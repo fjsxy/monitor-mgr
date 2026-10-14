@@ -41,6 +41,18 @@ python3 docs/prototypes/serve-phase1-ui-prototype.py
 
 JavaScript 与静态启动脚本通过语法检查；未运行产品测试、远程 CI 或真实集群验收。浏览器检查只证明原型可以评审。
 
-三个布局的截图：[A · 实例工作台](screenshots/variant-A.jpg)、[B · 分步下发](screenshots/variant-B.jpg)、[C · 表格与抽屉](screenshots/variant-C.jpg)。
+初版三个布局的截图：[A · 实例工作台](screenshots/variant-A.jpg)、[B · 分步下发](screenshots/variant-B.jpg)、[C · 表格与抽屉](screenshots/variant-C.jpg)。
 
-建议先体验修改资源 → 保存草稿 → 预览下发 → 确认下发，再从底部场景栏查看故障路径。待用户实际体验后，记录布局选择、需要调整的操作顺序及理解障碍；此处尚无用户评审结论。
+建议先体验修改资源 → 保存草稿 → 预览下发 → 确认下发，再从底部场景栏查看故障路径。已收到用户对 C 布局的页面评审意见并逐条调整；最终布局选型仍待确定。
+
+## 2026-10-14 页面评论调整
+
+- Comment 1：列表统一展示「部署命名空间」，不显示 `targetNamespace` 或 `namespace` 字段名。
+- Comment 2：实例类型使用 `exporter` / `collector`；分别列出具体组件 kube-state-metrics / Prometheus Agent。CR API 名称保持原样。
+- Comment 3：列表和共享运行信息使用「运行状态」文案。
+- Comment 4：列表行新增「删除」，复用已有确认及删除流程；外部只读实例、权限不足或未结束任务仍禁止删除。
+- Comment 5：各布局只保留统一「添加」入口，进入独立添加页面，先选实例类型，再选具体组件并填写配置。列表不为每个组件增加按钮。
+
+在客户端内置浏览器中验证了两类组件的添加路径、原 CR API 标识、列表删除的准确目标、外部及在途任务删除限制，并按评论中的 1137×954 视口确认列表没有横向溢出。类别选择本身不创建实例；进入具体组件配置后只创建内存中的未部署草稿。
+
+本轮截图：[更新后的 C 列表](screenshots/variant-C-review2.jpg)、[统一添加页面](screenshots/add-instance.jpg)。原型静态服务使用 `Cache-Control: no-store`，防止评审时继续加载旧脚本。

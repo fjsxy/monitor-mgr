@@ -6,13 +6,19 @@ from functools import partial
 import argparse
 import webbrowser
 
+
+class PrototypeHandler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
 parser = argparse.ArgumentParser(description="启动 monitor-mgr 一期页面原型")
 parser.add_argument("--port", type=int, default=8765)
 parser.add_argument("--no-open", action="store_true")
 args = parser.parse_args()
 root = Path(__file__).resolve().parent
 url = f"http://127.0.0.1:{args.port}/phase1-ui/?variant=A"
-handler = partial(SimpleHTTPRequestHandler, directory=str(root))
+handler = partial(PrototypeHandler, directory=str(root))
 with ThreadingHTTPServer(("127.0.0.1", args.port), handler) as server:
     print(f"页面原型：{url}", flush=True)
     print("所有数据与操作均为模拟；关闭后数据丢弃。Ctrl+C 停止。", flush=True)
