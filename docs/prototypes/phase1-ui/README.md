@@ -76,3 +76,20 @@ JavaScript 与静态启动脚本通过语法检查；未运行产品测试、远
 客户端内置浏览器已检查中文名称拒绝、空名称不可保存、两类组件名称与 CR YAML 一致、下发期间名称锁定、namespace 多选映射、常用 collector 顺序、连续勾选与后台刷新滚动位置保持、新建 / 修改 / 漂移覆盖 YAML diff，以及未下发草稿与实际部署模式分开显示。原型仍无真实集群请求；namespace 和 CR 均为模拟数据，真实获取与服务端校验留待产品实现。
 
 截图：[组件能力分组](screenshots/cluster-capabilities-review3.jpg)、[更新后的列表](screenshots/variant-C-review3.jpg)、[namespace 多选](screenshots/namespace-picker-review3.jpg)、[左右 YAML diff](screenshots/yaml-diff-review3.jpg)。
+
+## 2026-10-14 第三轮页面评论调整（6 条）
+
+- 列表第一列改为「名称/命名空间」，在名称下展示已部署配置的 namespace；未部署草稿使用已保存的 namespace。不再放在组件列。
+- 确认下发后立即进入该实例的「运行信息」，C 布局直接打开抽屉；重试也采用相同导航。任务接受和 CR 已写入仍分别表达。
+- 集群组件能力移除允许 / 不允许及空组文字，只展示组件标签：可下发为绿色，不可下发为灰色，悬停可查看能力含义；原有下发检查保持。
+- 集群选择框内合并集群名、Kubernetes 版本和归属，不再在框外重复展示元信息。
+- 列表「版本」只展示最近确认写入的发布版本，不展示最新草稿版本。点击打开对应版本来源草稿的只读配置快照，显示发布版本和来源草稿版本；当前草稿及未保存修改保留，可明确返回当前草稿。快照在接受发布时另存，成功写入后才更新列表版本；失败不会提升版本。未部署、未纳管、已删除或资源身份无法确认时不虚构可点击版本。
+- YAML 序列对象使用常见的 `- url: ...` 排版，后续字段保持缩进，不再把对象项的 `-` 单独放一行。仍保留数组、嵌套对象、空 `{}` / `[]` 和省略字段的语义。
+
+此轮取代上轮「列表省略命名空间」和「组件能力分组文字」的展示选择；其他命名、类型、权限和身份边界继续有效。
+
+在客户端内置浏览器验证：未保存草稿 CPU 为 300m 时，点击当前发布 v2 仍显示 100m 的只读配置，返回草稿后 300m 编辑保留；下发接受时版本仍为 v2，写入后变为 v3，其配置为 300m、来源草稿 v4；写入失败时保持 v2。确认下发 / 重试均直接显示运行信息。1137×954 下列表 clientWidth / scrollWidth 均为 1065，选择框完整显示集群版本和归属；组件标签按能力为绿 / 灰，页面没有控制台错误。
+
+从实际渲染的 Agent 左右 diff 提取 YAML，用系统 Ruby YAML parser 验证两个 remoteWrite endpoint、嵌套 TLS、PVC accessModes 数组、空 ServiceMonitor selector 与省略 PodMonitor selector 均正确，且没有孤立数组对象标记。JavaScript 语法及 diff 格式检查通过；未新增依赖、产品测试、远程 CI 或真实集群调用。
+
+截图：[新版 C 列表](screenshots/variant-C-review4.jpg)、[绿 / 灰组件能力](screenshots/cluster-capabilities-review4.jpg)、[对应版本配置](screenshots/published-config-review4.jpg)、[YAML 序列排版](screenshots/yaml-sequences-review4.jpg)。为保留用户旧页内存中的测试实例，新版在独立浏览器标签页验证；原评审标签页未刷新或关闭。
