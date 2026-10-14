@@ -56,3 +56,23 @@ JavaScript 与静态启动脚本通过语法检查；未运行产品测试、远
 在客户端内置浏览器中验证了两类组件的添加路径、原 CR API 标识、列表删除的准确目标、外部及在途任务删除限制，并按评论中的 1137×954 视口确认列表没有横向溢出。类别选择本身不创建实例；进入具体组件配置后只创建内存中的未部署草稿。
 
 本轮截图：[更新后的 C 列表](screenshots/variant-C-review2.jpg)、[统一添加页面](screenshots/add-instance.jpg)。原型静态服务使用 `Cache-Control: no-store`，防止评审时继续加载旧脚本。
+
+## 2026-10-14 第二轮页面评论调整
+
+本轮落实集群管理的组件分组评论，以及后续 9 条实例和抽屉评论：
+
+- 组件能力分为「允许」和「不允许」，列出具体组件名称；空组显示「无」。沿用原有能力检查。
+- 统计改为「平台纳管实例 / 平台未纳管实例」；未纳管实例继续只读。
+- 顶部明确展示「账号：admin · 角色：平台管理员」，解决示例账号名与角色同名的重复。
+- 列表移除部署命名空间，列标题改为「类型与组件」。部署配置中的 namespace 选择保留。
+- 表单「名称」直接作为 CR 的 metadata.name；不支持中文，按 DNS subdomain 格式演示校验，不再生成 CR name 或提供另一显示名称。新建和复制草稿的名称为空，必须填写；下发开始后保护名称，创建后固定，改名走新实例。
+- collectors 将 pods、nodes、deployments、statefulsets、daemonsets、services 等常用项前置。勾选直接更新选择与草稿状态，不再重建页面；后台重绘保留抽屉、选项区及页面滚动位置。
+- namespace 名称改为下拉多选，来自所选集群的模拟 namespace 列表。保留名称正则输入，匹配数量随多选即时更新；无法访问集群时保留原选择并说明读取不可用。
+- 下发预览改为左右完整 CR YAML 行 diff，带行号与红删绿增高亮。首次创建左侧说明尚无 CR，漂移覆盖中的额外 spec 字段在左侧标为删除。
+- 运行信息显示已观察到的部署模式：KSM 的 Deployment / StatefulSetSharded / DaemonSetSharded，Agent 的 StatefulSet 及 shards；当前未知时明确标为上次观测。未下发草稿不改变此显示。
+
+本轮命名决策取代前置 KSM / Agent 契约中的「自动生成 CR name 与可修改显示名称分离」；名称与 UID 的稳定绑定、只管理自身创建资源等边界继续有效。
+
+客户端内置浏览器已检查中文名称拒绝、空名称不可保存、两类组件名称与 CR YAML 一致、下发期间名称锁定、namespace 多选映射、常用 collector 顺序、连续勾选与后台刷新滚动位置保持、新建 / 修改 / 漂移覆盖 YAML diff，以及未下发草稿与实际部署模式分开显示。原型仍无真实集群请求；namespace 和 CR 均为模拟数据，真实获取与服务端校验留待产品实现。
+
+截图：[组件能力分组](screenshots/cluster-capabilities-review3.jpg)、[更新后的列表](screenshots/variant-C-review3.jpg)、[namespace 多选](screenshots/namespace-picker-review3.jpg)、[左右 YAML diff](screenshots/yaml-diff-review3.jpg)。
