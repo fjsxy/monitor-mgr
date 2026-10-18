@@ -164,7 +164,12 @@ func TestDeletionPreviewSchema6UnsentCanContinue(t *testing.T) {
 		t.Fatal("旧尝试未保留", attempts)
 	}
 	retained := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
-	if retained["uid"] != original["uid"] || retained["currentVersionId"] != publication["versionId"] {
+	if retained["uid"] != original["uid"] || retained["currentVersionId"] != "" {
 		t.Fatal("删除改写历史身份", retained)
+	}
+	// 已删除实例隐藏当前版本入口，原版本仍作为不可变历史保留。
+	versions := clusterCall(t, p, "GET", "/instances/"+id+"/versions", nil, c, "", 200)["versions"].([]any)
+	if len(versions) != 1 || versions[0].(map[string]any)["versionId"] != publication["versionId"] {
+		t.Fatal("删除丢失原版本历史", versions)
 	}
 }
