@@ -134,7 +134,7 @@
 
 ## 浏览器账号规则补充回归
 
-此条为真实浏览器B补充，可嵌入U02独立记录；固定69个owned责任子例及20个Go补充回归保持原计数。
+此条为真实浏览器B补充，可嵌入U02独立记录；固定69个owned责任子例不变，后续补充按独立层级记账。
 
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
@@ -142,7 +142,7 @@
 
 ## LabelSelector CR 输出补充回归
 
-以下6条为独立Q补充：经真实HTTP、生成Kitex RPC、SQLite与受控TLS Kubernetes API验证完整发布链，API按固定CRD省略非nullable的null字段；真实集群四类关联继续由A11完整矩阵覆盖。原69个owned责任子例保持不变；补充回归共27个唯一ID，其中26个Q，PATTERN-011为B，SOURCE-007同时执行Q/B，共28个补充执行键。
+以下6条为独立Q补充：经真实HTTP、生成Kitex RPC、SQLite与受控TLS Kubernetes API验证完整发布链，API按固定CRD省略非nullable的null字段；真实集群四类关联继续由A11完整矩阵覆盖。原69个owned责任子例保持不变；包含下节PROJECTION-013后，补充回归共29个唯一ID，其中28个Q，PATTERN-011为B，SOURCE-007同时执行Q/B，PROJECTION-013两项各执行Q/K，共32个补充执行键。
 
 关键：平台typed模型与Thrift往返继续区分缺失和显式空集合；仅CR输出边界省略nil的表达式values，显式空数组继续保留。不得全局删除null、折叠外层selector的省略/{}，或改写未知字段语义。
 
@@ -154,3 +154,14 @@
 | REG18-SELECTOR-012.not-exists-empty | DoesNotExist显式空values保持空集合 | 经HTTP/RPC保存values=[]的DoesNotExist规则，检查RPC/DB/预览并完成发布回读。 | 显式[]在typed和CR中保持，发布成功；没有null字段和重复创建，不改变外层None/All。 | #18 |
 | REG18-SELECTOR-012.in | In的非空values不可被省略规则吞掉 | 经HTTP/RPC保存In及两个合法values，预览、发布、回读实际CR与冻结版本。 | 非空values内容及顺序保持，正确匹配并发布成功；空值规范化不能改变集合选择含义。 | #18 |
 | REG18-SELECTOR-012.not-in | NotIn的非空values不可被省略规则吞掉 | 经HTTP/RPC保存NotIn及两个合法values，预览、发布、回读实际CR与冻结版本。 | 非空values完整保留，正确排除并发布成功；未越过当前集群授权或原UID校验。 | #18 |
+
+## 解析失败 URL 的读投影补充回归
+
+以下两条各执行独立Q和真实K。Q经真实HTTP/生成Kitex/SQLite及受控TLS目标；K由测试工具在独占runId namespace创建固定CRD接受的外部Agent及已纳管Agent漂移，只通过平台读模型/预览观察。URL内使用临时合成marker，报告只保留泄漏与否，不输出原URL、marker、认证串或原数据库。Q还将认证URL复制进Operator解析错误status.message及适用Available=False.reason；验证两个interpret入口只从同一安全副本派生Runtime.Error。真实proxy K先等待实际Operator status确实包含当前内存marker，只记branchObserved布尔和白名单reason，deadline未观察到即失败，不能以过早读取判安全。Q另以已有schema7旧CR/YAML与managed runtime.Error、external document.runtime.Error缓存启动新程序且令TLS目标离线，检查首次HTTP/直接RPC读安全及数据迁移的effective_spec/HMAC基线不变；旧cache修复只保证旧行与首次投影安全；迁移保留0600一致性恢复快照，不声称历史free pages/WAL/备份字节全部擦除；新恶意输入的当前DB/WAL无marker断言仍保留。K两例另由fixture设置schema接受的适用Available=False.reason认证URL，先回读原值仍存在，再要求平台当次managed Runtime.Error与external runtime.Error明确等于安全隐藏标记且无marker；读取前被Operator复写为普通reason不能算通过，deadline内未观察安全分支则失败。正常非敏感故障reason/message及用户metadata作为正向控制保留，正常URL/userinfo的既有SHARED-003及A12用例继续回归。
+
+关键：无法解析的URL整值隐藏；status自由文本及由其派生的Runtime.Error中复制的认证URL也不得进入公开投影或缓存，正常非敏感状态文本保持；原始目标仍在内存参与HMAC，不能改目标metadata/status/finalizers或重算历史effective_spec。先预览，再只改隐藏认证值，旧preview必须冲突；读取与安全投影本身不得写目标。当前90d完整K批次保持原源码和原记录；新修复的Q/REG、真实恶意外部CR两例及B验证另记实际源码，组件责任交付不冒充新源完整profile，最终#21仍统一候选重新执行282键。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG18-PROJECTION-013.url-parse-error | 外部Agent的无法解析URL不能回显认证串 | 创建含合法schema字符串、userinfo及非法escape的remoteWrite.url；Q将该URL复制进Operator解析错误message及适用Available=False.reason，并添加普通故障reason/message正控；K注入同一适用reason并回读原值，检查当次两类Runtime.Error明确等于安全隐藏标记；经平台发现、详情、运行刷新、左右YAML/历史及直接RPC读取，检查平台DB/安全日志。保存预览后仅替换临时认证marker（保留旧错误文本），再确认原preview；回读目标原UID、metadata/status；Q再注入schema7旧CR/YAML和两类runtime.Error cache，离线重启后检查首次HTTP/RPC读、迁移版本与历史基线，finally清理本例。 | HTTP/RPC/YAML/DB/日志/公开证据不含认证marker，无法解析URL整值隐藏，含认证串的状态文本和Runtime.Error安全投影；正常非敏感reason/message/用户metadata保留；隐藏值变化仍触发HMAC冲突，不误放旧预览；无读侧目标mutation，原metadata/status不因脱敏被改写；schema7旧cache经真实数据迁移后离线首次读无泄漏，effective_spec及HMAC基线保持。 | #18 |
+| REG18-PROJECTION-013.proxy-parse-error | 外部Agent的无法解析proxyUrl同样失败关闭 | 独立fixture使用固定CRD接受的HTTP前缀proxyUrl，含userinfo及非法escape；Q同样复制认证URL到Operator错误message/Available=False.reason；K另由fixture设置合法schema接受的适用reason，确认实际CR原值存在后经managed refresh和external发现读取，防止只保护YAML却漏Runtime.Error；K等待真实Operator status确含当前内存marker后再读公开投影，未观察分支则失败；执行同一公开读路径、DB/日志检查，检查正常非敏感状态正控；隐藏值漂移保留旧错误文本，回读原metadata/status；Q执行同一schema7旧cache离线重启检查，再finally清理。 | proxyUrl解析失败也整值隐藏，含真实Operator错误status及Runtime.Error在内的所有平台读投影和持久缓存无认证marker；branchObserved必须为true，正常非敏感reason/message/用户metadata保留；HMAC仍识别原值变化，旧预览拒绝，不能用解析失败绕过脱敏或修改真实对象；旧schema7读cache离线首次HTTP/RPC响应同样安全，迁移不改历史effective_spec/HMAC。 | #18 |

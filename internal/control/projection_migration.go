@@ -46,12 +46,13 @@ func migrateTargetProjections(tx *sql.Tx, key []byte) error {
 			return e
 		}
 	}
-	// 关键：历史CR与外部YAML同样脱敏，防止升级后首次响应重新暴露旧值。
-	for _, table := range []string{"instance_observations", "discovered_instances"} {
-		id, col := "instance_id", "cr"
-		if table == "discovered_instances" {
-			id, col = "id", "document"
-		}
+	// 关键：历史CR/YAML和已派生Runtime.Error共同修复，防止离线首次响应绕过新来源投影。
+	for _, field := range []struct{ table, id, col string }{
+		{"instance_observations", "instance_id", "cr"},
+		{"discovered_instances", "id", "document"},
+		{"instance_observations", "instance_id", "runtime"},
+	} {
+		table, id, col := field.table, field.id, field.col
 		rows, e = tx.Query(`SELECT ` + id + `,` + col + ` FROM ` + table)
 		if e != nil {
 			return e
@@ -79,7 +80,10 @@ func migrateTargetProjections(tx *sql.Tx, key []byte) error {
 			if json.Unmarshal(r.raw, &doc) != nil {
 				return fmt.Errorf("历史读模型格式无效")
 			}
-			if table == "discovered_instances" {
+			if col == "runtime" {
+				// 复用状态诊断规则；旧savedObservation包装和普通故障原因均保留。
+				sanitizeStatus(doc)
+			} else if table == "discovered_instances" {
 				if text, ok := doc["yaml"].(string); ok {
 					var cr map[string]any
 					if yaml.Unmarshal([]byte(text), &cr) != nil {
@@ -87,6 +91,7 @@ func migrateTargetProjections(tx *sql.Tx, key []byte) error {
 					}
 					doc["yaml"] = yamlText(safeTargetDocument(cr))
 				}
+				sanitizeStatus(doc["runtime"])
 			} else {
 				doc = safeTargetDocument(doc)
 			}

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/url"
+	"regexp"
 	"strings"
 
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
@@ -35,7 +36,34 @@ func safeTargetDocument(cr map[string]any) map[string]any {
 	var copy map[string]any
 	json.Unmarshal([]byte(canonical(cr)), &copy)
 	sanitizeTarget(copy, "")
+	sanitizeStatus(copy["status"])
 	return copy
+}
+
+// statusCredentialURL 只识别状态文本中的认证URL，不限制Probe等合法host:port配置。
+var statusCredentialURL = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://[^/?#\s]*@`)
+
+// sanitizeStatus 保留普通诊断文本；Operator可能把新旧认证URL复制进错误message。
+func sanitizeStatus(v any) {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, value := range x {
+			if text, ok := value.(string); ok && statusCredentialURL.MatchString(text) {
+				// 关键：错误可引用已不在当前spec中的旧URL；按状态内容遮蔽，不能只替换当前配置值。
+				x[k] = "[敏感内容已隐藏]"
+			} else {
+				sanitizeStatus(value)
+			}
+		}
+	case []any:
+		for i, value := range x {
+			if text, ok := value.(string); ok && statusCredentialURL.MatchString(text) {
+				x[i] = "[敏感内容已隐藏]"
+			} else {
+				sanitizeStatus(value)
+			}
+		}
+	}
 }
 func sanitizeTarget(v any, parent string) {
 	switch x := v.(type) {
@@ -54,7 +82,11 @@ func sanitizeTarget(v any, parent string) {
 			}
 			if lower == "url" || lower == "proxyurl" {
 				if raw, ok := value.(string); ok {
-					if u, e := url.Parse(raw); e == nil && u.User != nil {
+					u, e := url.Parse(raw)
+					// 关键：外部CR可含schema接受但无法解析的认证URL；不能因解析失败回显原值。
+					if e != nil {
+						x[k] = "[敏感内容已隐藏]"
+					} else if u.User != nil {
 						u.User = url.User("[已隐藏]")
 						x[k] = u.String()
 					}
