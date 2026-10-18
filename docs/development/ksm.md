@@ -33,7 +33,7 @@ KSM typed 配置包含 Deployment、StatefulSetSharded、DaemonSetSharded、运�
 ```sh
 make image IMAGE=monitor-mgr:ksm-candidate PLATFORM=linux/arm64
 make ksm-rpc-image IMAGE=monitor-mgr:ksm-candidate RPC_IMAGE=monitor-mgr:ksm-rpc-candidate
-make e2e-ksm PYTHON=/path/to/venv/bin/python E2E_ARGS='--kubectl /path/to/kubectl-v1.28.15 --control-config /private/control.kubeconfig --data-config /private/data.kubeconfig --control-pod-config /private/control-pod.kubeconfig.json --data-pod-config /private/data-pod.kubeconfig.json --image monitor-mgr:ksm-candidate --rpc-image monitor-mgr:ksm-rpc-candidate --source ACTUAL_IMAGE_SOURCE_SHA --output /absolute/evidence/run --prefix mm-phase1-ksm-RUN_ID --workers 3'
+make e2e-ksm PYTHON=/path/to/venv/bin/python E2E_ARGS='--kubectl /path/to/kubectl-v1.28.15 --control-config /private/control.kubeconfig --data-config /private/data.kubeconfig --control-pod-config /private/control-pod.kubeconfig.json --data-pod-config /private/data-pod.kubeconfig.json --image monitor-mgr:ksm-candidate --rpc-image monitor-mgr:ksm-rpc-candidate --source ACTUAL_IMAGE_SOURCE_SHA --output /absolute/evidence/run --prefix mm-phase1-ksm-RUN_ID --workers 1'
 ```
 
 构建镜像后须加载至本轮独占control kind，所有目标节点预载固定KSM镜像；环境依据以本轮 `environment/README-agents.md` 为准。`--cases K02.primary` 支持稳定ID定向执行；`--list` 列出51责任子例。C04是全局CRD故障，runner在其他并发fixture清理后独占执行并finally恢复。只清本run prefix+targetNamespace资源；完整列表读取失败会让cleanup失败，不能冒充无残留。
@@ -41,3 +41,5 @@ make e2e-ksm PYTHON=/path/to/venv/bin/python E2E_ARGS='--kubectl /path/to/kubect
 B层使用 Chromium，trace关闭，凭据只经进程环境/原0600文件传递，收据只保留安全页面截图。故障proxy只供测试，mTLS自检、Service与上游读取通过后才切换凭据；proxy的pause表示平台已经可能发送，不能当成产品未发送屏障。产品未派发边界由应用层专用测试hook验证。Q的子进程崩溃测试在提交前/后真正终止进程，重启后按命令键找回事务结果。
 
 每份收据绑定 `testedCommit`、runnerCommit、实际镜像manifest/configID、Linux/arm64目标节点与profile。Host Q、Host B、真实Pod B、K及CI不能互相替代；旧来源证据不改写为新来源。固定 `docs/acceptance/phase1.json` 仍为计划目录，运行结果独立存储。
+
+K/B门禁须独占目标namespace写入lane。固定monitor-op对All也将当前完整namespace集合写入`--namespaces`（planner.go:220），其他fixture建删namespace会触发工作负载重新滚动，不能把这种并发扰动误判为资源配置失败。runner默认串行；`--workers >1`仅显式`--parallel-diagnostic`诊断使用。B的全局CR inventory不变检查也应在K清理完成后执行。

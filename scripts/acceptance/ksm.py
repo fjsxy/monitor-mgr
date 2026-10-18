@@ -146,11 +146,13 @@ class Suite(ClusterSuite):
     except Exception as cleanup_error:record['cleanup']={'success':False,'failures':[str(cleanup_error)]}
     record['evidenceRefs']=[{'path':str(p.relative_to(self.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(self.out.rglob('*')) if p.is_file() and p not in [self.out/(case+'.json'),self.out/'results.json'] and (p.name.startswith(case+'.') or 'browser' in p.parts)]
     record['finishedAt']=stamp()
-    if not record['cleanup']['success']:record['outcome']='failed'
+    if not record['cleanup']['success']:
+     record['outcome']='failed'
+     if error is None:error=AssertionError('验收清理失败')
     (self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
    if error:raise error
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--data-config');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--rpc-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-ksm-k');p.add_argument('--port',type=int,default=18500);p.add_argument('--workers',type=int,choices=range(1,5),default=1);p.add_argument('--layer',choices=['Q','K','B'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--data-config');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--rpc-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-ksm-k');p.add_argument('--port',type=int,default=18500);p.add_argument('--workers',type=int,choices=range(1,5),default=1);p.add_argument('--layer',choices=['Q','K','B'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--parallel-diagnostic',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');a=p.parse_args()
  if a.list:
   contracts=manifest();print(json.dumps([{'id':id,'layer':contracts[id]['layer'],'testSelector':QCASES.get(id,id),'profiles':contracts[id]['profiles']} for id in list(QCASES)+KCASES+['U03.primary']],ensure_ascii=False,indent=2));raise SystemExit(0)
  if not a.output:p.error('必须显式output')
@@ -163,6 +165,8 @@ if __name__=='__main__':
  for field in ['kubectl','control_config','data_config','control_pod_config','data_pod_config','image','source']:
   if not getattr(a,field):p.error('K层必须显式'+field)
  if a.profile!='LOCAL_FULL':p.error('本票K runner当前为双目标LOCAL_FULL；CI_SMOKE由最终CI单集群编排执行')
+ # All会随全局namespace集合变化滚动，门禁串行；并行只用于明确标记的诊断。
+ if a.workers>1 and not a.parallel_diagnostic:p.error('全局namespace变化会重滚动All实例，门禁须workers=1；并行诊断需parallel-diagnostic')
  if a.layer=='B':a.cases=a.cases or BCASES
  if a.workers==1 or a.layer=='B':Suite(a).run()
  else:

@@ -43,7 +43,7 @@ def run_case(s,case):
   for mode,kind in [('StatefulSetSharded','StatefulSet'),('DaemonSetSharded','DaemonSet'),('Deployment','Deployment')]:
    old=[o['metadata']['uid'] for o in s.workloads() if o['kind'] in ['Deployment','StatefulSet','DaemonSet']];cfg=s.cfg(mode=mode)
    if mode=='DaemonSetSharded':cfg['collectors']={'mode':'Include','names':['pods','nodes']}
-   s.save(i,cfg);p=s.preview(i);assert any('重建' in w for w in p['warnings']);o=s.publish(i,preview=p);seen=[];end=time.monotonic()+100
+   s.save(i,cfg);p=s.preview(i);assert any(all(part in w for part in ['模式切换','清理旧 workload','建立新 workload','不承诺无损']) for w in p['warnings']),p['warnings'];o=s.publish(i,preview=p);seen=[];end=time.monotonic()+100
    while time.monotonic()<end:
     loads=[x for x in s.workloads() if x['kind'] in ['Deployment','StatefulSet','DaemonSet']];uids=[x['metadata']['uid'] for x in loads];new=[x for x in loads if x['kind']==kind and x['metadata']['uid'] not in old];remaining=[x for x in old if x in uids];seen.append({'at':time.time(),'controllers':[{'kind':x['kind'],'uid':x['metadata']['uid']} for x in loads]})
     if new:assert not remaining,'旧模式尚存在时出现新模式'
@@ -77,7 +77,7 @@ def run_case(s,case):
   if flavor in ['zero','dynamic-pattern']:
    s.runtime(i,'NoMatch');cr=counts(s,0);assert not [x for x in s.workloads() if x['kind'] in ['Deployment','StatefulSet','DaemonSet','Pod']];r=s.call('GET','/instances/'+i['id']+'/runtime');assert r['desiredPods']==0 and r['availablePods']==0;history.append(s.evidence(i))
    if flavor=='zero':return {'operation':o,'history':history}
-   ns=s.targetns+'-dynamic-a';s.k('create','namespace',ns,target=s.target);s.extra_namespaces.append(ns);counts(s,1);s.runtime(i);assert all('--namespaces='+ns in a for a in args(s));history.append(s.evidence(i));s.k('delete','namespace',ns,'--wait=true',target=s.target);s.extra_namespaces.remove(ns);counts(s,0);s.runtime(i,'NoMatch');assert not [x for x in s.workloads() if x['kind'] in ['Deployment','StatefulSet','DaemonSet','Pod']];history.append(s.evidence(i));return {'operation':o,'history':history}
+   ns=s.targetns+'-dynamic-a';s.k('create','namespace',ns,target=s.target);s.extra_namespaces.append(ns);counts(s,1);s.runtime(i);assert all('--namespaces='+ns in a for a in args(s));history.append(s.evidence(i));s.k('delete','namespace',ns,'--wait=true',target=s.target);s.extra_namespaces.remove(ns);counts(s,0);s.runtime(i,'NoMatch');stopped_workloads(s);assert not [x for x in s.workloads() if x['kind'] in ['Deployment','StatefulSet','DaemonSet','Pod']];history.append(s.evidence(i));return {'operation':o,'history':history}
   s.runtime(i)
   if flavor=='all':assert s.cr()['spec']['namespaceFilter']=={'mode':'All'}
   if flavor=='union':counts(s,2);expected='--namespaces='+','.join(sorted([s.targetns,ns]));assert all(expected in a for a in args(s))
