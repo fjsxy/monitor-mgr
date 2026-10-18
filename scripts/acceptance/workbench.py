@@ -42,10 +42,10 @@ def registry():
  assert all(v in contracts for v in REGCASES)
  return contracts
 
-def run_q(a,contracts,selected):
+def run_q(a,contracts,selected,case_tests=None,owned_count=15):
  source=source_state();assert not source['dirty'] or a.allow_dirty_runner,'正式Q来源必须干净'
  if a.profile=='CI_FAST':assert sys.platform=='linux' and platform.machine() in ['amd64','x86_64'],'CI_FAST必须在实际Linux amd64运行'
- selected_tests={v:(REGCASES if a.layer=='REG' else QCASES)[v] for v in selected}
+ selected_tests={v:(case_tests if case_tests is not None else REGCASES if a.layer=='REG' else QCASES)[v] for v in selected}
  roots=sorted({test.split('/')[0] for tests in selected_tests.values() for test in tests})
  command=['go','test','./internal/platform','-count=1','-json','-run','^('+'|'.join(roots)+')$']
  out=pathlib.Path(a.output);out.mkdir(parents=True,exist_ok=True);os.chmod(out,0o700)
@@ -64,7 +64,7 @@ def run_q(a,contracts,selected):
   (out/(variant+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n');records.append(record)
  (out/'results.json').write_text(json.dumps(records,ensure_ascii=False,indent=2)+'\n')
  success=bool(records) and all(r['outcome']=='passed' for r in records)
- print(json.dumps({'layer':a.layer,'profile':a.profile,'passed':sum(r['outcome']=='passed' for r in records),'total':len(records),'ownedCount':15,'success':success},ensure_ascii=False))
+ print(json.dumps({'layer':a.layer,'profile':a.profile,'passed':sum(r['outcome']=='passed' for r in records),'total':len(records),'ownedCount':owned_count,'success':success},ensure_ascii=False))
  return 0 if success else 1
 
 def main():

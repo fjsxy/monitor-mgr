@@ -18,3 +18,10 @@ HTTP安全整数范围保留 JSON number；更大 i64 输出十进制字符串�
 K/B继承既有双目标本地环境验证（3+1节点、Linux arm64、v1.28.15），逐例新namespace/PVC/平台Pod。B经本例Service访问，fixture以0600 JSON传递，trace关闭；U05原版本依赖真实KSM/Agent Operator运行，并以精确非dryRun路径拒绝实际写入。大修订fixture仅在应用缩为0且保留原PVC/密钥时设置初值，随后浏览器实际HTTP保存。测试工具按原UID正常GC资源；读取失败不当作空集，无force/finalizer移除。最终CI_SMOKE单目标环境由#21组合适配，不能把本地双目标结果换标为CI。
 
 计划与实际结果分别保存；固定manifest继续planned，实际testedCommit/runnerCommit/镜像/架构及失败重跑不改写。
+
+提前评审补充入口（原15责任收据继续保留历史来源）：
+
+- 规范 `GET /clusters/{id}/capabilities` 通过生成 `GetCluster` 返回同一安全能力数组；当前会话、账号和归属仍由RPC核验。
+- 规范 `DELETE /instances/{id}` 空确认只可删除未部署草稿；携 `versionId/previewId` 复用已部署删除状态机返回202，兼容 `POST /deletions`。规范 `POST /operations/{id}/continue` 先通过授权 `GetOperation` 读取不可变action，PUBLISH/DELETE复用带修订和删除预览的 `ContinueLifecycle`，集群候选沿原管理员白名单；兼容 `continue-unsent`。
+- 凭据受理与人工继续的幂等缓存只找回原operation身份，在当前授权事务中读取最新结果。独立卷任务在身份网络预读之前固定原集群UID/ACTIVE/credentialRevision，成功与失败都以同一CAS限制落盘；Pending卷责任仍阻止注销/转移，凭据轮换继续允许。
+- `make e2e-review-q` 跑应用层回归；`make review-q-receipt E2E_ARGS='--profile LOCAL_FULL --output /private/review-q'` 输出9条补充REG及全部必选leaf实际pass/no-skip证据。`make e2e-review PYTHON=/private/venv/bin/python E2E_ARGS='--layer B --profile LOCAL_FULL ...'` 运行2条真实Pod浏览器REG；显式双目标/镜像/source/lane参数与原工作台driver相同。B首次实际红、UI修复后新镜像的绿分别记录，不以Host或旧15收据替代。
