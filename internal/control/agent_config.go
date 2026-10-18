@@ -328,7 +328,16 @@ func (r SelectorRule) cr() map[string]any {
 		m["matchLabels"] = r.Selector.MatchLabels
 	}
 	if r.Selector.MatchExpressions != nil {
-		m["matchExpressions"] = r.Selector.MatchExpressions
+		// 关键：CRD会裁剪非nullable的null；仅CR投影省略nil值，显式[]及typed/RPC/DB presence保持。
+		expressions := make([]map[string]any, 0, len(r.Selector.MatchExpressions))
+		for _, expression := range r.Selector.MatchExpressions {
+			value := map[string]any{"key": expression.Key, "operator": expression.Operator}
+			if expression.Values != nil {
+				value["values"] = expression.Values
+			}
+			expressions = append(expressions, value)
+		}
+		m["matchExpressions"] = expressions
 	}
 	return m
 }
