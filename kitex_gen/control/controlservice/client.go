@@ -11,6 +11,22 @@ import (
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
+	CreateInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.CreateInstanceRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
+	ListInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.InstancesResult_, err error)
+	GetInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
+	GetDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
+	SaveDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.SaveDraftRequest, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
+	CopyTemplate(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
+	RecordEditingActivity(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.Empty, err error)
+	PreviewPublication(ctx context.Context, ctx_ *control.RequestContext, request *control.PreviewRequest, callOptions ...callopt.Option) (r *control.PublicationPreview, err error)
+	PublishConfiguration(ctx context.Context, ctx_ *control.RequestContext, request *control.PublishRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
+	ListVersions(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.VersionsResult_, err error)
+	GetVersion(ctx context.Context, ctx_ *control.RequestContext, request *control.VersionRequest, callOptions ...callopt.Option) (r *control.PublicationVersion, err error)
+	GetRuntime(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.InstanceRuntime, err error)
+	RefreshInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.InstanceRuntime, err error)
+	DeleteDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.Empty, err error)
+	LookupOperations(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationLookup, callOptions ...callopt.Option) (r *control.OperationsResult_, err error)
+	GetAttempts(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID, callOptions ...callopt.Option) (r *control.AttemptsResult_, err error)
 	ListKubeconfigContexts(ctx context.Context, ctx_ *control.RequestContext, request *control.KubeconfigRequest, callOptions ...callopt.Option) (r *control.ContextsResult_, err error)
 	ListClusters(ctx context.Context, ctx_ *control.RequestContext, callOptions ...callopt.Option) (r *control.ClustersResult_, err error)
 	GetCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.Cluster, err error)
@@ -63,6 +79,86 @@ func MustNewClient(destService string, opts ...client.Option) Client {
 
 type kControlServiceClient struct {
 	*kClient
+}
+
+func (p *kControlServiceClient) CreateInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.CreateInstanceRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.CreateInstance(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ListInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.InstancesResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListInstances(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) GetInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ObservationInstance, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetInstance(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) GetDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetDraft(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) SaveDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.SaveDraftRequest, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.SaveDraft(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) CopyTemplate(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.CopyTemplate(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) RecordEditingActivity(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.Empty, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RecordEditingActivity(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) PreviewPublication(ctx context.Context, ctx_ *control.RequestContext, request *control.PreviewRequest, callOptions ...callopt.Option) (r *control.PublicationPreview, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.PreviewPublication(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) PublishConfiguration(ctx context.Context, ctx_ *control.RequestContext, request *control.PublishRequest, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.PublishConfiguration(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ListVersions(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.VersionsResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListVersions(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) GetVersion(ctx context.Context, ctx_ *control.RequestContext, request *control.VersionRequest, callOptions ...callopt.Option) (r *control.PublicationVersion, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetVersion(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) GetRuntime(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.InstanceRuntime, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetRuntime(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) RefreshInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.InstanceRuntime, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RefreshInstance(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) DeleteDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.Empty, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.DeleteDraft(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) LookupOperations(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationLookup, callOptions ...callopt.Option) (r *control.OperationsResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.LookupOperations(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) GetAttempts(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID, callOptions ...callopt.Option) (r *control.AttemptsResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetAttempts(ctx, ctx_, request)
 }
 
 func (p *kControlServiceClient) ListKubeconfigContexts(ctx context.Context, ctx_ *control.RequestContext, request *control.KubeconfigRequest, callOptions ...callopt.Option) (r *control.ContextsResult_, err error) {

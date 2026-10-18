@@ -1,4 +1,4 @@
-// Package control 统一处理当前授权、持久化管理状态和目标集群访问。
+// Package control 统一承担业务授权、SQLite持久化与目标集群访问；HTTP层不能绕过此边界。
 package control
 
 import (
@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"syscall"
 	"time"
 
@@ -21,15 +22,19 @@ import (
 
 // Store 持有单 writer 数据库、独立密钥和应用生命周期 worker。
 type Store struct {
-	DB           *sql.DB
-	lock         *os.File
-	Now          func() time.Time
-	SessionTTL   time.Duration
-	Key          []byte
-	limits       *targetLimits
-	workerCancel context.CancelFunc
-	workerWake   chan struct{}
-	workerDone   chan struct{}
+	OperationBoundary func(stage, operationID string) error
+	DB                *sql.DB
+	lock              *os.File
+	Now               func() time.Time
+	SessionTTL        time.Duration
+	Key               []byte
+	limits            *targetLimits
+	workerCancel      context.CancelFunc
+	workerWake        chan struct{}
+	workerDone        chan struct{}
+	dispatch          sync.RWMutex
+	publicationWG     sync.WaitGroup
+	observationEpoch  string
 }
 
 // Open 在单 writer 锁、密钥校验与数据库迁移均通过后提供存储服务。
@@ -103,38 +108,18 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 		return fail(err)
 	}
 	db.SetMaxOpenConns(1)
+
+	s := &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key, limits: newTargetLimits(), observationEpoch: ID()}
+	// 关键：有密文旧库必须先验证原密钥，再制作快照或推进schema，错误密钥不能改变恢复基线。
+	if err = s.verifyExistingCredentials(); err != nil {
+		db.Close()
+		return fail(err)
+	}
 	if err = migrate(db, dataDir); err != nil {
 		db.Close()
 		return fail(err)
 	}
 
-	s := &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key, limits: newTargetLimits()}
-	// 关键：启动时验证全部当前及候选密文，错误原密钥不能伪装成可用平台。
-	rows, err := db.Query(`SELECT id,credential FROM clusters WHERE credential IS NOT NULL UNION ALL SELECT operation_id,cipher FROM cluster_candidates`)
-	if err != nil {
-		db.Close()
-		return fail(errors.New("凭据结构无法读取"))
-	}
-	for rows.Next() {
-		var aad string
-		var data []byte
-		if rows.Scan(&aad, &data) != nil {
-			rows.Close()
-			db.Close()
-			return fail(errors.New("凭据结构无法读取"))
-		}
-		if _, err = s.openCredential(data, aad); err != nil {
-			rows.Close()
-			db.Close()
-			return fail(errors.New("原密钥无法解密已保存集群凭据"))
-		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		db.Close()
-		return fail(errors.New("凭据结构无法读取"))
-	}
 	return s, nil
 }
 

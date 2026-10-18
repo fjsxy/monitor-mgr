@@ -1,4 +1,4 @@
-// Package platform 在同一进程装配 HTTP adapter 与真实 loopback Kitex 管控服务。
+// Package platform 组装HTTP入口与真实loopback Kitex服务，业务规则由管控服务统一执行。
 package platform
 
 import (
@@ -25,6 +25,8 @@ import (
 
 // Config 收集进程监听、持久目录、会话寿命与受控测试边界。
 type Config struct {
+	// OperationBoundary 仅供确定性进程/事务故障测试，不由 HTTP 或运行参数开放。
+	OperationBoundary                                   func(stage, operationID string) error
 	RPCDialer                                           remote.Dialer
 	DataDir, HTTPAddr, RPCAddr, PublicOrigin, StaticDir string
 	SessionTTL                                          time.Duration
@@ -65,6 +67,7 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	if err != nil {
 		return nil, err
 	}
+	store.OperationBoundary = cfg.OperationBoundary
 	rpcLn, err := net.Listen("tcp", cfg.RPCAddr)
 	if err != nil {
 		store.Close()
@@ -201,6 +204,10 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 		ctx.SessionToken = &cookie.Value
 	}
 	p.cfg.Logger.Info("业务请求", "requestId", requestID, "transport", "http-to-kitex", "method", r.Method, "path", r.URL.Path)
+	// 关键：实例入口同样只调用真实RPC，不以数据库/目标API旁路降级。
+	if p.instanceRoutes(w, r, ctx, requestID) {
+		return
+	}
 	switch r.Method + " " + r.URL.Path {
 	case "GET /api/v1/initialization":
 		result, err := p.client.Probe(r.Context(), ctx)
@@ -302,14 +309,14 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 func decode(r *http.Request, v any) error {
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 65537))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(v); err != nil {
-		return control.Error("BAD_REQUEST", "JSON 格式无效")
+	if err := decoder.Decode(v); err == nil {
+		var extra any
+		if err := decoder.Decode(&extra); err == io.EOF {
+			return nil
+		}
 	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return control.Error("BAD_REQUEST", "JSON 格式无效")
-	}
-	return nil
+	// 关键：解析错误只指向整个 request，不回显解码器错误中的未知字段名或敏感原值。
+	return &rpc.APIError{Code: "BAD_REQUEST", Message: "JSON 格式无效", FieldErrors: map[string]string{"request": "JSON 格式无效或包含不支持的字段"}}
 }
 
 // accountDTO 显式输出账号的非敏感 HTTP 字段。
@@ -348,6 +355,10 @@ func (p *Runtime) writeError(w http.ResponseWriter, err error, id string) {
 			status = 404
 		case "ALREADY_INITIALIZED", "CONFLICT", "LAST_ADMIN":
 			status = 409
+		case "TARGET_CONFLICT":
+			status = 409
+		case "TARGET_REJECTED":
+			status = 422
 		case "TARGET_FORBIDDEN":
 			status = 403
 		case "TARGET_NOT_FOUND":
@@ -360,7 +371,11 @@ func (p *Runtime) writeError(w http.ResponseWriter, err error, id string) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message, "requestId": id})
+	body := map[string]any{"code": code, "message": message, "requestId": id}
+	if apiErr != nil && len(apiErr.FieldErrors) > 0 {
+		body["fieldErrors"] = apiErr.FieldErrors
+	}
+	json.NewEncoder(w).Encode(body)
 }
 
 // accountMutation 将账号路径和 HTTP 请求转换为类型化 RPC 变更。

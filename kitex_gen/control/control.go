@@ -5,12 +5,14 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/cloudwego/thriftgo/generator/golang/extension/unknown"
 )
 
 type RequestContext struct {
 	RequestId      string  `thrift:"requestId,1,required" frugal:"1,required,string" json:"requestId"`
 	SessionToken   *string `thrift:"sessionToken,2,optional" frugal:"2,optional,string" json:"sessionToken,omitempty"`
 	IdempotencyKey *string `thrift:"idempotencyKey,3,optional" frugal:"3,optional,string" json:"idempotencyKey,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewRequestContext() *RequestContext {
@@ -51,6 +53,10 @@ func (p *RequestContext) SetIdempotencyKey(val *string) {
 	p.IdempotencyKey = val
 }
 
+func (p *RequestContext) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *RequestContext) IsSetSessionToken() bool {
 	return p.SessionToken != nil
 }
@@ -79,6 +85,7 @@ type Account struct {
 	Enabled            bool   `thrift:"enabled,4,required" frugal:"4,required,bool" json:"enabled"`
 	MustChangePassword bool   `thrift:"mustChangePassword,5,required" frugal:"5,required,bool" json:"mustChangePassword"`
 	CreatedAt          string `thrift:"createdAt,6,required" frugal:"6,required,string" json:"createdAt"`
+	_unknownFields     unknown.Fields
 }
 
 func NewAccount() *Account {
@@ -130,6 +137,10 @@ func (p *Account) SetCreatedAt(val string) {
 	p.CreatedAt = val
 }
 
+func (p *Account) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *Account) String() string {
 	if p == nil {
 		return "<nil>"
@@ -147,8 +158,9 @@ var fieldIDToName_Account = map[int16]string{
 }
 
 type InitializeRequest struct {
-	Username string `thrift:"username,1,required" frugal:"1,required,string" json:"username"`
-	Password string `thrift:"password,2,required" frugal:"2,required,string" json:"password"`
+	Username       string `thrift:"username,1,required" frugal:"1,required,string" json:"username"`
+	Password       string `thrift:"password,2,required" frugal:"2,required,string" json:"password"`
+	_unknownFields unknown.Fields
 }
 
 func NewInitializeRequest() *InitializeRequest {
@@ -172,6 +184,10 @@ func (p *InitializeRequest) SetPassword(val string) {
 	p.Password = val
 }
 
+func (p *InitializeRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *InitializeRequest) String() string {
 	if p == nil {
 		return "<nil>"
@@ -185,7 +201,8 @@ var fieldIDToName_InitializeRequest = map[int16]string{
 }
 
 type ProbeResult_ struct {
-	Initialized bool `thrift:"initialized,1,required" frugal:"1,required,bool" json:"initialized"`
+	Initialized    bool `thrift:"initialized,1,required" frugal:"1,required,bool" json:"initialized"`
+	_unknownFields unknown.Fields
 }
 
 func NewProbeResult_() *ProbeResult_ {
@@ -202,6 +219,10 @@ func (p *ProbeResult_) SetInitialized(val bool) {
 	p.Initialized = val
 }
 
+func (p *ProbeResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ProbeResult_) String() string {
 	if p == nil {
 		return "<nil>"
@@ -214,8 +235,9 @@ var fieldIDToName_ProbeResult_ = map[int16]string{
 }
 
 type LoginRequest struct {
-	Username string `thrift:"username,1,required" frugal:"1,required,string" json:"username"`
-	Password string `thrift:"password,2,required" frugal:"2,required,string" json:"password"`
+	Username       string `thrift:"username,1,required" frugal:"1,required,string" json:"username"`
+	Password       string `thrift:"password,2,required" frugal:"2,required,string" json:"password"`
+	_unknownFields unknown.Fields
 }
 
 func NewLoginRequest() *LoginRequest {
@@ -239,6 +261,10 @@ func (p *LoginRequest) SetPassword(val string) {
 	p.Password = val
 }
 
+func (p *LoginRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *LoginRequest) String() string {
 	if p == nil {
 		return "<nil>"
@@ -252,9 +278,10 @@ var fieldIDToName_LoginRequest = map[int16]string{
 }
 
 type LoginResult_ struct {
-	Account      *Account `thrift:"account,1,required" frugal:"1,required,Account" json:"account"`
-	SessionToken string   `thrift:"sessionToken,2,required" frugal:"2,required,string" json:"sessionToken"`
-	ExpiresAt    string   `thrift:"expiresAt,3,required" frugal:"3,required,string" json:"expiresAt"`
+	Account        *Account `thrift:"account,1,required" frugal:"1,required,Account" json:"account"`
+	SessionToken   string   `thrift:"sessionToken,2,required" frugal:"2,required,string" json:"sessionToken"`
+	ExpiresAt      string   `thrift:"expiresAt,3,required" frugal:"3,required,string" json:"expiresAt"`
+	_unknownFields unknown.Fields
 }
 
 func NewLoginResult_() *LoginResult_ {
@@ -290,6 +317,10 @@ func (p *LoginResult_) SetExpiresAt(val string) {
 	p.ExpiresAt = val
 }
 
+func (p *LoginResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *LoginResult_) IsSetAccount() bool {
 	return p.Account != nil
 }
@@ -308,8 +339,9 @@ var fieldIDToName_LoginResult_ = map[int16]string{
 }
 
 type SessionResult_ struct {
-	Account   *Account `thrift:"account,1,required" frugal:"1,required,Account" json:"account"`
-	ExpiresAt string   `thrift:"expiresAt,2,required" frugal:"2,required,string" json:"expiresAt"`
+	Account        *Account `thrift:"account,1,required" frugal:"1,required,Account" json:"account"`
+	ExpiresAt      string   `thrift:"expiresAt,2,required" frugal:"2,required,string" json:"expiresAt"`
+	_unknownFields unknown.Fields
 }
 
 func NewSessionResult_() *SessionResult_ {
@@ -338,6 +370,10 @@ func (p *SessionResult_) SetExpiresAt(val string) {
 	p.ExpiresAt = val
 }
 
+func (p *SessionResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *SessionResult_) IsSetAccount() bool {
 	return p.Account != nil
 }
@@ -357,6 +393,7 @@ var fieldIDToName_SessionResult_ = map[int16]string{
 type ChangePasswordRequest struct {
 	CurrentPassword string `thrift:"currentPassword,1,required" frugal:"1,required,string" json:"currentPassword"`
 	NewPassword_    string `thrift:"newPassword,2,required" frugal:"2,required,string" json:"newPassword"`
+	_unknownFields  unknown.Fields
 }
 
 func NewChangePasswordRequest() *ChangePasswordRequest {
@@ -380,6 +417,10 @@ func (p *ChangePasswordRequest) SetNewPassword_(val string) {
 	p.NewPassword_ = val
 }
 
+func (p *ChangePasswordRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ChangePasswordRequest) String() string {
 	if p == nil {
 		return "<nil>"
@@ -393,9 +434,10 @@ var fieldIDToName_ChangePasswordRequest = map[int16]string{
 }
 
 type CreateAccountRequest struct {
-	Username string `thrift:"username,1,required" frugal:"1,required,string" json:"username"`
-	Password string `thrift:"password,2,required" frugal:"2,required,string" json:"password"`
-	Role     string `thrift:"role,3,required" frugal:"3,required,string" json:"role"`
+	Username       string `thrift:"username,1,required" frugal:"1,required,string" json:"username"`
+	Password       string `thrift:"password,2,required" frugal:"2,required,string" json:"password"`
+	Role           string `thrift:"role,3,required" frugal:"3,required,string" json:"role"`
+	_unknownFields unknown.Fields
 }
 
 func NewCreateAccountRequest() *CreateAccountRequest {
@@ -426,6 +468,10 @@ func (p *CreateAccountRequest) SetRole(val string) {
 	p.Role = val
 }
 
+func (p *CreateAccountRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *CreateAccountRequest) String() string {
 	if p == nil {
 		return "<nil>"
@@ -440,7 +486,8 @@ var fieldIDToName_CreateAccountRequest = map[int16]string{
 }
 
 type AccountsResult_ struct {
-	Accounts []*Account `thrift:"accounts,1,required" frugal:"1,required,list<Account>" json:"accounts"`
+	Accounts       []*Account `thrift:"accounts,1,required" frugal:"1,required,list<Account>" json:"accounts"`
+	_unknownFields unknown.Fields
 }
 
 func NewAccountsResult_() *AccountsResult_ {
@@ -457,6 +504,10 @@ func (p *AccountsResult_) SetAccounts(val []*Account) {
 	p.Accounts = val
 }
 
+func (p *AccountsResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *AccountsResult_) String() string {
 	if p == nil {
 		return "<nil>"
@@ -469,9 +520,10 @@ var fieldIDToName_AccountsResult_ = map[int16]string{
 }
 
 type UpdateAccountRequest struct {
-	Id      string  `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	Role    *string `thrift:"role,2,optional" frugal:"2,optional,string" json:"role,omitempty"`
-	Enabled *bool   `thrift:"enabled,3,optional" frugal:"3,optional,bool" json:"enabled,omitempty"`
+	Id             string  `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	Role           *string `thrift:"role,2,optional" frugal:"2,optional,string" json:"role,omitempty"`
+	Enabled        *bool   `thrift:"enabled,3,optional" frugal:"3,optional,bool" json:"enabled,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewUpdateAccountRequest() *UpdateAccountRequest {
@@ -512,6 +564,10 @@ func (p *UpdateAccountRequest) SetEnabled(val *bool) {
 	p.Enabled = val
 }
 
+func (p *UpdateAccountRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *UpdateAccountRequest) IsSetRole() bool {
 	return p.Role != nil
 }
@@ -534,8 +590,9 @@ var fieldIDToName_UpdateAccountRequest = map[int16]string{
 }
 
 type ResetPasswordRequest struct {
-	Id       string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	Password string `thrift:"password,2,required" frugal:"2,required,string" json:"password"`
+	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	Password       string `thrift:"password,2,required" frugal:"2,required,string" json:"password"`
+	_unknownFields unknown.Fields
 }
 
 func NewResetPasswordRequest() *ResetPasswordRequest {
@@ -559,6 +616,10 @@ func (p *ResetPasswordRequest) SetPassword(val string) {
 	p.Password = val
 }
 
+func (p *ResetPasswordRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ResetPasswordRequest) String() string {
 	if p == nil {
 		return "<nil>"
@@ -572,7 +633,8 @@ var fieldIDToName_ResetPasswordRequest = map[int16]string{
 }
 
 type KubeconfigRequest struct {
-	Kubeconfig string `thrift:"kubeconfig,1,required" frugal:"1,required,string" json:"kubeconfig"`
+	Kubeconfig     string `thrift:"kubeconfig,1,required" frugal:"1,required,string" json:"kubeconfig"`
+	_unknownFields unknown.Fields
 }
 
 func NewKubeconfigRequest() *KubeconfigRequest {
@@ -589,6 +651,10 @@ func (p *KubeconfigRequest) SetKubeconfig(val string) {
 	p.Kubeconfig = val
 }
 
+func (p *KubeconfigRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *KubeconfigRequest) String() string {
 	if p == nil {
 		return "<nil>"
@@ -601,7 +667,8 @@ var fieldIDToName_KubeconfigRequest = map[int16]string{
 }
 
 type ContextsResult_ struct {
-	Contexts []string `thrift:"contexts,1,required" frugal:"1,required,list<string>" json:"contexts"`
+	Contexts       []string `thrift:"contexts,1,required" frugal:"1,required,list<string>" json:"contexts"`
+	_unknownFields unknown.Fields
 }
 
 func NewContextsResult_() *ContextsResult_ {
@@ -618,6 +685,10 @@ func (p *ContextsResult_) SetContexts(val []string) {
 	p.Contexts = val
 }
 
+func (p *ContextsResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ContextsResult_) String() string {
 	if p == nil {
 		return "<nil>"
@@ -630,6 +701,7 @@ var fieldIDToName_ContextsResult_ = map[int16]string{
 }
 
 type Empty struct {
+	_unknownFields unknown.Fields
 }
 
 func NewEmpty() *Empty {
@@ -637,6 +709,10 @@ func NewEmpty() *Empty {
 }
 
 func (p *Empty) InitDefault() {
+}
+
+func (p *Empty) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
 }
 
 func (p *Empty) String() string {
@@ -649,9 +725,10 @@ func (p *Empty) String() string {
 var fieldIDToName_Empty = map[int16]string{}
 
 type ClusterCapability struct {
-	Component string `thrift:"component,1,required" frugal:"1,required,string" json:"component"`
-	Allowed   bool   `thrift:"allowed,2,required" frugal:"2,required,bool" json:"allowed"`
-	Reason    string `thrift:"reason,3,required" frugal:"3,required,string" json:"reason"`
+	Component      string `thrift:"component,1,required" frugal:"1,required,string" json:"component"`
+	Allowed        bool   `thrift:"allowed,2,required" frugal:"2,required,bool" json:"allowed"`
+	Reason         string `thrift:"reason,3,required" frugal:"3,required,string" json:"reason"`
+	_unknownFields unknown.Fields
 }
 
 func NewClusterCapability() *ClusterCapability {
@@ -682,6 +759,10 @@ func (p *ClusterCapability) SetReason(val string) {
 	p.Reason = val
 }
 
+func (p *ClusterCapability) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ClusterCapability) String() string {
 	if p == nil {
 		return "<nil>"
@@ -707,6 +788,7 @@ type Cluster struct {
 	Revision           int64                `thrift:"revision,9,required" frugal:"9,required,i64" json:"revision"`
 	Capabilities       []*ClusterCapability `thrift:"capabilities,10,required" frugal:"10,required,list<ClusterCapability>" json:"capabilities"`
 	CreatedAt          string               `thrift:"createdAt,11,required" frugal:"11,required,string" json:"createdAt"`
+	_unknownFields     unknown.Fields
 }
 
 func NewCluster() *Cluster {
@@ -793,6 +875,10 @@ func (p *Cluster) SetCreatedAt(val string) {
 	p.CreatedAt = val
 }
 
+func (p *Cluster) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *Cluster) String() string {
 	if p == nil {
 		return "<nil>"
@@ -815,7 +901,8 @@ var fieldIDToName_Cluster = map[int16]string{
 }
 
 type ClustersResult_ struct {
-	Clusters []*Cluster `thrift:"clusters,1,required" frugal:"1,required,list<Cluster>" json:"clusters"`
+	Clusters       []*Cluster `thrift:"clusters,1,required" frugal:"1,required,list<Cluster>" json:"clusters"`
+	_unknownFields unknown.Fields
 }
 
 func NewClustersResult_() *ClustersResult_ {
@@ -832,6 +919,10 @@ func (p *ClustersResult_) SetClusters(val []*Cluster) {
 	p.Clusters = val
 }
 
+func (p *ClustersResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ClustersResult_) String() string {
 	if p == nil {
 		return "<nil>"
@@ -844,10 +935,11 @@ var fieldIDToName_ClustersResult_ = map[int16]string{
 }
 
 type RegisterClusterRequest struct {
-	Name       string `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
-	OwnerId    string `thrift:"ownerId,2,required" frugal:"2,required,string" json:"ownerId"`
-	Context    string `thrift:"context,3,required" frugal:"3,required,string" json:"context"`
-	Kubeconfig string `thrift:"kubeconfig,4,required" frugal:"4,required,string" json:"kubeconfig"`
+	Name           string `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	OwnerId        string `thrift:"ownerId,2,required" frugal:"2,required,string" json:"ownerId"`
+	Context        string `thrift:"context,3,required" frugal:"3,required,string" json:"context"`
+	Kubeconfig     string `thrift:"kubeconfig,4,required" frugal:"4,required,string" json:"kubeconfig"`
+	_unknownFields unknown.Fields
 }
 
 func NewRegisterClusterRequest() *RegisterClusterRequest {
@@ -885,6 +977,10 @@ func (p *RegisterClusterRequest) SetKubeconfig(val string) {
 	p.Kubeconfig = val
 }
 
+func (p *RegisterClusterRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *RegisterClusterRequest) String() string {
 	if p == nil {
 		return "<nil>"
@@ -900,7 +996,8 @@ var fieldIDToName_RegisterClusterRequest = map[int16]string{
 }
 
 type ClusterID struct {
-	Id string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	_unknownFields unknown.Fields
 }
 
 func NewClusterID() *ClusterID {
@@ -917,6 +1014,10 @@ func (p *ClusterID) SetId(val string) {
 	p.Id = val
 }
 
+func (p *ClusterID) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ClusterID) String() string {
 	if p == nil {
 		return "<nil>"
@@ -929,10 +1030,11 @@ var fieldIDToName_ClusterID = map[int16]string{
 }
 
 type CredentialRequest struct {
-	Id         string  `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	Context    string  `thrift:"context,2,required" frugal:"2,required,string" json:"context"`
-	Kubeconfig string  `thrift:"kubeconfig,3,required" frugal:"3,required,string" json:"kubeconfig"`
-	OwnerId    *string `thrift:"ownerId,4,optional" frugal:"4,optional,string" json:"ownerId,omitempty"`
+	Id             string  `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	Context        string  `thrift:"context,2,required" frugal:"2,required,string" json:"context"`
+	Kubeconfig     string  `thrift:"kubeconfig,3,required" frugal:"3,required,string" json:"kubeconfig"`
+	OwnerId        *string `thrift:"ownerId,4,optional" frugal:"4,optional,string" json:"ownerId,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewCredentialRequest() *CredentialRequest {
@@ -975,6 +1077,10 @@ func (p *CredentialRequest) SetOwnerId(val *string) {
 	p.OwnerId = val
 }
 
+func (p *CredentialRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *CredentialRequest) IsSetOwnerId() bool {
 	return p.OwnerId != nil
 }
@@ -994,8 +1100,9 @@ var fieldIDToName_CredentialRequest = map[int16]string{
 }
 
 type TransferClusterRequest struct {
-	Id      string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	OwnerId string `thrift:"ownerId,2,required" frugal:"2,required,string" json:"ownerId"`
+	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	OwnerId        string `thrift:"ownerId,2,required" frugal:"2,required,string" json:"ownerId"`
+	_unknownFields unknown.Fields
 }
 
 func NewTransferClusterRequest() *TransferClusterRequest {
@@ -1019,6 +1126,10 @@ func (p *TransferClusterRequest) SetOwnerId(val string) {
 	p.OwnerId = val
 }
 
+func (p *TransferClusterRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *TransferClusterRequest) String() string {
 	if p == nil {
 		return "<nil>"
@@ -1032,17 +1143,21 @@ var fieldIDToName_TransferClusterRequest = map[int16]string{
 }
 
 type Operation struct {
-	OperationId        string `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
-	Action             string `thrift:"action,2,required" frugal:"2,required,string" json:"action"`
-	State              string `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
-	ClusterId          string `thrift:"clusterId,4,required" frugal:"4,required,string" json:"clusterId"`
-	ActorId            string `thrift:"actorId,5,required" frugal:"5,required,string" json:"actorId"`
-	Message            string `thrift:"message,6,required" frugal:"6,required,string" json:"message"`
-	CreatedAt          string `thrift:"createdAt,7,required" frugal:"7,required,string" json:"createdAt"`
-	UpdatedAt          string `thrift:"updatedAt,8,required" frugal:"8,required,string" json:"updatedAt"`
-	CredentialRevision int64  `thrift:"credentialRevision,9,required" frugal:"9,required,i64" json:"credentialRevision"`
-	OwnerId            string `thrift:"ownerId,10,required" frugal:"10,required,string" json:"ownerId"`
-	PreviousOwnerId    string `thrift:"previousOwnerId,11,required" frugal:"11,required,string" json:"previousOwnerId"`
+	OperationId        string  `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
+	Action             string  `thrift:"action,2,required" frugal:"2,required,string" json:"action"`
+	State              string  `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
+	ClusterId          string  `thrift:"clusterId,4,required" frugal:"4,required,string" json:"clusterId"`
+	ActorId            string  `thrift:"actorId,5,required" frugal:"5,required,string" json:"actorId"`
+	Message            string  `thrift:"message,6,required" frugal:"6,required,string" json:"message"`
+	CreatedAt          string  `thrift:"createdAt,7,required" frugal:"7,required,string" json:"createdAt"`
+	UpdatedAt          string  `thrift:"updatedAt,8,required" frugal:"8,required,string" json:"updatedAt"`
+	CredentialRevision int64   `thrift:"credentialRevision,9,required" frugal:"9,required,i64" json:"credentialRevision"`
+	OwnerId            string  `thrift:"ownerId,10,required" frugal:"10,required,string" json:"ownerId"`
+	PreviousOwnerId    string  `thrift:"previousOwnerId,11,required" frugal:"11,required,string" json:"previousOwnerId"`
+	InstanceId         *string `thrift:"instanceId,12,optional" frugal:"12,optional,string" json:"instanceId,omitempty"`
+	VersionId          *string `thrift:"versionId,13,optional" frugal:"13,optional,string" json:"versionId,omitempty"`
+	AttemptId          *string `thrift:"attemptId,14,optional" frugal:"14,optional,string" json:"attemptId,omitempty"`
+	_unknownFields     unknown.Fields
 }
 
 func NewOperation() *Operation {
@@ -1095,6 +1210,33 @@ func (p *Operation) GetOwnerId() (v string) {
 func (p *Operation) GetPreviousOwnerId() (v string) {
 	return p.PreviousOwnerId
 }
+
+var Operation_InstanceId_DEFAULT string
+
+func (p *Operation) GetInstanceId() (v string) {
+	if !p.IsSetInstanceId() {
+		return Operation_InstanceId_DEFAULT
+	}
+	return *p.InstanceId
+}
+
+var Operation_VersionId_DEFAULT string
+
+func (p *Operation) GetVersionId() (v string) {
+	if !p.IsSetVersionId() {
+		return Operation_VersionId_DEFAULT
+	}
+	return *p.VersionId
+}
+
+var Operation_AttemptId_DEFAULT string
+
+func (p *Operation) GetAttemptId() (v string) {
+	if !p.IsSetAttemptId() {
+		return Operation_AttemptId_DEFAULT
+	}
+	return *p.AttemptId
+}
 func (p *Operation) SetOperationId(val string) {
 	p.OperationId = val
 }
@@ -1128,6 +1270,31 @@ func (p *Operation) SetOwnerId(val string) {
 func (p *Operation) SetPreviousOwnerId(val string) {
 	p.PreviousOwnerId = val
 }
+func (p *Operation) SetInstanceId(val *string) {
+	p.InstanceId = val
+}
+func (p *Operation) SetVersionId(val *string) {
+	p.VersionId = val
+}
+func (p *Operation) SetAttemptId(val *string) {
+	p.AttemptId = val
+}
+
+func (p *Operation) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *Operation) IsSetInstanceId() bool {
+	return p.InstanceId != nil
+}
+
+func (p *Operation) IsSetVersionId() bool {
+	return p.VersionId != nil
+}
+
+func (p *Operation) IsSetAttemptId() bool {
+	return p.AttemptId != nil
+}
 
 func (p *Operation) String() string {
 	if p == nil {
@@ -1148,10 +1315,14 @@ var fieldIDToName_Operation = map[int16]string{
 	9:  "credentialRevision",
 	10: "ownerId",
 	11: "previousOwnerId",
+	12: "instanceId",
+	13: "versionId",
+	14: "attemptId",
 }
 
 type OperationID struct {
-	OperationId string `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
+	OperationId    string `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
+	_unknownFields unknown.Fields
 }
 
 func NewOperationID() *OperationID {
@@ -1168,6 +1339,10 @@ func (p *OperationID) SetOperationId(val string) {
 	p.OperationId = val
 }
 
+func (p *OperationID) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *OperationID) String() string {
 	if p == nil {
 		return "<nil>"
@@ -1180,7 +1355,8 @@ var fieldIDToName_OperationID = map[int16]string{
 }
 
 type OperationsResult_ struct {
-	Operations []*Operation `thrift:"operations,1,required" frugal:"1,required,list<Operation>" json:"operations"`
+	Operations     []*Operation `thrift:"operations,1,required" frugal:"1,required,list<Operation>" json:"operations"`
+	_unknownFields unknown.Fields
 }
 
 func NewOperationsResult_() *OperationsResult_ {
@@ -1197,6 +1373,10 @@ func (p *OperationsResult_) SetOperations(val []*Operation) {
 	p.Operations = val
 }
 
+func (p *OperationsResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *OperationsResult_) String() string {
 	if p == nil {
 		return "<nil>"
@@ -1209,7 +1389,8 @@ var fieldIDToName_OperationsResult_ = map[int16]string{
 }
 
 type NamespacesResult_ struct {
-	Namespaces []string `thrift:"namespaces,1,required" frugal:"1,required,list<string>" json:"namespaces"`
+	Namespaces     []string `thrift:"namespaces,1,required" frugal:"1,required,list<string>" json:"namespaces"`
+	_unknownFields unknown.Fields
 }
 
 func NewNamespacesResult_() *NamespacesResult_ {
@@ -1226,6 +1407,10 @@ func (p *NamespacesResult_) SetNamespaces(val []string) {
 	p.Namespaces = val
 }
 
+func (p *NamespacesResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *NamespacesResult_) String() string {
 	if p == nil {
 		return "<nil>"
@@ -1238,10 +1423,11 @@ var fieldIDToName_NamespacesResult_ = map[int16]string{
 }
 
 type ReferenceMetadata struct {
-	Kind      string   `thrift:"kind,1,required" frugal:"1,required,string" json:"kind"`
-	Name      string   `thrift:"name,2,required" frugal:"2,required,string" json:"name"`
-	Namespace string   `thrift:"namespace,3,required" frugal:"3,required,string" json:"namespace"`
-	Keys      []string `thrift:"keys,4,required" frugal:"4,required,list<string>" json:"keys"`
+	Kind           string   `thrift:"kind,1,required" frugal:"1,required,string" json:"kind"`
+	Name           string   `thrift:"name,2,required" frugal:"2,required,string" json:"name"`
+	Namespace      string   `thrift:"namespace,3,required" frugal:"3,required,string" json:"namespace"`
+	Keys           []string `thrift:"keys,4,required" frugal:"4,required,list<string>" json:"keys"`
+	_unknownFields unknown.Fields
 }
 
 func NewReferenceMetadata() *ReferenceMetadata {
@@ -1279,6 +1465,10 @@ func (p *ReferenceMetadata) SetKeys(val []string) {
 	p.Keys = val
 }
 
+func (p *ReferenceMetadata) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ReferenceMetadata) String() string {
 	if p == nil {
 		return "<nil>"
@@ -1294,9 +1484,10 @@ var fieldIDToName_ReferenceMetadata = map[int16]string{
 }
 
 type ReferencesRequest struct {
-	Id        string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	Namespace string `thrift:"namespace,2,required" frugal:"2,required,string" json:"namespace"`
-	Kind      string `thrift:"kind,3,required" frugal:"3,required,string" json:"kind"`
+	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	Namespace      string `thrift:"namespace,2,required" frugal:"2,required,string" json:"namespace"`
+	Kind           string `thrift:"kind,3,required" frugal:"3,required,string" json:"kind"`
+	_unknownFields unknown.Fields
 }
 
 func NewReferencesRequest() *ReferencesRequest {
@@ -1327,6 +1518,10 @@ func (p *ReferencesRequest) SetKind(val string) {
 	p.Kind = val
 }
 
+func (p *ReferencesRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ReferencesRequest) String() string {
 	if p == nil {
 		return "<nil>"
@@ -1341,7 +1536,8 @@ var fieldIDToName_ReferencesRequest = map[int16]string{
 }
 
 type ReferencesResult_ struct {
-	References []*ReferenceMetadata `thrift:"references,1,required" frugal:"1,required,list<ReferenceMetadata>" json:"references"`
+	References     []*ReferenceMetadata `thrift:"references,1,required" frugal:"1,required,list<ReferenceMetadata>" json:"references"`
+	_unknownFields unknown.Fields
 }
 
 func NewReferencesResult_() *ReferencesResult_ {
@@ -1358,6 +1554,10 @@ func (p *ReferencesResult_) SetReferences(val []*ReferenceMetadata) {
 	p.References = val
 }
 
+func (p *ReferencesResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ReferencesResult_) String() string {
 	if p == nil {
 		return "<nil>"
@@ -1369,9 +1569,1587 @@ var fieldIDToName_ReferencesResult_ = map[int16]string{
 	1: "references",
 }
 
+type ContainerResources struct {
+	RequestCPU     *string `thrift:"requestCPU,1,optional" frugal:"1,optional,string" json:"requestCPU,omitempty"`
+	RequestMemory  *string `thrift:"requestMemory,2,optional" frugal:"2,optional,string" json:"requestMemory,omitempty"`
+	LimitCPU       *string `thrift:"limitCPU,3,optional" frugal:"3,optional,string" json:"limitCPU,omitempty"`
+	LimitMemory    *string `thrift:"limitMemory,4,optional" frugal:"4,optional,string" json:"limitMemory,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewContainerResources() *ContainerResources {
+	return &ContainerResources{}
+}
+
+func (p *ContainerResources) InitDefault() {
+}
+
+var ContainerResources_RequestCPU_DEFAULT string
+
+func (p *ContainerResources) GetRequestCPU() (v string) {
+	if !p.IsSetRequestCPU() {
+		return ContainerResources_RequestCPU_DEFAULT
+	}
+	return *p.RequestCPU
+}
+
+var ContainerResources_RequestMemory_DEFAULT string
+
+func (p *ContainerResources) GetRequestMemory() (v string) {
+	if !p.IsSetRequestMemory() {
+		return ContainerResources_RequestMemory_DEFAULT
+	}
+	return *p.RequestMemory
+}
+
+var ContainerResources_LimitCPU_DEFAULT string
+
+func (p *ContainerResources) GetLimitCPU() (v string) {
+	if !p.IsSetLimitCPU() {
+		return ContainerResources_LimitCPU_DEFAULT
+	}
+	return *p.LimitCPU
+}
+
+var ContainerResources_LimitMemory_DEFAULT string
+
+func (p *ContainerResources) GetLimitMemory() (v string) {
+	if !p.IsSetLimitMemory() {
+		return ContainerResources_LimitMemory_DEFAULT
+	}
+	return *p.LimitMemory
+}
+func (p *ContainerResources) SetRequestCPU(val *string) {
+	p.RequestCPU = val
+}
+func (p *ContainerResources) SetRequestMemory(val *string) {
+	p.RequestMemory = val
+}
+func (p *ContainerResources) SetLimitCPU(val *string) {
+	p.LimitCPU = val
+}
+func (p *ContainerResources) SetLimitMemory(val *string) {
+	p.LimitMemory = val
+}
+
+func (p *ContainerResources) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ContainerResources) IsSetRequestCPU() bool {
+	return p.RequestCPU != nil
+}
+
+func (p *ContainerResources) IsSetRequestMemory() bool {
+	return p.RequestMemory != nil
+}
+
+func (p *ContainerResources) IsSetLimitCPU() bool {
+	return p.LimitCPU != nil
+}
+
+func (p *ContainerResources) IsSetLimitMemory() bool {
+	return p.LimitMemory != nil
+}
+
+func (p *ContainerResources) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ContainerResources(%+v)", *p)
+}
+
+var fieldIDToName_ContainerResources = map[int16]string{
+	1: "requestCPU",
+	2: "requestMemory",
+	3: "limitCPU",
+	4: "limitMemory",
+}
+
+type CollectorSelection struct {
+	Mode           string   `thrift:"mode,1,required" frugal:"1,required,string" json:"mode"`
+	Names          []string `thrift:"names,2,optional" frugal:"2,optional,list<string>" json:"names,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewCollectorSelection() *CollectorSelection {
+	return &CollectorSelection{}
+}
+
+func (p *CollectorSelection) InitDefault() {
+}
+
+func (p *CollectorSelection) GetMode() (v string) {
+	return p.Mode
+}
+
+var CollectorSelection_Names_DEFAULT []string
+
+func (p *CollectorSelection) GetNames() (v []string) {
+	if !p.IsSetNames() {
+		return CollectorSelection_Names_DEFAULT
+	}
+	return p.Names
+}
+func (p *CollectorSelection) SetMode(val string) {
+	p.Mode = val
+}
+func (p *CollectorSelection) SetNames(val []string) {
+	p.Names = val
+}
+
+func (p *CollectorSelection) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *CollectorSelection) IsSetNames() bool {
+	return p.Names != nil
+}
+
+func (p *CollectorSelection) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CollectorSelection(%+v)", *p)
+}
+
+var fieldIDToName_CollectorSelection = map[int16]string{
+	1: "mode",
+	2: "names",
+}
+
+type MetricSelection struct {
+	Mode           string   `thrift:"mode,1,required" frugal:"1,required,string" json:"mode"`
+	Patterns       []string `thrift:"patterns,2,optional" frugal:"2,optional,list<string>" json:"patterns,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewMetricSelection() *MetricSelection {
+	return &MetricSelection{}
+}
+
+func (p *MetricSelection) InitDefault() {
+}
+
+func (p *MetricSelection) GetMode() (v string) {
+	return p.Mode
+}
+
+var MetricSelection_Patterns_DEFAULT []string
+
+func (p *MetricSelection) GetPatterns() (v []string) {
+	if !p.IsSetPatterns() {
+		return MetricSelection_Patterns_DEFAULT
+	}
+	return p.Patterns
+}
+func (p *MetricSelection) SetMode(val string) {
+	p.Mode = val
+}
+func (p *MetricSelection) SetPatterns(val []string) {
+	p.Patterns = val
+}
+
+func (p *MetricSelection) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *MetricSelection) IsSetPatterns() bool {
+	return p.Patterns != nil
+}
+
+func (p *MetricSelection) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MetricSelection(%+v)", *p)
+}
+
+var fieldIDToName_MetricSelection = map[int16]string{
+	1: "mode",
+	2: "patterns",
+}
+
+type NamespaceSelection struct {
+	Mode           string   `thrift:"mode,1,required" frugal:"1,required,string" json:"mode"`
+	Names          []string `thrift:"names,2,optional" frugal:"2,optional,list<string>" json:"names,omitempty"`
+	NamePatterns   []string `thrift:"namePatterns,3,optional" frugal:"3,optional,list<string>" json:"namePatterns,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewNamespaceSelection() *NamespaceSelection {
+	return &NamespaceSelection{}
+}
+
+func (p *NamespaceSelection) InitDefault() {
+}
+
+func (p *NamespaceSelection) GetMode() (v string) {
+	return p.Mode
+}
+
+var NamespaceSelection_Names_DEFAULT []string
+
+func (p *NamespaceSelection) GetNames() (v []string) {
+	if !p.IsSetNames() {
+		return NamespaceSelection_Names_DEFAULT
+	}
+	return p.Names
+}
+
+var NamespaceSelection_NamePatterns_DEFAULT []string
+
+func (p *NamespaceSelection) GetNamePatterns() (v []string) {
+	if !p.IsSetNamePatterns() {
+		return NamespaceSelection_NamePatterns_DEFAULT
+	}
+	return p.NamePatterns
+}
+func (p *NamespaceSelection) SetMode(val string) {
+	p.Mode = val
+}
+func (p *NamespaceSelection) SetNames(val []string) {
+	p.Names = val
+}
+func (p *NamespaceSelection) SetNamePatterns(val []string) {
+	p.NamePatterns = val
+}
+
+func (p *NamespaceSelection) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *NamespaceSelection) IsSetNames() bool {
+	return p.Names != nil
+}
+
+func (p *NamespaceSelection) IsSetNamePatterns() bool {
+	return p.NamePatterns != nil
+}
+
+func (p *NamespaceSelection) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("NamespaceSelection(%+v)", *p)
+}
+
+var fieldIDToName_NamespaceSelection = map[int16]string{
+	1: "mode",
+	2: "names",
+	3: "namePatterns",
+}
+
+type RoleResources struct {
+	Mode           string              `thrift:"mode,1,required" frugal:"1,required,string" json:"mode"`
+	Resources      *ContainerResources `thrift:"resources,2,optional" frugal:"2,optional,ContainerResources" json:"resources,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewRoleResources() *RoleResources {
+	return &RoleResources{}
+}
+
+func (p *RoleResources) InitDefault() {
+}
+
+func (p *RoleResources) GetMode() (v string) {
+	return p.Mode
+}
+
+var RoleResources_Resources_DEFAULT *ContainerResources
+
+func (p *RoleResources) GetResources() (v *ContainerResources) {
+	if !p.IsSetResources() {
+		return RoleResources_Resources_DEFAULT
+	}
+	return p.Resources
+}
+func (p *RoleResources) SetMode(val string) {
+	p.Mode = val
+}
+func (p *RoleResources) SetResources(val *ContainerResources) {
+	p.Resources = val
+}
+
+func (p *RoleResources) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *RoleResources) IsSetResources() bool {
+	return p.Resources != nil
+}
+
+func (p *RoleResources) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RoleResources(%+v)", *p)
+}
+
+var fieldIDToName_RoleResources = map[int16]string{
+	1: "mode",
+	2: "resources",
+}
+
+type KSMConfiguration struct {
+	Name                 string              `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	TargetNamespace      string              `thrift:"targetNamespace,2,required" frugal:"2,required,string" json:"targetNamespace"`
+	DeploymentMode       string              `thrift:"deploymentMode,3,required" frugal:"3,required,string" json:"deploymentMode"`
+	DesiredState         string              `thrift:"desiredState,4,required" frugal:"4,required,string" json:"desiredState"`
+	Resources            *ContainerResources `thrift:"resources,5,required" frugal:"5,required,ContainerResources" json:"resources"`
+	Collectors           *CollectorSelection `thrift:"collectors,6,required" frugal:"6,required,CollectorSelection" json:"collectors"`
+	MetricFilter         *MetricSelection    `thrift:"metricFilter,7,required" frugal:"7,required,MetricSelection" json:"metricFilter"`
+	NamespaceFilter      *NamespaceSelection `thrift:"namespaceFilter,8,required" frugal:"8,required,NamespaceSelection" json:"namespaceFilter"`
+	AdvancedResources    bool                `thrift:"advancedResources,9,required" frugal:"9,required,bool" json:"advancedResources"`
+	Shards               *int32              `thrift:"shards,10,optional" frugal:"10,optional,i32" json:"shards,omitempty"`
+	NodeResources        *RoleResources      `thrift:"nodeResources,11,optional" frugal:"11,optional,RoleResources" json:"nodeResources,omitempty"`
+	ClusterResources     *RoleResources      `thrift:"clusterResources,12,optional" frugal:"12,optional,RoleResources" json:"clusterResources,omitempty"`
+	UnscheduledResources *RoleResources      `thrift:"unscheduledResources,13,optional" frugal:"13,optional,RoleResources" json:"unscheduledResources,omitempty"`
+	_unknownFields       unknown.Fields
+}
+
+func NewKSMConfiguration() *KSMConfiguration {
+	return &KSMConfiguration{}
+}
+
+func (p *KSMConfiguration) InitDefault() {
+}
+
+func (p *KSMConfiguration) GetName() (v string) {
+	return p.Name
+}
+
+func (p *KSMConfiguration) GetTargetNamespace() (v string) {
+	return p.TargetNamespace
+}
+
+func (p *KSMConfiguration) GetDeploymentMode() (v string) {
+	return p.DeploymentMode
+}
+
+func (p *KSMConfiguration) GetDesiredState() (v string) {
+	return p.DesiredState
+}
+
+var KSMConfiguration_Resources_DEFAULT *ContainerResources
+
+func (p *KSMConfiguration) GetResources() (v *ContainerResources) {
+	if !p.IsSetResources() {
+		return KSMConfiguration_Resources_DEFAULT
+	}
+	return p.Resources
+}
+
+var KSMConfiguration_Collectors_DEFAULT *CollectorSelection
+
+func (p *KSMConfiguration) GetCollectors() (v *CollectorSelection) {
+	if !p.IsSetCollectors() {
+		return KSMConfiguration_Collectors_DEFAULT
+	}
+	return p.Collectors
+}
+
+var KSMConfiguration_MetricFilter_DEFAULT *MetricSelection
+
+func (p *KSMConfiguration) GetMetricFilter() (v *MetricSelection) {
+	if !p.IsSetMetricFilter() {
+		return KSMConfiguration_MetricFilter_DEFAULT
+	}
+	return p.MetricFilter
+}
+
+var KSMConfiguration_NamespaceFilter_DEFAULT *NamespaceSelection
+
+func (p *KSMConfiguration) GetNamespaceFilter() (v *NamespaceSelection) {
+	if !p.IsSetNamespaceFilter() {
+		return KSMConfiguration_NamespaceFilter_DEFAULT
+	}
+	return p.NamespaceFilter
+}
+
+func (p *KSMConfiguration) GetAdvancedResources() (v bool) {
+	return p.AdvancedResources
+}
+
+var KSMConfiguration_Shards_DEFAULT int32
+
+func (p *KSMConfiguration) GetShards() (v int32) {
+	if !p.IsSetShards() {
+		return KSMConfiguration_Shards_DEFAULT
+	}
+	return *p.Shards
+}
+
+var KSMConfiguration_NodeResources_DEFAULT *RoleResources
+
+func (p *KSMConfiguration) GetNodeResources() (v *RoleResources) {
+	if !p.IsSetNodeResources() {
+		return KSMConfiguration_NodeResources_DEFAULT
+	}
+	return p.NodeResources
+}
+
+var KSMConfiguration_ClusterResources_DEFAULT *RoleResources
+
+func (p *KSMConfiguration) GetClusterResources() (v *RoleResources) {
+	if !p.IsSetClusterResources() {
+		return KSMConfiguration_ClusterResources_DEFAULT
+	}
+	return p.ClusterResources
+}
+
+var KSMConfiguration_UnscheduledResources_DEFAULT *RoleResources
+
+func (p *KSMConfiguration) GetUnscheduledResources() (v *RoleResources) {
+	if !p.IsSetUnscheduledResources() {
+		return KSMConfiguration_UnscheduledResources_DEFAULT
+	}
+	return p.UnscheduledResources
+}
+func (p *KSMConfiguration) SetName(val string) {
+	p.Name = val
+}
+func (p *KSMConfiguration) SetTargetNamespace(val string) {
+	p.TargetNamespace = val
+}
+func (p *KSMConfiguration) SetDeploymentMode(val string) {
+	p.DeploymentMode = val
+}
+func (p *KSMConfiguration) SetDesiredState(val string) {
+	p.DesiredState = val
+}
+func (p *KSMConfiguration) SetResources(val *ContainerResources) {
+	p.Resources = val
+}
+func (p *KSMConfiguration) SetCollectors(val *CollectorSelection) {
+	p.Collectors = val
+}
+func (p *KSMConfiguration) SetMetricFilter(val *MetricSelection) {
+	p.MetricFilter = val
+}
+func (p *KSMConfiguration) SetNamespaceFilter(val *NamespaceSelection) {
+	p.NamespaceFilter = val
+}
+func (p *KSMConfiguration) SetAdvancedResources(val bool) {
+	p.AdvancedResources = val
+}
+func (p *KSMConfiguration) SetShards(val *int32) {
+	p.Shards = val
+}
+func (p *KSMConfiguration) SetNodeResources(val *RoleResources) {
+	p.NodeResources = val
+}
+func (p *KSMConfiguration) SetClusterResources(val *RoleResources) {
+	p.ClusterResources = val
+}
+func (p *KSMConfiguration) SetUnscheduledResources(val *RoleResources) {
+	p.UnscheduledResources = val
+}
+
+func (p *KSMConfiguration) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *KSMConfiguration) IsSetResources() bool {
+	return p.Resources != nil
+}
+
+func (p *KSMConfiguration) IsSetCollectors() bool {
+	return p.Collectors != nil
+}
+
+func (p *KSMConfiguration) IsSetMetricFilter() bool {
+	return p.MetricFilter != nil
+}
+
+func (p *KSMConfiguration) IsSetNamespaceFilter() bool {
+	return p.NamespaceFilter != nil
+}
+
+func (p *KSMConfiguration) IsSetShards() bool {
+	return p.Shards != nil
+}
+
+func (p *KSMConfiguration) IsSetNodeResources() bool {
+	return p.NodeResources != nil
+}
+
+func (p *KSMConfiguration) IsSetClusterResources() bool {
+	return p.ClusterResources != nil
+}
+
+func (p *KSMConfiguration) IsSetUnscheduledResources() bool {
+	return p.UnscheduledResources != nil
+}
+
+func (p *KSMConfiguration) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("KSMConfiguration(%+v)", *p)
+}
+
+var fieldIDToName_KSMConfiguration = map[int16]string{
+	1:  "name",
+	2:  "targetNamespace",
+	3:  "deploymentMode",
+	4:  "desiredState",
+	5:  "resources",
+	6:  "collectors",
+	7:  "metricFilter",
+	8:  "namespaceFilter",
+	9:  "advancedResources",
+	10: "shards",
+	11: "nodeResources",
+	12: "clusterResources",
+	13: "unscheduledResources",
+}
+
+type InstanceID struct {
+	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	_unknownFields unknown.Fields
+}
+
+func NewInstanceID() *InstanceID {
+	return &InstanceID{}
+}
+
+func (p *InstanceID) InitDefault() {
+}
+
+func (p *InstanceID) GetId() (v string) {
+	return p.Id
+}
+func (p *InstanceID) SetId(val string) {
+	p.Id = val
+}
+
+func (p *InstanceID) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *InstanceID) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("InstanceID(%+v)", *p)
+}
+
+var fieldIDToName_InstanceID = map[int16]string{
+	1: "id",
+}
+
+type CreateInstanceRequest struct {
+	ClusterId      string            `thrift:"clusterId,1,required" frugal:"1,required,string" json:"clusterId"`
+	Component      string            `thrift:"component,2,required" frugal:"2,required,string" json:"component"`
+	Ksm            *KSMConfiguration `thrift:"ksm,3,optional" frugal:"3,optional,KSMConfiguration" json:"ksm,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewCreateInstanceRequest() *CreateInstanceRequest {
+	return &CreateInstanceRequest{}
+}
+
+func (p *CreateInstanceRequest) InitDefault() {
+}
+
+func (p *CreateInstanceRequest) GetClusterId() (v string) {
+	return p.ClusterId
+}
+
+func (p *CreateInstanceRequest) GetComponent() (v string) {
+	return p.Component
+}
+
+var CreateInstanceRequest_Ksm_DEFAULT *KSMConfiguration
+
+func (p *CreateInstanceRequest) GetKsm() (v *KSMConfiguration) {
+	if !p.IsSetKsm() {
+		return CreateInstanceRequest_Ksm_DEFAULT
+	}
+	return p.Ksm
+}
+func (p *CreateInstanceRequest) SetClusterId(val string) {
+	p.ClusterId = val
+}
+func (p *CreateInstanceRequest) SetComponent(val string) {
+	p.Component = val
+}
+func (p *CreateInstanceRequest) SetKsm(val *KSMConfiguration) {
+	p.Ksm = val
+}
+
+func (p *CreateInstanceRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *CreateInstanceRequest) IsSetKsm() bool {
+	return p.Ksm != nil
+}
+
+func (p *CreateInstanceRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CreateInstanceRequest(%+v)", *p)
+}
+
+var fieldIDToName_CreateInstanceRequest = map[int16]string{
+	1: "clusterId",
+	2: "component",
+	3: "ksm",
+}
+
+type SaveDraftRequest struct {
+	Id                    string            `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	ExpectedDraftRevision int64             `thrift:"expectedDraftRevision,2,required" frugal:"2,required,i64" json:"expectedDraftRevision"`
+	Ksm                   *KSMConfiguration `thrift:"ksm,3,optional" frugal:"3,optional,KSMConfiguration" json:"ksm,omitempty"`
+	_unknownFields        unknown.Fields
+}
+
+func NewSaveDraftRequest() *SaveDraftRequest {
+	return &SaveDraftRequest{}
+}
+
+func (p *SaveDraftRequest) InitDefault() {
+}
+
+func (p *SaveDraftRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *SaveDraftRequest) GetExpectedDraftRevision() (v int64) {
+	return p.ExpectedDraftRevision
+}
+
+var SaveDraftRequest_Ksm_DEFAULT *KSMConfiguration
+
+func (p *SaveDraftRequest) GetKsm() (v *KSMConfiguration) {
+	if !p.IsSetKsm() {
+		return SaveDraftRequest_Ksm_DEFAULT
+	}
+	return p.Ksm
+}
+func (p *SaveDraftRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *SaveDraftRequest) SetExpectedDraftRevision(val int64) {
+	p.ExpectedDraftRevision = val
+}
+func (p *SaveDraftRequest) SetKsm(val *KSMConfiguration) {
+	p.Ksm = val
+}
+
+func (p *SaveDraftRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *SaveDraftRequest) IsSetKsm() bool {
+	return p.Ksm != nil
+}
+
+func (p *SaveDraftRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SaveDraftRequest(%+v)", *p)
+}
+
+var fieldIDToName_SaveDraftRequest = map[int16]string{
+	1: "id",
+	2: "expectedDraftRevision",
+	3: "ksm",
+}
+
+type ConfigurationDraft struct {
+	Revision       int64             `thrift:"revision,1,required" frugal:"1,required,i64" json:"revision"`
+	Ksm            *KSMConfiguration `thrift:"ksm,2,optional" frugal:"2,optional,KSMConfiguration" json:"ksm,omitempty"`
+	Yaml           string            `thrift:"yaml,3,required" frugal:"3,required,string" json:"yaml"`
+	_unknownFields unknown.Fields
+}
+
+func NewConfigurationDraft() *ConfigurationDraft {
+	return &ConfigurationDraft{}
+}
+
+func (p *ConfigurationDraft) InitDefault() {
+}
+
+func (p *ConfigurationDraft) GetRevision() (v int64) {
+	return p.Revision
+}
+
+var ConfigurationDraft_Ksm_DEFAULT *KSMConfiguration
+
+func (p *ConfigurationDraft) GetKsm() (v *KSMConfiguration) {
+	if !p.IsSetKsm() {
+		return ConfigurationDraft_Ksm_DEFAULT
+	}
+	return p.Ksm
+}
+
+func (p *ConfigurationDraft) GetYaml() (v string) {
+	return p.Yaml
+}
+func (p *ConfigurationDraft) SetRevision(val int64) {
+	p.Revision = val
+}
+func (p *ConfigurationDraft) SetKsm(val *KSMConfiguration) {
+	p.Ksm = val
+}
+func (p *ConfigurationDraft) SetYaml(val string) {
+	p.Yaml = val
+}
+
+func (p *ConfigurationDraft) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ConfigurationDraft) IsSetKsm() bool {
+	return p.Ksm != nil
+}
+
+func (p *ConfigurationDraft) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ConfigurationDraft(%+v)", *p)
+}
+
+var fieldIDToName_ConfigurationDraft = map[int16]string{
+	1: "revision",
+	2: "ksm",
+	3: "yaml",
+}
+
+type InstanceRuntime struct {
+	Summary        string `thrift:"summary,1,required" frugal:"1,required,string" json:"summary"`
+	DesiredState   string `thrift:"desiredState,2,required" frugal:"2,required,string" json:"desiredState"`
+	DeploymentMode string `thrift:"deploymentMode,3,required" frugal:"3,required,string" json:"deploymentMode"`
+	AvailablePods  *int32 `thrift:"availablePods,4,optional" frugal:"4,optional,i32" json:"availablePods,omitempty"`
+	DesiredPods    *int32 `thrift:"desiredPods,5,optional" frugal:"5,optional,i32" json:"desiredPods,omitempty"`
+	LastSuccessAt  string `thrift:"lastSuccessAt,6,required" frugal:"6,required,string" json:"lastSuccessAt"`
+	Error          string `thrift:"error,7,required" frugal:"7,required,string" json:"error"`
+	ObservedAt     string `thrift:"observedAt,8,required" frugal:"8,required,string" json:"observedAt"`
+	_unknownFields unknown.Fields
+}
+
+func NewInstanceRuntime() *InstanceRuntime {
+	return &InstanceRuntime{}
+}
+
+func (p *InstanceRuntime) InitDefault() {
+}
+
+func (p *InstanceRuntime) GetSummary() (v string) {
+	return p.Summary
+}
+
+func (p *InstanceRuntime) GetDesiredState() (v string) {
+	return p.DesiredState
+}
+
+func (p *InstanceRuntime) GetDeploymentMode() (v string) {
+	return p.DeploymentMode
+}
+
+var InstanceRuntime_AvailablePods_DEFAULT int32
+
+func (p *InstanceRuntime) GetAvailablePods() (v int32) {
+	if !p.IsSetAvailablePods() {
+		return InstanceRuntime_AvailablePods_DEFAULT
+	}
+	return *p.AvailablePods
+}
+
+var InstanceRuntime_DesiredPods_DEFAULT int32
+
+func (p *InstanceRuntime) GetDesiredPods() (v int32) {
+	if !p.IsSetDesiredPods() {
+		return InstanceRuntime_DesiredPods_DEFAULT
+	}
+	return *p.DesiredPods
+}
+
+func (p *InstanceRuntime) GetLastSuccessAt() (v string) {
+	return p.LastSuccessAt
+}
+
+func (p *InstanceRuntime) GetError() (v string) {
+	return p.Error
+}
+
+func (p *InstanceRuntime) GetObservedAt() (v string) {
+	return p.ObservedAt
+}
+func (p *InstanceRuntime) SetSummary(val string) {
+	p.Summary = val
+}
+func (p *InstanceRuntime) SetDesiredState(val string) {
+	p.DesiredState = val
+}
+func (p *InstanceRuntime) SetDeploymentMode(val string) {
+	p.DeploymentMode = val
+}
+func (p *InstanceRuntime) SetAvailablePods(val *int32) {
+	p.AvailablePods = val
+}
+func (p *InstanceRuntime) SetDesiredPods(val *int32) {
+	p.DesiredPods = val
+}
+func (p *InstanceRuntime) SetLastSuccessAt(val string) {
+	p.LastSuccessAt = val
+}
+func (p *InstanceRuntime) SetError(val string) {
+	p.Error = val
+}
+func (p *InstanceRuntime) SetObservedAt(val string) {
+	p.ObservedAt = val
+}
+
+func (p *InstanceRuntime) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *InstanceRuntime) IsSetAvailablePods() bool {
+	return p.AvailablePods != nil
+}
+
+func (p *InstanceRuntime) IsSetDesiredPods() bool {
+	return p.DesiredPods != nil
+}
+
+func (p *InstanceRuntime) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("InstanceRuntime(%+v)", *p)
+}
+
+var fieldIDToName_InstanceRuntime = map[int16]string{
+	1: "summary",
+	2: "desiredState",
+	3: "deploymentMode",
+	4: "availablePods",
+	5: "desiredPods",
+	6: "lastSuccessAt",
+	7: "error",
+	8: "observedAt",
+}
+
+type ObservationInstance struct {
+	Id               string           `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	ClusterId        string           `thrift:"clusterId,2,required" frugal:"2,required,string" json:"clusterId"`
+	Name             string           `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
+	TargetNamespace  string           `thrift:"targetNamespace,4,required" frugal:"4,required,string" json:"targetNamespace"`
+	Component        string           `thrift:"component,5,required" frugal:"5,required,string" json:"component"`
+	Type             string           `thrift:"type,6,required" frugal:"6,required,string" json:"type"`
+	ReadOnly         bool             `thrift:"readOnly,7,required" frugal:"7,required,bool" json:"readOnly"`
+	Uid              string           `thrift:"uid,8,required" frugal:"8,required,string" json:"uid"`
+	Lifecycle        string           `thrift:"lifecycle,9,required" frugal:"9,required,string" json:"lifecycle"`
+	CurrentVersionId string           `thrift:"currentVersionId,10,required" frugal:"10,required,string" json:"currentVersionId"`
+	ActivityAt       string           `thrift:"activityAt,11,required" frugal:"11,required,string" json:"activityAt"`
+	Runtime          *InstanceRuntime `thrift:"runtime,12,optional" frugal:"12,optional,InstanceRuntime" json:"runtime,omitempty"`
+	Ownership        string           `thrift:"ownership,13,required" frugal:"13,required,string" json:"ownership"`
+	Yaml             *string          `thrift:"yaml,14,optional" frugal:"14,optional,string" json:"yaml,omitempty"`
+	_unknownFields   unknown.Fields
+}
+
+func NewObservationInstance() *ObservationInstance {
+	return &ObservationInstance{}
+}
+
+func (p *ObservationInstance) InitDefault() {
+}
+
+func (p *ObservationInstance) GetId() (v string) {
+	return p.Id
+}
+
+func (p *ObservationInstance) GetClusterId() (v string) {
+	return p.ClusterId
+}
+
+func (p *ObservationInstance) GetName() (v string) {
+	return p.Name
+}
+
+func (p *ObservationInstance) GetTargetNamespace() (v string) {
+	return p.TargetNamespace
+}
+
+func (p *ObservationInstance) GetComponent() (v string) {
+	return p.Component
+}
+
+func (p *ObservationInstance) GetType() (v string) {
+	return p.Type
+}
+
+func (p *ObservationInstance) GetReadOnly() (v bool) {
+	return p.ReadOnly
+}
+
+func (p *ObservationInstance) GetUid() (v string) {
+	return p.Uid
+}
+
+func (p *ObservationInstance) GetLifecycle() (v string) {
+	return p.Lifecycle
+}
+
+func (p *ObservationInstance) GetCurrentVersionId() (v string) {
+	return p.CurrentVersionId
+}
+
+func (p *ObservationInstance) GetActivityAt() (v string) {
+	return p.ActivityAt
+}
+
+var ObservationInstance_Runtime_DEFAULT *InstanceRuntime
+
+func (p *ObservationInstance) GetRuntime() (v *InstanceRuntime) {
+	if !p.IsSetRuntime() {
+		return ObservationInstance_Runtime_DEFAULT
+	}
+	return p.Runtime
+}
+
+func (p *ObservationInstance) GetOwnership() (v string) {
+	return p.Ownership
+}
+
+var ObservationInstance_Yaml_DEFAULT string
+
+func (p *ObservationInstance) GetYaml() (v string) {
+	if !p.IsSetYaml() {
+		return ObservationInstance_Yaml_DEFAULT
+	}
+	return *p.Yaml
+}
+func (p *ObservationInstance) SetId(val string) {
+	p.Id = val
+}
+func (p *ObservationInstance) SetClusterId(val string) {
+	p.ClusterId = val
+}
+func (p *ObservationInstance) SetName(val string) {
+	p.Name = val
+}
+func (p *ObservationInstance) SetTargetNamespace(val string) {
+	p.TargetNamespace = val
+}
+func (p *ObservationInstance) SetComponent(val string) {
+	p.Component = val
+}
+func (p *ObservationInstance) SetType(val string) {
+	p.Type = val
+}
+func (p *ObservationInstance) SetReadOnly(val bool) {
+	p.ReadOnly = val
+}
+func (p *ObservationInstance) SetUid(val string) {
+	p.Uid = val
+}
+func (p *ObservationInstance) SetLifecycle(val string) {
+	p.Lifecycle = val
+}
+func (p *ObservationInstance) SetCurrentVersionId(val string) {
+	p.CurrentVersionId = val
+}
+func (p *ObservationInstance) SetActivityAt(val string) {
+	p.ActivityAt = val
+}
+func (p *ObservationInstance) SetRuntime(val *InstanceRuntime) {
+	p.Runtime = val
+}
+func (p *ObservationInstance) SetOwnership(val string) {
+	p.Ownership = val
+}
+func (p *ObservationInstance) SetYaml(val *string) {
+	p.Yaml = val
+}
+
+func (p *ObservationInstance) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ObservationInstance) IsSetRuntime() bool {
+	return p.Runtime != nil
+}
+
+func (p *ObservationInstance) IsSetYaml() bool {
+	return p.Yaml != nil
+}
+
+func (p *ObservationInstance) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ObservationInstance(%+v)", *p)
+}
+
+var fieldIDToName_ObservationInstance = map[int16]string{
+	1:  "id",
+	2:  "clusterId",
+	3:  "name",
+	4:  "targetNamespace",
+	5:  "component",
+	6:  "type",
+	7:  "readOnly",
+	8:  "uid",
+	9:  "lifecycle",
+	10: "currentVersionId",
+	11: "activityAt",
+	12: "runtime",
+	13: "ownership",
+	14: "yaml",
+}
+
+type InstancesResult_ struct {
+	Instances      []*ObservationInstance `thrift:"instances,1,required" frugal:"1,required,list<ObservationInstance>" json:"instances"`
+	_unknownFields unknown.Fields
+}
+
+func NewInstancesResult_() *InstancesResult_ {
+	return &InstancesResult_{}
+}
+
+func (p *InstancesResult_) InitDefault() {
+}
+
+func (p *InstancesResult_) GetInstances() (v []*ObservationInstance) {
+	return p.Instances
+}
+func (p *InstancesResult_) SetInstances(val []*ObservationInstance) {
+	p.Instances = val
+}
+
+func (p *InstancesResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *InstancesResult_) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("InstancesResult_(%+v)", *p)
+}
+
+var fieldIDToName_InstancesResult_ = map[int16]string{
+	1: "instances",
+}
+
+type PreviewRequest struct {
+	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	DraftRevision  int64  `thrift:"draftRevision,2,required" frugal:"2,required,i64" json:"draftRevision"`
+	_unknownFields unknown.Fields
+}
+
+func NewPreviewRequest() *PreviewRequest {
+	return &PreviewRequest{}
+}
+
+func (p *PreviewRequest) InitDefault() {
+}
+
+func (p *PreviewRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *PreviewRequest) GetDraftRevision() (v int64) {
+	return p.DraftRevision
+}
+func (p *PreviewRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *PreviewRequest) SetDraftRevision(val int64) {
+	p.DraftRevision = val
+}
+
+func (p *PreviewRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *PreviewRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("PreviewRequest(%+v)", *p)
+}
+
+var fieldIDToName_PreviewRequest = map[int16]string{
+	1: "id",
+	2: "draftRevision",
+}
+
+type PublicationPreview struct {
+	PreviewId      string   `thrift:"previewId,1,required" frugal:"1,required,string" json:"previewId"`
+	DraftRevision  int64    `thrift:"draftRevision,2,required" frugal:"2,required,i64" json:"draftRevision"`
+	LeftYAML       string   `thrift:"leftYAML,3,required" frugal:"3,required,string" json:"leftYAML"`
+	RightYAML      string   `thrift:"rightYAML,4,required" frugal:"4,required,string" json:"rightYAML"`
+	Drift          bool     `thrift:"drift,5,required" frugal:"5,required,bool" json:"drift"`
+	Warnings       []string `thrift:"warnings,6,required" frugal:"6,required,list<string>" json:"warnings"`
+	_unknownFields unknown.Fields
+}
+
+func NewPublicationPreview() *PublicationPreview {
+	return &PublicationPreview{}
+}
+
+func (p *PublicationPreview) InitDefault() {
+}
+
+func (p *PublicationPreview) GetPreviewId() (v string) {
+	return p.PreviewId
+}
+
+func (p *PublicationPreview) GetDraftRevision() (v int64) {
+	return p.DraftRevision
+}
+
+func (p *PublicationPreview) GetLeftYAML() (v string) {
+	return p.LeftYAML
+}
+
+func (p *PublicationPreview) GetRightYAML() (v string) {
+	return p.RightYAML
+}
+
+func (p *PublicationPreview) GetDrift() (v bool) {
+	return p.Drift
+}
+
+func (p *PublicationPreview) GetWarnings() (v []string) {
+	return p.Warnings
+}
+func (p *PublicationPreview) SetPreviewId(val string) {
+	p.PreviewId = val
+}
+func (p *PublicationPreview) SetDraftRevision(val int64) {
+	p.DraftRevision = val
+}
+func (p *PublicationPreview) SetLeftYAML(val string) {
+	p.LeftYAML = val
+}
+func (p *PublicationPreview) SetRightYAML(val string) {
+	p.RightYAML = val
+}
+func (p *PublicationPreview) SetDrift(val bool) {
+	p.Drift = val
+}
+func (p *PublicationPreview) SetWarnings(val []string) {
+	p.Warnings = val
+}
+
+func (p *PublicationPreview) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *PublicationPreview) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("PublicationPreview(%+v)", *p)
+}
+
+var fieldIDToName_PublicationPreview = map[int16]string{
+	1: "previewId",
+	2: "draftRevision",
+	3: "leftYAML",
+	4: "rightYAML",
+	5: "drift",
+	6: "warnings",
+}
+
+type PublishRequest struct {
+	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	PreviewId      string `thrift:"previewId,2,required" frugal:"2,required,string" json:"previewId"`
+	DraftRevision  int64  `thrift:"draftRevision,3,required" frugal:"3,required,i64" json:"draftRevision"`
+	OverwriteDrift bool   `thrift:"overwriteDrift,4,required" frugal:"4,required,bool" json:"overwriteDrift"`
+	_unknownFields unknown.Fields
+}
+
+func NewPublishRequest() *PublishRequest {
+	return &PublishRequest{}
+}
+
+func (p *PublishRequest) InitDefault() {
+}
+
+func (p *PublishRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *PublishRequest) GetPreviewId() (v string) {
+	return p.PreviewId
+}
+
+func (p *PublishRequest) GetDraftRevision() (v int64) {
+	return p.DraftRevision
+}
+
+func (p *PublishRequest) GetOverwriteDrift() (v bool) {
+	return p.OverwriteDrift
+}
+func (p *PublishRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *PublishRequest) SetPreviewId(val string) {
+	p.PreviewId = val
+}
+func (p *PublishRequest) SetDraftRevision(val int64) {
+	p.DraftRevision = val
+}
+func (p *PublishRequest) SetOverwriteDrift(val bool) {
+	p.OverwriteDrift = val
+}
+
+func (p *PublishRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *PublishRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("PublishRequest(%+v)", *p)
+}
+
+var fieldIDToName_PublishRequest = map[int16]string{
+	1: "id",
+	2: "previewId",
+	3: "draftRevision",
+	4: "overwriteDrift",
+}
+
+type PublicationVersion struct {
+	VersionId           string            `thrift:"versionId,1,required" frugal:"1,required,string" json:"versionId"`
+	InstanceId          string            `thrift:"instanceId,2,required" frugal:"2,required,string" json:"instanceId"`
+	SourceDraftRevision int64             `thrift:"sourceDraftRevision,3,required" frugal:"3,required,i64" json:"sourceDraftRevision"`
+	Ksm                 *KSMConfiguration `thrift:"ksm,4,optional" frugal:"4,optional,KSMConfiguration" json:"ksm,omitempty"`
+	Yaml                string            `thrift:"yaml,5,required" frugal:"5,required,string" json:"yaml"`
+	CreatedAt           string            `thrift:"createdAt,6,required" frugal:"6,required,string" json:"createdAt"`
+	_unknownFields      unknown.Fields
+}
+
+func NewPublicationVersion() *PublicationVersion {
+	return &PublicationVersion{}
+}
+
+func (p *PublicationVersion) InitDefault() {
+}
+
+func (p *PublicationVersion) GetVersionId() (v string) {
+	return p.VersionId
+}
+
+func (p *PublicationVersion) GetInstanceId() (v string) {
+	return p.InstanceId
+}
+
+func (p *PublicationVersion) GetSourceDraftRevision() (v int64) {
+	return p.SourceDraftRevision
+}
+
+var PublicationVersion_Ksm_DEFAULT *KSMConfiguration
+
+func (p *PublicationVersion) GetKsm() (v *KSMConfiguration) {
+	if !p.IsSetKsm() {
+		return PublicationVersion_Ksm_DEFAULT
+	}
+	return p.Ksm
+}
+
+func (p *PublicationVersion) GetYaml() (v string) {
+	return p.Yaml
+}
+
+func (p *PublicationVersion) GetCreatedAt() (v string) {
+	return p.CreatedAt
+}
+func (p *PublicationVersion) SetVersionId(val string) {
+	p.VersionId = val
+}
+func (p *PublicationVersion) SetInstanceId(val string) {
+	p.InstanceId = val
+}
+func (p *PublicationVersion) SetSourceDraftRevision(val int64) {
+	p.SourceDraftRevision = val
+}
+func (p *PublicationVersion) SetKsm(val *KSMConfiguration) {
+	p.Ksm = val
+}
+func (p *PublicationVersion) SetYaml(val string) {
+	p.Yaml = val
+}
+func (p *PublicationVersion) SetCreatedAt(val string) {
+	p.CreatedAt = val
+}
+
+func (p *PublicationVersion) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *PublicationVersion) IsSetKsm() bool {
+	return p.Ksm != nil
+}
+
+func (p *PublicationVersion) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("PublicationVersion(%+v)", *p)
+}
+
+var fieldIDToName_PublicationVersion = map[int16]string{
+	1: "versionId",
+	2: "instanceId",
+	3: "sourceDraftRevision",
+	4: "ksm",
+	5: "yaml",
+	6: "createdAt",
+}
+
+type VersionsResult_ struct {
+	Versions       []*PublicationVersion `thrift:"versions,1,required" frugal:"1,required,list<PublicationVersion>" json:"versions"`
+	_unknownFields unknown.Fields
+}
+
+func NewVersionsResult_() *VersionsResult_ {
+	return &VersionsResult_{}
+}
+
+func (p *VersionsResult_) InitDefault() {
+}
+
+func (p *VersionsResult_) GetVersions() (v []*PublicationVersion) {
+	return p.Versions
+}
+func (p *VersionsResult_) SetVersions(val []*PublicationVersion) {
+	p.Versions = val
+}
+
+func (p *VersionsResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *VersionsResult_) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VersionsResult_(%+v)", *p)
+}
+
+var fieldIDToName_VersionsResult_ = map[int16]string{
+	1: "versions",
+}
+
+type VersionRequest struct {
+	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	VersionId      string `thrift:"versionId,2,required" frugal:"2,required,string" json:"versionId"`
+	_unknownFields unknown.Fields
+}
+
+func NewVersionRequest() *VersionRequest {
+	return &VersionRequest{}
+}
+
+func (p *VersionRequest) InitDefault() {
+}
+
+func (p *VersionRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *VersionRequest) GetVersionId() (v string) {
+	return p.VersionId
+}
+func (p *VersionRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *VersionRequest) SetVersionId(val string) {
+	p.VersionId = val
+}
+
+func (p *VersionRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *VersionRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VersionRequest(%+v)", *p)
+}
+
+var fieldIDToName_VersionRequest = map[int16]string{
+	1: "id",
+	2: "versionId",
+}
+
+type OperationLookup struct {
+	InstanceId     string `thrift:"instanceId,1,required" frugal:"1,required,string" json:"instanceId"`
+	IdempotencyKey string `thrift:"idempotencyKey,2,required" frugal:"2,required,string" json:"idempotencyKey"`
+	_unknownFields unknown.Fields
+}
+
+func NewOperationLookup() *OperationLookup {
+	return &OperationLookup{}
+}
+
+func (p *OperationLookup) InitDefault() {
+}
+
+func (p *OperationLookup) GetInstanceId() (v string) {
+	return p.InstanceId
+}
+
+func (p *OperationLookup) GetIdempotencyKey() (v string) {
+	return p.IdempotencyKey
+}
+func (p *OperationLookup) SetInstanceId(val string) {
+	p.InstanceId = val
+}
+func (p *OperationLookup) SetIdempotencyKey(val string) {
+	p.IdempotencyKey = val
+}
+
+func (p *OperationLookup) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *OperationLookup) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("OperationLookup(%+v)", *p)
+}
+
+var fieldIDToName_OperationLookup = map[int16]string{
+	1: "instanceId",
+	2: "idempotencyKey",
+}
+
+type ExecutionAttempt struct {
+	AttemptId      string `thrift:"attemptId,1,required" frugal:"1,required,string" json:"attemptId"`
+	OperationId    string `thrift:"operationId,2,required" frugal:"2,required,string" json:"operationId"`
+	State          string `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
+	PossiblySent   bool   `thrift:"possiblySent,4,required" frugal:"4,required,bool" json:"possiblySent"`
+	CreatedAt      string `thrift:"createdAt,5,required" frugal:"5,required,string" json:"createdAt"`
+	UpdatedAt      string `thrift:"updatedAt,6,required" frugal:"6,required,string" json:"updatedAt"`
+	_unknownFields unknown.Fields
+}
+
+func NewExecutionAttempt() *ExecutionAttempt {
+	return &ExecutionAttempt{}
+}
+
+func (p *ExecutionAttempt) InitDefault() {
+}
+
+func (p *ExecutionAttempt) GetAttemptId() (v string) {
+	return p.AttemptId
+}
+
+func (p *ExecutionAttempt) GetOperationId() (v string) {
+	return p.OperationId
+}
+
+func (p *ExecutionAttempt) GetState() (v string) {
+	return p.State
+}
+
+func (p *ExecutionAttempt) GetPossiblySent() (v bool) {
+	return p.PossiblySent
+}
+
+func (p *ExecutionAttempt) GetCreatedAt() (v string) {
+	return p.CreatedAt
+}
+
+func (p *ExecutionAttempt) GetUpdatedAt() (v string) {
+	return p.UpdatedAt
+}
+func (p *ExecutionAttempt) SetAttemptId(val string) {
+	p.AttemptId = val
+}
+func (p *ExecutionAttempt) SetOperationId(val string) {
+	p.OperationId = val
+}
+func (p *ExecutionAttempt) SetState(val string) {
+	p.State = val
+}
+func (p *ExecutionAttempt) SetPossiblySent(val bool) {
+	p.PossiblySent = val
+}
+func (p *ExecutionAttempt) SetCreatedAt(val string) {
+	p.CreatedAt = val
+}
+func (p *ExecutionAttempt) SetUpdatedAt(val string) {
+	p.UpdatedAt = val
+}
+
+func (p *ExecutionAttempt) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ExecutionAttempt) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ExecutionAttempt(%+v)", *p)
+}
+
+var fieldIDToName_ExecutionAttempt = map[int16]string{
+	1: "attemptId",
+	2: "operationId",
+	3: "state",
+	4: "possiblySent",
+	5: "createdAt",
+	6: "updatedAt",
+}
+
+type AttemptsResult_ struct {
+	Attempts       []*ExecutionAttempt `thrift:"attempts,1,required" frugal:"1,required,list<ExecutionAttempt>" json:"attempts"`
+	_unknownFields unknown.Fields
+}
+
+func NewAttemptsResult_() *AttemptsResult_ {
+	return &AttemptsResult_{}
+}
+
+func (p *AttemptsResult_) InitDefault() {
+}
+
+func (p *AttemptsResult_) GetAttempts() (v []*ExecutionAttempt) {
+	return p.Attempts
+}
+func (p *AttemptsResult_) SetAttempts(val []*ExecutionAttempt) {
+	p.Attempts = val
+}
+
+func (p *AttemptsResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *AttemptsResult_) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AttemptsResult_(%+v)", *p)
+}
+
+var fieldIDToName_AttemptsResult_ = map[int16]string{
+	1: "attempts",
+}
+
 type APIError struct {
-	Code    string `thrift:"code,1,required" frugal:"1,required,string" json:"code"`
-	Message string `thrift:"message,2,required" frugal:"2,required,string" json:"message"`
+	Code           string            `thrift:"code,1,required" frugal:"1,required,string" json:"code"`
+	Message        string            `thrift:"message,2,required" frugal:"2,required,string" json:"message"`
+	FieldErrors    map[string]string `thrift:"fieldErrors,3,optional" frugal:"3,optional,map<string:string>" json:"fieldErrors,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewAPIError() *APIError {
@@ -1388,11 +3166,31 @@ func (p *APIError) GetCode() (v string) {
 func (p *APIError) GetMessage() (v string) {
 	return p.Message
 }
+
+var APIError_FieldErrors_DEFAULT map[string]string
+
+func (p *APIError) GetFieldErrors() (v map[string]string) {
+	if !p.IsSetFieldErrors() {
+		return APIError_FieldErrors_DEFAULT
+	}
+	return p.FieldErrors
+}
 func (p *APIError) SetCode(val string) {
 	p.Code = val
 }
 func (p *APIError) SetMessage(val string) {
 	p.Message = val
+}
+func (p *APIError) SetFieldErrors(val map[string]string) {
+	p.FieldErrors = val
+}
+
+func (p *APIError) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *APIError) IsSetFieldErrors() bool {
+	return p.FieldErrors != nil
 }
 
 func (p *APIError) String() string {
@@ -1408,9 +3206,42 @@ func (p *APIError) Error() string {
 var fieldIDToName_APIError = map[int16]string{
 	1: "code",
 	2: "message",
+	3: "fieldErrors",
 }
 
 type ControlService interface {
+	CreateInstance(ctx context.Context, ctx_ *RequestContext, request *CreateInstanceRequest) (r *ObservationInstance, err error)
+
+	ListInstances(ctx context.Context, ctx_ *RequestContext, request *ClusterID) (r *InstancesResult_, err error)
+
+	GetInstance(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *ObservationInstance, err error)
+
+	GetDraft(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *ConfigurationDraft, err error)
+
+	SaveDraft(ctx context.Context, ctx_ *RequestContext, request *SaveDraftRequest) (r *ConfigurationDraft, err error)
+
+	CopyTemplate(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *ConfigurationDraft, err error)
+
+	RecordEditingActivity(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *Empty, err error)
+
+	PreviewPublication(ctx context.Context, ctx_ *RequestContext, request *PreviewRequest) (r *PublicationPreview, err error)
+
+	PublishConfiguration(ctx context.Context, ctx_ *RequestContext, request *PublishRequest) (r *Operation, err error)
+
+	ListVersions(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *VersionsResult_, err error)
+
+	GetVersion(ctx context.Context, ctx_ *RequestContext, request *VersionRequest) (r *PublicationVersion, err error)
+
+	GetRuntime(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *InstanceRuntime, err error)
+
+	RefreshInstance(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *InstanceRuntime, err error)
+
+	DeleteDraft(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *Empty, err error)
+
+	LookupOperations(ctx context.Context, ctx_ *RequestContext, request *OperationLookup) (r *OperationsResult_, err error)
+
+	GetAttempts(ctx context.Context, ctx_ *RequestContext, request *OperationID) (r *AttemptsResult_, err error)
+
 	ListKubeconfigContexts(ctx context.Context, ctx_ *RequestContext, request *KubeconfigRequest) (r *ContextsResult_, err error)
 
 	ListClusters(ctx context.Context, ctx_ *RequestContext) (r *ClustersResult_, err error)
@@ -1458,9 +3289,1962 @@ type ControlService interface {
 	ResetPassword(ctx context.Context, ctx_ *RequestContext, request *ResetPasswordRequest) (r *Empty, err error)
 }
 
+type ControlServiceCreateInstanceArgs struct {
+	Ctx            *RequestContext        `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *CreateInstanceRequest `thrift:"request,2" frugal:"2,default,CreateInstanceRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceCreateInstanceArgs() *ControlServiceCreateInstanceArgs {
+	return &ControlServiceCreateInstanceArgs{}
+}
+
+func (p *ControlServiceCreateInstanceArgs) InitDefault() {
+}
+
+var ControlServiceCreateInstanceArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceCreateInstanceArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceCreateInstanceArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceCreateInstanceArgs_Request_DEFAULT *CreateInstanceRequest
+
+func (p *ControlServiceCreateInstanceArgs) GetRequest() (v *CreateInstanceRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceCreateInstanceArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceCreateInstanceArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceCreateInstanceArgs) SetRequest(val *CreateInstanceRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceCreateInstanceArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceCreateInstanceArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceCreateInstanceArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceCreateInstanceArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceCreateInstanceArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceCreateInstanceArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceCreateInstanceResult struct {
+	Success        *ObservationInstance `thrift:"success,0,optional" frugal:"0,optional,ObservationInstance" json:"success,omitempty"`
+	Error          *APIError            `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceCreateInstanceResult() *ControlServiceCreateInstanceResult {
+	return &ControlServiceCreateInstanceResult{}
+}
+
+func (p *ControlServiceCreateInstanceResult) InitDefault() {
+}
+
+var ControlServiceCreateInstanceResult_Success_DEFAULT *ObservationInstance
+
+func (p *ControlServiceCreateInstanceResult) GetSuccess() (v *ObservationInstance) {
+	if !p.IsSetSuccess() {
+		return ControlServiceCreateInstanceResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceCreateInstanceResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceCreateInstanceResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceCreateInstanceResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceCreateInstanceResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ObservationInstance)
+}
+func (p *ControlServiceCreateInstanceResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceCreateInstanceResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceCreateInstanceResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceCreateInstanceResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceCreateInstanceResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceCreateInstanceResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceCreateInstanceResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceListInstancesArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceListInstancesArgs() *ControlServiceListInstancesArgs {
+	return &ControlServiceListInstancesArgs{}
+}
+
+func (p *ControlServiceListInstancesArgs) InitDefault() {
+}
+
+var ControlServiceListInstancesArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceListInstancesArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceListInstancesArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceListInstancesArgs_Request_DEFAULT *ClusterID
+
+func (p *ControlServiceListInstancesArgs) GetRequest() (v *ClusterID) {
+	if !p.IsSetRequest() {
+		return ControlServiceListInstancesArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceListInstancesArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceListInstancesArgs) SetRequest(val *ClusterID) {
+	p.Request = val
+}
+
+func (p *ControlServiceListInstancesArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceListInstancesArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceListInstancesArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceListInstancesArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListInstancesArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListInstancesArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceListInstancesResult struct {
+	Success        *InstancesResult_ `thrift:"success,0,optional" frugal:"0,optional,InstancesResult_" json:"success,omitempty"`
+	Error          *APIError         `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceListInstancesResult() *ControlServiceListInstancesResult {
+	return &ControlServiceListInstancesResult{}
+}
+
+func (p *ControlServiceListInstancesResult) InitDefault() {
+}
+
+var ControlServiceListInstancesResult_Success_DEFAULT *InstancesResult_
+
+func (p *ControlServiceListInstancesResult) GetSuccess() (v *InstancesResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceListInstancesResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceListInstancesResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceListInstancesResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceListInstancesResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceListInstancesResult) SetSuccess(x interface{}) {
+	p.Success = x.(*InstancesResult_)
+}
+func (p *ControlServiceListInstancesResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceListInstancesResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceListInstancesResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceListInstancesResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceListInstancesResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListInstancesResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListInstancesResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceGetInstanceArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetInstanceArgs() *ControlServiceGetInstanceArgs {
+	return &ControlServiceGetInstanceArgs{}
+}
+
+func (p *ControlServiceGetInstanceArgs) InitDefault() {
+}
+
+var ControlServiceGetInstanceArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceGetInstanceArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceGetInstanceArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceGetInstanceArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceGetInstanceArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceGetInstanceArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceGetInstanceArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceGetInstanceArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceGetInstanceArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetInstanceArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceGetInstanceArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceGetInstanceArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetInstanceArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetInstanceArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceGetInstanceResult struct {
+	Success        *ObservationInstance `thrift:"success,0,optional" frugal:"0,optional,ObservationInstance" json:"success,omitempty"`
+	Error          *APIError            `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetInstanceResult() *ControlServiceGetInstanceResult {
+	return &ControlServiceGetInstanceResult{}
+}
+
+func (p *ControlServiceGetInstanceResult) InitDefault() {
+}
+
+var ControlServiceGetInstanceResult_Success_DEFAULT *ObservationInstance
+
+func (p *ControlServiceGetInstanceResult) GetSuccess() (v *ObservationInstance) {
+	if !p.IsSetSuccess() {
+		return ControlServiceGetInstanceResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceGetInstanceResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceGetInstanceResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceGetInstanceResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceGetInstanceResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ObservationInstance)
+}
+func (p *ControlServiceGetInstanceResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceGetInstanceResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetInstanceResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceGetInstanceResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceGetInstanceResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetInstanceResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetInstanceResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceGetDraftArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetDraftArgs() *ControlServiceGetDraftArgs {
+	return &ControlServiceGetDraftArgs{}
+}
+
+func (p *ControlServiceGetDraftArgs) InitDefault() {
+}
+
+var ControlServiceGetDraftArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceGetDraftArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceGetDraftArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceGetDraftArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceGetDraftArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceGetDraftArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceGetDraftArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceGetDraftArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceGetDraftArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetDraftArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceGetDraftArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceGetDraftArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetDraftArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetDraftArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceGetDraftResult struct {
+	Success        *ConfigurationDraft `thrift:"success,0,optional" frugal:"0,optional,ConfigurationDraft" json:"success,omitempty"`
+	Error          *APIError           `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetDraftResult() *ControlServiceGetDraftResult {
+	return &ControlServiceGetDraftResult{}
+}
+
+func (p *ControlServiceGetDraftResult) InitDefault() {
+}
+
+var ControlServiceGetDraftResult_Success_DEFAULT *ConfigurationDraft
+
+func (p *ControlServiceGetDraftResult) GetSuccess() (v *ConfigurationDraft) {
+	if !p.IsSetSuccess() {
+		return ControlServiceGetDraftResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceGetDraftResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceGetDraftResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceGetDraftResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceGetDraftResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConfigurationDraft)
+}
+func (p *ControlServiceGetDraftResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceGetDraftResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetDraftResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceGetDraftResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceGetDraftResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetDraftResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetDraftResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceSaveDraftArgs struct {
+	Ctx            *RequestContext   `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *SaveDraftRequest `thrift:"request,2" frugal:"2,default,SaveDraftRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceSaveDraftArgs() *ControlServiceSaveDraftArgs {
+	return &ControlServiceSaveDraftArgs{}
+}
+
+func (p *ControlServiceSaveDraftArgs) InitDefault() {
+}
+
+var ControlServiceSaveDraftArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceSaveDraftArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceSaveDraftArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceSaveDraftArgs_Request_DEFAULT *SaveDraftRequest
+
+func (p *ControlServiceSaveDraftArgs) GetRequest() (v *SaveDraftRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceSaveDraftArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceSaveDraftArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceSaveDraftArgs) SetRequest(val *SaveDraftRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceSaveDraftArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceSaveDraftArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceSaveDraftArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceSaveDraftArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceSaveDraftArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceSaveDraftArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceSaveDraftResult struct {
+	Success        *ConfigurationDraft `thrift:"success,0,optional" frugal:"0,optional,ConfigurationDraft" json:"success,omitempty"`
+	Error          *APIError           `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceSaveDraftResult() *ControlServiceSaveDraftResult {
+	return &ControlServiceSaveDraftResult{}
+}
+
+func (p *ControlServiceSaveDraftResult) InitDefault() {
+}
+
+var ControlServiceSaveDraftResult_Success_DEFAULT *ConfigurationDraft
+
+func (p *ControlServiceSaveDraftResult) GetSuccess() (v *ConfigurationDraft) {
+	if !p.IsSetSuccess() {
+		return ControlServiceSaveDraftResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceSaveDraftResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceSaveDraftResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceSaveDraftResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceSaveDraftResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConfigurationDraft)
+}
+func (p *ControlServiceSaveDraftResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceSaveDraftResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceSaveDraftResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceSaveDraftResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceSaveDraftResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceSaveDraftResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceSaveDraftResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceCopyTemplateArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceCopyTemplateArgs() *ControlServiceCopyTemplateArgs {
+	return &ControlServiceCopyTemplateArgs{}
+}
+
+func (p *ControlServiceCopyTemplateArgs) InitDefault() {
+}
+
+var ControlServiceCopyTemplateArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceCopyTemplateArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceCopyTemplateArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceCopyTemplateArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceCopyTemplateArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceCopyTemplateArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceCopyTemplateArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceCopyTemplateArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceCopyTemplateArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceCopyTemplateArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceCopyTemplateArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceCopyTemplateArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceCopyTemplateArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceCopyTemplateArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceCopyTemplateResult struct {
+	Success        *ConfigurationDraft `thrift:"success,0,optional" frugal:"0,optional,ConfigurationDraft" json:"success,omitempty"`
+	Error          *APIError           `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceCopyTemplateResult() *ControlServiceCopyTemplateResult {
+	return &ControlServiceCopyTemplateResult{}
+}
+
+func (p *ControlServiceCopyTemplateResult) InitDefault() {
+}
+
+var ControlServiceCopyTemplateResult_Success_DEFAULT *ConfigurationDraft
+
+func (p *ControlServiceCopyTemplateResult) GetSuccess() (v *ConfigurationDraft) {
+	if !p.IsSetSuccess() {
+		return ControlServiceCopyTemplateResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceCopyTemplateResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceCopyTemplateResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceCopyTemplateResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceCopyTemplateResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConfigurationDraft)
+}
+func (p *ControlServiceCopyTemplateResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceCopyTemplateResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceCopyTemplateResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceCopyTemplateResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceCopyTemplateResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceCopyTemplateResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceCopyTemplateResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceRecordEditingActivityArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceRecordEditingActivityArgs() *ControlServiceRecordEditingActivityArgs {
+	return &ControlServiceRecordEditingActivityArgs{}
+}
+
+func (p *ControlServiceRecordEditingActivityArgs) InitDefault() {
+}
+
+var ControlServiceRecordEditingActivityArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceRecordEditingActivityArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceRecordEditingActivityArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceRecordEditingActivityArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceRecordEditingActivityArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceRecordEditingActivityArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceRecordEditingActivityArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceRecordEditingActivityArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceRecordEditingActivityArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceRecordEditingActivityArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceRecordEditingActivityArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceRecordEditingActivityArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceRecordEditingActivityArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceRecordEditingActivityArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceRecordEditingActivityResult struct {
+	Success        *Empty    `thrift:"success,0,optional" frugal:"0,optional,Empty" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceRecordEditingActivityResult() *ControlServiceRecordEditingActivityResult {
+	return &ControlServiceRecordEditingActivityResult{}
+}
+
+func (p *ControlServiceRecordEditingActivityResult) InitDefault() {
+}
+
+var ControlServiceRecordEditingActivityResult_Success_DEFAULT *Empty
+
+func (p *ControlServiceRecordEditingActivityResult) GetSuccess() (v *Empty) {
+	if !p.IsSetSuccess() {
+		return ControlServiceRecordEditingActivityResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceRecordEditingActivityResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceRecordEditingActivityResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceRecordEditingActivityResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceRecordEditingActivityResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Empty)
+}
+func (p *ControlServiceRecordEditingActivityResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceRecordEditingActivityResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceRecordEditingActivityResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceRecordEditingActivityResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceRecordEditingActivityResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceRecordEditingActivityResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceRecordEditingActivityResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServicePreviewPublicationArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *PreviewRequest `thrift:"request,2" frugal:"2,default,PreviewRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServicePreviewPublicationArgs() *ControlServicePreviewPublicationArgs {
+	return &ControlServicePreviewPublicationArgs{}
+}
+
+func (p *ControlServicePreviewPublicationArgs) InitDefault() {
+}
+
+var ControlServicePreviewPublicationArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServicePreviewPublicationArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServicePreviewPublicationArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServicePreviewPublicationArgs_Request_DEFAULT *PreviewRequest
+
+func (p *ControlServicePreviewPublicationArgs) GetRequest() (v *PreviewRequest) {
+	if !p.IsSetRequest() {
+		return ControlServicePreviewPublicationArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServicePreviewPublicationArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServicePreviewPublicationArgs) SetRequest(val *PreviewRequest) {
+	p.Request = val
+}
+
+func (p *ControlServicePreviewPublicationArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServicePreviewPublicationArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServicePreviewPublicationArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServicePreviewPublicationArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServicePreviewPublicationArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServicePreviewPublicationArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServicePreviewPublicationResult struct {
+	Success        *PublicationPreview `thrift:"success,0,optional" frugal:"0,optional,PublicationPreview" json:"success,omitempty"`
+	Error          *APIError           `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServicePreviewPublicationResult() *ControlServicePreviewPublicationResult {
+	return &ControlServicePreviewPublicationResult{}
+}
+
+func (p *ControlServicePreviewPublicationResult) InitDefault() {
+}
+
+var ControlServicePreviewPublicationResult_Success_DEFAULT *PublicationPreview
+
+func (p *ControlServicePreviewPublicationResult) GetSuccess() (v *PublicationPreview) {
+	if !p.IsSetSuccess() {
+		return ControlServicePreviewPublicationResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServicePreviewPublicationResult_Error_DEFAULT *APIError
+
+func (p *ControlServicePreviewPublicationResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServicePreviewPublicationResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServicePreviewPublicationResult) SetSuccess(x interface{}) {
+	p.Success = x.(*PublicationPreview)
+}
+func (p *ControlServicePreviewPublicationResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServicePreviewPublicationResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServicePreviewPublicationResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServicePreviewPublicationResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServicePreviewPublicationResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServicePreviewPublicationResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServicePreviewPublicationResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServicePublishConfigurationArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *PublishRequest `thrift:"request,2" frugal:"2,default,PublishRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServicePublishConfigurationArgs() *ControlServicePublishConfigurationArgs {
+	return &ControlServicePublishConfigurationArgs{}
+}
+
+func (p *ControlServicePublishConfigurationArgs) InitDefault() {
+}
+
+var ControlServicePublishConfigurationArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServicePublishConfigurationArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServicePublishConfigurationArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServicePublishConfigurationArgs_Request_DEFAULT *PublishRequest
+
+func (p *ControlServicePublishConfigurationArgs) GetRequest() (v *PublishRequest) {
+	if !p.IsSetRequest() {
+		return ControlServicePublishConfigurationArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServicePublishConfigurationArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServicePublishConfigurationArgs) SetRequest(val *PublishRequest) {
+	p.Request = val
+}
+
+func (p *ControlServicePublishConfigurationArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServicePublishConfigurationArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServicePublishConfigurationArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServicePublishConfigurationArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServicePublishConfigurationArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServicePublishConfigurationArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServicePublishConfigurationResult struct {
+	Success        *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error          *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServicePublishConfigurationResult() *ControlServicePublishConfigurationResult {
+	return &ControlServicePublishConfigurationResult{}
+}
+
+func (p *ControlServicePublishConfigurationResult) InitDefault() {
+}
+
+var ControlServicePublishConfigurationResult_Success_DEFAULT *Operation
+
+func (p *ControlServicePublishConfigurationResult) GetSuccess() (v *Operation) {
+	if !p.IsSetSuccess() {
+		return ControlServicePublishConfigurationResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServicePublishConfigurationResult_Error_DEFAULT *APIError
+
+func (p *ControlServicePublishConfigurationResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServicePublishConfigurationResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServicePublishConfigurationResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Operation)
+}
+func (p *ControlServicePublishConfigurationResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServicePublishConfigurationResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServicePublishConfigurationResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServicePublishConfigurationResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServicePublishConfigurationResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServicePublishConfigurationResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServicePublishConfigurationResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceListVersionsArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceListVersionsArgs() *ControlServiceListVersionsArgs {
+	return &ControlServiceListVersionsArgs{}
+}
+
+func (p *ControlServiceListVersionsArgs) InitDefault() {
+}
+
+var ControlServiceListVersionsArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceListVersionsArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceListVersionsArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceListVersionsArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceListVersionsArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceListVersionsArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceListVersionsArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceListVersionsArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceListVersionsArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceListVersionsArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceListVersionsArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceListVersionsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListVersionsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListVersionsArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceListVersionsResult struct {
+	Success        *VersionsResult_ `thrift:"success,0,optional" frugal:"0,optional,VersionsResult_" json:"success,omitempty"`
+	Error          *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceListVersionsResult() *ControlServiceListVersionsResult {
+	return &ControlServiceListVersionsResult{}
+}
+
+func (p *ControlServiceListVersionsResult) InitDefault() {
+}
+
+var ControlServiceListVersionsResult_Success_DEFAULT *VersionsResult_
+
+func (p *ControlServiceListVersionsResult) GetSuccess() (v *VersionsResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceListVersionsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceListVersionsResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceListVersionsResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceListVersionsResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceListVersionsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*VersionsResult_)
+}
+func (p *ControlServiceListVersionsResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceListVersionsResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceListVersionsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceListVersionsResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceListVersionsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListVersionsResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListVersionsResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceGetVersionArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *VersionRequest `thrift:"request,2" frugal:"2,default,VersionRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetVersionArgs() *ControlServiceGetVersionArgs {
+	return &ControlServiceGetVersionArgs{}
+}
+
+func (p *ControlServiceGetVersionArgs) InitDefault() {
+}
+
+var ControlServiceGetVersionArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceGetVersionArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceGetVersionArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceGetVersionArgs_Request_DEFAULT *VersionRequest
+
+func (p *ControlServiceGetVersionArgs) GetRequest() (v *VersionRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceGetVersionArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceGetVersionArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceGetVersionArgs) SetRequest(val *VersionRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceGetVersionArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetVersionArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceGetVersionArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceGetVersionArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetVersionArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetVersionArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceGetVersionResult struct {
+	Success        *PublicationVersion `thrift:"success,0,optional" frugal:"0,optional,PublicationVersion" json:"success,omitempty"`
+	Error          *APIError           `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetVersionResult() *ControlServiceGetVersionResult {
+	return &ControlServiceGetVersionResult{}
+}
+
+func (p *ControlServiceGetVersionResult) InitDefault() {
+}
+
+var ControlServiceGetVersionResult_Success_DEFAULT *PublicationVersion
+
+func (p *ControlServiceGetVersionResult) GetSuccess() (v *PublicationVersion) {
+	if !p.IsSetSuccess() {
+		return ControlServiceGetVersionResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceGetVersionResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceGetVersionResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceGetVersionResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceGetVersionResult) SetSuccess(x interface{}) {
+	p.Success = x.(*PublicationVersion)
+}
+func (p *ControlServiceGetVersionResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceGetVersionResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetVersionResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceGetVersionResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceGetVersionResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetVersionResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetVersionResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceGetRuntimeArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetRuntimeArgs() *ControlServiceGetRuntimeArgs {
+	return &ControlServiceGetRuntimeArgs{}
+}
+
+func (p *ControlServiceGetRuntimeArgs) InitDefault() {
+}
+
+var ControlServiceGetRuntimeArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceGetRuntimeArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceGetRuntimeArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceGetRuntimeArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceGetRuntimeArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceGetRuntimeArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceGetRuntimeArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceGetRuntimeArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceGetRuntimeArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetRuntimeArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceGetRuntimeArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceGetRuntimeArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetRuntimeArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetRuntimeArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceGetRuntimeResult struct {
+	Success        *InstanceRuntime `thrift:"success,0,optional" frugal:"0,optional,InstanceRuntime" json:"success,omitempty"`
+	Error          *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetRuntimeResult() *ControlServiceGetRuntimeResult {
+	return &ControlServiceGetRuntimeResult{}
+}
+
+func (p *ControlServiceGetRuntimeResult) InitDefault() {
+}
+
+var ControlServiceGetRuntimeResult_Success_DEFAULT *InstanceRuntime
+
+func (p *ControlServiceGetRuntimeResult) GetSuccess() (v *InstanceRuntime) {
+	if !p.IsSetSuccess() {
+		return ControlServiceGetRuntimeResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceGetRuntimeResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceGetRuntimeResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceGetRuntimeResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceGetRuntimeResult) SetSuccess(x interface{}) {
+	p.Success = x.(*InstanceRuntime)
+}
+func (p *ControlServiceGetRuntimeResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceGetRuntimeResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetRuntimeResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceGetRuntimeResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceGetRuntimeResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetRuntimeResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetRuntimeResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceRefreshInstanceArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceRefreshInstanceArgs() *ControlServiceRefreshInstanceArgs {
+	return &ControlServiceRefreshInstanceArgs{}
+}
+
+func (p *ControlServiceRefreshInstanceArgs) InitDefault() {
+}
+
+var ControlServiceRefreshInstanceArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceRefreshInstanceArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceRefreshInstanceArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceRefreshInstanceArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceRefreshInstanceArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceRefreshInstanceArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceRefreshInstanceArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceRefreshInstanceArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceRefreshInstanceArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceRefreshInstanceArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceRefreshInstanceArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceRefreshInstanceArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceRefreshInstanceArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceRefreshInstanceArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceRefreshInstanceResult struct {
+	Success        *InstanceRuntime `thrift:"success,0,optional" frugal:"0,optional,InstanceRuntime" json:"success,omitempty"`
+	Error          *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceRefreshInstanceResult() *ControlServiceRefreshInstanceResult {
+	return &ControlServiceRefreshInstanceResult{}
+}
+
+func (p *ControlServiceRefreshInstanceResult) InitDefault() {
+}
+
+var ControlServiceRefreshInstanceResult_Success_DEFAULT *InstanceRuntime
+
+func (p *ControlServiceRefreshInstanceResult) GetSuccess() (v *InstanceRuntime) {
+	if !p.IsSetSuccess() {
+		return ControlServiceRefreshInstanceResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceRefreshInstanceResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceRefreshInstanceResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceRefreshInstanceResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceRefreshInstanceResult) SetSuccess(x interface{}) {
+	p.Success = x.(*InstanceRuntime)
+}
+func (p *ControlServiceRefreshInstanceResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceRefreshInstanceResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceRefreshInstanceResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceRefreshInstanceResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceRefreshInstanceResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceRefreshInstanceResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceRefreshInstanceResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceDeleteDraftArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceDeleteDraftArgs() *ControlServiceDeleteDraftArgs {
+	return &ControlServiceDeleteDraftArgs{}
+}
+
+func (p *ControlServiceDeleteDraftArgs) InitDefault() {
+}
+
+var ControlServiceDeleteDraftArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceDeleteDraftArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceDeleteDraftArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceDeleteDraftArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceDeleteDraftArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceDeleteDraftArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceDeleteDraftArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceDeleteDraftArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceDeleteDraftArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceDeleteDraftArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceDeleteDraftArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceDeleteDraftArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceDeleteDraftArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceDeleteDraftArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceDeleteDraftResult struct {
+	Success        *Empty    `thrift:"success,0,optional" frugal:"0,optional,Empty" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceDeleteDraftResult() *ControlServiceDeleteDraftResult {
+	return &ControlServiceDeleteDraftResult{}
+}
+
+func (p *ControlServiceDeleteDraftResult) InitDefault() {
+}
+
+var ControlServiceDeleteDraftResult_Success_DEFAULT *Empty
+
+func (p *ControlServiceDeleteDraftResult) GetSuccess() (v *Empty) {
+	if !p.IsSetSuccess() {
+		return ControlServiceDeleteDraftResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceDeleteDraftResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceDeleteDraftResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceDeleteDraftResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceDeleteDraftResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Empty)
+}
+func (p *ControlServiceDeleteDraftResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceDeleteDraftResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceDeleteDraftResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceDeleteDraftResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceDeleteDraftResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceDeleteDraftResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceDeleteDraftResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceLookupOperationsArgs struct {
+	Ctx            *RequestContext  `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *OperationLookup `thrift:"request,2" frugal:"2,default,OperationLookup" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceLookupOperationsArgs() *ControlServiceLookupOperationsArgs {
+	return &ControlServiceLookupOperationsArgs{}
+}
+
+func (p *ControlServiceLookupOperationsArgs) InitDefault() {
+}
+
+var ControlServiceLookupOperationsArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceLookupOperationsArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceLookupOperationsArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceLookupOperationsArgs_Request_DEFAULT *OperationLookup
+
+func (p *ControlServiceLookupOperationsArgs) GetRequest() (v *OperationLookup) {
+	if !p.IsSetRequest() {
+		return ControlServiceLookupOperationsArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceLookupOperationsArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceLookupOperationsArgs) SetRequest(val *OperationLookup) {
+	p.Request = val
+}
+
+func (p *ControlServiceLookupOperationsArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceLookupOperationsArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceLookupOperationsArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceLookupOperationsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceLookupOperationsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceLookupOperationsArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceLookupOperationsResult struct {
+	Success        *OperationsResult_ `thrift:"success,0,optional" frugal:"0,optional,OperationsResult_" json:"success,omitempty"`
+	Error          *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceLookupOperationsResult() *ControlServiceLookupOperationsResult {
+	return &ControlServiceLookupOperationsResult{}
+}
+
+func (p *ControlServiceLookupOperationsResult) InitDefault() {
+}
+
+var ControlServiceLookupOperationsResult_Success_DEFAULT *OperationsResult_
+
+func (p *ControlServiceLookupOperationsResult) GetSuccess() (v *OperationsResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceLookupOperationsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceLookupOperationsResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceLookupOperationsResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceLookupOperationsResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceLookupOperationsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*OperationsResult_)
+}
+func (p *ControlServiceLookupOperationsResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceLookupOperationsResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceLookupOperationsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceLookupOperationsResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceLookupOperationsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceLookupOperationsResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceLookupOperationsResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceGetAttemptsArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *OperationID    `thrift:"request,2" frugal:"2,default,OperationID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetAttemptsArgs() *ControlServiceGetAttemptsArgs {
+	return &ControlServiceGetAttemptsArgs{}
+}
+
+func (p *ControlServiceGetAttemptsArgs) InitDefault() {
+}
+
+var ControlServiceGetAttemptsArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceGetAttemptsArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceGetAttemptsArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceGetAttemptsArgs_Request_DEFAULT *OperationID
+
+func (p *ControlServiceGetAttemptsArgs) GetRequest() (v *OperationID) {
+	if !p.IsSetRequest() {
+		return ControlServiceGetAttemptsArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceGetAttemptsArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceGetAttemptsArgs) SetRequest(val *OperationID) {
+	p.Request = val
+}
+
+func (p *ControlServiceGetAttemptsArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetAttemptsArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceGetAttemptsArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceGetAttemptsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetAttemptsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetAttemptsArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceGetAttemptsResult struct {
+	Success        *AttemptsResult_ `thrift:"success,0,optional" frugal:"0,optional,AttemptsResult_" json:"success,omitempty"`
+	Error          *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetAttemptsResult() *ControlServiceGetAttemptsResult {
+	return &ControlServiceGetAttemptsResult{}
+}
+
+func (p *ControlServiceGetAttemptsResult) InitDefault() {
+}
+
+var ControlServiceGetAttemptsResult_Success_DEFAULT *AttemptsResult_
+
+func (p *ControlServiceGetAttemptsResult) GetSuccess() (v *AttemptsResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceGetAttemptsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceGetAttemptsResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceGetAttemptsResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceGetAttemptsResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceGetAttemptsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*AttemptsResult_)
+}
+func (p *ControlServiceGetAttemptsResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceGetAttemptsResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetAttemptsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceGetAttemptsResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceGetAttemptsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetAttemptsResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetAttemptsResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
 type ControlServiceListKubeconfigContextsArgs struct {
-	Ctx     *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *KubeconfigRequest `thrift:"request,2" frugal:"2,default,KubeconfigRequest" json:"request"`
+	Ctx            *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *KubeconfigRequest `thrift:"request,2" frugal:"2,default,KubeconfigRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListKubeconfigContextsArgs() *ControlServiceListKubeconfigContextsArgs {
@@ -1494,6 +5278,10 @@ func (p *ControlServiceListKubeconfigContextsArgs) SetRequest(val *KubeconfigReq
 	p.Request = val
 }
 
+func (p *ControlServiceListKubeconfigContextsArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListKubeconfigContextsArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -1515,8 +5303,9 @@ var fieldIDToName_ControlServiceListKubeconfigContextsArgs = map[int16]string{
 }
 
 type ControlServiceListKubeconfigContextsResult struct {
-	Success *ContextsResult_ `thrift:"success,0,optional" frugal:"0,optional,ContextsResult_" json:"success,omitempty"`
-	Error   *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *ContextsResult_ `thrift:"success,0,optional" frugal:"0,optional,ContextsResult_" json:"success,omitempty"`
+	Error          *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListKubeconfigContextsResult() *ControlServiceListKubeconfigContextsResult {
@@ -1550,6 +5339,10 @@ func (p *ControlServiceListKubeconfigContextsResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceListKubeconfigContextsResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListKubeconfigContextsResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -1571,7 +5364,8 @@ var fieldIDToName_ControlServiceListKubeconfigContextsResult = map[int16]string{
 }
 
 type ControlServiceListClustersArgs struct {
-	Ctx *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListClustersArgs() *ControlServiceListClustersArgs {
@@ -1593,6 +5387,10 @@ func (p *ControlServiceListClustersArgs) SetCtx(val *RequestContext) {
 	p.Ctx = val
 }
 
+func (p *ControlServiceListClustersArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListClustersArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -1609,8 +5407,9 @@ var fieldIDToName_ControlServiceListClustersArgs = map[int16]string{
 }
 
 type ControlServiceListClustersResult struct {
-	Success *ClustersResult_ `thrift:"success,0,optional" frugal:"0,optional,ClustersResult_" json:"success,omitempty"`
-	Error   *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *ClustersResult_ `thrift:"success,0,optional" frugal:"0,optional,ClustersResult_" json:"success,omitempty"`
+	Error          *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListClustersResult() *ControlServiceListClustersResult {
@@ -1644,6 +5443,10 @@ func (p *ControlServiceListClustersResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceListClustersResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListClustersResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -1665,8 +5468,9 @@ var fieldIDToName_ControlServiceListClustersResult = map[int16]string{
 }
 
 type ControlServiceGetClusterArgs struct {
-	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceGetClusterArgs() *ControlServiceGetClusterArgs {
@@ -1700,6 +5504,10 @@ func (p *ControlServiceGetClusterArgs) SetRequest(val *ClusterID) {
 	p.Request = val
 }
 
+func (p *ControlServiceGetClusterArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceGetClusterArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -1721,8 +5529,9 @@ var fieldIDToName_ControlServiceGetClusterArgs = map[int16]string{
 }
 
 type ControlServiceGetClusterResult struct {
-	Success *Cluster  `thrift:"success,0,optional" frugal:"0,optional,Cluster" json:"success,omitempty"`
-	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Cluster  `thrift:"success,0,optional" frugal:"0,optional,Cluster" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceGetClusterResult() *ControlServiceGetClusterResult {
@@ -1756,6 +5565,10 @@ func (p *ControlServiceGetClusterResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceGetClusterResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceGetClusterResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -1777,8 +5590,9 @@ var fieldIDToName_ControlServiceGetClusterResult = map[int16]string{
 }
 
 type ControlServiceRegisterClusterArgs struct {
-	Ctx     *RequestContext         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *RegisterClusterRequest `thrift:"request,2" frugal:"2,default,RegisterClusterRequest" json:"request"`
+	Ctx            *RequestContext         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *RegisterClusterRequest `thrift:"request,2" frugal:"2,default,RegisterClusterRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceRegisterClusterArgs() *ControlServiceRegisterClusterArgs {
@@ -1812,6 +5626,10 @@ func (p *ControlServiceRegisterClusterArgs) SetRequest(val *RegisterClusterReque
 	p.Request = val
 }
 
+func (p *ControlServiceRegisterClusterArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceRegisterClusterArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -1833,8 +5651,9 @@ var fieldIDToName_ControlServiceRegisterClusterArgs = map[int16]string{
 }
 
 type ControlServiceRegisterClusterResult struct {
-	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
-	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error          *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceRegisterClusterResult() *ControlServiceRegisterClusterResult {
@@ -1868,6 +5687,10 @@ func (p *ControlServiceRegisterClusterResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceRegisterClusterResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceRegisterClusterResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -1889,8 +5712,9 @@ var fieldIDToName_ControlServiceRegisterClusterResult = map[int16]string{
 }
 
 type ControlServiceUpdateCredentialArgs struct {
-	Ctx     *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *CredentialRequest `thrift:"request,2" frugal:"2,default,CredentialRequest" json:"request"`
+	Ctx            *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *CredentialRequest `thrift:"request,2" frugal:"2,default,CredentialRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceUpdateCredentialArgs() *ControlServiceUpdateCredentialArgs {
@@ -1924,6 +5748,10 @@ func (p *ControlServiceUpdateCredentialArgs) SetRequest(val *CredentialRequest) 
 	p.Request = val
 }
 
+func (p *ControlServiceUpdateCredentialArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceUpdateCredentialArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -1945,8 +5773,9 @@ var fieldIDToName_ControlServiceUpdateCredentialArgs = map[int16]string{
 }
 
 type ControlServiceUpdateCredentialResult struct {
-	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
-	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error          *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceUpdateCredentialResult() *ControlServiceUpdateCredentialResult {
@@ -1980,6 +5809,10 @@ func (p *ControlServiceUpdateCredentialResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceUpdateCredentialResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceUpdateCredentialResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2001,8 +5834,9 @@ var fieldIDToName_ControlServiceUpdateCredentialResult = map[int16]string{
 }
 
 type ControlServiceReactivateClusterArgs struct {
-	Ctx     *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *CredentialRequest `thrift:"request,2" frugal:"2,default,CredentialRequest" json:"request"`
+	Ctx            *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *CredentialRequest `thrift:"request,2" frugal:"2,default,CredentialRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceReactivateClusterArgs() *ControlServiceReactivateClusterArgs {
@@ -2036,6 +5870,10 @@ func (p *ControlServiceReactivateClusterArgs) SetRequest(val *CredentialRequest)
 	p.Request = val
 }
 
+func (p *ControlServiceReactivateClusterArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceReactivateClusterArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -2057,8 +5895,9 @@ var fieldIDToName_ControlServiceReactivateClusterArgs = map[int16]string{
 }
 
 type ControlServiceReactivateClusterResult struct {
-	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
-	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error          *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceReactivateClusterResult() *ControlServiceReactivateClusterResult {
@@ -2092,6 +5931,10 @@ func (p *ControlServiceReactivateClusterResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceReactivateClusterResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceReactivateClusterResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2113,8 +5956,9 @@ var fieldIDToName_ControlServiceReactivateClusterResult = map[int16]string{
 }
 
 type ControlServiceTransferClusterArgs struct {
-	Ctx     *RequestContext         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *TransferClusterRequest `thrift:"request,2" frugal:"2,default,TransferClusterRequest" json:"request"`
+	Ctx            *RequestContext         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *TransferClusterRequest `thrift:"request,2" frugal:"2,default,TransferClusterRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceTransferClusterArgs() *ControlServiceTransferClusterArgs {
@@ -2148,6 +5992,10 @@ func (p *ControlServiceTransferClusterArgs) SetRequest(val *TransferClusterReque
 	p.Request = val
 }
 
+func (p *ControlServiceTransferClusterArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceTransferClusterArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -2169,8 +6017,9 @@ var fieldIDToName_ControlServiceTransferClusterArgs = map[int16]string{
 }
 
 type ControlServiceTransferClusterResult struct {
-	Success *Cluster  `thrift:"success,0,optional" frugal:"0,optional,Cluster" json:"success,omitempty"`
-	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Cluster  `thrift:"success,0,optional" frugal:"0,optional,Cluster" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceTransferClusterResult() *ControlServiceTransferClusterResult {
@@ -2204,6 +6053,10 @@ func (p *ControlServiceTransferClusterResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceTransferClusterResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceTransferClusterResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2225,8 +6078,9 @@ var fieldIDToName_ControlServiceTransferClusterResult = map[int16]string{
 }
 
 type ControlServiceUnregisterClusterArgs struct {
-	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceUnregisterClusterArgs() *ControlServiceUnregisterClusterArgs {
@@ -2260,6 +6114,10 @@ func (p *ControlServiceUnregisterClusterArgs) SetRequest(val *ClusterID) {
 	p.Request = val
 }
 
+func (p *ControlServiceUnregisterClusterArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceUnregisterClusterArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -2281,8 +6139,9 @@ var fieldIDToName_ControlServiceUnregisterClusterArgs = map[int16]string{
 }
 
 type ControlServiceUnregisterClusterResult struct {
-	Success *Cluster  `thrift:"success,0,optional" frugal:"0,optional,Cluster" json:"success,omitempty"`
-	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Cluster  `thrift:"success,0,optional" frugal:"0,optional,Cluster" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceUnregisterClusterResult() *ControlServiceUnregisterClusterResult {
@@ -2316,6 +6175,10 @@ func (p *ControlServiceUnregisterClusterResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceUnregisterClusterResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceUnregisterClusterResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2337,8 +6200,9 @@ var fieldIDToName_ControlServiceUnregisterClusterResult = map[int16]string{
 }
 
 type ControlServiceGetOperationArgs struct {
-	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *OperationID    `thrift:"request,2" frugal:"2,default,OperationID" json:"request"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *OperationID    `thrift:"request,2" frugal:"2,default,OperationID" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceGetOperationArgs() *ControlServiceGetOperationArgs {
@@ -2372,6 +6236,10 @@ func (p *ControlServiceGetOperationArgs) SetRequest(val *OperationID) {
 	p.Request = val
 }
 
+func (p *ControlServiceGetOperationArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceGetOperationArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -2393,8 +6261,9 @@ var fieldIDToName_ControlServiceGetOperationArgs = map[int16]string{
 }
 
 type ControlServiceGetOperationResult struct {
-	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
-	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error          *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceGetOperationResult() *ControlServiceGetOperationResult {
@@ -2428,6 +6297,10 @@ func (p *ControlServiceGetOperationResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceGetOperationResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceGetOperationResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2449,8 +6322,9 @@ var fieldIDToName_ControlServiceGetOperationResult = map[int16]string{
 }
 
 type ControlServiceContinueOperationArgs struct {
-	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *OperationID    `thrift:"request,2" frugal:"2,default,OperationID" json:"request"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *OperationID    `thrift:"request,2" frugal:"2,default,OperationID" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceContinueOperationArgs() *ControlServiceContinueOperationArgs {
@@ -2484,6 +6358,10 @@ func (p *ControlServiceContinueOperationArgs) SetRequest(val *OperationID) {
 	p.Request = val
 }
 
+func (p *ControlServiceContinueOperationArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceContinueOperationArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -2505,8 +6383,9 @@ var fieldIDToName_ControlServiceContinueOperationArgs = map[int16]string{
 }
 
 type ControlServiceContinueOperationResult struct {
-	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
-	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error          *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceContinueOperationResult() *ControlServiceContinueOperationResult {
@@ -2540,6 +6419,10 @@ func (p *ControlServiceContinueOperationResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceContinueOperationResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceContinueOperationResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2561,8 +6444,9 @@ var fieldIDToName_ControlServiceContinueOperationResult = map[int16]string{
 }
 
 type ControlServiceListClusterOperationsArgs struct {
-	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListClusterOperationsArgs() *ControlServiceListClusterOperationsArgs {
@@ -2596,6 +6480,10 @@ func (p *ControlServiceListClusterOperationsArgs) SetRequest(val *ClusterID) {
 	p.Request = val
 }
 
+func (p *ControlServiceListClusterOperationsArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListClusterOperationsArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -2617,8 +6505,9 @@ var fieldIDToName_ControlServiceListClusterOperationsArgs = map[int16]string{
 }
 
 type ControlServiceListClusterOperationsResult struct {
-	Success *OperationsResult_ `thrift:"success,0,optional" frugal:"0,optional,OperationsResult_" json:"success,omitempty"`
-	Error   *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *OperationsResult_ `thrift:"success,0,optional" frugal:"0,optional,OperationsResult_" json:"success,omitempty"`
+	Error          *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListClusterOperationsResult() *ControlServiceListClusterOperationsResult {
@@ -2652,6 +6541,10 @@ func (p *ControlServiceListClusterOperationsResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceListClusterOperationsResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListClusterOperationsResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2673,8 +6566,9 @@ var fieldIDToName_ControlServiceListClusterOperationsResult = map[int16]string{
 }
 
 type ControlServiceListNamespacesArgs struct {
-	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListNamespacesArgs() *ControlServiceListNamespacesArgs {
@@ -2708,6 +6602,10 @@ func (p *ControlServiceListNamespacesArgs) SetRequest(val *ClusterID) {
 	p.Request = val
 }
 
+func (p *ControlServiceListNamespacesArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListNamespacesArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -2729,8 +6627,9 @@ var fieldIDToName_ControlServiceListNamespacesArgs = map[int16]string{
 }
 
 type ControlServiceListNamespacesResult struct {
-	Success *NamespacesResult_ `thrift:"success,0,optional" frugal:"0,optional,NamespacesResult_" json:"success,omitempty"`
-	Error   *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *NamespacesResult_ `thrift:"success,0,optional" frugal:"0,optional,NamespacesResult_" json:"success,omitempty"`
+	Error          *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListNamespacesResult() *ControlServiceListNamespacesResult {
@@ -2764,6 +6663,10 @@ func (p *ControlServiceListNamespacesResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceListNamespacesResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListNamespacesResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2785,8 +6688,9 @@ var fieldIDToName_ControlServiceListNamespacesResult = map[int16]string{
 }
 
 type ControlServiceListReferencesArgs struct {
-	Ctx     *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *ReferencesRequest `thrift:"request,2" frugal:"2,default,ReferencesRequest" json:"request"`
+	Ctx            *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ReferencesRequest `thrift:"request,2" frugal:"2,default,ReferencesRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListReferencesArgs() *ControlServiceListReferencesArgs {
@@ -2820,6 +6724,10 @@ func (p *ControlServiceListReferencesArgs) SetRequest(val *ReferencesRequest) {
 	p.Request = val
 }
 
+func (p *ControlServiceListReferencesArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListReferencesArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -2841,8 +6749,9 @@ var fieldIDToName_ControlServiceListReferencesArgs = map[int16]string{
 }
 
 type ControlServiceListReferencesResult struct {
-	Success *ReferencesResult_ `thrift:"success,0,optional" frugal:"0,optional,ReferencesResult_" json:"success,omitempty"`
-	Error   *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *ReferencesResult_ `thrift:"success,0,optional" frugal:"0,optional,ReferencesResult_" json:"success,omitempty"`
+	Error          *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListReferencesResult() *ControlServiceListReferencesResult {
@@ -2876,6 +6785,10 @@ func (p *ControlServiceListReferencesResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceListReferencesResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListReferencesResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2897,7 +6810,8 @@ var fieldIDToName_ControlServiceListReferencesResult = map[int16]string{
 }
 
 type ControlServiceProbeArgs struct {
-	Ctx *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceProbeArgs() *ControlServiceProbeArgs {
@@ -2919,6 +6833,10 @@ func (p *ControlServiceProbeArgs) SetCtx(val *RequestContext) {
 	p.Ctx = val
 }
 
+func (p *ControlServiceProbeArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceProbeArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -2935,8 +6853,9 @@ var fieldIDToName_ControlServiceProbeArgs = map[int16]string{
 }
 
 type ControlServiceProbeResult struct {
-	Success *ProbeResult_ `thrift:"success,0,optional" frugal:"0,optional,ProbeResult_" json:"success,omitempty"`
-	Error   *APIError     `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *ProbeResult_ `thrift:"success,0,optional" frugal:"0,optional,ProbeResult_" json:"success,omitempty"`
+	Error          *APIError     `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceProbeResult() *ControlServiceProbeResult {
@@ -2970,6 +6889,10 @@ func (p *ControlServiceProbeResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceProbeResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceProbeResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -2991,8 +6914,9 @@ var fieldIDToName_ControlServiceProbeResult = map[int16]string{
 }
 
 type ControlServiceInitializeArgs struct {
-	Ctx     *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *InitializeRequest `thrift:"request,2" frugal:"2,default,InitializeRequest" json:"request"`
+	Ctx            *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InitializeRequest `thrift:"request,2" frugal:"2,default,InitializeRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceInitializeArgs() *ControlServiceInitializeArgs {
@@ -3026,6 +6950,10 @@ func (p *ControlServiceInitializeArgs) SetRequest(val *InitializeRequest) {
 	p.Request = val
 }
 
+func (p *ControlServiceInitializeArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceInitializeArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -3047,8 +6975,9 @@ var fieldIDToName_ControlServiceInitializeArgs = map[int16]string{
 }
 
 type ControlServiceInitializeResult struct {
-	Success *Account  `thrift:"success,0,optional" frugal:"0,optional,Account" json:"success,omitempty"`
-	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Account  `thrift:"success,0,optional" frugal:"0,optional,Account" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceInitializeResult() *ControlServiceInitializeResult {
@@ -3082,6 +7011,10 @@ func (p *ControlServiceInitializeResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceInitializeResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceInitializeResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -3103,8 +7036,9 @@ var fieldIDToName_ControlServiceInitializeResult = map[int16]string{
 }
 
 type ControlServiceLoginArgs struct {
-	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *LoginRequest   `thrift:"request,2" frugal:"2,default,LoginRequest" json:"request"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *LoginRequest   `thrift:"request,2" frugal:"2,default,LoginRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceLoginArgs() *ControlServiceLoginArgs {
@@ -3138,6 +7072,10 @@ func (p *ControlServiceLoginArgs) SetRequest(val *LoginRequest) {
 	p.Request = val
 }
 
+func (p *ControlServiceLoginArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceLoginArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -3159,8 +7097,9 @@ var fieldIDToName_ControlServiceLoginArgs = map[int16]string{
 }
 
 type ControlServiceLoginResult struct {
-	Success *LoginResult_ `thrift:"success,0,optional" frugal:"0,optional,LoginResult_" json:"success,omitempty"`
-	Error   *APIError     `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *LoginResult_ `thrift:"success,0,optional" frugal:"0,optional,LoginResult_" json:"success,omitempty"`
+	Error          *APIError     `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceLoginResult() *ControlServiceLoginResult {
@@ -3194,6 +7133,10 @@ func (p *ControlServiceLoginResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceLoginResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceLoginResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -3215,7 +7158,8 @@ var fieldIDToName_ControlServiceLoginResult = map[int16]string{
 }
 
 type ControlServiceGetSessionArgs struct {
-	Ctx *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceGetSessionArgs() *ControlServiceGetSessionArgs {
@@ -3237,6 +7181,10 @@ func (p *ControlServiceGetSessionArgs) SetCtx(val *RequestContext) {
 	p.Ctx = val
 }
 
+func (p *ControlServiceGetSessionArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceGetSessionArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -3253,8 +7201,9 @@ var fieldIDToName_ControlServiceGetSessionArgs = map[int16]string{
 }
 
 type ControlServiceGetSessionResult struct {
-	Success *SessionResult_ `thrift:"success,0,optional" frugal:"0,optional,SessionResult_" json:"success,omitempty"`
-	Error   *APIError       `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *SessionResult_ `thrift:"success,0,optional" frugal:"0,optional,SessionResult_" json:"success,omitempty"`
+	Error          *APIError       `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceGetSessionResult() *ControlServiceGetSessionResult {
@@ -3288,6 +7237,10 @@ func (p *ControlServiceGetSessionResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceGetSessionResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceGetSessionResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -3309,7 +7262,8 @@ var fieldIDToName_ControlServiceGetSessionResult = map[int16]string{
 }
 
 type ControlServiceLogoutArgs struct {
-	Ctx *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceLogoutArgs() *ControlServiceLogoutArgs {
@@ -3331,6 +7285,10 @@ func (p *ControlServiceLogoutArgs) SetCtx(val *RequestContext) {
 	p.Ctx = val
 }
 
+func (p *ControlServiceLogoutArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceLogoutArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -3347,8 +7305,9 @@ var fieldIDToName_ControlServiceLogoutArgs = map[int16]string{
 }
 
 type ControlServiceLogoutResult struct {
-	Success *Empty    `thrift:"success,0,optional" frugal:"0,optional,Empty" json:"success,omitempty"`
-	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Empty    `thrift:"success,0,optional" frugal:"0,optional,Empty" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceLogoutResult() *ControlServiceLogoutResult {
@@ -3382,6 +7341,10 @@ func (p *ControlServiceLogoutResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceLogoutResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceLogoutResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -3403,8 +7366,9 @@ var fieldIDToName_ControlServiceLogoutResult = map[int16]string{
 }
 
 type ControlServiceChangePasswordArgs struct {
-	Ctx     *RequestContext        `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *ChangePasswordRequest `thrift:"request,2" frugal:"2,default,ChangePasswordRequest" json:"request"`
+	Ctx            *RequestContext        `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ChangePasswordRequest `thrift:"request,2" frugal:"2,default,ChangePasswordRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceChangePasswordArgs() *ControlServiceChangePasswordArgs {
@@ -3438,6 +7402,10 @@ func (p *ControlServiceChangePasswordArgs) SetRequest(val *ChangePasswordRequest
 	p.Request = val
 }
 
+func (p *ControlServiceChangePasswordArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceChangePasswordArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -3459,8 +7427,9 @@ var fieldIDToName_ControlServiceChangePasswordArgs = map[int16]string{
 }
 
 type ControlServiceChangePasswordResult struct {
-	Success *Empty    `thrift:"success,0,optional" frugal:"0,optional,Empty" json:"success,omitempty"`
-	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Empty    `thrift:"success,0,optional" frugal:"0,optional,Empty" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceChangePasswordResult() *ControlServiceChangePasswordResult {
@@ -3494,6 +7463,10 @@ func (p *ControlServiceChangePasswordResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceChangePasswordResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceChangePasswordResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -3515,7 +7488,8 @@ var fieldIDToName_ControlServiceChangePasswordResult = map[int16]string{
 }
 
 type ControlServiceListAccountsArgs struct {
-	Ctx *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListAccountsArgs() *ControlServiceListAccountsArgs {
@@ -3537,6 +7511,10 @@ func (p *ControlServiceListAccountsArgs) SetCtx(val *RequestContext) {
 	p.Ctx = val
 }
 
+func (p *ControlServiceListAccountsArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListAccountsArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -3553,8 +7531,9 @@ var fieldIDToName_ControlServiceListAccountsArgs = map[int16]string{
 }
 
 type ControlServiceListAccountsResult struct {
-	Success *AccountsResult_ `thrift:"success,0,optional" frugal:"0,optional,AccountsResult_" json:"success,omitempty"`
-	Error   *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *AccountsResult_ `thrift:"success,0,optional" frugal:"0,optional,AccountsResult_" json:"success,omitempty"`
+	Error          *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceListAccountsResult() *ControlServiceListAccountsResult {
@@ -3588,6 +7567,10 @@ func (p *ControlServiceListAccountsResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceListAccountsResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceListAccountsResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -3609,8 +7592,9 @@ var fieldIDToName_ControlServiceListAccountsResult = map[int16]string{
 }
 
 type ControlServiceCreateAccountArgs struct {
-	Ctx     *RequestContext       `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *CreateAccountRequest `thrift:"request,2" frugal:"2,default,CreateAccountRequest" json:"request"`
+	Ctx            *RequestContext       `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *CreateAccountRequest `thrift:"request,2" frugal:"2,default,CreateAccountRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceCreateAccountArgs() *ControlServiceCreateAccountArgs {
@@ -3644,6 +7628,10 @@ func (p *ControlServiceCreateAccountArgs) SetRequest(val *CreateAccountRequest) 
 	p.Request = val
 }
 
+func (p *ControlServiceCreateAccountArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceCreateAccountArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -3665,8 +7653,9 @@ var fieldIDToName_ControlServiceCreateAccountArgs = map[int16]string{
 }
 
 type ControlServiceCreateAccountResult struct {
-	Success *Account  `thrift:"success,0,optional" frugal:"0,optional,Account" json:"success,omitempty"`
-	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Account  `thrift:"success,0,optional" frugal:"0,optional,Account" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceCreateAccountResult() *ControlServiceCreateAccountResult {
@@ -3700,6 +7689,10 @@ func (p *ControlServiceCreateAccountResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceCreateAccountResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceCreateAccountResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -3721,8 +7714,9 @@ var fieldIDToName_ControlServiceCreateAccountResult = map[int16]string{
 }
 
 type ControlServiceUpdateAccountArgs struct {
-	Ctx     *RequestContext       `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *UpdateAccountRequest `thrift:"request,2" frugal:"2,default,UpdateAccountRequest" json:"request"`
+	Ctx            *RequestContext       `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *UpdateAccountRequest `thrift:"request,2" frugal:"2,default,UpdateAccountRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceUpdateAccountArgs() *ControlServiceUpdateAccountArgs {
@@ -3756,6 +7750,10 @@ func (p *ControlServiceUpdateAccountArgs) SetRequest(val *UpdateAccountRequest) 
 	p.Request = val
 }
 
+func (p *ControlServiceUpdateAccountArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceUpdateAccountArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -3777,8 +7775,9 @@ var fieldIDToName_ControlServiceUpdateAccountArgs = map[int16]string{
 }
 
 type ControlServiceUpdateAccountResult struct {
-	Success *Account  `thrift:"success,0,optional" frugal:"0,optional,Account" json:"success,omitempty"`
-	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Account  `thrift:"success,0,optional" frugal:"0,optional,Account" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceUpdateAccountResult() *ControlServiceUpdateAccountResult {
@@ -3812,6 +7811,10 @@ func (p *ControlServiceUpdateAccountResult) SetError(val *APIError) {
 	p.Error = val
 }
 
+func (p *ControlServiceUpdateAccountResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceUpdateAccountResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
@@ -3833,8 +7836,9 @@ var fieldIDToName_ControlServiceUpdateAccountResult = map[int16]string{
 }
 
 type ControlServiceResetPasswordArgs struct {
-	Ctx     *RequestContext       `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
-	Request *ResetPasswordRequest `thrift:"request,2" frugal:"2,default,ResetPasswordRequest" json:"request"`
+	Ctx            *RequestContext       `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ResetPasswordRequest `thrift:"request,2" frugal:"2,default,ResetPasswordRequest" json:"request"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceResetPasswordArgs() *ControlServiceResetPasswordArgs {
@@ -3868,6 +7872,10 @@ func (p *ControlServiceResetPasswordArgs) SetRequest(val *ResetPasswordRequest) 
 	p.Request = val
 }
 
+func (p *ControlServiceResetPasswordArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
 func (p *ControlServiceResetPasswordArgs) IsSetCtx() bool {
 	return p.Ctx != nil
 }
@@ -3889,8 +7897,9 @@ var fieldIDToName_ControlServiceResetPasswordArgs = map[int16]string{
 }
 
 type ControlServiceResetPasswordResult struct {
-	Success *Empty    `thrift:"success,0,optional" frugal:"0,optional,Empty" json:"success,omitempty"`
-	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	Success        *Empty    `thrift:"success,0,optional" frugal:"0,optional,Empty" json:"success,omitempty"`
+	Error          *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
 }
 
 func NewControlServiceResetPasswordResult() *ControlServiceResetPasswordResult {
@@ -3922,6 +7931,10 @@ func (p *ControlServiceResetPasswordResult) SetSuccess(x interface{}) {
 }
 func (p *ControlServiceResetPasswordResult) SetError(val *APIError) {
 	p.Error = val
+}
+
+func (p *ControlServiceResetPasswordResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
 }
 
 func (p *ControlServiceResetPasswordResult) IsSetSuccess() bool {

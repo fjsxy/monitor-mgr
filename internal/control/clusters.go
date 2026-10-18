@@ -249,6 +249,8 @@ func (s *Store) UnregisterCluster(ctx context.Context, c *rpc.RequestContext, r 
 
 // clusterMutation 在同一事务内执行转移或注销及对应审计、幂等结果。
 func (s *Store) clusterMutation(ctx context.Context, c *rpc.RequestContext, action, id, owner string, request any) (*rpc.Cluster, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")
@@ -339,6 +341,7 @@ func (s *Store) GetOperation(ctx context.Context, c *rpc.RequestContext, r *rpc.
 			return nil, e
 		}
 	}
+	s.enrichPublicationOperation(ctx, s.DB, o)
 	return o, nil
 }
 

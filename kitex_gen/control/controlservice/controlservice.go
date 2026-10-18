@@ -13,6 +13,118 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
+	"CreateInstance": kitex.NewMethodInfo(
+		createInstanceHandler,
+		newControlServiceCreateInstanceArgs,
+		newControlServiceCreateInstanceResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ListInstances": kitex.NewMethodInfo(
+		listInstancesHandler,
+		newControlServiceListInstancesArgs,
+		newControlServiceListInstancesResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetInstance": kitex.NewMethodInfo(
+		getInstanceHandler,
+		newControlServiceGetInstanceArgs,
+		newControlServiceGetInstanceResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetDraft": kitex.NewMethodInfo(
+		getDraftHandler,
+		newControlServiceGetDraftArgs,
+		newControlServiceGetDraftResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"SaveDraft": kitex.NewMethodInfo(
+		saveDraftHandler,
+		newControlServiceSaveDraftArgs,
+		newControlServiceSaveDraftResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"CopyTemplate": kitex.NewMethodInfo(
+		copyTemplateHandler,
+		newControlServiceCopyTemplateArgs,
+		newControlServiceCopyTemplateResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"RecordEditingActivity": kitex.NewMethodInfo(
+		recordEditingActivityHandler,
+		newControlServiceRecordEditingActivityArgs,
+		newControlServiceRecordEditingActivityResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"PreviewPublication": kitex.NewMethodInfo(
+		previewPublicationHandler,
+		newControlServicePreviewPublicationArgs,
+		newControlServicePreviewPublicationResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"PublishConfiguration": kitex.NewMethodInfo(
+		publishConfigurationHandler,
+		newControlServicePublishConfigurationArgs,
+		newControlServicePublishConfigurationResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ListVersions": kitex.NewMethodInfo(
+		listVersionsHandler,
+		newControlServiceListVersionsArgs,
+		newControlServiceListVersionsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetVersion": kitex.NewMethodInfo(
+		getVersionHandler,
+		newControlServiceGetVersionArgs,
+		newControlServiceGetVersionResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetRuntime": kitex.NewMethodInfo(
+		getRuntimeHandler,
+		newControlServiceGetRuntimeArgs,
+		newControlServiceGetRuntimeResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"RefreshInstance": kitex.NewMethodInfo(
+		refreshInstanceHandler,
+		newControlServiceRefreshInstanceArgs,
+		newControlServiceRefreshInstanceResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"DeleteDraft": kitex.NewMethodInfo(
+		deleteDraftHandler,
+		newControlServiceDeleteDraftArgs,
+		newControlServiceDeleteDraftResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"LookupOperations": kitex.NewMethodInfo(
+		lookupOperationsHandler,
+		newControlServiceLookupOperationsArgs,
+		newControlServiceLookupOperationsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetAttempts": kitex.NewMethodInfo(
+		getAttemptsHandler,
+		newControlServiceGetAttemptsArgs,
+		newControlServiceGetAttemptsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"ListKubeconfigContexts": kitex.NewMethodInfo(
 		listKubeconfigContextsHandler,
 		newControlServiceListKubeconfigContextsArgs,
@@ -238,6 +350,390 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 		Extra:           extra,
 	}
 	return svcInfo
+}
+
+func createInstanceHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceCreateInstanceArgs)
+	realResult := result.(*control.ControlServiceCreateInstanceResult)
+	success, err := handler.(control.ControlService).CreateInstance(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceCreateInstanceArgs() interface{} {
+	return control.NewControlServiceCreateInstanceArgs()
+}
+
+func newControlServiceCreateInstanceResult() interface{} {
+	return control.NewControlServiceCreateInstanceResult()
+}
+
+func listInstancesHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceListInstancesArgs)
+	realResult := result.(*control.ControlServiceListInstancesResult)
+	success, err := handler.(control.ControlService).ListInstances(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceListInstancesArgs() interface{} {
+	return control.NewControlServiceListInstancesArgs()
+}
+
+func newControlServiceListInstancesResult() interface{} {
+	return control.NewControlServiceListInstancesResult()
+}
+
+func getInstanceHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceGetInstanceArgs)
+	realResult := result.(*control.ControlServiceGetInstanceResult)
+	success, err := handler.(control.ControlService).GetInstance(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceGetInstanceArgs() interface{} {
+	return control.NewControlServiceGetInstanceArgs()
+}
+
+func newControlServiceGetInstanceResult() interface{} {
+	return control.NewControlServiceGetInstanceResult()
+}
+
+func getDraftHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceGetDraftArgs)
+	realResult := result.(*control.ControlServiceGetDraftResult)
+	success, err := handler.(control.ControlService).GetDraft(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceGetDraftArgs() interface{} {
+	return control.NewControlServiceGetDraftArgs()
+}
+
+func newControlServiceGetDraftResult() interface{} {
+	return control.NewControlServiceGetDraftResult()
+}
+
+func saveDraftHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceSaveDraftArgs)
+	realResult := result.(*control.ControlServiceSaveDraftResult)
+	success, err := handler.(control.ControlService).SaveDraft(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceSaveDraftArgs() interface{} {
+	return control.NewControlServiceSaveDraftArgs()
+}
+
+func newControlServiceSaveDraftResult() interface{} {
+	return control.NewControlServiceSaveDraftResult()
+}
+
+func copyTemplateHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceCopyTemplateArgs)
+	realResult := result.(*control.ControlServiceCopyTemplateResult)
+	success, err := handler.(control.ControlService).CopyTemplate(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceCopyTemplateArgs() interface{} {
+	return control.NewControlServiceCopyTemplateArgs()
+}
+
+func newControlServiceCopyTemplateResult() interface{} {
+	return control.NewControlServiceCopyTemplateResult()
+}
+
+func recordEditingActivityHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceRecordEditingActivityArgs)
+	realResult := result.(*control.ControlServiceRecordEditingActivityResult)
+	success, err := handler.(control.ControlService).RecordEditingActivity(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceRecordEditingActivityArgs() interface{} {
+	return control.NewControlServiceRecordEditingActivityArgs()
+}
+
+func newControlServiceRecordEditingActivityResult() interface{} {
+	return control.NewControlServiceRecordEditingActivityResult()
+}
+
+func previewPublicationHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServicePreviewPublicationArgs)
+	realResult := result.(*control.ControlServicePreviewPublicationResult)
+	success, err := handler.(control.ControlService).PreviewPublication(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServicePreviewPublicationArgs() interface{} {
+	return control.NewControlServicePreviewPublicationArgs()
+}
+
+func newControlServicePreviewPublicationResult() interface{} {
+	return control.NewControlServicePreviewPublicationResult()
+}
+
+func publishConfigurationHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServicePublishConfigurationArgs)
+	realResult := result.(*control.ControlServicePublishConfigurationResult)
+	success, err := handler.(control.ControlService).PublishConfiguration(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServicePublishConfigurationArgs() interface{} {
+	return control.NewControlServicePublishConfigurationArgs()
+}
+
+func newControlServicePublishConfigurationResult() interface{} {
+	return control.NewControlServicePublishConfigurationResult()
+}
+
+func listVersionsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceListVersionsArgs)
+	realResult := result.(*control.ControlServiceListVersionsResult)
+	success, err := handler.(control.ControlService).ListVersions(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceListVersionsArgs() interface{} {
+	return control.NewControlServiceListVersionsArgs()
+}
+
+func newControlServiceListVersionsResult() interface{} {
+	return control.NewControlServiceListVersionsResult()
+}
+
+func getVersionHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceGetVersionArgs)
+	realResult := result.(*control.ControlServiceGetVersionResult)
+	success, err := handler.(control.ControlService).GetVersion(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceGetVersionArgs() interface{} {
+	return control.NewControlServiceGetVersionArgs()
+}
+
+func newControlServiceGetVersionResult() interface{} {
+	return control.NewControlServiceGetVersionResult()
+}
+
+func getRuntimeHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceGetRuntimeArgs)
+	realResult := result.(*control.ControlServiceGetRuntimeResult)
+	success, err := handler.(control.ControlService).GetRuntime(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceGetRuntimeArgs() interface{} {
+	return control.NewControlServiceGetRuntimeArgs()
+}
+
+func newControlServiceGetRuntimeResult() interface{} {
+	return control.NewControlServiceGetRuntimeResult()
+}
+
+func refreshInstanceHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceRefreshInstanceArgs)
+	realResult := result.(*control.ControlServiceRefreshInstanceResult)
+	success, err := handler.(control.ControlService).RefreshInstance(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceRefreshInstanceArgs() interface{} {
+	return control.NewControlServiceRefreshInstanceArgs()
+}
+
+func newControlServiceRefreshInstanceResult() interface{} {
+	return control.NewControlServiceRefreshInstanceResult()
+}
+
+func deleteDraftHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceDeleteDraftArgs)
+	realResult := result.(*control.ControlServiceDeleteDraftResult)
+	success, err := handler.(control.ControlService).DeleteDraft(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceDeleteDraftArgs() interface{} {
+	return control.NewControlServiceDeleteDraftArgs()
+}
+
+func newControlServiceDeleteDraftResult() interface{} {
+	return control.NewControlServiceDeleteDraftResult()
+}
+
+func lookupOperationsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceLookupOperationsArgs)
+	realResult := result.(*control.ControlServiceLookupOperationsResult)
+	success, err := handler.(control.ControlService).LookupOperations(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceLookupOperationsArgs() interface{} {
+	return control.NewControlServiceLookupOperationsArgs()
+}
+
+func newControlServiceLookupOperationsResult() interface{} {
+	return control.NewControlServiceLookupOperationsResult()
+}
+
+func getAttemptsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceGetAttemptsArgs)
+	realResult := result.(*control.ControlServiceGetAttemptsResult)
+	success, err := handler.(control.ControlService).GetAttempts(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceGetAttemptsArgs() interface{} {
+	return control.NewControlServiceGetAttemptsArgs()
+}
+
+func newControlServiceGetAttemptsResult() interface{} {
+	return control.NewControlServiceGetAttemptsResult()
 }
 
 func listKubeconfigContextsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -800,6 +1296,246 @@ func newServiceClient(c client.Client) *kClient {
 	return &kClient{
 		c: c,
 	}
+}
+
+func (p *kClient) CreateInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.CreateInstanceRequest) (r *control.ObservationInstance, err error) {
+	var _args control.ControlServiceCreateInstanceArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceCreateInstanceResult
+	if err = p.c.Call(ctx, "CreateInstance", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID) (r *control.InstancesResult_, err error) {
+	var _args control.ControlServiceListInstancesArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceListInstancesResult
+	if err = p.c.Call(ctx, "ListInstances", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID) (r *control.ObservationInstance, err error) {
+	var _args control.ControlServiceGetInstanceArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceGetInstanceResult
+	if err = p.c.Call(ctx, "GetInstance", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID) (r *control.ConfigurationDraft, err error) {
+	var _args control.ControlServiceGetDraftArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceGetDraftResult
+	if err = p.c.Call(ctx, "GetDraft", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) SaveDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.SaveDraftRequest) (r *control.ConfigurationDraft, err error) {
+	var _args control.ControlServiceSaveDraftArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceSaveDraftResult
+	if err = p.c.Call(ctx, "SaveDraft", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) CopyTemplate(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID) (r *control.ConfigurationDraft, err error) {
+	var _args control.ControlServiceCopyTemplateArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceCopyTemplateResult
+	if err = p.c.Call(ctx, "CopyTemplate", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) RecordEditingActivity(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID) (r *control.Empty, err error) {
+	var _args control.ControlServiceRecordEditingActivityArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceRecordEditingActivityResult
+	if err = p.c.Call(ctx, "RecordEditingActivity", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) PreviewPublication(ctx context.Context, ctx_ *control.RequestContext, request *control.PreviewRequest) (r *control.PublicationPreview, err error) {
+	var _args control.ControlServicePreviewPublicationArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServicePreviewPublicationResult
+	if err = p.c.Call(ctx, "PreviewPublication", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) PublishConfiguration(ctx context.Context, ctx_ *control.RequestContext, request *control.PublishRequest) (r *control.Operation, err error) {
+	var _args control.ControlServicePublishConfigurationArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServicePublishConfigurationResult
+	if err = p.c.Call(ctx, "PublishConfiguration", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListVersions(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID) (r *control.VersionsResult_, err error) {
+	var _args control.ControlServiceListVersionsArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceListVersionsResult
+	if err = p.c.Call(ctx, "ListVersions", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetVersion(ctx context.Context, ctx_ *control.RequestContext, request *control.VersionRequest) (r *control.PublicationVersion, err error) {
+	var _args control.ControlServiceGetVersionArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceGetVersionResult
+	if err = p.c.Call(ctx, "GetVersion", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetRuntime(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID) (r *control.InstanceRuntime, err error) {
+	var _args control.ControlServiceGetRuntimeArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceGetRuntimeResult
+	if err = p.c.Call(ctx, "GetRuntime", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) RefreshInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID) (r *control.InstanceRuntime, err error) {
+	var _args control.ControlServiceRefreshInstanceArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceRefreshInstanceResult
+	if err = p.c.Call(ctx, "RefreshInstance", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) DeleteDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID) (r *control.Empty, err error) {
+	var _args control.ControlServiceDeleteDraftArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceDeleteDraftResult
+	if err = p.c.Call(ctx, "DeleteDraft", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) LookupOperations(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationLookup) (r *control.OperationsResult_, err error) {
+	var _args control.ControlServiceLookupOperationsArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceLookupOperationsResult
+	if err = p.c.Call(ctx, "LookupOperations", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetAttempts(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID) (r *control.AttemptsResult_, err error) {
+	var _args control.ControlServiceGetAttemptsArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceGetAttemptsResult
+	if err = p.c.Call(ctx, "GetAttempts", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
 }
 
 func (p *kClient) ListKubeconfigContexts(ctx context.Context, ctx_ *control.RequestContext, request *control.KubeconfigRequest) (r *control.ContextsResult_, err error) {

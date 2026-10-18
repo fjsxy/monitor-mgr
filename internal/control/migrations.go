@@ -1,3 +1,4 @@
+// SQLite按连续版本迁移；升级前保留一致性快照，失败不能替换为空库。
 package control
 
 import (
@@ -9,7 +10,7 @@ import (
 )
 
 // schemaVersion 定义本程序能够读取和升级到的数据库版本。
-const schemaVersion = 3
+const schemaVersion = 4
 
 // migrationSQL 按版本依次保存结构变更，不修改已经发布的旧版本语句。
 var migrationSQL = [][]string{
@@ -22,6 +23,15 @@ var migrationSQL = [][]string{
 		`CREATE TABLE operations(id TEXT PRIMARY KEY,action TEXT NOT NULL,state TEXT NOT NULL,cluster_id TEXT NOT NULL,actor_id TEXT NOT NULL REFERENCES accounts(id),owner_id TEXT NOT NULL,owner_before TEXT NOT NULL DEFAULT '',name TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,credential_revision INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE INDEX unfinished_operations ON operations(cluster_id,state)`,
 		`CREATE TABLE cluster_candidates(operation_id TEXT PRIMARY KEY REFERENCES operations(id),cipher BLOB NOT NULL)`},
+	{`CREATE TABLE discovered_instances(id TEXT PRIMARY KEY,cluster_id TEXT NOT NULL REFERENCES clusters(id),document BLOB NOT NULL)`,
+		`CREATE TABLE instances(id TEXT PRIMARY KEY,cluster_id TEXT NOT NULL REFERENCES clusters(id),component TEXT NOT NULL,name TEXT NOT NULL,target_namespace TEXT NOT NULL,uid TEXT NOT NULL DEFAULT '',lifecycle TEXT NOT NULL DEFAULT 'DRAFT',current_version_id TEXT NOT NULL DEFAULT '',activity_at TEXT NOT NULL,UNIQUE(cluster_id,component,name))`,
+		`CREATE TABLE drafts(instance_id TEXT PRIMARY KEY REFERENCES instances(id),revision INTEGER NOT NULL,config BLOB NOT NULL)`,
+		`CREATE TABLE publication_versions(id TEXT PRIMARY KEY,instance_id TEXT NOT NULL REFERENCES instances(id),source_revision INTEGER NOT NULL,config BLOB NOT NULL,effective_spec BLOB NOT NULL,created_at TEXT NOT NULL)`,
+		`CREATE TABLE publication_previews(id TEXT PRIMARY KEY,instance_id TEXT NOT NULL REFERENCES instances(id),draft_revision INTEGER NOT NULL,uid TEXT NOT NULL,target_spec BLOB NOT NULL,desired_spec BLOB NOT NULL,drift INTEGER NOT NULL)`,
+		`CREATE TABLE publication_operations(operation_id TEXT PRIMARY KEY REFERENCES operations(id),instance_id TEXT NOT NULL REFERENCES instances(id),version_id TEXT NOT NULL REFERENCES publication_versions(id),preview_id TEXT NOT NULL REFERENCES publication_previews(id),overwrite_drift INTEGER NOT NULL)`,
+		`CREATE TABLE execution_attempts(id TEXT PRIMARY KEY,operation_id TEXT NOT NULL REFERENCES operations(id),state TEXT NOT NULL,possibly_sent INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)`,
+		`CREATE TABLE instance_protections(instance_id TEXT PRIMARY KEY REFERENCES instances(id),operation_id TEXT NOT NULL UNIQUE REFERENCES operations(id))`,
+		`CREATE TABLE instance_observations(instance_id TEXT PRIMARY KEY REFERENCES instances(id),runtime BLOB NOT NULL,cr BLOB NOT NULL,observed_at TEXT NOT NULL)`},
 }
 
 // migrate 配置 SQLite WAL，并在保留恢复依据的前提下原子升级数据库。

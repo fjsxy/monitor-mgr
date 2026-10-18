@@ -20,8 +20,11 @@ func (s *Store) wakeWorker() {
 
 // StartWorkers 建立后台核验循环，并先将重启遗留操作转为等待明确继续。
 func (s *Store) StartWorkers() error {
-	// 关键：重启不自动继续已受理变更，候选仍保持密文；否则恢复可能变成未确认的重放。
-	if _, e := s.DB.Exec(`UPDATE operations SET state='WAITING_CONFIRMATION',message='平台已重启，等待管理员明确继续核验' WHERE state IN ('QUEUED','RUNNING')`); e != nil {
+	// 关键：重启不能重放已受理变更；未发等待人工继续，可能已发保持不确定保护。
+	if _, e := s.DB.Exec(`UPDATE operations SET state='WAITING_CONFIRMATION',message='平台已重启，等待管理员明确继续核验' WHERE state IN ('QUEUED','RUNNING','CHECKING')`); e != nil {
+		return e
+	}
+	if _, e := s.DB.Exec(`UPDATE operations SET state=CASE WHEN EXISTS(SELECT 1 FROM publication_operations p JOIN instances i ON i.id=p.instance_id WHERE p.operation_id=operations.id AND i.uid='') THEN 'IDENTITY_UNCERTAIN' ELSE 'RESULT_UNCERTAIN' END,message='平台已重启，只恢复读取核验，不自动重放' WHERE action='PUBLISH' AND state='DISPATCHED'`); e != nil {
 		return e
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -30,6 +33,7 @@ func (s *Store) StartWorkers() error {
 	s.workerDone = make(chan struct{})
 	go func() {
 		defer close(s.workerDone)
+		defer s.publicationWG.Wait()
 		tick := time.NewTicker(100 * time.Millisecond)
 		defer tick.Stop()
 		for {
@@ -39,6 +43,7 @@ func (s *Store) StartWorkers() error {
 			case <-tick.C:
 			case <-s.workerWake:
 			}
+			s.launchPublications(ctx)
 			for ctx.Err() == nil {
 				var id string
 				if s.DB.QueryRowContext(ctx, `SELECT id FROM operations WHERE state='QUEUED' AND action IN ('REGISTER','CREDENTIAL','REACTIVATE') ORDER BY created_at,id LIMIT 1`).Scan(&id) != nil {
@@ -120,6 +125,8 @@ func (s *Store) verifyOperation(life context.Context, id string) {
 
 // finishVerification 在事务内保存验证结果，仅成功且身份一致时切换有效凭据。
 func (s *Store) finishVerification(life context.Context, o *rpc.Operation, cred *targetCredential, v *verifiedTarget, verifyErr error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	// 关键：网络取消后仍用独立限时事务保存等待状态，退出不能把未核实结果误报失败或完成。
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

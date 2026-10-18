@@ -104,6 +104,8 @@ func (s *Store) Logout(ctx context.Context, c *rpc.RequestContext) (*rpc.Empty, 
 
 // ChangePassword 在同一事务中核验旧密码、更新密码并失效全部旧会话。
 func (s *Store) ChangePassword(ctx context.Context, c *rpc.RequestContext, r *rpc.ChangePasswordRequest) (*rpc.Empty, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	if err := validPassword(r.NewPassword_); err != nil {
 		return nil, err
 	}
@@ -240,6 +242,8 @@ func audit(ctx context.Context, tx *sql.Tx, actor, action, target string, now ti
 
 // UpdateAccount 修改角色或启用状态，并在实际变化时提升认证版本。
 func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc.UpdateAccountRequest) (*rpc.Account, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")
@@ -312,6 +316,8 @@ func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 
 // ResetPassword 设置新的临时密码；认证版本递增使既有会话立即失效。
 func (s *Store) ResetPassword(ctx context.Context, c *rpc.RequestContext, r *rpc.ResetPasswordRequest) (*rpc.Empty, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")
