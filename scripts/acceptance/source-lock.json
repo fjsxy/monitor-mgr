@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "tools": {
+    "Go": {
+      "version": "1.27.1",
+      "url": "https://go.dev/dl/go1.27.1.linux-amd64.tar.gz",
+      "sha256": "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445"
+    },
+    "Node.js": {
+      "version": "26.4.0",
+      "url": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-linux-x64.tar.xz",
+      "sha256": "5c4286dcd5bbd5acb1ccc7eb0e088bd5eb1e3affad671ee9364004f8f6a4a431"
+    },
+    "kind": {
+      "version": "v0.33.0",
+      "url": "https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64",
+      "sha256": "aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d"
+    },
+    "kubectl": {
+      "version": "v1.28.15",
+      "url": "https://dl.k8s.io/release/v1.28.15/bin/linux/amd64/kubectl",
+      "sha256": "1f7651ad0b50ef4561aa82e77f3ad06599b5e6b0b2a5fb6c4f474d95a77e41c5"
+    },
+    "Python": {
+      "version": "3.14.7",
+      "url": "https://github.com/actions/python-versions/releases/download/3.14.7-31064857500/python-3.14.7-linux-24.04-x64.tar.gz",
+      "sha256": "76d5ddab6d2dd89a39c06220f6efeda486a48ed481eae97bfc596c74ac3623db",
+      "setupPythonCommit": "5fda3b95a4ea91299a34e894583c3862153e4b97"
+    },
+    "PyYAML": {
+      "version": "6.0.3",
+      "url": "https://files.pythonhosted.org/packages/88/f9/16491d7ed2a919954993e48aa941b200f38040928474c9e85ea9e64222c3/pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5"
+    },
+    "pip": {
+      "version": "26.2.1",
+      "url": "https://files.pythonhosted.org/packages/f3/6e/1736e5b4ae2b778ef2f81c47d797de9f891d4d8acb047a24ca37a60294dd/pip-26.2.1-py3-none-any.whl",
+      "sha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e"
+    }
+  },
+  "actions": {
+    "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "actions/setup-go": "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+    "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+    "actions/upload-artifact": "cf430e030ddbb5b0abf93d22962f4752f3646cd9"
+  },
+  "images": {
+    "kind_node": {
+      "image": "kindest/node:v1.28.15@sha256:a7c05c7ae043a0b8c818f5a06188bc2c4098f6cb59ca7d1856df00375d839251",
+      "tag": "kindest/node:v1.28.15",
+      "indexDigest": "sha256:a7c05c7ae043a0b8c818f5a06188bc2c4098f6cb59ca7d1856df00375d839251",
+      "amd64Manifest": "sha256:af665d70820b816eb1384b9f715f608dca9c625014ebbfa59415dcf703860e93",
+      "amd64Config": "sha256:a71aa91a65fd8ad902ec0e5e4c763fa3018f843dbfada31a80d158eb8aaabcaa"
+    },
+    "ksm": {
+      "image": "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:11da79c0e80e9cc755f84a3fc0cd0269be57148aad2587059abe3296e84b67e9",
+      "tag": "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.11.0",
+      "indexDigest": "sha256:11da79c0e80e9cc755f84a3fc0cd0269be57148aad2587059abe3296e84b67e9",
+      "amd64Manifest": "sha256:256353e391bb6444e8451bc570d130ae4617134cd34d99fec931a28a238f35aa",
+      "amd64Config": "sha256:85a4fd5c67a4d0611e301656ef9351b196af4c0267fd7c38e26acf831b57f726"
+    },
+    "monitorop_go": {
+      "image": "golang:1.22.12-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052",
+      "tag": "golang:1.22.12-alpine",
+      "indexDigest": "sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052",
+      "amd64Manifest": "sha256:6d405dfc5fdf3a45df1529cf060b920041f52ce523487e0f36f02765af294a51",
+      "amd64Config": "sha256:4129f51f28c9ae5de799b958ba2aaa8f92f26cc7bf47c107891673fe4b516c03"
+    },
+    "monitorop_runtime": {
+      "image": "gcr.io/distroless/static:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3",
+      "tag": "gcr.io/distroless/static:nonroot",
+      "indexDigest": "sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3",
+      "amd64Manifest": "sha256:2293b36c7c9082bf4115aab724b4d2cddec82c8eba39bf27ac0517e159acf150",
+      "amd64Config": "sha256:55a757dc8ab862a4eb634c434261dcd26f17c186b54f7bce845404a335456110"
+    },
+    "platform_go": {
+      "image": "golang:1.27.1-bookworm@sha256:8d48e12ec56735e9358640898b9d9b9fcca110612ed8a5567438c0a1baa24e66",
+      "tag": "golang:1.27.1-bookworm",
+      "indexDigest": "sha256:8d48e12ec56735e9358640898b9d9b9fcca110612ed8a5567438c0a1baa24e66",
+      "amd64Manifest": "sha256:e114385c58e7280d2f56d6cf374219dda33fef8eb77f72e9f290ccae6160bd90",
+      "amd64Config": "sha256:5d12712a32f8abba7d2612d3aa1917b8524d2b0f090117ce89d86907f6aa8c1f"
+    },
+    "platform_node": {
+      "image": "node:26.4.0-bookworm-slim@sha256:ec82d089a8ae2cf02628da7b34ea57dc357b24db724d557fe2d240e6beb659c1",
+      "tag": "node:26.4.0-bookworm-slim",
+      "indexDigest": "sha256:ec82d089a8ae2cf02628da7b34ea57dc357b24db724d557fe2d240e6beb659c1",
+      "amd64Manifest": "sha256:70a832c538c185e6a1a5387d46fc5b615363c50d49dcf50505879ee3f39c6001",
+      "amd64Config": "sha256:354c13b6c96f9ee1d05feba4ffade8b40e4b0f26a75cb493a2cc3b0b6b8a5207"
+    },
+    "platform_runtime": {
+      "image": "gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab",
+      "tag": "gcr.io/distroless/static-debian12:nonroot",
+      "indexDigest": "sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab",
+      "amd64Manifest": "sha256:52dcfbabb7457ea47c82f6e13af8c8a4a1d9f7b0145142b3ecab20f2b888411d",
+      "amd64Config": "sha256:12aa113e298cbae388b298c0dc163fa1547beba948153b23eb9094e16a07a770"
+    },
+    "prometheus": {
+      "image": "quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3",
+      "tag": "quay.io/prometheus/prometheus:v2.55.1",
+      "indexDigest": "sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3",
+      "amd64Manifest": "sha256:b1935d181b6dd8e9c827705e89438815337e1b10ae35605126f05f44e5c6940f",
+      "amd64Config": "sha256:899b369f202e252dfef80f3999e981a3d7fc7445228aa6098177acaf50349a76"
+    },
+    "promop": {
+      "image": "quay.io/prometheus-operator/prometheus-operator@sha256:b6a89b8ec08f4cca759b2d579e8545f97ffb897973fcd68148c153f2e936c8b3",
+      "tag": "quay.io/prometheus-operator/prometheus-operator:v0.83.0",
+      "indexDigest": "sha256:b6a89b8ec08f4cca759b2d579e8545f97ffb897973fcd68148c153f2e936c8b3",
+      "amd64Manifest": "sha256:45e3523bc3be67499af00b3a1528b1b94d8261c1a67c6d51473d6e4607a02a6c",
+      "amd64Config": "sha256:08ab5c2b4b7f58f032e7808d127bf6071b0de38404664617a438dc5a2448ed0e"
+    },
+    "provisioner": {
+      "image": "docker.io/kindest/local-path-provisioner@sha256:1f05a0a7698401d1a606583b8d571797e7c2a9310b9a19e6e1cd34b8ddb5cb11",
+      "tag": "docker.io/kindest/local-path-provisioner:v20240813-c6f155d6",
+      "indexDigest": "sha256:1f05a0a7698401d1a606583b8d571797e7c2a9310b9a19e6e1cd34b8ddb5cb11",
+      "amd64Manifest": "sha256:71bb04542ea457593e90991be7443b4e3642c0b797e2f1ea950407f751a3364f",
+      "amd64Config": "sha256:3a195b56ff1540463285c7f6287ef0d4ec18754013f68a3666b363b7893a62ad"
+    },
+    "reloader": {
+      "image": "quay.io/prometheus-operator/prometheus-config-reloader@sha256:78aec597d87aa2b4ba947ab9190538dae93a58a67b8e930aefea1086534b02ef",
+      "tag": "quay.io/prometheus-operator/prometheus-config-reloader:v0.83.0",
+      "indexDigest": "sha256:78aec597d87aa2b4ba947ab9190538dae93a58a67b8e930aefea1086534b02ef",
+      "amd64Manifest": "sha256:76fa11618538bd3bb1ca58c80fea54aaea1af05bacef2a830df36138589f8243",
+      "amd64Config": "sha256:0d812acc1ba03cf3f186dec8650c9310e74c9100fcf0b8c1ed2bd39d6fe90eb5"
+    },
+    "python_fixture": {
+      "image": "docker.io/library/python@sha256:323a717dc4a010fee21e3f1aac738ee10bb485de4e7593ce242b36ee48d6b352",
+      "tag": "docker.io/library/python:3.13.2-alpine",
+      "indexDigest": "sha256:323a717dc4a010fee21e3f1aac738ee10bb485de4e7593ce242b36ee48d6b352",
+      "amd64Manifest": "sha256:8a34ebceda7d48c11d6ec7f322807032f1f152ef121ea7f628cbd72643affd57",
+      "amd64Config": "sha256:e0566e0d46dcfa5a8b8ada82bba53d8f84d0629d8460d1d41197e4c66bc24a51",
+      "arm64Manifest": "sha256:91f983b2a023903433f6227b6c6056cedda4a335f1348d4ffbede021ab11602b",
+      "arm64Config": "sha256:dc9f1382ab7d1e9b9c42b37c96e6637aed45e1323a8fb0a79ba7f98681621632"
+    }
+  },
+  "monitorOp": {
+    "source": "2b2a8b79a52070fb89a08f5afae2b7698901c999",
+    "dockerfileSHA256": "77a70f2323832ff353b8e5d08e023a4eff5d0872638ac9219ad3cb7441c6311a",
+    "crdSHA256": "66c224f6f5657afeeb1d891b6398bfaa797b766554a7c6f85ffe3f94a5cc2b7f",
+    "repository": "fjsxy/monitor-in-hand",
+    "sshHostsSource": "https://api.github.com/meta",
+    "sshHostsSHA256": "c73ac5d045cd2a359d2202b79b551fb22a638463d5ddbe5ed59b1b3998869c88"
+  },
+  "prometheusOperator": {
+    "source": "5cf2f5d37906d64b2259a262e319df4c74639e31",
+    "bundleURL": "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/5cf2f5d37906d64b2259a262e319df4c74639e31/bundle.yaml",
+    "bundleSHA256": "da07af933fda2dbb48e5bc44d4beafff93937e16fc777e19e0d43f332aac500c"
+  },
+  "playwright": {
+    "version": "1.64.1",
+    "browserVersion": "156.0.8078.4",
+    "browserRevision": "1248",
+    "archives": [
+      {
+        "name": "chromium",
+        "url": "https://cdn.playwright.dev/builds/cft/156.0.8078.4/linux64/chrome-linux64.zip",
+        "headStatus": 200,
+        "officialSha256": null
+      },
+      {
+        "name": "chromium_headless",
+        "url": "https://cdn.playwright.dev/builds/cft/156.0.8078.4/linux64/chrome-headless-shell-linux64.zip",
+        "headStatus": 200,
+        "officialSha256": null
+      },
+      {
+        "name": "ffmpeg",
+        "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1013/ffmpeg-linux.zip",
+        "headStatus": 200,
+        "officialSha256": null
+      }
+    ],
+    "systemPackages": [
+      "libasound2t64",
+      "libatk-bridge2.0-0t64",
+      "libatk1.0-0t64",
+      "libatspi2.0-0t64",
+      "libcairo2",
+      "libcups2t64",
+      "libdbus-1-3",
+      "libdrm2",
+      "libgbm1",
+      "libglib2.0-0t64",
+      "libnspr4",
+      "libnss3",
+      "libpango-1.0-0",
+      "libx11-6",
+      "libxcb1",
+      "libxcomposite1",
+      "libxdamage1",
+      "libxext6",
+      "libxfixes3",
+      "libxkbcommon0",
+      "libxrandr2",
+      "xvfb",
+      "fonts-noto-color-emoji",
+      "fonts-unifont",
+      "libfontconfig1",
+      "libfreetype6",
+      "xfonts-cyrillic",
+      "xfonts-scalable",
+      "fonts-liberation",
+      "fonts-ipafont-gothic",
+      "fonts-wqy-zenhei",
+      "fonts-tlwg-loma-otf",
+      "fonts-freefont-ttf"
+    ],
+    "archiveDigestAuthority": "observed-only; pinned upstream does not publish archive SHA256"
+  }
+}
