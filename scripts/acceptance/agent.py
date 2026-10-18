@@ -15,6 +15,42 @@ def owned():
  return ids
 KCASES=[v for v in owned() if manifest()[v]['layer']=='K']
 BCASES=['U02.primary','U06.primary']
+REGCASES={
+ 'REG18-SHARED-001':['TestSharedSchema4PreviewSurvivesUpgrade'],
+ 'REG18-SHARED-002':['TestSharedSchema4PreviewSurvivesUpgrade','TestAgentTypedDraftIdentityAndDefaults'],
+ 'REG18-SHARED-003':['TestSharedTargetSensitiveReadProjection','TestSharedHMACDetectsHiddenConfigAndPreservesMetadata'],
+ 'REG18-CAP-004':['TestAgentOperatorCapabilityBoundaries/missing-agent-controller'],
+ 'REG18-CAP-005':['TestAgentOperatorCapabilityBoundaries/missing-scrape-informer'],
+ 'REG18-CAP-004.single-dash-namespace':['TestAgentOperatorCapabilityBoundaries/single-dash-namespace'],
+ 'REG18-CAP-004.single-dash-selector':['TestAgentOperatorCapabilityBoundaries/single-dash-selector'],
+ 'REG18-CAP-004.override':['TestAgentOperatorCapabilityBoundaries/identity-override'],
+ 'REG18-CAP-004.old-rs':['TestAgentOperatorCapabilityBoundaries/old-rs-mismatch','TestAgentOperatorCapabilityBoundaries/mixed-pod-scope'],
+ 'REG18-CAP-004.none-short-circuit':['TestAgentOperatorCapabilityBoundaries/none-without-scrape-api'],
+ 'REG18-VALID-006':['TestAgentDurationRange'],
+ 'REG18-SOURCE-007':['TestAgentDraftSourceIsolation'],
+ 'REG18-FIXED-008':['TestAgentFixedCapacityRevalidated','TestAgentFixedCapacityPossiblySent'],
+ 'REG18-HEADERS-009':['TestAgentHeadersReadProjection']}
+
+def run_regressions(a):
+ """补充回归单独计数：真实HTTP/Kitex/SQLite加受控目标，不冒充Operator真实启动故障。"""
+ source=source_state();assert not source['dirty'],'正式补充回归需要干净来源';assert a.profile=='LOCAL_FULL'
+ contracts={}
+ for line in (ROOT/'docs/e2e/issue-18.md').read_text().splitlines():
+  cells=[c.strip() for c in line.strip('|').split('|')]
+  if len(cells)==5 and cells[0] in REGCASES:contracts[cells[0]]={'variantId':cells[0],'purpose':cells[1],'steps':cells[2],'expected':cells[3]}
+ assert set(contracts)==set(REGCASES),'补充计划与runner不一致'
+ selected=a.cases or list(REGCASES);roots=sorted({s.split('/')[0] for v in selected for s in REGCASES[v]});command=['go','test','./internal/platform','-count=1','-json','-run','^('+'|'.join(roots)+')$'];started=stamp();r=subprocess.run(command,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+ out=pathlib.Path(a.output);out.mkdir(parents=True,exist_ok=True);os.chmod(out,0o700);log=out/'go-test.jsonl';log.write_bytes(r.stdout);passed=set()
+ for line in r.stdout.splitlines():
+  try:
+   event=json.loads(line)
+   if event.get('Action')=='pass':passed.add(event.get('Test'))
+  except ValueError:pass
+ records=[]
+ for variant in selected:
+  selectors=REGCASES[variant];record={**contracts[variant],'kind':'supplementary','layer':'Q','profile':'LOCAL_FULL','source':source,'testedCommit':source['commit'],'testedTree':source['tree'],'runnerCommit':source['commit'],'testSelectors':selectors,'executionBoundary':'实际HTTP/Kitex/SQLite；受控TLS目标API/metrics/派发屏障','runtimeOS':sys.platform,'runtimeArch':platform.machine(),'contractFingerprint':fingerprint(contracts[variant]),'command':command,'commandExitCode':r.returncode,'startedAt':started,'finishedAt':stamp(),'outcome':'passed' if r.returncode==0 and all(s in passed for s in selectors) else 'failed','evidenceRefs':[{'path':log.name,'sha256':hashlib.sha256(r.stdout).hexdigest()}],'cleanup':{'success':True,'scope':'Go t.TempDir及测试listeners/屏障按测试finally关闭'}}
+  (out/(variant+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));records.append(record)
+ (out/'results.json').write_text(json.dumps(records,ensure_ascii=False,indent=2));print(json.dumps({'supplementary':len(records),'passed':sum(r['outcome']=='passed' for r in records),'ownedCountUnaffected':69}));return 0 if all(r['outcome']=='passed' for r in records) else 1
 
 class Suite(ClusterSuite):
  def __init__(self,a):
@@ -211,11 +247,14 @@ class Suite(ClusterSuite):
   return 0 if all(r['outcome']=='passed' for r in self.results) else 1
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('--layer',choices=['Q','K'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');p.add_argument('--output');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--fail-fast',action='store_true')
+ p=argparse.ArgumentParser();p.add_argument('--layer',choices=['Q','K','REG'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');p.add_argument('--output');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--fail-fast',action='store_true')
  for field in ['kubectl','control-config','data-config','control-context','data-context','control-pod-config','data-pod-config','image','source','api-lane']:p.add_argument('--'+field)
  p.add_argument('--prefix',default='mm18-agent');p.add_argument('--port',type=int,default=18700);a=p.parse_args();contract=manifest()
  if a.list:
   print(json.dumps([{'id':v,'layer':contract[v]['layer'],'testSelector':QCASES.get(v,v),'profiles':contract[v]['profiles']} for v in owned()],ensure_ascii=False,indent=2));return 0
+ if a.layer=='REG':
+  if not a.output or a.cases and any(v not in REGCASES for v in a.cases):p.error('补充回归需要output及已计划子例')
+  return run_regressions(a)
  valid=list(QCASES) if a.layer=='Q' else KCASES
  if a.cases and any(v not in valid for v in a.cases):p.error('未知/层级不符子例')
  if any(a.profile not in contract[v]['profiles'] for v in a.cases or valid):p.error('子例不属于profile')
