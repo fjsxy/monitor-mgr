@@ -628,13 +628,31 @@ def cleanup_environment(descriptor, *, execute, ledger):
     if set(descriptor.get('targets', {})) != expected:
         raise PrepareError('RECOVER_TARGETS_INVALID')
     report = {'schemaVersion': 1, 'runId': descriptor['runId'], 'kind': 'environment-recovery', 'targets': {}, 'success': True}
+    safe_errors = {'RECOVER_CONTAINER_UID_UNKNOWN', 'RECOVER_CONTAINER_READ_FAILED',
+                   'RECOVER_CONTAINER_UID_CHANGED', 'RECOVER_CLUSTER_UID_UNKNOWN',
+                   'RECOVER_CLUSTER_READ_FAILED', 'RECOVER_CLUSTER_UID_CHANGED',
+                   'RECOVER_CLUSTER_DELETE_FAILED', 'RECOVER_CONFIRM_READ_FAILED',
+                   'RECOVER_CLUSTER_STILL_PRESENT'}
+    class LedgerFailure(PrepareError):
+        pass
+    def record(event):
+        # 关键：ledger/fsync 失败意味着后续动作不能持久归属，必须停止整批写入。
+        try:
+            ledger(event)
+        except Exception:
+            report['success'] = False
+            if event.get('target') in report['targets']:
+                report['targets'][event['target']].update(success=False, error='RECOVER_LEDGER_FAILED')
+            error = LedgerFailure('RECOVER_LEDGER_FAILED')
+            error.report = report
+            raise error from None
     # 关键：顺序删除独立 kubeconfig，避免 kind 并发写同一默认配置。
     for role in reversed(list(descriptor.get('targets', {}))):
         target = descriptor['targets'][role]
-        prefix = [descriptor['kubectl'], '--kubeconfig', target['kubeconfig'], '--context', target['context']]
-        state = {'name': target['name'], 'success': False}
+        state = {'name': target.get('name'), 'success': False}
         report['targets'][role] = state
         try:
+            prefix = [descriptor['kubectl'], '--kubeconfig', target['kubeconfig'], '--context', target['context']]
             if not target.get('containers'):
                 raise PrepareError('RECOVER_CONTAINER_UID_UNKNOWN')
             current = execute(['docker', 'ps', '-a', '--no-trunc', '--filter', 'label=io.x-k8s.kind.cluster=' + target['name'], '--format', '{{json .}}'], label='recover-containers')
@@ -642,7 +660,7 @@ def cleanup_environment(descriptor, *, execute, ledger):
             actual = [json.loads(line) for line in _bytes(current.stdout).splitlines() if line]
             if not actual:
                 state.update(success=True, absent=True)
-                ledger({'event': 'environment_cleanup_result', 'runId': descriptor['runId'], 'target': role, 'result': state})
+                record({'event': 'environment_cleanup_result', 'runId': descriptor['runId'], 'target': role, 'result': state})
                 continue
             if {item['ID'] for item in actual} != {item['id'] for item in target['containers']}:
                 raise PrepareError('RECOVER_CONTAINER_UID_CHANGED')
@@ -651,7 +669,7 @@ def cleanup_environment(descriptor, *, execute, ledger):
             uid = _json(_check(execute([*prefix, 'get', 'namespace', 'kube-system', '-o', 'json'], label='recover-cluster-uid'), 'RECOVER_CLUSTER_READ'))['metadata']['uid']
             if uid != target['clusterUID']:
                 raise PrepareError('RECOVER_CLUSTER_UID_CHANGED')
-            ledger({'event': 'environment_cleanup_intent', 'runId': descriptor['runId'], 'target': role, 'clusterUID': uid, 'containers': target['containers']})
+            record({'event': 'environment_cleanup_intent', 'runId': descriptor['runId'], 'target': role, 'clusterUID': uid, 'containers': target['containers']})
             _check(execute([descriptor['kind'], 'delete', 'cluster', '--name', target['name'], '--kubeconfig', target['kubeconfig']],
                            label='recover-delete-owned-cluster', timeout=300), 'RECOVER_CLUSTER_DELETE')
             remaining = execute(['docker', 'ps', '-a', '--no-trunc', '--filter', 'label=io.x-k8s.kind.cluster=' + target['name'], '--format', '{{json .}}'], label='recover-confirm-absent')
@@ -659,10 +677,19 @@ def cleanup_environment(descriptor, *, execute, ledger):
             if _bytes(remaining.stdout).strip():
                 raise PrepareError('RECOVER_CLUSTER_STILL_PRESENT')
             state.update(success=True, absent=True, clusterUID=uid)
-        except (PrepareError, ValueError, KeyError) as error:
-            state['error'] = str(error) if isinstance(error, PrepareError) else 'RECOVER_RESPONSE_INVALID'
+        except LedgerFailure:
+            state.update(success=False, error='RECOVER_LEDGER_FAILED')
+            raise
+        except Exception as error:
+            # 单个目标的执行超时/OS错误不妨碍另一已确认目标；公开结果只保留固定码。
+            if isinstance(error, PrepareError) and str(error) in safe_errors:
+                state['error'] = str(error)
+            elif isinstance(error, (ValueError, KeyError, TypeError)) or str(error) == 'PREPARE_RESPONSE_INVALID':
+                state['error'] = 'RECOVER_RESPONSE_INVALID'
+            else:
+                state['error'] = 'RECOVER_EXECUTION_FAILED'
             report['success'] = False
-        ledger({'event': 'environment_cleanup_result', 'runId': descriptor['runId'], 'target': role, 'result': state})
+        record({'event': 'environment_cleanup_result', 'runId': descriptor['runId'], 'target': role, 'result': state})
     return report
 
 

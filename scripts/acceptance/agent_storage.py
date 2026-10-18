@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """#20存储门禁：复用真实Pod/HTTP/Kitex环境，每例独立fixture，逐例保存卷UID结果。"""
-import argparse,copy,fcntl,hashlib,json,pathlib,signal,subprocess,sys,time,urllib.request
+import argparse,copy,fcntl,hashlib,json,pathlib,signal,sys,time,urllib.request
+from transport import process as subprocess
 import agent as base
 from ksm import manifest,source_state,fingerprint
 from ksm_proxy import Proxy
@@ -212,6 +213,8 @@ class Suite(base.Suite):
    except Exception:time.sleep(.1)
   raise AssertionError('应用fixture入口不可达')
  def cleanup(self):
+  # 关键：统一运行只按 Session 原 UID ledger 清理，不能先执行旧诊断恢复或前缀认领。
+  if self.session:return self.session.cleanup_case(self)
   # 关键：SIGTERM也走同一finally；代理先恢复、关闭，再按原UID正常GC独占资源。
   failures=[]
   if hasattr(self,'proxy'):

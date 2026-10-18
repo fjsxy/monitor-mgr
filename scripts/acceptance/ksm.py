@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """#16 KSM验收：真实平台Pod→HTTP→Kitex→目标API；每例独立前置并finally清理。"""
-import argparse,copy,datetime,platform,concurrent.futures,traceback,hashlib,sys,http.cookiejar,json,os,pathlib,subprocess,time,urllib.error,urllib.request,uuid
+import argparse,copy,datetime,platform,concurrent.futures,traceback,hashlib,sys,http.cookiejar,json,os,pathlib,time,urllib.error,urllib.request,uuid
+from transport import process as subprocess
 from clusters import Suite as ClusterSuite
 from ksm_cases import run_case
 from ksm_proxy import Proxy
@@ -13,21 +14,20 @@ def stamp():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def fingerprint(case):return hashlib.sha256(json.dumps(case,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
 def source_state():return {'commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],cwd=ROOT,text=True).strip(),'dirty':bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True).strip())}
 def manifest():
- x=json.load(open(ROOT/'docs/acceptance/phase1.json'));return {v['id']:{'variantId':v['id'],'caseId':c['id'],'layer':c['layer'],'purpose':c['purpose'],'steps':v['steps'],'expected':v['expected'],'profiles':c['profiles']} for c in x['cases'] for v in c['variants']}
+ x=json.loads((ROOT/'docs/acceptance/phase1.json').read_text());return {v['id']:{'variantId':v['id'],'caseId':c['id'],'layer':c['layer'],'purpose':c['purpose'],'steps':v['steps'],'expected':v['expected'],'profiles':c['profiles']} for c in x['cases'] for v in c['variants']}
 class Suite(ClusterSuite):
  def __init__(self,a):
   super().__init__(a);self.contract=manifest();self.traces=[];self.source=source_state()
   if self.source['dirty'] and not a.allow_dirty_runner:raise SystemExit('K runner来源必须干净；诊断需明确allow-dirty-runner')
-  metadata=json.loads(subprocess.check_output(['docker','image','inspect',a.image],text=True))[0];self.image_metadata={'configID':metadata['Id'],'manifest':metadata.get('Descriptor',{}).get('digest'),'os':metadata['Os'],'architecture':metadata['Architecture'],'source':metadata['Config'].get('Labels',{}).get('org.opencontainers.image.revision')};assert self.image_metadata['source']==a.source,'镜像revision与testedCommit不符'
-  self.environment={}
-  for target in ['control','data']:
-   nodes=json.loads(self.k('get','nodes','-o','json',target=target).stdout)['items'];uid=json.loads(self.k('get','namespace','kube-system','-o','json',target=target).stdout)['metadata']['uid'];self.environment[target]={'uid':uid,'nodes':[{'name':n['metadata']['name'],'nodeInfo':n['status']['nodeInfo'],'taints':n['spec'].get('taints',[])} for n in nodes]};assert all(n['status']['nodeInfo']['kubeletVersion']=='v1.28.15' and n['status']['nodeInfo']['architecture']=='arm64' and n['status']['nodeInfo']['operatingSystem']=='linux' for n in nodes),'真实目标版本/架构不符'
+  if self.session:assert a.source==self.source['commit'] and not self.source['dirty'],'正式Session必须同一干净来源'
+  self.image_metadata=self.image_proof(a.image);self.environment=self.target_environment()
 
  def call(self,method,path,body=None,key=None,status=200):
+  if self.session:self.session.http_intent(self,method,path,body)
   req=urllib.request.Request(self.base+'/api/v1'+path,data=None if body is None else json.dumps(body).encode(),method=method,headers={'Origin':self.base,'Content-Type':'application/json','Idempotency-Key':key or str(uuid.uuid4())})
   try:r=self.http.open(req,timeout=18)
   except urllib.error.HTTPError as e:r=e
-  value=json.load(r);self.traces.append({'at':stamp(),'method':method,'path':path,'status':r.code,'requestId':r.headers.get('X-Request-Id',''),'operationId':value.get('operationId','')})
+  value=json.load(r);self.http_observed(method,path,body,r,value);r.close();self.traces.append({'at':stamp(),'method':method,'path':path,'status':r.code,'requestId':r.headers.get('X-Request-Id',''),'operationId':value.get('operationId','')})
   assert r.code==status,(path,r.code,value.get('code'),value.get('message'));return value
  def cfg(self,name=None,mode='Deployment'):
   out={'name':name or self.crname,'targetNamespace':self.targetns,'deploymentMode':mode,'desiredState':'Running','resources':{'requestCPU':'100m','requestMemory':'250Mi','limitMemory':'500Mi'},'collectors':{'mode':'Default'},'metricFilter':{'mode':'All'},'namespaceFilter':{'mode':'All'},'advancedResources':False}
@@ -75,6 +75,8 @@ class Suite(ClusterSuite):
  def setup_proxy(self):
   self.proxy=Proxy(self,self.target);done=self.operation(self.accept(self.proxy.config,path='/clusters/'+self.cluster['id']+'/credentials'));assert done['state']=='SUCCEEDED',done;return self.proxy
  def cleanup(self):
+  # 关键：统一运行只按 Session 原 UID ledger 清理，不能先执行旧诊断恢复或前缀认领。
+  if self.session:return self.session.cleanup_case(self)
   failures=[]
   if hasattr(self,'proxy'):
    try:(self.out/(self.case+'.proxy.jsonl')).write_text(self.proxy.events());self.proxy.close()
@@ -121,12 +123,12 @@ class Suite(ClusterSuite):
   return {'success':not failures,'failures':failures}
  def run(self):
   for index,case in enumerate(self.a.cases or KCASES):
-   self.case=case;self.extra_namespaces=[];self.traces=[];self.cookies=http.cookiejar.CookieJar();record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'runnerCommit':self.source['commit'],'profile':self.a.profile,'testedTree':subprocess.check_output(['git','rev-parse',self.a.source+'^{tree}'],cwd=ROOT,text=True).strip(),'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()};error=None
+   self.case=case;self.extra_namespaces=[];self.traces=[];self.cookies=http.cookiejar.CookieJar();record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'runnerCommit':self.source['commit'],'profile':self.a.profile,'testedTree':subprocess.check_output(['git','rev-parse',self.a.source+'^{tree}'],cwd=ROOT,text=True).strip(),'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':self.runtime_arch,'environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()};error=None
    try:
     product_image=self.a.image
     if case=='I03.primary':
      assert self.a.rpc_image,'I03需要只追加RPC探针的测试镜像';self.a.image=self.a.rpc_image
-     probe=json.loads(subprocess.check_output(['docker','image','inspect',self.a.rpc_image],text=True))[0];assert probe['Config'].get('Labels',{}).get('org.opencontainers.image.revision')==self.a.source and probe['Os']=='linux' and probe['Architecture']=='arm64','RPC测试镜像来源或架构不符';record['rpcFixtureImage']={'configID':probe['Id'],'manifest':probe.get('Descriptor',{}).get('digest'),'source':self.a.source}
+     record['rpcFixtureImage']=self.image_proof(self.a.rpc_image)
     record['platform']=self.deploy(case,index);self.a.image=product_image;record['platform']['baseProductImage']=product_image
     expected_image=record.get('rpcFixtureImage',self.image_metadata);assert record['platform']['imageID'].endswith(expected_image.get('manifest') or expected_image['configID']),'Pod实际镜像与锁定镜像不符'
     if case in BCASES:record['evidence']=run_browser(self)
@@ -152,7 +154,7 @@ class Suite(ClusterSuite):
     (self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
    if error:raise error
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--data-config');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--rpc-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-ksm-k');p.add_argument('--port',type=int,default=18500);p.add_argument('--workers',type=int,choices=range(1,5),default=1);p.add_argument('--layer',choices=['Q','K','B'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--parallel-diagnostic',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--control-context');p.add_argument('--data-config');p.add_argument('--data-context');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--rpc-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-ksm-k');p.add_argument('--port',type=int,default=18500);p.add_argument('--workers',type=int,choices=range(1,5),default=1);p.add_argument('--layer',choices=['Q','K','B'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--parallel-diagnostic',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');a=p.parse_args()
  if a.list:
   contracts=manifest();print(json.dumps([{'id':id,'layer':contracts[id]['layer'],'testSelector':QCASES.get(id,id),'profiles':contracts[id]['profiles']} for id in list(QCASES)+KCASES+['U03.primary']],ensure_ascii=False,indent=2));raise SystemExit(0)
  if not a.output:p.error('必须显式output')
@@ -162,7 +164,7 @@ if __name__=='__main__':
  if a.layer=='Q':
   from ksm_q import run_q
   raise SystemExit(run_q(a,QCASES,manifest(),ROOT,source_state(),stamp))
- for field in ['kubectl','control_config','data_config','control_pod_config','data_pod_config','image','source']:
+ for field in ['kubectl','control_config','data_config','control_context','data_context','control_pod_config','data_pod_config','image','source']:
   if not getattr(a,field):p.error('K层必须显式'+field)
  if a.profile!='LOCAL_FULL':p.error('本票K runner当前为双目标LOCAL_FULL；CI_SMOKE由最终CI单集群编排执行')
  # All会随全局namespace集合变化滚动，门禁串行；并行只用于明确标记的诊断。

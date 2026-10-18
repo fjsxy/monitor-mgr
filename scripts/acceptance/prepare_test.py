@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 from prepare import PrepareError, prepare_environment, cleanup_environment, verify_environment
+from transport import ProcessFailure
 
 
 class PrepareProtocolTest(unittest.TestCase):
@@ -158,6 +159,65 @@ class PrepareProtocolTest(unittest.TestCase):
             with self.assertRaises(OSError):
                 prepare_environment(request, execute=execute, ledger=refuse)
             self.assertFalse(any('create' in argv or 'build' in argv or 'apply' in argv for argv in calls))
+
+    def test_recovery_execution_failure_continues_other_confirmed_target(self):
+        for failure in [RuntimeError('PRIVATE-TIMEOUT'), ProcessFailure('PRIVATE-TIMEOUT'), OSError('PRIVATE-EXECUTOR'),
+                        PrepareError('PRIVATE-UNEXPECTED-PREPARE'),
+                        subprocess.TimeoutExpired(['PRIVATE-ARGV'], 1)]:
+            with self.subTest(kind=type(failure).__name__), tempfile.TemporaryDirectory() as directory:
+                descriptor = self.recovery_descriptor(directory)
+                descriptor['profile'] = 'LOCAL_FULL'
+                descriptor['targets']['data'] = {**descriptor['targets']['control'], 'name': 'mm21-recover-data'}
+                calls = []
+                def execute(argv, **kwargs):
+                    calls.append(argv)
+                    if 'label=io.x-k8s.kind.cluster=mm21-recover-data' in argv: raise failure
+                    return subprocess.CompletedProcess(argv, 0, b'', b'')
+                result = cleanup_environment(descriptor, execute=execute, ledger=lambda event: None)
+                self.assertFalse(result['success'])
+                self.assertTrue(result['targets']['control']['success'])
+                self.assertEqual(result['targets']['data']['error'], 'RECOVER_EXECUTION_FAILED')
+                self.assertNotIn('PRIVATE', json.dumps(result))
+                self.assertEqual(len(calls), 2)
+
+    def test_recovery_ledger_failure_is_fatal_before_later_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            descriptor = self.recovery_descriptor(directory)
+            descriptor['profile'] = 'LOCAL_FULL'
+            descriptor['targets']['data'] = {**descriptor['targets']['control'], 'name': 'mm21-recover-data'}
+            calls = []
+            def execute(argv, **kwargs):
+                calls.append(argv)
+                output = json.dumps({'ID': 'd' * 64, 'Names': 'mm21-recover-data-control-plane'}).encode() if argv[0] == 'docker' else b'{"metadata":{"uid":"original-cluster"}}'
+                return subprocess.CompletedProcess(argv, 0, output, b'')
+            def refuse(event): raise OSError('PRIVATE-FSYNC')
+            with self.assertRaisesRegex(PrepareError, 'RECOVER_LEDGER_FAILED'):
+                cleanup_environment(descriptor, execute=execute, ledger=refuse)
+            self.assertFalse(any('delete' in argv for argv in calls))
+            self.assertFalse(any('label=io.x-k8s.kind.cluster=mm21-recover-control' in argv for argv in calls))
+
+    def test_recovery_result_ledger_failure_stops_after_recorded_delete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            descriptor = self.recovery_descriptor(directory);descriptor['profile'] = 'LOCAL_FULL'
+            descriptor['targets']['data'] = {**descriptor['targets']['control'], 'name': 'mm21-recover-data'}
+            calls, events = [], []
+            removed = False
+            def execute(argv, **kwargs):
+                nonlocal removed
+                calls.append(argv);output = b''
+                if argv[0] == 'docker' and not removed:output = json.dumps({'ID': 'd' * 64}).encode()
+                elif argv[0] == 'kubectl':output = b'{"metadata":{"uid":"original-cluster"}}'
+                elif argv[0] == 'kind':removed = True
+                return subprocess.CompletedProcess(argv, 0, output, b'')
+            def ledger(event):
+                events.append(event)
+                if event['event'] == 'environment_cleanup_result':raise OSError('PRIVATE-RESULT-FSYNC')
+            with self.assertRaisesRegex(PrepareError, 'RECOVER_LEDGER_FAILED') as caught:
+                cleanup_environment(descriptor, execute=execute, ledger=ledger)
+            self.assertFalse(caught.exception.report['success'])
+            self.assertEqual(caught.exception.report['targets']['data']['error'], 'RECOVER_LEDGER_FAILED')
+            self.assertEqual(sum(argv[0] == 'kind' for argv in calls), 1)
+            self.assertFalse(any('label=io.x-k8s.kind.cluster=mm21-recover-control' in argv for argv in calls))
 
 
 if __name__ == '__main__':
