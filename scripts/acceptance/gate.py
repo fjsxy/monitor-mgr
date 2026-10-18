@@ -96,6 +96,18 @@ class Evidence:
                 self.closure(child)
 
 
+class RelativeEvidence(Evidence):
+    """组件原件不重写路径；在同一可信 run 根下解析其相对目录，并共享导出闭包。"""
+    def __init__(self, reader, base):
+        self.reader, self.base = reader, base
+
+    def read(self, ref):
+        require(isinstance(ref, dict) and isinstance(ref.get('path'), str), 'invalid-reference')
+        # 不用 resolve/join 归一化不可信相对段，交给根 reader 拒绝 ../、symlink 和绝对路径。
+        require(not ref['path'].startswith('/'), 'path-escape')
+        return self.reader.read({**ref, 'path': (self.base + '/' if self.base else '') + ref['path']})
+
+
 def _source(value, candidate, tree):
     require(all(value.get(field) == candidate for field in
                 ['candidateCommit', 'testedCommit', 'runnerCommit']), 'wrong-source')
@@ -243,6 +255,223 @@ def _image(record, reader, candidate, arch, cluster_uids):
     require(any(platform['imageID'].endswith(digest) for digest in [config_digest, manifest_digest]), 'wrong-image-digest')
 
 
+def kubernetes_protocol(proof, entry, reader, cluster_uids, arch, candidate, tree, validator_test=False):
+    """八个 REG21 K 独立核 API/UID/信号/恢复原件；不要求合法缺席的产品 Pod。"""
+    variant = entry['variantId']
+    require(variant in registry.KUBERNETES_PROTOCOL_CASES and entry['layer'] == 'K' and
+            entry['executionBoundary'] == 'kubernetes-protocol', 'wrong-protocol-case')
+    require(isinstance(proof, dict) and proof.get('schemaVersion') == 1, 'missing-kubernetes-protocol')
+    require(proof.get('executionBoundary') == ('validator-test' if validator_test else 'kubernetes-protocol') and
+            proof.get('actualKubernetes') is (not validator_test), 'fixture-scope')
+    _source(proof, candidate, tree)
+    mode = registry.KUBERNETES_PROTOCOL_CASES[variant]
+    require(proof.get('variantId') == variant and proof.get('profile') == 'LOCAL_FULL' and
+            proof.get('mode') == mode and proof.get('targetUID') in cluster_uids and
+            isinstance(proof.get('runId'), str) and bool(proof['runId']), 'wrong-protocol-identity')
+    keys = ['runId', 'profile', 'candidateCommit', 'testedTree', 'runnerCommit', 'dirty', 'variantId', 'targetUID']
+
+    def bound(value):
+        require(isinstance(value, dict) and all(value.get(k) == proof[k] for k in keys), 'wrong-protocol-identity')
+
+    def data(name):
+        ref = proof.get(name)
+        require(isinstance(ref, dict) and ref.get('visibility') == 'public', 'missing-kubernetes-protocol')
+        value = reader.json(ref)
+        require(isinstance(value, dict), 'invalid-kubernetes-protocol')
+        return value
+
+    def normal_cleanup(value, uid):
+        require(isinstance(value, dict) and value.get('success') is True and not value.get('failures') and
+                value.get('mode') == 'original-uid-normal-gc' and value.get('force') is False and
+                value.get('genericFinalizerRemoval') is False and not value.get('auxiliaryFailures') and
+                any(v.get('uid') == uid and v.get('notFound') is True for v in value.get('resources', [])),
+                'protocol-cleanup-unconfirmed')
+
+    namespace = data('namespaceResponseRef')
+    metadata = namespace.get('metadata', {})
+    uid = metadata.get('uid')
+    require(namespace.get('apiVersion') == 'v1' and namespace.get('kind') == 'Namespace' and
+            isinstance(uid, str) and bool(uid) and uid == proof.get('namespaceUID') and
+            bool(metadata.get('name')) and bool(metadata.get('resourceVersion')), 'missing-original-uid')
+    checkpoint = data('checkpointRef')
+    bound(checkpoint)
+    require(checkpoint.get('stage') == 'namespace_checkpoint' and checkpoint.get('namespaceUID') == uid and
+            checkpoint.get('resourceVersion') == metadata['resourceVersion'] and
+            checkpoint.get('actualKubernetes') is (not validator_test), 'protocol-checkpoint-mismatch')
+    creation = data('creationLedgerRef')
+    require(creation.get('runId') == proof['runId'] and creation.get('candidateCommit') == candidate and
+            creation.get('targets', {}).get('control') == proof['targetUID'], 'wrong-protocol-identity')
+    original = [e for e in creation.get('entries', {}).values() if e.get('action') == 'create' and
+                e.get('case') == variant and e.get('target') == 'control' and e.get('clusterUID') == proof['targetUID'] and
+                e.get('stage') == 'confirmed' and e.get('uid') == uid and
+                e.get('resourceVersion') == metadata['resourceVersion'] and e.get('identity') ==
+                {'apiVersion': 'v1', 'kind': 'Namespace', 'namespace': '', 'name': metadata['name']}]
+    require(len(original) == 1, 'missing-original-uid')
+    system = data('clusterSystemResponseRef')
+    require(system.get('kind') == 'Namespace' and system.get('metadata', {}).get('name') == 'kube-system' and
+            system.get('metadata', {}).get('uid') == proof['targetUID'], 'wrong-environment')
+    nodes = data('nodeResponseRef')
+    actual_nodes = nodes.get('items', [])
+    require(nodes.get('kind') == 'NodeList' and len(actual_nodes) == 3 and
+            all(n.get('metadata', {}).get('uid') and n.get('metadata', {}).get('name') and
+                n.get('status', {}).get('nodeInfo', {}).get('operatingSystem') == 'linux' and
+                n.get('status', {}).get('nodeInfo', {}).get('architecture') == arch for n in actual_nodes), 'wrong-profile')
+    environment = data('environmentRef')
+    _source(environment, candidate, tree)
+    bound(environment)
+    require(environment.get('runtimeOS') == 'linux' and environment.get('runtimeArch') == arch and
+            environment.get('clusterUID') == proof['targetUID'] and environment.get('nodes') == [
+                {'name': n['metadata']['name'], 'uid': n['metadata']['uid'], 'os': 'linux', 'arch': arch}
+                for n in actual_nodes], 'wrong-environment')
+    child = data('childIndexRef')
+    require(child.get('runId') == proof['runId'] and child.get('profile') == proof['profile'] and
+            all(child.get(k) == candidate for k in ['candidateCommit', 'testedCommit', 'runnerCommit']) and
+            child.get('testedTree') == tree and child.get('dirty') is False, 'wrong-source')
+    _no_bridge(child)
+    expected = [{k: e[k] for k in ['variantId', 'layer']} for e in registry.entries(proof['profile'])]
+    require(child.get('expectedKeys') == expected and isinstance(child.get('results'), list) and
+            len(child['results']) == len(expected) and all(
+                all(actual.get(k) == key[k] for k in ['variantId', 'layer']) for actual, key in zip(child['results'], expected)),
+            'expected-keys-mismatch')
+    outcomes = [v.get('outcome') for v in child['results']]
+    require(outcomes == (['not_run'] * len(expected) if mode == 'kill' else
+            ['environment_failed' if mode == 'setup' else 'failed'] + ['not_run'] * (len(expected) - 1)), 'protocol-child-was-green')
+    process = data('childProcessRef')
+    bound(process)
+    require(isinstance(process.get('pid'), int) and process['pid'] > 0 and process.get('birth') and
+            isinstance(process.get('returncode'), int) and process['returncode'] != 0, 'protocol-exit-unconfirmed')
+    signal_names = {'term': ['SIGTERM'], 'int': ['SIGINT'], 'repeat': ['SIGTERM', 'SIGINT'], 'kill': ['SIGKILL']}.get(mode, [])
+    require(process.get('signalsSent') == signal_names, 'protocol-signal-mismatch')
+    final_ledger = data('childLedgerRef')
+    require(final_ledger.get('runId') == proof['runId'] and final_ledger.get('candidateCommit') == candidate and
+            final_ledger.get('targets') == creation.get('targets'), 'wrong-protocol-identity')
+    auxiliaries = [p for p in final_ledger.get('processes', {}).values() if p.get('label') == 'protocol-owned-auxiliary']
+    require(len(auxiliaries) == 1 and auxiliaries[0].get('stage') in ['exited', 'recovered-exit'], 'protocol-auxiliary-unconfirmed')
+    if mode in ['term', 'int', 'repeat', 'setup']:
+        require(child.get('cleanup', {}).get('entryCount') == 1, 'protocol-cleanup-reentered')
+        normal_cleanup(child['cleanup'], uid)
+    if mode in ['term', 'int', 'repeat']:
+        require(child.get('state') == 'interrupted' and [s.get('name') for s in child.get('signals', [])] == signal_names,
+                'protocol-signal-mismatch')
+    if mode == 'int':
+        require(child.get('failure', {}).get('type') == 'KeyboardInterrupt', 'protocol-interrupt-lost')
+    if mode in ['repeat', 'cleanup-denied']:
+        require(child.get('failure', {}).get('type') == 'AssertionError', 'protocol-assertion-lost')
+    if mode == 'repeat':
+        barrier = data('cleanupBarrierRef')
+        bound(barrier)
+        require(barrier.get('stage') == 'cleanup_waiting', 'protocol-cleanup-barrier-missing')
+    if mode == 'kill':
+        observation = data('killObservationRef')
+        bound(observation)
+        raw_index = reader.read(proof['childIndexRef'])
+        require(reader.read(proof.get('killedIndexRef')) == raw_index and process['returncode'] == -9 and
+                observation.get('returncode') == -9 and observation.get('pid') == process['pid'] and
+                observation.get('birth') == process['birth'] and observation.get('state') == 'interrupted' and
+                observation.get('finallyExecuted') is False and observation.get('cleanup', {}).get('success') is False and
+                observation.get('originalIndexSHA256') == hashlib.sha256(raw_index).hexdigest() and
+                child.get('cleanup', {}).get('success') is False and not child.get('finishedAt'), 'protocol-kill-finally-claim')
+    reports = []
+    require(isinstance(proof.get('recoveryRefs'), list), 'missing-kubernetes-protocol')
+    for ref in proof['recoveryRefs']:
+        report = reader.json(ref)
+        bound(report)
+        _source(report, candidate, tree)
+        require(report.get('originalIndexUnchanged') is True and report.get('replaysBusiness') is False and
+                report.get('originalIndexSHA256') == proof['childIndexRef']['sha256'] and not report.get('auxiliaryFailures'),
+                'protocol-old-run-rewritten')
+        recovered_ledger = reader.json(report.get('ledgerRef'))
+        attempt = report.get('attempt')
+        require(recovered_ledger.get('runId') == proof['runId'] and recovered_ledger.get('candidateCommit') == candidate and
+                recovered_ledger.get('targets') == creation.get('targets'), 'wrong-protocol-identity')
+        if attempt in ['owner-recover', 'initial-recover']:
+            require(any(e.get('action') == 'create' and e.get('uid') == uid and e.get('case') == variant and
+                        e.get('identity') == original[0]['identity'] and e.get('clusterUID') == proof['targetUID'] and
+                        (e.get('stage') == 'absent' if report.get('success') is True else e.get('stage') != 'absent')
+                        for e in recovered_ledger.get('entries', {}).values()), 'missing-original-uid')
+        # 恢复自己的实际目标原读也要核对，不能由外层同 UID 声明代替。
+        recovered_environment = reader.json(report.get('environmentRef'))
+        bound(recovered_environment)
+        _source(recovered_environment, candidate, tree)
+        recovered_system = reader.json(report.get('clusterSystemResponseRef'))
+        recovered_nodes = reader.json(report.get('nodeResponseRef'))
+        items = recovered_nodes.get('items', [])
+        require(recovered_system.get('kind') == 'Namespace' and
+                recovered_system.get('metadata', {}).get('name') == 'kube-system' and
+                recovered_system.get('metadata', {}).get('uid') == proof['targetUID'] and
+                recovered_nodes.get('kind') == 'NodeList' and len(items) == 3 and all(
+                    n.get('status', {}).get('nodeInfo', {}).get('operatingSystem') == 'linux' and
+                    n.get('status', {}).get('nodeInfo', {}).get('architecture') == arch and
+                    n.get('metadata', {}).get('uid') and n.get('metadata', {}).get('name') for n in items) and
+                recovered_environment.get('clusterUID') == proof['targetUID'] and
+                recovered_environment.get('runtimeOS') == 'linux' and recovered_environment.get('runtimeArch') == arch and
+                recovered_environment.get('nodes') == [{'name': n['metadata']['name'], 'uid': n['metadata']['uid'],
+                    'os': 'linux', 'arch': arch} for n in items], 'wrong-environment')
+        reader.closure(report)
+        reports.append(report)
+    attempts = {'kill': ['owner-recover'], 'cleanup-denied': ['owner-recover'],
+                'read-denied': ['initial-recover', 'owner-recover'],
+                'replaced': ['owner-replace', 'initial-recover', 'owner-cleanup']}.get(mode, [])
+    require([r.get('attempt') for r in reports] == attempts, 'protocol-recovery-missing')
+    if mode in ['kill', 'cleanup-denied', 'read-denied']:
+        require(reports[-1].get('success') is True, 'protocol-cleanup-unconfirmed')
+        normal_cleanup(reports[-1].get('cleanup'), uid)
+    if mode in ['cleanup-denied', 'read-denied']:
+        identity = data('restrictedIdentityRef')
+        bound(identity)
+        _source(identity, candidate, tree)
+        require(identity.get('actual') is True and identity.get('serviceAccountUID') and
+                re.fullmatch('system:serviceaccount:[a-z0-9-]+:[a-z0-9-]+', identity.get('username', '')) and
+                identity.get('mode') == mode, 'protocol-restricted-identity-missing')
+        owner = data('restrictedOwnerLedgerRef')
+        sa = [e for e in owner.get('entries', {}).values() if e.get('action') == 'create' and
+              e.get('case') == variant + ':restricted-owner' and e.get('clusterUID') == proof['targetUID'] and
+              e.get('identity', {}).get('kind') == 'ServiceAccount' and e.get('uid') == identity['serviceAccountUID'] and
+              identity['username'] == 'system:serviceaccount:' + e['identity'].get('namespace', '') + ':' + e['identity'].get('name', '')]
+        require(owner.get('runId') == proof['runId'] and owner.get('candidateCommit') == candidate and
+                owner.get('targets') == creation.get('targets') and len(sa) == 1, 'protocol-restricted-identity-missing')
+        access = data('restrictedAccessRef')
+        bound(access)
+        _source(access, candidate, tree)
+        require(access.get('serviceAccountUID') == identity['serviceAccountUID'] and access.get('systemReadAllowed') is True and
+                access.get('victimReadAllowed') is (mode == 'cleanup-denied') and access.get('victimDeleteAllowed') is False,
+                'protocol-restricted-identity-missing')
+        failed = child['cleanup'] if mode == 'cleanup-denied' else reports[0].get('cleanup', {})
+        require(failed.get('success') is False and any(f.get('errorCode') == 'Forbidden' for f in failed.get('failures', [])) and
+                not any(r.get('uid') == uid and r.get('notFound') is True for r in failed.get('resources', [])) and
+                (mode == 'cleanup-denied' or reports[0].get('success') is False), 'protocol-forbidden-missing')
+        fixture_cleanup = reports[-1].get('fixtureOwnerCleanup', {})
+        require(fixture_cleanup.get('success') is True and fixture_cleanup.get('mode') == 'original-uid-normal-gc' and
+                fixture_cleanup.get('force') is False and fixture_cleanup.get('genericFinalizerRemoval') is False,
+                'protocol-cleanup-unconfirmed')
+        events = reader.json(proof.get('restrictedCleanupEventsRef' if mode == 'cleanup-denied' else 'restrictedReadEventsRef'))
+        require(isinstance(events, list) and any(e.get('reason') == 'Forbidden' and e.get('returncode') != 0 and
+                e.get('restrictedIdentity') is True and e.get('label') == ('kube-delete' if mode == 'cleanup-denied' else 'kube-read')
+                for e in events), 'protocol-forbidden-missing')
+    if mode == 'replaced':
+        owner, failed, cleaned = reports
+        new_uid = owner.get('replacementUID')
+        require(owner.get('success') is True and owner.get('originalUID') == uid and new_uid and new_uid != uid and
+                failed.get('success') is False and failed.get('observedReplacementUID') == new_uid and
+                any(f.get('errorCode') == 'replacement_uid' for f in failed.get('cleanup', {}).get('failures', [])) and
+                cleaned.get('success') is True, 'protocol-replacement-not-refused')
+        replacement = reader.json(owner.get('namespaceResponseRef'))
+        observed = reader.json(failed.get('observedNamespaceRef'))
+        replacement_ledger = reader.json(owner.get('ledgerRef'))
+        require(all(v.get('kind') == 'Namespace' and v.get('metadata', {}).get('uid') == new_uid and
+                    v.get('metadata', {}).get('name') == metadata['name'] for v in [replacement, observed]) and
+                replacement_ledger.get('runId') == proof['runId'] and replacement_ledger.get('candidateCommit') == candidate and
+                replacement_ledger.get('targets') == creation.get('targets') and any(
+                    e.get('action') == 'create' and e.get('case') == variant + ':replacement-owner' and
+                    e.get('stage') == 'confirmed' and e.get('uid') == new_uid and e.get('clusterUID') == proof['targetUID'] and
+                    e.get('identity') == original[0]['identity'] for e in replacement_ledger.get('entries', {}).values()),
+                'protocol-replacement-not-refused')
+        normal_cleanup(cleaned.get('cleanup'), new_uid)
+    reader.closure(proof)
+    return {'success': True, 'executionBoundary': 'validator-test' if validator_test else 'kubernetes-protocol',
+            'productGate': not validator_test}
+
+
 def inspect(index_path, candidate, profile, supplemental=False, validator_test=False):
     """验证完整run；返回已实读的证据闭包供安全exporter使用。"""
     path = pathlib.Path(index_path).absolute()
@@ -314,7 +543,16 @@ def inspect(index_path, candidate, profile, supplemental=False, validator_test=F
         _original(record, entry, reader, candidate, tree)
         require(record.get('runtimeOS') == (host_os if entry['layer'] == 'Q' else 'linux') and
                 record.get('runtimeArch') == arch, 'wrong-profile')
-        if entry['layer'] in ['K', 'B']:
+        if entry['executionBoundary'] == 'kubernetes-protocol':
+            proof_ref = record.get('kubernetesProtocolRef')
+            proof = reader.json(proof_ref)
+            require(proof.get('runId') == index['runId'] and proof.get('targetUID') == next(
+                t['clusterUID'] for t in index['environment']['targets'] if t['name'] == 'control'), 'wrong-protocol-identity')
+            base = str(pathlib.PurePosixPath(proof_ref['path']).parent)
+            scoped = RelativeEvidence(reader, '' if base == '.' else base)
+            kubernetes_protocol(proof, entry, scoped,
+                                cluster_uids, arch, candidate, tree, validator_test)
+        elif entry['layer'] in ['K', 'B']:
             _image(record, reader, candidate, arch, cluster_uids)
         _events(record, entry, reader)
     reader.closure(index)
