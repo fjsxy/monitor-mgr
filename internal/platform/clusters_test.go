@@ -20,7 +20,7 @@ import (
 )
 
 // The controlled TLS API is the external system boundary; every platform call still crosses generated Kitex.
-func clusterAPI(t *testing.T, ssrCode int, anonymous bool) (*httptest.Server, string, *atomic.Int64) {
+func clusterAPI(t *testing.T, ssrCode int, anonymous bool, beforeSSR ...func(*http.Request)) (*httptest.Server, string, *atomic.Int64) {
 	t.Helper()
 	calls := new(atomic.Int64)
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -28,6 +28,9 @@ func clusterAPI(t *testing.T, ssrCode int, anonymous bool) (*httptest.Server, st
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/apis/authentication.k8s.io/v1/selfsubjectreviews":
+			for _, f := range beforeSSR {
+				f(r)
+			}
 			if ssrCode != 200 {
 				w.WriteHeader(ssrCode)
 				io.WriteString(w, `{"message":"controlled failure"}`)
@@ -359,5 +362,155 @@ func TestClusterUnfinishedChangesBlockTransferAndUnregisterAcrossKinds(t *testin
 		clusterCall(t, p, "POST", "/clusters/"+id+"/transfer", map[string]any{"ownerId": owner}, c, "blocked-transfer-"+kind, 409)
 		clusterCall(t, p, "POST", "/clusters/"+id+"/unregister", map[string]any{}, c, "blocked-unregister-"+kind, 409)
 		db.Exec(`DELETE FROM operations WHERE id=?`, opid)
+	}
+}
+
+func TestClusterMetadataReadFailureCannotBecomeEmptyList(t *testing.T) {
+	srv, cfg, _ := clusterAPI(t, 200, false)
+	p, c, owner := clusterPlatform(t)
+	o := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "fixture", "ownerId": owner, "context": "explicit", "kubeconfig": cfg}, c, "register", 202)
+	done := awaitClusterOperation(t, p, c, o["operationId"].(string))
+	srv.Close()
+	for _, suffix := range []string{"/namespaces", "/references?kind=Secret&namespace=monitoring"} {
+		clusterCall(t, p, "GET", "/clusters/"+done["clusterId"].(string)+suffix, nil, c, "", 502)
+	}
+}
+
+func TestClusterPendingCredentialSurvivesRestartWithoutAutomaticReplay(t *testing.T) {
+	var gated atomic.Bool
+	var reviews atomic.Int64
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	_, cfg, _ := clusterAPI(t, 200, false, func(r *http.Request) {
+		reviews.Add(1)
+		if gated.Load() {
+			select {
+			case entered <- struct{}{}:
+			default:
+			}
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+		}
+	})
+	dir := t.TempDir()
+	pcfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
+	p, e := platform.Start(context.Background(), pcfg)
+	if e != nil {
+		t.Fatal(e)
+	}
+	request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
+	c := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
+	owner := readJSON(t, p, "/session", c)["account"].(map[string]any)["id"].(string)
+	o := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "fixture", "ownerId": owner, "context": "explicit", "kubeconfig": cfg}, c, "register", 202)
+	done := awaitClusterOperation(t, p, c, o["operationId"].(string))
+	id := done["clusterId"].(string)
+	gated.Store(true)
+	accepted := clusterCall(t, p, "POST", "/clusters/"+id+"/credentials", map[string]any{"context": "explicit", "kubeconfig": cfg}, c, "candidate", 202)
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not outlive accepted HTTP request")
+	}
+	p.Close(context.Background())
+	before := reviews.Load()
+	p, e = platform.Start(context.Background(), pcfg)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer p.Close(context.Background())
+	opid := accepted["operationId"].(string)
+	pending := clusterCall(t, p, "GET", "/operations/"+opid, nil, c, "", 200)
+	if pending["state"] != "WAITING_CONFIRMATION" {
+		t.Fatalf("pending operation auto-resumed: %v", pending)
+	}
+	time.Sleep(150 * time.Millisecond)
+	if reviews.Load() != before {
+		t.Fatal("restart replayed candidate review without explicit continue")
+	}
+	clusterCall(t, p, "POST", "/clusters/"+id+"/transfer", map[string]any{"ownerId": owner}, c, "blocked-transfer", 409)
+	clusterCall(t, p, "POST", "/clusters/"+id+"/unregister", map[string]any{}, c, "blocked-unregister", 409)
+	close(release)
+	clusterCall(t, p, "POST", "/operations/"+opid+"/continue", map[string]any{}, c, "continue", 202)
+	resumed := awaitClusterOperation(t, p, c, opid)
+	if resumed["state"] != "SUCCEEDED" || resumed["credentialRevision"] != float64(2) {
+		t.Fatalf("explicit recovery failed: %v", resumed)
+	}
+}
+
+func TestCredentialContinueRejectsOtherOperationKindsWithoutChangingActor(t *testing.T) {
+	dir := t.TempDir()
+	p, e := platform.Start(context.Background(), platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer p.Close(context.Background())
+	request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
+	c := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
+	user := clusterCall(t, p, "POST", "/accounts", map[string]any{"username": "previous-actor", "password": "temporary-password", "role": "USER"}, c, "create-user", 201)
+	actor := user["id"].(string)
+	db, e := sql.Open("sqlite", filepath.Join(dir, "platform.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	for _, kind := range []string{"PUBLISH", "DELETE", "FUTURE_CHANGE"} {
+		id := "pending-" + kind
+		if _, e = db.Exec(`INSERT INTO operations(id,action,state,cluster_id,actor_id,owner_id,name,message,created_at,updated_at) VALUES(?,?,'WAITING_CONFIRMATION','fixture-cluster',?,?,'fixture','','2026-01-01','2026-01-01')`, id, kind, actor, actor); e != nil {
+			t.Fatal(e)
+		}
+		clusterCall(t, p, "POST", "/operations/"+id+"/continue", map[string]any{}, c, "continue-"+kind, 409)
+		op := clusterCall(t, p, "GET", "/operations/"+id, nil, c, "", 200)
+		if op["state"] != "WAITING_CONFIRMATION" || op["actorId"] != actor {
+			t.Fatalf("credential recovery changed another kind: %v", op)
+		}
+	}
+}
+
+func TestReferenceMetadataRequiresCompletePagesAndNeverReturnsSecretValues(t *testing.T) {
+	var failSecond atomic.Bool
+	failSecond.Store(true)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/apis/authentication.k8s.io/v1/selfsubjectreviews":
+			io.WriteString(w, `{"status":{"userInfo":{"username":"verified-reference-reader"}}}`)
+		case "/api/v1/namespaces/kube-system":
+			io.WriteString(w, `{"metadata":{"uid":"reference-fixture-uid"}}`)
+		case "/version":
+			io.WriteString(w, `{"gitVersion":"v1.28.15"}`)
+		case "/api/v1/namespaces/monitoring/secrets":
+			if r.URL.Query().Get("continue") == "page-two" {
+				if failSecond.Load() {
+					w.WriteHeader(403)
+					io.WriteString(w, `{}`)
+					return
+				}
+				io.WriteString(w, `{"items":[{"metadata":{"name":"second-secret","namespace":"monitoring"},"data":{"password":"c2Vuc2l0aXZl"}}]}`)
+			} else {
+				io.WriteString(w, `{"metadata":{"continue":"page-two"},"items":[{"metadata":{"name":"first-secret","namespace":"monitoring"},"data":{"token":"c2Vuc2l0aXZl"}}]}`)
+			}
+		default:
+			io.WriteString(w, `{"items":[]}`)
+		}
+	}))
+	defer srv.Close()
+	ca := base64.StdEncoding.EncodeToString([]byte(pemCert(srv.Certificate().Raw)))
+	cfg := `{"clusters":[{"name":"c","cluster":{"server":"` + srv.URL + `","certificate-authority-data":"` + ca + `"}}],"users":[{"name":"u","user":{"token":"fixture-token"}}],"contexts":[{"name":"explicit","context":{"cluster":"c","user":"u"}}]}`
+	p, c, owner := clusterPlatform(t)
+	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "reference-fixture", "ownerId": owner, "context": "explicit", "kubeconfig": cfg}, c, "register", 202)
+	done := awaitClusterOperation(t, p, c, op["operationId"].(string))
+	path := "/clusters/" + done["clusterId"].(string) + "/references?kind=Secret&namespace=monitoring"
+	clusterCall(t, p, "GET", path, nil, c, "", 403)
+	failSecond.Store(false)
+	v := clusterCall(t, p, "GET", path, nil, c, "", 200)
+	refs := v["references"].([]any)
+	if len(refs) != 2 {
+		t.Fatalf("incomplete metadata returned: %v", v)
+	}
+	raw, _ := json.Marshal(v)
+	if bytes.Contains(raw, []byte("c2Vuc2l0aXZl")) || bytes.Contains(raw, []byte("sensitive")) {
+		t.Fatal("Secret values leaked into reference metadata")
 	}
 }

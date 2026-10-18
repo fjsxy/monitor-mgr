@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -344,6 +345,9 @@ func (s *Store) ContinueOperation(ctx context.Context, c *rpc.RequestContext, r 
 	if e != nil {
 		return nil, Error("NOT_FOUND", "操作不存在")
 	}
+	if o.Action != "REGISTER" && o.Action != "CREDENTIAL" && o.Action != "REACTIVATE" {
+		return nil, Error("CONFLICT", "此入口仅可继续集群注册或凭据只读核验")
+	}
 	var replay rpc.Operation
 	cmd, hit, e := s.beginCommand(ctx, tx, p, c, "CONTINUE_OPERATION", o.OperationId, r, &replay)
 	if e != nil {
@@ -357,7 +361,7 @@ func (s *Store) ContinueOperation(ctx context.Context, c *rpc.RequestContext, r 
 	}
 	o.State = "QUEUED"
 	o.ActorId = p.Account.Id
-	o.Message = "已明确继续只读核验"
+	o.Message = "已明确继续凭据只读核验"
 	o.UpdatedAt = s.Now().UTC().Format(time.RFC3339Nano)
 	if _, e = tx.ExecContext(ctx, `UPDATE operations SET state=?,actor_id=?,message=?,updated_at=? WHERE id=?`, o.State, o.ActorId, o.Message, o.UpdatedAt, o.OperationId); e != nil {
 		return nil, Error("UNAVAILABLE", "继续失败")
@@ -421,25 +425,41 @@ func (s *Store) ListReferences(ctx context.Context, c *rpc.RequestContext, r *rp
 	}
 	bounded, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	var list struct {
-		Items []struct {
-			Metadata struct {
-				Name      string `json:"name"`
-				Namespace string `json:"namespace"`
-			} `json:"metadata"`
-			Data map[string]json.RawMessage `json:"data"`
-		} `json:"items"`
-	}
-	if e = t.Request(bounded, "GET", "/api/v1/namespaces/"+url.PathEscape(r.Namespace)+"/"+resource, nil, &list); e != nil {
-		return nil, e
-	}
 	out := []*rpc.ReferenceMetadata{}
-	for _, i := range list.Items {
-		keys := []string{}
-		for k := range i.Data {
-			keys = append(keys, k)
+	continuation := ""
+	seen := map[string]bool{}
+	for {
+		var list struct {
+			Metadata struct {
+				Continue string `json:"continue"`
+			} `json:"metadata"`
+			Items []struct {
+				Metadata struct {
+					Name      string `json:"name"`
+					Namespace string `json:"namespace"`
+				} `json:"metadata"`
+				Data map[string]json.RawMessage `json:"data"`
+			} `json:"items"`
 		}
-		out = append(out, &rpc.ReferenceMetadata{Kind: r.Kind, Name: i.Metadata.Name, Namespace: i.Metadata.Namespace, Keys: keys})
+		if e = t.Request(bounded, "GET", "/api/v1/namespaces/"+url.PathEscape(r.Namespace)+"/"+resource+"?limit=500&continue="+url.QueryEscape(continuation), nil, &list); e != nil {
+			return nil, e
+		}
+		for _, i := range list.Items {
+			keys := []string{}
+			for k := range i.Data {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			out = append(out, &rpc.ReferenceMetadata{Kind: r.Kind, Name: i.Metadata.Name, Namespace: i.Metadata.Namespace, Keys: keys})
+		}
+		if list.Metadata.Continue == "" {
+			break
+		}
+		if seen[list.Metadata.Continue] {
+			return nil, Error("TARGET_ERROR", "引用元信息分页未前进，结果不完整")
+		}
+		seen[list.Metadata.Continue] = true
+		continuation = list.Metadata.Continue
 	}
 	return &rpc.ReferencesResult_{References: out}, nil
 }
