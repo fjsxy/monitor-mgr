@@ -19,11 +19,14 @@ import (
 )
 
 type Store struct {
-	DB         *sql.DB
-	lock       *os.File
-	Now        func() time.Time
-	SessionTTL time.Duration
-	Key        []byte
+	DB           *sql.DB
+	lock         *os.File
+	Now          func() time.Time
+	SessionTTL   time.Duration
+	Key          []byte
+	workerCancel context.CancelFunc
+	workerWake   chan struct{}
+	workerDone   chan struct{}
 }
 
 func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, error) {
@@ -101,6 +104,7 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 	return &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key}, nil
 }
 func (s *Store) Close() error {
+	s.stopWorkers()
 	err := s.DB.Close()
 	unix.Flock(int(s.lock.Fd()), unix.LOCK_UN)
 	s.lock.Close()

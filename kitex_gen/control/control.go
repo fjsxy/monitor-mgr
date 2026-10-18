@@ -590,6 +590,709 @@ func (p *Empty) String() string {
 
 var fieldIDToName_Empty = map[int16]string{}
 
+type ClusterCapability struct {
+	Component string `thrift:"component,1,required" frugal:"1,required,string" json:"component"`
+	Allowed   bool   `thrift:"allowed,2,required" frugal:"2,required,bool" json:"allowed"`
+	Reason    string `thrift:"reason,3,required" frugal:"3,required,string" json:"reason"`
+}
+
+func NewClusterCapability() *ClusterCapability {
+	return &ClusterCapability{}
+}
+
+func (p *ClusterCapability) InitDefault() {
+}
+
+func (p *ClusterCapability) GetComponent() (v string) {
+	return p.Component
+}
+
+func (p *ClusterCapability) GetAllowed() (v bool) {
+	return p.Allowed
+}
+
+func (p *ClusterCapability) GetReason() (v string) {
+	return p.Reason
+}
+func (p *ClusterCapability) SetComponent(val string) {
+	p.Component = val
+}
+func (p *ClusterCapability) SetAllowed(val bool) {
+	p.Allowed = val
+}
+func (p *ClusterCapability) SetReason(val string) {
+	p.Reason = val
+}
+
+func (p *ClusterCapability) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ClusterCapability(%+v)", *p)
+}
+
+var fieldIDToName_ClusterCapability = map[int16]string{
+	1: "component",
+	2: "allowed",
+	3: "reason",
+}
+
+type Cluster struct {
+	Id                 string               `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	Name               string               `thrift:"name,2,required" frugal:"2,required,string" json:"name"`
+	OwnerId            string               `thrift:"ownerId,3,required" frugal:"3,required,string" json:"ownerId"`
+	Uid                string               `thrift:"uid,4,required" frugal:"4,required,string" json:"uid"`
+	Identity           string               `thrift:"identity,5,required" frugal:"5,required,string" json:"identity"`
+	KubernetesVersion  string               `thrift:"kubernetesVersion,6,required" frugal:"6,required,string" json:"kubernetesVersion"`
+	State              string               `thrift:"state,7,required" frugal:"7,required,string" json:"state"`
+	CredentialRevision int64                `thrift:"credentialRevision,8,required" frugal:"8,required,i64" json:"credentialRevision"`
+	Revision           int64                `thrift:"revision,9,required" frugal:"9,required,i64" json:"revision"`
+	Capabilities       []*ClusterCapability `thrift:"capabilities,10,required" frugal:"10,required,list<ClusterCapability>" json:"capabilities"`
+	CreatedAt          string               `thrift:"createdAt,11,required" frugal:"11,required,string" json:"createdAt"`
+}
+
+func NewCluster() *Cluster {
+	return &Cluster{}
+}
+
+func (p *Cluster) InitDefault() {
+}
+
+func (p *Cluster) GetId() (v string) {
+	return p.Id
+}
+
+func (p *Cluster) GetName() (v string) {
+	return p.Name
+}
+
+func (p *Cluster) GetOwnerId() (v string) {
+	return p.OwnerId
+}
+
+func (p *Cluster) GetUid() (v string) {
+	return p.Uid
+}
+
+func (p *Cluster) GetIdentity() (v string) {
+	return p.Identity
+}
+
+func (p *Cluster) GetKubernetesVersion() (v string) {
+	return p.KubernetesVersion
+}
+
+func (p *Cluster) GetState() (v string) {
+	return p.State
+}
+
+func (p *Cluster) GetCredentialRevision() (v int64) {
+	return p.CredentialRevision
+}
+
+func (p *Cluster) GetRevision() (v int64) {
+	return p.Revision
+}
+
+func (p *Cluster) GetCapabilities() (v []*ClusterCapability) {
+	return p.Capabilities
+}
+
+func (p *Cluster) GetCreatedAt() (v string) {
+	return p.CreatedAt
+}
+func (p *Cluster) SetId(val string) {
+	p.Id = val
+}
+func (p *Cluster) SetName(val string) {
+	p.Name = val
+}
+func (p *Cluster) SetOwnerId(val string) {
+	p.OwnerId = val
+}
+func (p *Cluster) SetUid(val string) {
+	p.Uid = val
+}
+func (p *Cluster) SetIdentity(val string) {
+	p.Identity = val
+}
+func (p *Cluster) SetKubernetesVersion(val string) {
+	p.KubernetesVersion = val
+}
+func (p *Cluster) SetState(val string) {
+	p.State = val
+}
+func (p *Cluster) SetCredentialRevision(val int64) {
+	p.CredentialRevision = val
+}
+func (p *Cluster) SetRevision(val int64) {
+	p.Revision = val
+}
+func (p *Cluster) SetCapabilities(val []*ClusterCapability) {
+	p.Capabilities = val
+}
+func (p *Cluster) SetCreatedAt(val string) {
+	p.CreatedAt = val
+}
+
+func (p *Cluster) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("Cluster(%+v)", *p)
+}
+
+var fieldIDToName_Cluster = map[int16]string{
+	1:  "id",
+	2:  "name",
+	3:  "ownerId",
+	4:  "uid",
+	5:  "identity",
+	6:  "kubernetesVersion",
+	7:  "state",
+	8:  "credentialRevision",
+	9:  "revision",
+	10: "capabilities",
+	11: "createdAt",
+}
+
+type ClustersResult_ struct {
+	Clusters []*Cluster `thrift:"clusters,1,required" frugal:"1,required,list<Cluster>" json:"clusters"`
+}
+
+func NewClustersResult_() *ClustersResult_ {
+	return &ClustersResult_{}
+}
+
+func (p *ClustersResult_) InitDefault() {
+}
+
+func (p *ClustersResult_) GetClusters() (v []*Cluster) {
+	return p.Clusters
+}
+func (p *ClustersResult_) SetClusters(val []*Cluster) {
+	p.Clusters = val
+}
+
+func (p *ClustersResult_) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ClustersResult_(%+v)", *p)
+}
+
+var fieldIDToName_ClustersResult_ = map[int16]string{
+	1: "clusters",
+}
+
+type RegisterClusterRequest struct {
+	Name       string `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	OwnerId    string `thrift:"ownerId,2,required" frugal:"2,required,string" json:"ownerId"`
+	Context    string `thrift:"context,3,required" frugal:"3,required,string" json:"context"`
+	Kubeconfig string `thrift:"kubeconfig,4,required" frugal:"4,required,string" json:"kubeconfig"`
+}
+
+func NewRegisterClusterRequest() *RegisterClusterRequest {
+	return &RegisterClusterRequest{}
+}
+
+func (p *RegisterClusterRequest) InitDefault() {
+}
+
+func (p *RegisterClusterRequest) GetName() (v string) {
+	return p.Name
+}
+
+func (p *RegisterClusterRequest) GetOwnerId() (v string) {
+	return p.OwnerId
+}
+
+func (p *RegisterClusterRequest) GetContext() (v string) {
+	return p.Context
+}
+
+func (p *RegisterClusterRequest) GetKubeconfig() (v string) {
+	return p.Kubeconfig
+}
+func (p *RegisterClusterRequest) SetName(val string) {
+	p.Name = val
+}
+func (p *RegisterClusterRequest) SetOwnerId(val string) {
+	p.OwnerId = val
+}
+func (p *RegisterClusterRequest) SetContext(val string) {
+	p.Context = val
+}
+func (p *RegisterClusterRequest) SetKubeconfig(val string) {
+	p.Kubeconfig = val
+}
+
+func (p *RegisterClusterRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RegisterClusterRequest(%+v)", *p)
+}
+
+var fieldIDToName_RegisterClusterRequest = map[int16]string{
+	1: "name",
+	2: "ownerId",
+	3: "context",
+	4: "kubeconfig",
+}
+
+type ClusterID struct {
+	Id string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+}
+
+func NewClusterID() *ClusterID {
+	return &ClusterID{}
+}
+
+func (p *ClusterID) InitDefault() {
+}
+
+func (p *ClusterID) GetId() (v string) {
+	return p.Id
+}
+func (p *ClusterID) SetId(val string) {
+	p.Id = val
+}
+
+func (p *ClusterID) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ClusterID(%+v)", *p)
+}
+
+var fieldIDToName_ClusterID = map[int16]string{
+	1: "id",
+}
+
+type CredentialRequest struct {
+	Id         string  `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	Context    string  `thrift:"context,2,required" frugal:"2,required,string" json:"context"`
+	Kubeconfig string  `thrift:"kubeconfig,3,required" frugal:"3,required,string" json:"kubeconfig"`
+	OwnerId    *string `thrift:"ownerId,4,optional" frugal:"4,optional,string" json:"ownerId,omitempty"`
+}
+
+func NewCredentialRequest() *CredentialRequest {
+	return &CredentialRequest{}
+}
+
+func (p *CredentialRequest) InitDefault() {
+}
+
+func (p *CredentialRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *CredentialRequest) GetContext() (v string) {
+	return p.Context
+}
+
+func (p *CredentialRequest) GetKubeconfig() (v string) {
+	return p.Kubeconfig
+}
+
+var CredentialRequest_OwnerId_DEFAULT string
+
+func (p *CredentialRequest) GetOwnerId() (v string) {
+	if !p.IsSetOwnerId() {
+		return CredentialRequest_OwnerId_DEFAULT
+	}
+	return *p.OwnerId
+}
+func (p *CredentialRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *CredentialRequest) SetContext(val string) {
+	p.Context = val
+}
+func (p *CredentialRequest) SetKubeconfig(val string) {
+	p.Kubeconfig = val
+}
+func (p *CredentialRequest) SetOwnerId(val *string) {
+	p.OwnerId = val
+}
+
+func (p *CredentialRequest) IsSetOwnerId() bool {
+	return p.OwnerId != nil
+}
+
+func (p *CredentialRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CredentialRequest(%+v)", *p)
+}
+
+var fieldIDToName_CredentialRequest = map[int16]string{
+	1: "id",
+	2: "context",
+	3: "kubeconfig",
+	4: "ownerId",
+}
+
+type TransferClusterRequest struct {
+	Id      string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	OwnerId string `thrift:"ownerId,2,required" frugal:"2,required,string" json:"ownerId"`
+}
+
+func NewTransferClusterRequest() *TransferClusterRequest {
+	return &TransferClusterRequest{}
+}
+
+func (p *TransferClusterRequest) InitDefault() {
+}
+
+func (p *TransferClusterRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *TransferClusterRequest) GetOwnerId() (v string) {
+	return p.OwnerId
+}
+func (p *TransferClusterRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *TransferClusterRequest) SetOwnerId(val string) {
+	p.OwnerId = val
+}
+
+func (p *TransferClusterRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("TransferClusterRequest(%+v)", *p)
+}
+
+var fieldIDToName_TransferClusterRequest = map[int16]string{
+	1: "id",
+	2: "ownerId",
+}
+
+type Operation struct {
+	OperationId        string `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
+	Action             string `thrift:"action,2,required" frugal:"2,required,string" json:"action"`
+	State              string `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
+	ClusterId          string `thrift:"clusterId,4,required" frugal:"4,required,string" json:"clusterId"`
+	ActorId            string `thrift:"actorId,5,required" frugal:"5,required,string" json:"actorId"`
+	Message            string `thrift:"message,6,required" frugal:"6,required,string" json:"message"`
+	CreatedAt          string `thrift:"createdAt,7,required" frugal:"7,required,string" json:"createdAt"`
+	UpdatedAt          string `thrift:"updatedAt,8,required" frugal:"8,required,string" json:"updatedAt"`
+	CredentialRevision int64  `thrift:"credentialRevision,9,required" frugal:"9,required,i64" json:"credentialRevision"`
+}
+
+func NewOperation() *Operation {
+	return &Operation{}
+}
+
+func (p *Operation) InitDefault() {
+}
+
+func (p *Operation) GetOperationId() (v string) {
+	return p.OperationId
+}
+
+func (p *Operation) GetAction() (v string) {
+	return p.Action
+}
+
+func (p *Operation) GetState() (v string) {
+	return p.State
+}
+
+func (p *Operation) GetClusterId() (v string) {
+	return p.ClusterId
+}
+
+func (p *Operation) GetActorId() (v string) {
+	return p.ActorId
+}
+
+func (p *Operation) GetMessage() (v string) {
+	return p.Message
+}
+
+func (p *Operation) GetCreatedAt() (v string) {
+	return p.CreatedAt
+}
+
+func (p *Operation) GetUpdatedAt() (v string) {
+	return p.UpdatedAt
+}
+
+func (p *Operation) GetCredentialRevision() (v int64) {
+	return p.CredentialRevision
+}
+func (p *Operation) SetOperationId(val string) {
+	p.OperationId = val
+}
+func (p *Operation) SetAction(val string) {
+	p.Action = val
+}
+func (p *Operation) SetState(val string) {
+	p.State = val
+}
+func (p *Operation) SetClusterId(val string) {
+	p.ClusterId = val
+}
+func (p *Operation) SetActorId(val string) {
+	p.ActorId = val
+}
+func (p *Operation) SetMessage(val string) {
+	p.Message = val
+}
+func (p *Operation) SetCreatedAt(val string) {
+	p.CreatedAt = val
+}
+func (p *Operation) SetUpdatedAt(val string) {
+	p.UpdatedAt = val
+}
+func (p *Operation) SetCredentialRevision(val int64) {
+	p.CredentialRevision = val
+}
+
+func (p *Operation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("Operation(%+v)", *p)
+}
+
+var fieldIDToName_Operation = map[int16]string{
+	1: "operationId",
+	2: "action",
+	3: "state",
+	4: "clusterId",
+	5: "actorId",
+	6: "message",
+	7: "createdAt",
+	8: "updatedAt",
+	9: "credentialRevision",
+}
+
+type OperationID struct {
+	OperationId string `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
+}
+
+func NewOperationID() *OperationID {
+	return &OperationID{}
+}
+
+func (p *OperationID) InitDefault() {
+}
+
+func (p *OperationID) GetOperationId() (v string) {
+	return p.OperationId
+}
+func (p *OperationID) SetOperationId(val string) {
+	p.OperationId = val
+}
+
+func (p *OperationID) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("OperationID(%+v)", *p)
+}
+
+var fieldIDToName_OperationID = map[int16]string{
+	1: "operationId",
+}
+
+type OperationsResult_ struct {
+	Operations []*Operation `thrift:"operations,1,required" frugal:"1,required,list<Operation>" json:"operations"`
+}
+
+func NewOperationsResult_() *OperationsResult_ {
+	return &OperationsResult_{}
+}
+
+func (p *OperationsResult_) InitDefault() {
+}
+
+func (p *OperationsResult_) GetOperations() (v []*Operation) {
+	return p.Operations
+}
+func (p *OperationsResult_) SetOperations(val []*Operation) {
+	p.Operations = val
+}
+
+func (p *OperationsResult_) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("OperationsResult_(%+v)", *p)
+}
+
+var fieldIDToName_OperationsResult_ = map[int16]string{
+	1: "operations",
+}
+
+type NamespacesResult_ struct {
+	Namespaces []string `thrift:"namespaces,1,required" frugal:"1,required,list<string>" json:"namespaces"`
+}
+
+func NewNamespacesResult_() *NamespacesResult_ {
+	return &NamespacesResult_{}
+}
+
+func (p *NamespacesResult_) InitDefault() {
+}
+
+func (p *NamespacesResult_) GetNamespaces() (v []string) {
+	return p.Namespaces
+}
+func (p *NamespacesResult_) SetNamespaces(val []string) {
+	p.Namespaces = val
+}
+
+func (p *NamespacesResult_) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("NamespacesResult_(%+v)", *p)
+}
+
+var fieldIDToName_NamespacesResult_ = map[int16]string{
+	1: "namespaces",
+}
+
+type ReferenceMetadata struct {
+	Kind      string   `thrift:"kind,1,required" frugal:"1,required,string" json:"kind"`
+	Name      string   `thrift:"name,2,required" frugal:"2,required,string" json:"name"`
+	Namespace string   `thrift:"namespace,3,required" frugal:"3,required,string" json:"namespace"`
+	Keys      []string `thrift:"keys,4,required" frugal:"4,required,list<string>" json:"keys"`
+}
+
+func NewReferenceMetadata() *ReferenceMetadata {
+	return &ReferenceMetadata{}
+}
+
+func (p *ReferenceMetadata) InitDefault() {
+}
+
+func (p *ReferenceMetadata) GetKind() (v string) {
+	return p.Kind
+}
+
+func (p *ReferenceMetadata) GetName() (v string) {
+	return p.Name
+}
+
+func (p *ReferenceMetadata) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *ReferenceMetadata) GetKeys() (v []string) {
+	return p.Keys
+}
+func (p *ReferenceMetadata) SetKind(val string) {
+	p.Kind = val
+}
+func (p *ReferenceMetadata) SetName(val string) {
+	p.Name = val
+}
+func (p *ReferenceMetadata) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *ReferenceMetadata) SetKeys(val []string) {
+	p.Keys = val
+}
+
+func (p *ReferenceMetadata) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ReferenceMetadata(%+v)", *p)
+}
+
+var fieldIDToName_ReferenceMetadata = map[int16]string{
+	1: "kind",
+	2: "name",
+	3: "namespace",
+	4: "keys",
+}
+
+type ReferencesRequest struct {
+	Id        string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	Namespace string `thrift:"namespace,2,required" frugal:"2,required,string" json:"namespace"`
+	Kind      string `thrift:"kind,3,required" frugal:"3,required,string" json:"kind"`
+}
+
+func NewReferencesRequest() *ReferencesRequest {
+	return &ReferencesRequest{}
+}
+
+func (p *ReferencesRequest) InitDefault() {
+}
+
+func (p *ReferencesRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *ReferencesRequest) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *ReferencesRequest) GetKind() (v string) {
+	return p.Kind
+}
+func (p *ReferencesRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *ReferencesRequest) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *ReferencesRequest) SetKind(val string) {
+	p.Kind = val
+}
+
+func (p *ReferencesRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ReferencesRequest(%+v)", *p)
+}
+
+var fieldIDToName_ReferencesRequest = map[int16]string{
+	1: "id",
+	2: "namespace",
+	3: "kind",
+}
+
+type ReferencesResult_ struct {
+	References []*ReferenceMetadata `thrift:"references,1,required" frugal:"1,required,list<ReferenceMetadata>" json:"references"`
+}
+
+func NewReferencesResult_() *ReferencesResult_ {
+	return &ReferencesResult_{}
+}
+
+func (p *ReferencesResult_) InitDefault() {
+}
+
+func (p *ReferencesResult_) GetReferences() (v []*ReferenceMetadata) {
+	return p.References
+}
+func (p *ReferencesResult_) SetReferences(val []*ReferenceMetadata) {
+	p.References = val
+}
+
+func (p *ReferencesResult_) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ReferencesResult_(%+v)", *p)
+}
+
+var fieldIDToName_ReferencesResult_ = map[int16]string{
+	1: "references",
+}
+
 type APIError struct {
 	Code    string `thrift:"code,1,required" frugal:"1,required,string" json:"code"`
 	Message string `thrift:"message,2,required" frugal:"2,required,string" json:"message"`
@@ -632,6 +1335,30 @@ var fieldIDToName_APIError = map[int16]string{
 }
 
 type ControlService interface {
+	ListClusters(ctx context.Context, ctx_ *RequestContext) (r *ClustersResult_, err error)
+
+	GetCluster(ctx context.Context, ctx_ *RequestContext, request *ClusterID) (r *Cluster, err error)
+
+	RegisterCluster(ctx context.Context, ctx_ *RequestContext, request *RegisterClusterRequest) (r *Operation, err error)
+
+	UpdateCredential(ctx context.Context, ctx_ *RequestContext, request *CredentialRequest) (r *Operation, err error)
+
+	ReactivateCluster(ctx context.Context, ctx_ *RequestContext, request *CredentialRequest) (r *Operation, err error)
+
+	TransferCluster(ctx context.Context, ctx_ *RequestContext, request *TransferClusterRequest) (r *Cluster, err error)
+
+	UnregisterCluster(ctx context.Context, ctx_ *RequestContext, request *ClusterID) (r *Cluster, err error)
+
+	GetOperation(ctx context.Context, ctx_ *RequestContext, request *OperationID) (r *Operation, err error)
+
+	ContinueOperation(ctx context.Context, ctx_ *RequestContext, request *OperationID) (r *Operation, err error)
+
+	ListClusterOperations(ctx context.Context, ctx_ *RequestContext, request *ClusterID) (r *OperationsResult_, err error)
+
+	ListNamespaces(ctx context.Context, ctx_ *RequestContext, request *ClusterID) (r *NamespacesResult_, err error)
+
+	ListReferences(ctx context.Context, ctx_ *RequestContext, request *ReferencesRequest) (r *ReferencesResult_, err error)
+
 	Probe(ctx context.Context, ctx_ *RequestContext) (r *ProbeResult_, err error)
 
 	Initialize(ctx context.Context, ctx_ *RequestContext, request *InitializeRequest) (r *Account, err error)
@@ -651,6 +1378,1332 @@ type ControlService interface {
 	UpdateAccount(ctx context.Context, ctx_ *RequestContext, request *UpdateAccountRequest) (r *Account, err error)
 
 	ResetPassword(ctx context.Context, ctx_ *RequestContext, request *ResetPasswordRequest) (r *Empty, err error)
+}
+
+type ControlServiceListClustersArgs struct {
+	Ctx *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+}
+
+func NewControlServiceListClustersArgs() *ControlServiceListClustersArgs {
+	return &ControlServiceListClustersArgs{}
+}
+
+func (p *ControlServiceListClustersArgs) InitDefault() {
+}
+
+var ControlServiceListClustersArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceListClustersArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceListClustersArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+func (p *ControlServiceListClustersArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+
+func (p *ControlServiceListClustersArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceListClustersArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListClustersArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListClustersArgs = map[int16]string{
+	1: "ctx",
+}
+
+type ControlServiceListClustersResult struct {
+	Success *ClustersResult_ `thrift:"success,0,optional" frugal:"0,optional,ClustersResult_" json:"success,omitempty"`
+	Error   *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceListClustersResult() *ControlServiceListClustersResult {
+	return &ControlServiceListClustersResult{}
+}
+
+func (p *ControlServiceListClustersResult) InitDefault() {
+}
+
+var ControlServiceListClustersResult_Success_DEFAULT *ClustersResult_
+
+func (p *ControlServiceListClustersResult) GetSuccess() (v *ClustersResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceListClustersResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceListClustersResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceListClustersResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceListClustersResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceListClustersResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ClustersResult_)
+}
+func (p *ControlServiceListClustersResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceListClustersResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceListClustersResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceListClustersResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListClustersResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListClustersResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceGetClusterArgs struct {
+	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+}
+
+func NewControlServiceGetClusterArgs() *ControlServiceGetClusterArgs {
+	return &ControlServiceGetClusterArgs{}
+}
+
+func (p *ControlServiceGetClusterArgs) InitDefault() {
+}
+
+var ControlServiceGetClusterArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceGetClusterArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceGetClusterArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceGetClusterArgs_Request_DEFAULT *ClusterID
+
+func (p *ControlServiceGetClusterArgs) GetRequest() (v *ClusterID) {
+	if !p.IsSetRequest() {
+		return ControlServiceGetClusterArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceGetClusterArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceGetClusterArgs) SetRequest(val *ClusterID) {
+	p.Request = val
+}
+
+func (p *ControlServiceGetClusterArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceGetClusterArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceGetClusterArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetClusterArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetClusterArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceGetClusterResult struct {
+	Success *Cluster  `thrift:"success,0,optional" frugal:"0,optional,Cluster" json:"success,omitempty"`
+	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceGetClusterResult() *ControlServiceGetClusterResult {
+	return &ControlServiceGetClusterResult{}
+}
+
+func (p *ControlServiceGetClusterResult) InitDefault() {
+}
+
+var ControlServiceGetClusterResult_Success_DEFAULT *Cluster
+
+func (p *ControlServiceGetClusterResult) GetSuccess() (v *Cluster) {
+	if !p.IsSetSuccess() {
+		return ControlServiceGetClusterResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceGetClusterResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceGetClusterResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceGetClusterResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceGetClusterResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Cluster)
+}
+func (p *ControlServiceGetClusterResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceGetClusterResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceGetClusterResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceGetClusterResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetClusterResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetClusterResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceRegisterClusterArgs struct {
+	Ctx     *RequestContext         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *RegisterClusterRequest `thrift:"request,2" frugal:"2,default,RegisterClusterRequest" json:"request"`
+}
+
+func NewControlServiceRegisterClusterArgs() *ControlServiceRegisterClusterArgs {
+	return &ControlServiceRegisterClusterArgs{}
+}
+
+func (p *ControlServiceRegisterClusterArgs) InitDefault() {
+}
+
+var ControlServiceRegisterClusterArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceRegisterClusterArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceRegisterClusterArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceRegisterClusterArgs_Request_DEFAULT *RegisterClusterRequest
+
+func (p *ControlServiceRegisterClusterArgs) GetRequest() (v *RegisterClusterRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceRegisterClusterArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceRegisterClusterArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceRegisterClusterArgs) SetRequest(val *RegisterClusterRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceRegisterClusterArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceRegisterClusterArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceRegisterClusterArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceRegisterClusterArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceRegisterClusterArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceRegisterClusterResult struct {
+	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceRegisterClusterResult() *ControlServiceRegisterClusterResult {
+	return &ControlServiceRegisterClusterResult{}
+}
+
+func (p *ControlServiceRegisterClusterResult) InitDefault() {
+}
+
+var ControlServiceRegisterClusterResult_Success_DEFAULT *Operation
+
+func (p *ControlServiceRegisterClusterResult) GetSuccess() (v *Operation) {
+	if !p.IsSetSuccess() {
+		return ControlServiceRegisterClusterResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceRegisterClusterResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceRegisterClusterResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceRegisterClusterResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceRegisterClusterResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Operation)
+}
+func (p *ControlServiceRegisterClusterResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceRegisterClusterResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceRegisterClusterResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceRegisterClusterResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceRegisterClusterResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceRegisterClusterResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceUpdateCredentialArgs struct {
+	Ctx     *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *CredentialRequest `thrift:"request,2" frugal:"2,default,CredentialRequest" json:"request"`
+}
+
+func NewControlServiceUpdateCredentialArgs() *ControlServiceUpdateCredentialArgs {
+	return &ControlServiceUpdateCredentialArgs{}
+}
+
+func (p *ControlServiceUpdateCredentialArgs) InitDefault() {
+}
+
+var ControlServiceUpdateCredentialArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceUpdateCredentialArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceUpdateCredentialArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceUpdateCredentialArgs_Request_DEFAULT *CredentialRequest
+
+func (p *ControlServiceUpdateCredentialArgs) GetRequest() (v *CredentialRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceUpdateCredentialArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceUpdateCredentialArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceUpdateCredentialArgs) SetRequest(val *CredentialRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceUpdateCredentialArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceUpdateCredentialArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceUpdateCredentialArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceUpdateCredentialArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceUpdateCredentialArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceUpdateCredentialResult struct {
+	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceUpdateCredentialResult() *ControlServiceUpdateCredentialResult {
+	return &ControlServiceUpdateCredentialResult{}
+}
+
+func (p *ControlServiceUpdateCredentialResult) InitDefault() {
+}
+
+var ControlServiceUpdateCredentialResult_Success_DEFAULT *Operation
+
+func (p *ControlServiceUpdateCredentialResult) GetSuccess() (v *Operation) {
+	if !p.IsSetSuccess() {
+		return ControlServiceUpdateCredentialResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceUpdateCredentialResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceUpdateCredentialResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceUpdateCredentialResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceUpdateCredentialResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Operation)
+}
+func (p *ControlServiceUpdateCredentialResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceUpdateCredentialResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceUpdateCredentialResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceUpdateCredentialResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceUpdateCredentialResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceUpdateCredentialResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceReactivateClusterArgs struct {
+	Ctx     *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *CredentialRequest `thrift:"request,2" frugal:"2,default,CredentialRequest" json:"request"`
+}
+
+func NewControlServiceReactivateClusterArgs() *ControlServiceReactivateClusterArgs {
+	return &ControlServiceReactivateClusterArgs{}
+}
+
+func (p *ControlServiceReactivateClusterArgs) InitDefault() {
+}
+
+var ControlServiceReactivateClusterArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceReactivateClusterArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceReactivateClusterArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceReactivateClusterArgs_Request_DEFAULT *CredentialRequest
+
+func (p *ControlServiceReactivateClusterArgs) GetRequest() (v *CredentialRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceReactivateClusterArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceReactivateClusterArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceReactivateClusterArgs) SetRequest(val *CredentialRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceReactivateClusterArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceReactivateClusterArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceReactivateClusterArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceReactivateClusterArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceReactivateClusterArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceReactivateClusterResult struct {
+	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceReactivateClusterResult() *ControlServiceReactivateClusterResult {
+	return &ControlServiceReactivateClusterResult{}
+}
+
+func (p *ControlServiceReactivateClusterResult) InitDefault() {
+}
+
+var ControlServiceReactivateClusterResult_Success_DEFAULT *Operation
+
+func (p *ControlServiceReactivateClusterResult) GetSuccess() (v *Operation) {
+	if !p.IsSetSuccess() {
+		return ControlServiceReactivateClusterResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceReactivateClusterResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceReactivateClusterResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceReactivateClusterResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceReactivateClusterResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Operation)
+}
+func (p *ControlServiceReactivateClusterResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceReactivateClusterResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceReactivateClusterResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceReactivateClusterResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceReactivateClusterResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceReactivateClusterResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceTransferClusterArgs struct {
+	Ctx     *RequestContext         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *TransferClusterRequest `thrift:"request,2" frugal:"2,default,TransferClusterRequest" json:"request"`
+}
+
+func NewControlServiceTransferClusterArgs() *ControlServiceTransferClusterArgs {
+	return &ControlServiceTransferClusterArgs{}
+}
+
+func (p *ControlServiceTransferClusterArgs) InitDefault() {
+}
+
+var ControlServiceTransferClusterArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceTransferClusterArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceTransferClusterArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceTransferClusterArgs_Request_DEFAULT *TransferClusterRequest
+
+func (p *ControlServiceTransferClusterArgs) GetRequest() (v *TransferClusterRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceTransferClusterArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceTransferClusterArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceTransferClusterArgs) SetRequest(val *TransferClusterRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceTransferClusterArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceTransferClusterArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceTransferClusterArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceTransferClusterArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceTransferClusterArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceTransferClusterResult struct {
+	Success *Cluster  `thrift:"success,0,optional" frugal:"0,optional,Cluster" json:"success,omitempty"`
+	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceTransferClusterResult() *ControlServiceTransferClusterResult {
+	return &ControlServiceTransferClusterResult{}
+}
+
+func (p *ControlServiceTransferClusterResult) InitDefault() {
+}
+
+var ControlServiceTransferClusterResult_Success_DEFAULT *Cluster
+
+func (p *ControlServiceTransferClusterResult) GetSuccess() (v *Cluster) {
+	if !p.IsSetSuccess() {
+		return ControlServiceTransferClusterResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceTransferClusterResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceTransferClusterResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceTransferClusterResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceTransferClusterResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Cluster)
+}
+func (p *ControlServiceTransferClusterResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceTransferClusterResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceTransferClusterResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceTransferClusterResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceTransferClusterResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceTransferClusterResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceUnregisterClusterArgs struct {
+	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+}
+
+func NewControlServiceUnregisterClusterArgs() *ControlServiceUnregisterClusterArgs {
+	return &ControlServiceUnregisterClusterArgs{}
+}
+
+func (p *ControlServiceUnregisterClusterArgs) InitDefault() {
+}
+
+var ControlServiceUnregisterClusterArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceUnregisterClusterArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceUnregisterClusterArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceUnregisterClusterArgs_Request_DEFAULT *ClusterID
+
+func (p *ControlServiceUnregisterClusterArgs) GetRequest() (v *ClusterID) {
+	if !p.IsSetRequest() {
+		return ControlServiceUnregisterClusterArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceUnregisterClusterArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceUnregisterClusterArgs) SetRequest(val *ClusterID) {
+	p.Request = val
+}
+
+func (p *ControlServiceUnregisterClusterArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceUnregisterClusterArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceUnregisterClusterArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceUnregisterClusterArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceUnregisterClusterArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceUnregisterClusterResult struct {
+	Success *Cluster  `thrift:"success,0,optional" frugal:"0,optional,Cluster" json:"success,omitempty"`
+	Error   *APIError `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceUnregisterClusterResult() *ControlServiceUnregisterClusterResult {
+	return &ControlServiceUnregisterClusterResult{}
+}
+
+func (p *ControlServiceUnregisterClusterResult) InitDefault() {
+}
+
+var ControlServiceUnregisterClusterResult_Success_DEFAULT *Cluster
+
+func (p *ControlServiceUnregisterClusterResult) GetSuccess() (v *Cluster) {
+	if !p.IsSetSuccess() {
+		return ControlServiceUnregisterClusterResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceUnregisterClusterResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceUnregisterClusterResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceUnregisterClusterResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceUnregisterClusterResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Cluster)
+}
+func (p *ControlServiceUnregisterClusterResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceUnregisterClusterResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceUnregisterClusterResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceUnregisterClusterResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceUnregisterClusterResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceUnregisterClusterResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceGetOperationArgs struct {
+	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *OperationID    `thrift:"request,2" frugal:"2,default,OperationID" json:"request"`
+}
+
+func NewControlServiceGetOperationArgs() *ControlServiceGetOperationArgs {
+	return &ControlServiceGetOperationArgs{}
+}
+
+func (p *ControlServiceGetOperationArgs) InitDefault() {
+}
+
+var ControlServiceGetOperationArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceGetOperationArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceGetOperationArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceGetOperationArgs_Request_DEFAULT *OperationID
+
+func (p *ControlServiceGetOperationArgs) GetRequest() (v *OperationID) {
+	if !p.IsSetRequest() {
+		return ControlServiceGetOperationArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceGetOperationArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceGetOperationArgs) SetRequest(val *OperationID) {
+	p.Request = val
+}
+
+func (p *ControlServiceGetOperationArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceGetOperationArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceGetOperationArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetOperationArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetOperationArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceGetOperationResult struct {
+	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceGetOperationResult() *ControlServiceGetOperationResult {
+	return &ControlServiceGetOperationResult{}
+}
+
+func (p *ControlServiceGetOperationResult) InitDefault() {
+}
+
+var ControlServiceGetOperationResult_Success_DEFAULT *Operation
+
+func (p *ControlServiceGetOperationResult) GetSuccess() (v *Operation) {
+	if !p.IsSetSuccess() {
+		return ControlServiceGetOperationResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceGetOperationResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceGetOperationResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceGetOperationResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceGetOperationResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Operation)
+}
+func (p *ControlServiceGetOperationResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceGetOperationResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceGetOperationResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceGetOperationResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetOperationResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetOperationResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceContinueOperationArgs struct {
+	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *OperationID    `thrift:"request,2" frugal:"2,default,OperationID" json:"request"`
+}
+
+func NewControlServiceContinueOperationArgs() *ControlServiceContinueOperationArgs {
+	return &ControlServiceContinueOperationArgs{}
+}
+
+func (p *ControlServiceContinueOperationArgs) InitDefault() {
+}
+
+var ControlServiceContinueOperationArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceContinueOperationArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceContinueOperationArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceContinueOperationArgs_Request_DEFAULT *OperationID
+
+func (p *ControlServiceContinueOperationArgs) GetRequest() (v *OperationID) {
+	if !p.IsSetRequest() {
+		return ControlServiceContinueOperationArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceContinueOperationArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceContinueOperationArgs) SetRequest(val *OperationID) {
+	p.Request = val
+}
+
+func (p *ControlServiceContinueOperationArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceContinueOperationArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceContinueOperationArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceContinueOperationArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceContinueOperationArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceContinueOperationResult struct {
+	Success *Operation `thrift:"success,0,optional" frugal:"0,optional,Operation" json:"success,omitempty"`
+	Error   *APIError  `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceContinueOperationResult() *ControlServiceContinueOperationResult {
+	return &ControlServiceContinueOperationResult{}
+}
+
+func (p *ControlServiceContinueOperationResult) InitDefault() {
+}
+
+var ControlServiceContinueOperationResult_Success_DEFAULT *Operation
+
+func (p *ControlServiceContinueOperationResult) GetSuccess() (v *Operation) {
+	if !p.IsSetSuccess() {
+		return ControlServiceContinueOperationResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceContinueOperationResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceContinueOperationResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceContinueOperationResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceContinueOperationResult) SetSuccess(x interface{}) {
+	p.Success = x.(*Operation)
+}
+func (p *ControlServiceContinueOperationResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceContinueOperationResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceContinueOperationResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceContinueOperationResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceContinueOperationResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceContinueOperationResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceListClusterOperationsArgs struct {
+	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+}
+
+func NewControlServiceListClusterOperationsArgs() *ControlServiceListClusterOperationsArgs {
+	return &ControlServiceListClusterOperationsArgs{}
+}
+
+func (p *ControlServiceListClusterOperationsArgs) InitDefault() {
+}
+
+var ControlServiceListClusterOperationsArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceListClusterOperationsArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceListClusterOperationsArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceListClusterOperationsArgs_Request_DEFAULT *ClusterID
+
+func (p *ControlServiceListClusterOperationsArgs) GetRequest() (v *ClusterID) {
+	if !p.IsSetRequest() {
+		return ControlServiceListClusterOperationsArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceListClusterOperationsArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceListClusterOperationsArgs) SetRequest(val *ClusterID) {
+	p.Request = val
+}
+
+func (p *ControlServiceListClusterOperationsArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceListClusterOperationsArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceListClusterOperationsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListClusterOperationsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListClusterOperationsArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceListClusterOperationsResult struct {
+	Success *OperationsResult_ `thrift:"success,0,optional" frugal:"0,optional,OperationsResult_" json:"success,omitempty"`
+	Error   *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceListClusterOperationsResult() *ControlServiceListClusterOperationsResult {
+	return &ControlServiceListClusterOperationsResult{}
+}
+
+func (p *ControlServiceListClusterOperationsResult) InitDefault() {
+}
+
+var ControlServiceListClusterOperationsResult_Success_DEFAULT *OperationsResult_
+
+func (p *ControlServiceListClusterOperationsResult) GetSuccess() (v *OperationsResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceListClusterOperationsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceListClusterOperationsResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceListClusterOperationsResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceListClusterOperationsResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceListClusterOperationsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*OperationsResult_)
+}
+func (p *ControlServiceListClusterOperationsResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceListClusterOperationsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceListClusterOperationsResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceListClusterOperationsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListClusterOperationsResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListClusterOperationsResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceListNamespacesArgs struct {
+	Ctx     *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *ClusterID      `thrift:"request,2" frugal:"2,default,ClusterID" json:"request"`
+}
+
+func NewControlServiceListNamespacesArgs() *ControlServiceListNamespacesArgs {
+	return &ControlServiceListNamespacesArgs{}
+}
+
+func (p *ControlServiceListNamespacesArgs) InitDefault() {
+}
+
+var ControlServiceListNamespacesArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceListNamespacesArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceListNamespacesArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceListNamespacesArgs_Request_DEFAULT *ClusterID
+
+func (p *ControlServiceListNamespacesArgs) GetRequest() (v *ClusterID) {
+	if !p.IsSetRequest() {
+		return ControlServiceListNamespacesArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceListNamespacesArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceListNamespacesArgs) SetRequest(val *ClusterID) {
+	p.Request = val
+}
+
+func (p *ControlServiceListNamespacesArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceListNamespacesArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceListNamespacesArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListNamespacesArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListNamespacesArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceListNamespacesResult struct {
+	Success *NamespacesResult_ `thrift:"success,0,optional" frugal:"0,optional,NamespacesResult_" json:"success,omitempty"`
+	Error   *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceListNamespacesResult() *ControlServiceListNamespacesResult {
+	return &ControlServiceListNamespacesResult{}
+}
+
+func (p *ControlServiceListNamespacesResult) InitDefault() {
+}
+
+var ControlServiceListNamespacesResult_Success_DEFAULT *NamespacesResult_
+
+func (p *ControlServiceListNamespacesResult) GetSuccess() (v *NamespacesResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceListNamespacesResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceListNamespacesResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceListNamespacesResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceListNamespacesResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceListNamespacesResult) SetSuccess(x interface{}) {
+	p.Success = x.(*NamespacesResult_)
+}
+func (p *ControlServiceListNamespacesResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceListNamespacesResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceListNamespacesResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceListNamespacesResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListNamespacesResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListNamespacesResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceListReferencesArgs struct {
+	Ctx     *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *ReferencesRequest `thrift:"request,2" frugal:"2,default,ReferencesRequest" json:"request"`
+}
+
+func NewControlServiceListReferencesArgs() *ControlServiceListReferencesArgs {
+	return &ControlServiceListReferencesArgs{}
+}
+
+func (p *ControlServiceListReferencesArgs) InitDefault() {
+}
+
+var ControlServiceListReferencesArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceListReferencesArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceListReferencesArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceListReferencesArgs_Request_DEFAULT *ReferencesRequest
+
+func (p *ControlServiceListReferencesArgs) GetRequest() (v *ReferencesRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceListReferencesArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceListReferencesArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceListReferencesArgs) SetRequest(val *ReferencesRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceListReferencesArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceListReferencesArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceListReferencesArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListReferencesArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListReferencesArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceListReferencesResult struct {
+	Success *ReferencesResult_ `thrift:"success,0,optional" frugal:"0,optional,ReferencesResult_" json:"success,omitempty"`
+	Error   *APIError          `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceListReferencesResult() *ControlServiceListReferencesResult {
+	return &ControlServiceListReferencesResult{}
+}
+
+func (p *ControlServiceListReferencesResult) InitDefault() {
+}
+
+var ControlServiceListReferencesResult_Success_DEFAULT *ReferencesResult_
+
+func (p *ControlServiceListReferencesResult) GetSuccess() (v *ReferencesResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceListReferencesResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceListReferencesResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceListReferencesResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceListReferencesResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceListReferencesResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ReferencesResult_)
+}
+func (p *ControlServiceListReferencesResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceListReferencesResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceListReferencesResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceListReferencesResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListReferencesResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListReferencesResult = map[int16]string{
+	0: "success",
+	1: "error",
 }
 
 type ControlServiceProbeArgs struct {

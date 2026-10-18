@@ -109,6 +109,9 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	if err != nil {
 		goto failed
 	}
+	if err = store.StartWorkers(); err != nil {
+		goto failed
+	}
 	p.http = &http.Server{Handler: http.TimeoutHandler(http.HandlerFunc(p.handle), 15*time.Second, `{"code":"DEADLINE_EXCEEDED","message":"请求超时"}`), ReadHeaderTimeout: 5 * time.Second}
 	go p.http.Serve(httpLn)
 	return p, nil
@@ -260,6 +263,10 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 		result, err := p.client.CreateAccount(r.Context(), ctx, &rpc.CreateAccountRequest{Username: body.Username, Password: body.Password, Role: body.Role})
 		p.respond(w, 201, accountDTO(result), err, requestID)
 	default:
+		if strings.HasPrefix(r.URL.Path, "/api/v1/clusters") || strings.HasPrefix(r.URL.Path, "/api/v1/operations/") {
+			p.clusterRoutes(w, r, ctx, requestID)
+			return
+		}
 		if p.cfg.StaticDir != "" && r.Method == "GET" && !strings.HasPrefix(r.URL.Path, "/api/") {
 			http.FileServer(http.Dir(p.cfg.StaticDir)).ServeHTTP(w, r)
 			return
@@ -314,6 +321,12 @@ func (p *Runtime) writeError(w http.ResponseWriter, err error, id string) {
 			status = 404
 		case "ALREADY_INITIALIZED", "CONFLICT", "LAST_ADMIN":
 			status = 409
+		case "TARGET_FORBIDDEN":
+			status = 403
+		case "TARGET_NOT_FOUND":
+			status = 404
+		case "TARGET_TLS", "TARGET_ERROR", "TARGET_UNAUTHENTICATED", "TARGET_UNAVAILABLE":
+			status = 502
 		case "INVALID_INPUT":
 			status = 422
 		}

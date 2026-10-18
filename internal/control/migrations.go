@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 var migrationSQL = [][]string{
 	{`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY)`,
@@ -16,6 +16,10 @@ var migrationSQL = [][]string{
 		`CREATE TABLE sessions(digest TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES accounts(id),auth_version INTEGER NOT NULL,expires_at TEXT NOT NULL)`,
 		`CREATE TABLE audit(id TEXT PRIMARY KEY,actor_id TEXT,action TEXT NOT NULL,target_id TEXT,created_at TEXT NOT NULL)`},
 	{`CREATE TABLE command_results(actor_id TEXT NOT NULL,action TEXT NOT NULL,target_id TEXT NOT NULL,command_key TEXT NOT NULL,request_digest TEXT NOT NULL,result_json BLOB NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(actor_id,action,target_id,command_key))`},
+	{`CREATE TABLE clusters(id TEXT PRIMARY KEY,name TEXT NOT NULL,owner_id TEXT NOT NULL REFERENCES accounts(id),uid TEXT NOT NULL UNIQUE,identity TEXT NOT NULL,kubernetes_version TEXT NOT NULL,state TEXT NOT NULL,credential_revision INTEGER NOT NULL,revision INTEGER NOT NULL,capabilities BLOB NOT NULL,credential BLOB,created_at TEXT NOT NULL)`,
+		`CREATE TABLE operations(id TEXT PRIMARY KEY,action TEXT NOT NULL,state TEXT NOT NULL,cluster_id TEXT NOT NULL,actor_id TEXT NOT NULL REFERENCES accounts(id),owner_id TEXT NOT NULL,name TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,credential_revision INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE INDEX unfinished_operations ON operations(cluster_id,state)`,
+		`CREATE TABLE cluster_candidates(operation_id TEXT PRIMARY KEY REFERENCES operations(id),cipher BLOB NOT NULL)`},
 }
 
 func migrate(db *sql.DB, dataDir string) error {
