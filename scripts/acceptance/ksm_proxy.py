@@ -1,5 +1,6 @@
 """独占TLS API故障fixture；平台到达proxy时已经属于possibly-sent，不能充当产品未派发屏障。"""
-import base64,copy,json,os,pathlib,secrets,subprocess,tempfile,time,urllib.parse,urllib.request
+import base64,copy,json,os,pathlib,secrets,tempfile,time,urllib.parse,urllib.request
+from transport import process as subprocess
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 class Proxy:
  def __init__(self,s,target):
@@ -18,6 +19,7 @@ class Proxy:
    files={'backend-ca.crt':base64.b64decode(cluster['certificate-authority-data']),'backend-admin.crt':base64.b64decode(user['client-certificate-data']),'backend-admin.key':base64.b64decode(user['client-key-data']),'proxy-server.crt':(p/'server.crt').read_bytes(),'proxy-server.key':(p/'server.key').read_bytes(),'proxy-client-ca.crt':(p/'ca.crt').read_bytes(),'proxy-probe.crt':(p/'client.crt').read_bytes(),'proxy-probe.key':(p/'client.key').read_bytes(),'control-token':self.token.encode()}
    cfg={'backend':{'host':u.hostname,'port':u.port or 443,'server_name':cluster.get('tls-server-name',u.hostname),'ca_file':'/private/backend-ca.crt','client_cert_file':'/private/backend-admin.crt','client_key_file':'/private/backend-admin.key'},'frontend':{'bind':'0.0.0.0','port':8443,'cert_file':'/private/proxy-server.crt','key_file':'/private/proxy-server.key','client_ca_file':'/private/proxy-client-ca.crt'},'control':{'port':9090,'token_file':'/private/control-token'},'limits':{'io_timeout_seconds':15,'pause_timeout_seconds':30},'event_log_file':'/evidence/events.jsonl'}
    files['config.json']=json.dumps(cfg).encode()
+   if s.session:s.session.register_secrets(self.token,*[value.decode() for value in files.values()])
    secret={'apiVersion':'v1','kind':'Secret','metadata':{'name':'fault-private','namespace':self.ns},'data':{k:base64.b64encode(v).decode() for k,v in files.items()}}
    code={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'fault-code','namespace':self.ns},'data':{'proxy.py':(ROOT/'scripts/acceptance/fixtures/fault_proxy.py').read_text()}}
    pod={'apiVersion':'v1','kind':'Pod','metadata':{'name':'fault-proxy','namespace':self.ns},'spec':{'automountServiceAccountToken':False,'containers':[{'name':'proxy','image':'python:3.13.2-alpine','imagePullPolicy':'Never','command':['python','/fixture/proxy.py','serve','--config','/private/config.json'],'volumeMounts':[{'name':'private','mountPath':'/private','readOnly':True},{'name':'code','mountPath':'/fixture','readOnly':True},{'name':'evidence','mountPath':'/evidence'}],'readinessProbe':{'tcpSocket':{'port':8443},'periodSeconds':1}}],'volumes':[{'name':'private','secret':{'secretName':'fault-private','defaultMode':384}},{'name':'code','configMap':{'name':'fault-code'}},{'name':'evidence','emptyDir':{}}]}}
@@ -28,7 +30,7 @@ class Proxy:
    (s.out/(s.case+'.proxy-tls.json')).write_text(json.dumps(self.probe,ensure_ascii=False,indent=2))
    self.config={'apiVersion':'v1','kind':'Config','clusters':[{'name':'proxy','cluster':{'server':'https://fault-proxy.'+self.ns+'.svc:8443','certificate-authority-data':base64.b64encode((p/'ca.crt').read_bytes()).decode()}}],'users':[{'name':'fixture','user':{'client-certificate-data':base64.b64encode((p/'client.crt').read_bytes()).decode(),'client-key-data':base64.b64encode((p/'client.key').read_bytes()).decode()}}],'contexts':[{'name':'explicit','context':{'cluster':'proxy','user':'fixture'}}]}
   self.port=s.port+200;self.base='http://127.0.0.1:'+str(self.port)
-  self.pf=subprocess.Popen([s.a.kubectl,'--kubeconfig',s.a.control_config,'-n',self.ns,'port-forward','pod/fault-proxy',str(self.port)+':9090'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+  self.pf=subprocess.Popen([s.a.kubectl,'--kubeconfig',s.a.control_config,'--context',s.a.control_context,'-n',self.ns,'port-forward','pod/fault-proxy',str(self.port)+':9090'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
   deadline=time.monotonic()+15
   while time.monotonic()<deadline:
    try:self.control('state');break

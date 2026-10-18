@@ -1,5 +1,6 @@
 """#19独占真实Pod工作台验收；每例独立资源，读模型必须来自实际目标。"""
-import copy,datetime,hashlib,http.cookiejar,json,os,pathlib,platform,secrets,subprocess,sys,time,traceback,urllib.request,uuid
+import copy,datetime,hashlib,http.cookiejar,json,os,pathlib,platform,secrets,sys,time,traceback,urllib.request,uuid
+from transport import process as subprocess
 from agent import Suite as AgentSuite
 from ksm_proxy import Proxy
 from workbench import registry,fingerprint,stamp
@@ -7,7 +8,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[2]
 
 class Suite(AgentSuite):
  def __init__(self,a):
-  super().__init__(a);self.contract=registry();self.instances=[]
+  super().__init__(a);self.contract=registry();self.instances=[];self.proxies=[];self.pending_ksms={};self.ksm_identities=[]
  def register(self,target,config=None):
   done=self.operation(self.accept(config or self.config(target),self.owner,name=self.a.prefix+'-'+target));assert done['state']=='SUCCEEDED',done
   return self.call('GET','/clusters/'+done['clusterId'])
@@ -46,22 +47,31 @@ class Suite(AgentSuite):
   target=item['target'];ns=item['namespace'];cr=self.get('kubestatemetrics',item['name'],target=target)
   assert cr['metadata']['uid']==item['uid']
   pods=[p for p in self.get('pods','-n',ns,target=target)['items'] if not p['metadata'].get('deletionTimestamp')]
-  expected='sha256:2de1b6dacbf8f41a4f90ef74c487ad49c50bfcfe8d5dbf70b58b4968ffcb0076';proof=[]
+  index='sha256:11da79c0e80e9cc755f84a3fc0cd0269be57148aad2587059abe3296e84b67e9';proof=[]
   for pod in pods:
    container=next(c for c in pod['spec']['containers'] if 'kube-state-metrics' in c['image']);status=next(c for c in pod['status']['containerStatuses'] if c['name']==container['name'])
    node=pod['spec']['nodeName'];assert node in {n['name'] for n in self.environment[target]['nodes']}
-   raw=subprocess.check_output(['docker','exec',node,'ctr','-n','k8s.io','content','get',expected],stderr=subprocess.PIPE);assert 'sha256:'+hashlib.sha256(raw).hexdigest()==expected
-   manifest=json.loads(raw);config_id=manifest['config']['digest'];config_raw=subprocess.check_output(['docker','exec',node,'ctr','-n','k8s.io','content','get',config_id],stderr=subprocess.PIPE)
-   assert 'sha256:'+hashlib.sha256(config_raw).hexdigest()==config_id;config=json.loads(config_raw);assert config['os']=='linux' and config['architecture']=='arm64'
+   def content(digest):
+    raw=subprocess.check_output(['docker','exec',node,'ctr','-n','k8s.io','content','get',digest],stderr=subprocess.PIPE)
+    assert 'sha256:'+hashlib.sha256(raw).hexdigest()==digest,'节点OCI内容摘要不符'
+    return json.loads(raw)
+   # 关键：同一个官方 index 按实际目标架构选择 child，不能沿用 Host arm64 摘要。
+   assert container['image']=='registry.k8s.io/kube-state-metrics/kube-state-metrics@'+index
+   original=content(index);children=[m for m in original['manifests'] if m['platform']['os']=='linux' and m['platform']['architecture']==self.runtime_arch];assert len(children)==1;expected=children[0]['digest']
+   manifest=content(expected);config_id=manifest['config']['digest'];config=content(config_id)
+   assert config['os']=='linux' and config['architecture']==self.runtime_arch
    cid=status['containerID'].removeprefix('containerd://');actual=json.loads(subprocess.check_output(['docker','exec',node,'crictl','inspect',cid],stderr=subprocess.PIPE))
-   assert actual['status']['labels']['io.kubernetes.pod.uid']==pod['metadata']['uid'] and actual['info']['config']['image']['image']==config_id
-   proof.append({'podUID':pod['metadata']['uid'],'name':pod['metadata']['name'],'containerID':cid,'node':node,'image':container['image'],'imageID':status['imageID'],'runtimeManifestDigest':expected,'configDigest':config_id,'os':'linux','architecture':'arm64'})
+   assert actual['status']['id']==cid and actual['status']['metadata']['name']==container['name'] and actual['status']['labels']['io.kubernetes.pod.uid']==pod['metadata']['uid'] and actual['info']['config']['image']['image']==config_id
+   assert status['imageID'].rsplit('@',1)[-1].split('://',1)[-1] in {index,expected,config_id},'实际Pod镜像不在官方内容链'
+   proof.append({'podUID':pod['metadata']['uid'],'name':pod['metadata']['name'],'containerID':cid,'node':node,'image':container['image'],'imageID':status['imageID'],'indexDigest':index,'runtimeManifestDigest':expected,'configDigest':config_id,'contentBytesSHA256Verified':True,'os':'linux','architecture':self.runtime_arch})
   assert proof;return {'crUID':item['uid'],'generation':cr['metadata']['generation'],'status':cr.get('status',{}),'pods':proof}
  def use_proxy(self,target='control'):
   proxy=Proxy(self,target);self.restorers.append(proxy.close);self.proxies.append(proxy);return proxy
  def faults(self,proxy,mode='none',write=''):
   return proxy.control('faults',{'readMode':mode,'rejectWritePath':write})
  def cleanup(self):
+  # 关键：统一运行只按 Session 原 UID ledger 清理，不能先执行旧诊断恢复或前缀认领。
+  if self.session:return self.session.cleanup_case(self)
   failures=[]
   for restore in reversed(self.restorers):
    try:restore()
@@ -137,7 +147,7 @@ class Suite(AgentSuite):
   self.k('-n',self.ns,'patch','deployment','monitor-mgr','--type=merge','-p',json.dumps({'spec':{'template':{'metadata':{'annotations':{'workbench-restart':uuid.uuid4().hex}}}}}))
   self.k('-n',self.ns,'rollout','status','deployment/monitor-mgr','--timeout=100s')
   pods=self.get('pods','-n',self.ns,'-l','app=monitor-mgr',target='control')['items'];pods=[p for p in pods if not p['metadata'].get('deletionTimestamp')];assert len(pods)==1 and pods[0]['metadata']['uid']!=old_uid
-  self.pod=pods[0]['metadata']['name'];self.connect();self.cookies=cookies;self.http=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies));return {'originalPodUID':old_uid,'newPodUID':pods[0]['metadata']['uid']}
+  self.pod=pods[0]['metadata']['name'];self.platform_pod_uid=pods[0]['metadata']['uid'];self.connect();self.cookies=cookies;self.http=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies));return {'originalPodUID':old_uid,'newPodUID':pods[0]['metadata']['uid']}
  def r08(self,index):
   proxy=self.use_proxy();cluster=self.register('control',proxy.config);item=self.new_ksm(index,cluster=cluster);i=item['instance'];before=self.current(i)['CR'];session=self.call('GET','/session');key=self.proof('key-before')
   self.call('POST','/instances/'+i['id']+'/refresh',{});self.faults(proxy,'all');before=self.current(i)['CR'];rebuild=self.restart();unknown=self.observe(i);source=next(s for s in unknown['sources'] if s['source']=='CR')
@@ -152,7 +162,7 @@ class Suite(AgentSuite):
  def run(self):
   for index,case in enumerate(self.a.cases):
    self.case=case;self.traces=[];self.instances=[];self.proxies=[];self.pending_ksms={};self.ksm_identities=[];self.targetns=None;self.cookies=http.cookiejar.CookieJar()
-   record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
+   record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':self.runtime_arch,'environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
    try:
     record['platform']=self.deploy(case,index);assert record['platform']['imageID'].endswith(self.image_metadata.get('manifestDigest') or self.image_metadata['dockerInspectId'])
     if self.a.layer=='B':

@@ -1,19 +1,14 @@
 """工作台真实Chromium编排；业务请求经实际平台Pod，私有控制材料仅留Node fixture。"""
-import base64,copy,hashlib,json,os,pathlib,re,subprocess,tempfile,time,urllib.request,uuid
+import base64,copy,hashlib,json,os,pathlib,re,tempfile,time,urllib.request,uuid
+from transport import process as subprocess
 from agent import Suite as AgentSuite
 from workbench import stamp
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 
 def service_access(s):
  """B层显式经本例Service访问；Pod UID另外绑定，不借用旧Service选择到的离场Pod。"""
- s.forward.terminate();s.forward.wait(timeout=5)
- s.forward=subprocess.Popen([s.a.kubectl,'--kubeconfig',s.a.control_config,'--context',s.a.control_context,'-n',s.ns,'port-forward','service/monitor-mgr',str(s.port)+':8080'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
- deadline=time.monotonic()+15
- while time.monotonic()<deadline:
-  try:
-   if urllib.request.urlopen(s.base+'/readyz',timeout=1).status==200:return
-  except Exception:time.sleep(.2)
- raise AssertionError('本例平台Service不可达')
+ cookies=s.cookies;s.forward.terminate();s.forward.wait(timeout=5);s.connect()
+ s.cookies=cookies;s.http=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies))
 
 def large_revision(s,cluster,namespace):
  """仅受限旧库fixture设置大i64初值；原PVC/密钥保留且应用停止时写入，随后通过HTTP验证。"""
@@ -24,7 +19,7 @@ def large_revision(s,cluster,namespace):
 c=sqlite3.connect('/data/platform.db');c.execute('pragma foreign_keys=on');r=c.execute('update drafts set revision=? where instance_id=?',(9007199254740992,INSTANCE));assert r.rowcount==1;c.commit();c.close();print(json.dumps({'fixtureUpdated':True,'revision':'9007199254740992'}))""".replace('INSTANCE',repr(i['id']))
  proof=s.job('large-i64-fixture',script);assert proof=={'fixtureUpdated':True,'revision':'9007199254740992'}
  s.k('-n',s.ns,'scale','deployment/monitor-mgr','--replicas=1');s.k('-n',s.ns,'rollout','status','deployment/monitor-mgr','--timeout=100s')
- pods=[p for p in s.get('pods','-n',s.ns,'-l','app=monitor-mgr')['items'] if not p['metadata'].get('deletionTimestamp')];assert len(pods)==1;s.pod=pods[0]['metadata']['name'];s.connect();s.cookies=cookies;s.http=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies))
+ pods=[p for p in s.get('pods','-n',s.ns,'-l','app=monitor-mgr')['items'] if not p['metadata'].get('deletionTimestamp')];assert len(pods)==1;s.pod=pods[0]['metadata']['name'];s.platform_pod_uid=pods[0]['metadata']['uid'];s.connect();s.cookies=cookies;s.http=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies))
  draft=s.call('GET','/instances/'+i['id']+'/draft');assert draft['revision']=='9007199254740992';return i
 
 def outside_instance(s,ksm):
@@ -40,7 +35,7 @@ def prepare(s,case,index):
  s.fixture(s.targetns);proxy=s.use_proxy() if case=='U05.primary' else None;s.cluster=s.register('control',proxy.config if proxy else None)
  fixture={'baseURL':s.base,'adminUsername':'admin','adminPassword':s.password,'clusterId':s.cluster['id'],'clusterName':s.cluster['name'],'namespace':s.targetns,'runId':s.a.prefix}
  evidence={};managed_uids=set()
- if case=='U01.primary':
+ if case=='U01.primary' and 'data' in s.target_names:
   second=s.register('data');fixture.update({'secondClusterId':second['id'],'secondClusterName':second['name']})
  if case=='U05.primary':
   ksm=s.new_ksm(index,cluster=s.cluster,namespace=s.targetns);agent=AgentSuite.create(s);AgentSuite.publish(s,agent);agent_proof=AgentSuite.runtime(s,agent)
@@ -63,6 +58,7 @@ def prepare(s,case,index):
  service_access(s);pod=s.get('pod',s.pod,'-n',s.ns);evidence['browserPlatform']={'service':'monitor-mgr','namespace':s.ns,'podUID':pod['metadata']['uid'],'imageID':pod['status']['containerStatuses'][0]['imageID']};return fixture,evidence
 
 def execute(s,selector,fixture,test_file='tests/workbench.spec.ts'):
+ fixture=dict(fixture,baseURL=s.base,kubectl=getattr(s.session,'browser_kubectl',s.a.kubectl))
  out=s.out/'browser'/selector;out.mkdir(parents=True,exist_ok=True);os.chmod(out,0o700);report=out/'playwright.json'
  command=['npm','--prefix','web','run','test:e2e','--',test_file,'--grep',r'(?:^|\s)'+re.escape(selector)+' ','--output',str(out/'artifacts')]
  with tempfile.TemporaryDirectory(prefix='mm19-private-browser-') as private:

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """#18真实Agent门禁：每例独立平台Pod和目标fixture，完整批次持有跨票API互斥锁。"""
-import argparse,base64,copy,datetime,fcntl,gzip,hashlib,http.cookiejar,json,os,pathlib,platform,re,secrets,subprocess,sys,tarfile,tempfile,time,traceback,urllib.error,urllib.request,uuid
+import argparse,base64,copy,datetime,fcntl,gzip,hashlib,http.cookiejar,json,os,pathlib,platform,re,secrets,sys,tarfile,tempfile,time,traceback,urllib.error,urllib.request,uuid
+from transport import process as subprocess
 import yaml
 from clusters import Suite as ClusterSuite
 from ksm import manifest,source_state,fingerprint
@@ -79,38 +80,25 @@ class Suite(ClusterSuite):
    cells=[c.strip() for c in line.strip('|').split('|')]
    if len(cells)==5 and cells[0] in ['REG18-SOURCE-007',*PROJECTION_KCASES]:self.contract[cells[0]]={'variantId':cells[0],'caseId':cells[0],'layer':'K' if cells[0] in PROJECTION_KCASES else 'B','kind':'supplementary','purpose':cells[1],'steps':cells[2],'expected':cells[3],'profiles':['LOCAL_FULL']}
   assert not self.source['dirty'] or a.allow_dirty_runner,'门禁来源必须干净'
+  if self.session:assert a.source==self.source['commit'] and not self.source['dirty'],'正式Session必须同一干净来源'
   self.bridge=None
   if a.source!=self.source['commit']:
    assert a.allow_source_bridge,'运行器与产品来源不同，需要显式source bridge证明'
    self.bridge=source_bridge(a.source,self.source['commit'])
-  m=json.loads(subprocess.check_output(['docker','image','inspect',a.image],text=True))[0]
-  # Docker29 inspect.Id可能是manifest摘要；真正config摘要必须对docker-save中的配置字节实算。
-  with tempfile.TemporaryFile() as saved:
-   subprocess.run(['docker','save',a.image],stdout=saved,check=True);saved.seek(0)
-   with tarfile.open(fileobj=saved) as archive:
-    entry=json.load(archive.extractfile('manifest.json'))[0];config_bytes=archive.extractfile(entry['Config']).read();config=json.loads(config_bytes)
-  config_digest='sha256:'+hashlib.sha256(config_bytes).hexdigest()
-  self.image_metadata={'dockerInspectId':m['Id'],'manifestDigest':m.get('Descriptor',{}).get('digest'),'configDigest':config_digest,'configDigestMethod':'docker-save manifest.json Config bytes SHA256','os':config['os'],'architecture':config['architecture'],'source':config.get('config',{}).get('Labels',{}).get('org.opencontainers.image.revision')}
-  assert self.image_metadata['source']==a.source and m['Os']=='linux' and m['Architecture']=='arm64','镜像来源/架构不符'
-  self.environment={}
-  for target,count in [('control',3),('data',1)]:
-   nodes=self.get('nodes',target=target)['items'];uid=self.get('namespace','kube-system',target=target)['metadata']['uid']
-   assert len(nodes)==count and all(n['status']['nodeInfo']['kubeletVersion']=='v1.28.15' and n['status']['nodeInfo']['architecture']=='arm64' for n in nodes),'目标拓扑/版本不符'
-   self.environment[target]={'uid':uid,'nodes':[{'name':n['metadata']['name'],'nodeInfo':n['status']['nodeInfo']} for n in nodes]}
+  self.image_metadata=self.image_proof(a.image);self.environment=self.target_environment()
   # 证书仅用于独占fixture；私钥只驻留内存和0600临时文件，生成配置也不输出到证据。
   with tempfile.TemporaryDirectory(prefix='mm18-tls-') as d:
    cert=pathlib.Path(d)/'cert';key=pathlib.Path(d)/'key'
    subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=receiver.example.invalid'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
    os.chmod(key,0o600);self.secret_values={'username':secrets.token_urlsafe(12),'password':secrets.token_urlsafe(24),'credentials':secrets.token_urlsafe(32),'ca':cert.read_text(),'cert':cert.read_text(),'key':key.read_text()}
+  if self.session:self.session.register_secrets(*self.secret_values.values())
 
  def k(self,*args,data=None,target='control',check=True):
-  cfg=self.a.control_config if target=='control' else self.a.data_config;context=self.a.control_context if target=='control' else self.a.data_context
-  r=subprocess.run([self.a.kubectl,'--kubeconfig',cfg,'--context',context,*args],input=None if data is None else json.dumps(data).encode(),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-  if check and r.returncode:raise RuntimeError('kubectl '+str(args[:2])+' 失败（参数/目标响应不输出）')
-  return r
+  return super().k(*args,data=data,target=target,check=check)
  def get(self,*args,target=None):return json.loads(self.k('get',*args,'-o','json',target=target or self.target).stdout)
  def apply(self,obj,target=None):self.k('create','-f','-',data=obj,target=target or self.target)
  def deploy(self,case,index):
+  if not getattr(self.a,'initialize',True) and case!='I01.primary':raise ValueError('SUITE_INITIALIZATION_SKIP_INVALID')
   # 平台namespace也由本例显式创建并登记UID，名称冲突时不能误清理既有资源。
   self.ns=self.a.prefix+'-'+str(index);self.port=self.a.port+index;self.namespace(self.ns,'control');objects=[]
   for raw in yaml.safe_load_all(open(ROOT/'deploy/platform.yaml')):
@@ -122,24 +110,18 @@ class Suite(ClusterSuite):
    objects.append(raw)
   self.k('apply','-f','-',data={'apiVersion':'v1','kind':'List','items':objects});self.k('-n',self.ns,'rollout','status','deployment/monitor-mgr','--timeout=120s')
   pods=self.get('pods','-n',self.ns,'-l','app=monitor-mgr',target='control')['items'];assert len(pods)==1
-  pod=pods[0];self.pod=pod['metadata']['name'];self.initial_uid=pod['metadata']['uid'];self.connect()
-  self.call('POST','/initialization',{'username':'admin','password':self.password},status=201);self.call('POST','/sessions',{'username':'admin','password':self.password},status=201);self.owner=self.call('GET','/session')['account']['id']
+  pod=pods[0];self.pod=pod['metadata']['name'];self.platform_pod_uid=pod['metadata']['uid'];self.initial_uid=pod['metadata']['uid'];self.connect()
+  if getattr(self.a,'initialize',True):
+   self.call('POST','/initialization',{'username':'admin','password':self.password},status=201);self.call('POST','/sessions',{'username':'admin','password':self.password},status=201);self.owner=self.call('GET','/session')['account']['id']
   return {'namespaceUID':self.namespace_uids[('control',self.ns)],'podUID':self.initial_uid,'node':pod['spec']['nodeName'],'imageID':pod['status']['containerStatuses'][0]['imageID'],'source':self.a.source}
  def connect(self):
-  self.base='http://127.0.0.1:'+str(self.port)
-  self.forward=subprocess.Popen([self.a.kubectl,'--kubeconfig',self.a.control_config,'--context',self.a.control_context,'-n',self.ns,'port-forward','pod/'+self.pod,str(self.port)+':8080'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-  end=time.monotonic()+20
-  while time.monotonic()<end:
-   try:
-    if urllib.request.urlopen(self.base+'/readyz',timeout=1).status==200:break
-   except Exception:time.sleep(.2)
-  else:raise RuntimeError('真实平台Pod不可达')
-  self.cookies=http.cookiejar.CookieJar();self.http=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
+  self.cookies=http.cookiejar.CookieJar();super().connect()
  def call(self,method,path,body=None,key=None,status=200):
+  if self.session:self.session.http_intent(self,method,path,body)
   req=urllib.request.Request(self.base+'/api/v1'+path,data=None if body is None else json.dumps(body).encode(),method=method,headers={'Origin':self.base,'Content-Type':'application/json','Idempotency-Key':key or str(uuid.uuid4())})
   try:r=self.http.open(req,timeout=30)
   except urllib.error.HTTPError as e:r=e
-  value=json.load(r);self.traces.append({'at':stamp(),'method':method,'path':path,'status':r.code,'requestId':r.headers.get('X-Request-Id',''),'operationId':value.get('operationId','')})
+  value=json.load(r);self.http_observed(method,path,body,r,value);r.close();self.traces.append({'at':stamp(),'method':method,'path':path,'status':r.code,'requestId':r.headers.get('X-Request-Id',''),'operationId':value.get('operationId','')})
   assert r.code==status,(path,r.code,value.get('code'),value.get('message'));return value
  def cfg(self,name=None,namespace=None):
   rule=lambda:{'object':{'mode':'None'},'namespace':{'mode':'Own'}}
@@ -200,7 +182,7 @@ class Suite(ClusterSuite):
   raise AssertionError('Agent真实ST/Pod/PVC未收敛：'+str(last))
  def prometheus_image(self,pod,container,status,target):
   """绑定原Pod/运行容器和节点内容链，不把CRI报告官方index误判为镜像变化。"""
-  index='sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3';child='sha256:f4def6b3b61109a6eeea59945d578bb7e926c36cb0e036a23e3ceb8b6de024ad'
+  index='sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3'
   node=pod['spec']['nodeName'];assert node in {n['name'] for n in self.environment[target]['nodes']}
   assert container['image']=='quay.io/prometheus/prometheus@'+index
   def node_json(*args):return json.loads(subprocess.check_output(['docker','exec',node,*args],stderr=subprocess.PIPE))
@@ -208,9 +190,9 @@ class Suite(ClusterSuite):
    raw=subprocess.check_output(['docker','exec',node,'ctr','-n','k8s.io','content','get',digest],stderr=subprocess.PIPE)
    assert 'sha256:'+hashlib.sha256(raw).hexdigest()==digest,'节点OCI内容摘要不符'
    return json.loads(raw)
-  original=content(index);assert any(m['digest']==child and m['platform']['os']=='linux' and m['platform']['architecture']=='arm64' for m in original['manifests'])
+  original=content(index);children=[m for m in original['manifests'] if m['platform']['os']=='linux' and m['platform']['architecture']==self.runtime_arch];assert len(children)==1;child=children[0]['digest']
   manifest=content(child);config_digest=manifest['config']['digest'];config=content(config_digest)
-  assert config['os']=='linux' and config['architecture']=='arm64'
+  assert config['os']=='linux' and config['architecture']==self.runtime_arch
   container_id=status['containerID'].removeprefix('containerd://');assert re.fullmatch('[0-9a-f]{64}',container_id)
   inspected=node_json('crictl','inspect',container_id);actual=inspected['status']
   # 关键：CRI查询限定原容器ID及原Pod UID，不能用同节点另一绿色容器冒充当前Pod。
@@ -218,7 +200,7 @@ class Suite(ClusterSuite):
   actual_ref=actual['imageRef'];assert inspected['info']['config']['image']['image']==config_digest,'原容器实际config与官方内容链不符'
   image=node_json('crictl','inspecti',config_digest)['status'];assert image['id']==config_digest
   reported=re.search(r'sha256:[0-9a-f]{64}$',status['imageID']);assert reported and reported[0] in {index,child,config_digest},'kubelet镜像ID不在已验证的官方内容链'
-  return {'podUID':pod['metadata']['uid'],'containerID':container_id,'node':node,'indexDigest':index,'arm64ManifestDigest':child,'configDigest':config_digest,'criImageId':image['id'],'criImageRef':actual_ref,'criStatusImage':actual['image']['image'],'kubeletImageID':status['imageID'],'contentBytesSHA256Verified':True,'os':config['os'],'architecture':config['architecture']}
+  return {'podUID':pod['metadata']['uid'],'containerID':container_id,'node':node,'indexDigest':index,'runtimeManifestDigest':child,'configDigest':config_digest,'criImageId':image['id'],'criImageRef':actual_ref,'criStatusImage':actual['image']['image'],'kubeletImageID':status['imageID'],'contentBytesSHA256Verified':True,'os':config['os'],'architecture':config['architecture']}
  def collection(self,kind,namespace,name='matched',label='yes'):
   version='v1alpha1' if kind=='ScrapeConfig' else 'v1'
   specs={'ServiceMonitor':{'selector':{},'endpoints':[{'port':'http'}]},'PodMonitor':{'selector':{},'podMetricsEndpoints':[{'port':'http'}]},'Probe':{'prober':{'url':'blackbox.example.invalid:9115'},'targets':{'staticConfig':{'static':['https://example.invalid']}}},'ScrapeConfig':{'staticConfigs':[{'targets':['example.invalid:9090']}]}}
@@ -242,6 +224,8 @@ class Suite(ClusterSuite):
   secret=self.get('secret','prom-agent-'+(name or self.crname),'-n',self.targetns)
   return yaml.safe_load(gzip.decompress(base64.b64decode(secret['data']['prometheus.yaml.gz'])))
  def cleanup(self):
+  # 关键：统一运行只按 Session 原 UID ledger 清理，不能先执行旧诊断恢复或前缀认领。
+  if self.session:return self.session.cleanup_case(self)
   failures=[]
   for restore in reversed(self.restorers):
    try:restore()
@@ -314,7 +298,7 @@ class Suite(ClusterSuite):
   return {'success':not failures,'failures':failures,'namespaceResults':namespaces,'agentWorkloadResults':workloads,'mode':'测试工具按原UID正常Foreground/namespace GC；无force或finalizer修改'}
  def run(self):
   for index,case in enumerate(self.a.cases or KCASES):
-   self.case=case;self.traces=[];self.targetns=None;self.projection_markers=[];record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
+   self.case=case;self.traces=[];self.targetns=None;self.projection_markers=[];record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':self.runtime_arch,'environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
    try:
     record['platform']=self.deploy(case,index);assert record['platform']['imageID'].endswith(self.image_metadata.get('manifestDigest') or self.image_metadata['dockerInspectId'])
     self.prepare_target(index,'data' if case in ['C04.agent-crd','A05.primary'] else 'control');record['evidence']=run_browser(self,case) if self.a.layer=='B' else (projection_case(self,case) if case in PROJECTION_KCASES else run_case(self,case));record['outcome']='passed'
