@@ -134,7 +134,7 @@
 
 ## 浏览器账号规则补充回归
 
-此条为真实浏览器B补充，可嵌入U02独立记录；固定69个owned责任子例及20个Go补充回归保持原计数。
+此条为真实浏览器B补充，可嵌入U02独立记录；固定69个owned责任子例不变，后续补充按独立层级记账。
 
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
@@ -142,7 +142,7 @@
 
 ## LabelSelector CR 输出补充回归
 
-以下6条为独立Q补充：经真实HTTP、生成Kitex RPC、SQLite与受控TLS Kubernetes API验证完整发布链，API按固定CRD省略非nullable的null字段；真实集群四类关联继续由A11完整矩阵覆盖。原69个owned责任子例保持不变；补充回归共27个唯一ID，其中26个Q，PATTERN-011为B，SOURCE-007同时执行Q/B，共28个补充执行键。
+以下6条为独立Q补充：经真实HTTP、生成Kitex RPC、SQLite与受控TLS Kubernetes API验证完整发布链，API按固定CRD省略非nullable的null字段；真实集群四类关联继续由A11完整矩阵覆盖。原69个owned责任子例保持不变；包含下节PROJECTION-013后，补充回归共29个唯一ID，其中28个Q，PATTERN-011为B，SOURCE-007同时执行Q/B，PROJECTION-013两项各执行Q/K，共32个补充执行键。
 
 关键：平台typed模型与Thrift往返继续区分缺失和显式空集合；仅CR输出边界省略nil的表达式values，显式空数组继续保留。不得全局删除null、折叠外层selector的省略/{}，或改写未知字段语义。
 
@@ -154,3 +154,14 @@
 | REG18-SELECTOR-012.not-exists-empty | DoesNotExist显式空values保持空集合 | 经HTTP/RPC保存values=[]的DoesNotExist规则，检查RPC/DB/预览并完成发布回读。 | 显式[]在typed和CR中保持，发布成功；没有null字段和重复创建，不改变外层None/All。 | #18 |
 | REG18-SELECTOR-012.in | In的非空values不可被省略规则吞掉 | 经HTTP/RPC保存In及两个合法values，预览、发布、回读实际CR与冻结版本。 | 非空values内容及顺序保持，正确匹配并发布成功；空值规范化不能改变集合选择含义。 | #18 |
 | REG18-SELECTOR-012.not-in | NotIn的非空values不可被省略规则吞掉 | 经HTTP/RPC保存NotIn及两个合法values，预览、发布、回读实际CR与冻结版本。 | 非空values完整保留，正确排除并发布成功；未越过当前集群授权或原UID校验。 | #18 |
+
+## 解析失败 URL 的读投影补充回归
+
+以下两条各执行独立Q和真实K。Q经真实HTTP/生成Kitex/SQLite及受控TLS目标；K由测试工具在独占runId namespace创建固定CRD接受的外部Agent及已纳管Agent漂移，只通过平台读模型/预览观察。URL内使用临时合成marker，报告只保留泄漏与否，不输出原URL、marker、认证串或原数据库。正常URL/userinfo的既有SHARED-003及A12用例继续回归。
+
+关键：仅无法解析的URL整值隐藏；原始目标仍在内存参与HMAC，不能改目标metadata/status/finalizers或重算历史effective_spec。先预览，再只改隐藏认证值，旧preview必须冲突；读取与安全投影本身不得写目标。当前90d完整K批次保持原源码和原记录；新修复的Q/REG、真实恶意外部CR两例及B验证另记实际源码，组件责任交付不冒充新源完整profile，最终#21仍统一候选重新执行282键。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG18-PROJECTION-013.url-parse-error | 外部Agent的无法解析URL不能回显认证串 | 创建含合法schema字符串、userinfo及非法escape的remoteWrite.url；经平台发现、详情、运行刷新、左右YAML/历史及直接RPC读取，检查平台DB/安全日志。保存预览后仅替换临时认证marker，再确认原preview；回读目标原UID与metadata，finally清理本例。 | HTTP/RPC/YAML/DB/日志/公开证据不含认证marker，无法解析URL整值隐藏；隐藏值变化仍触发HMAC冲突，不误放旧预览；无读侧目标mutation，原metadata不因脱敏被改写。 | #18 |
+| REG18-PROJECTION-013.proxy-parse-error | 外部Agent的无法解析proxyUrl同样失败关闭 | 独立fixture使用固定CRD接受的HTTP前缀proxyUrl，含userinfo及非法escape；执行同一公开读路径、DB/日志检查、隐藏值漂移和原metadata回读，再finally清理。 | proxyUrl解析失败也整值隐藏，所有平台读投影和持久缓存无认证marker；HMAC仍识别原值变化，旧预览拒绝，不能用解析失败绕过脱敏或修改真实对象。 | #18 |
