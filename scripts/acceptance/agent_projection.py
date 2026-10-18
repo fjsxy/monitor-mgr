@@ -56,7 +56,9 @@ def database_probe(s,markers,expected=None):
  script="""import glob,hashlib,json,sqlite3
 markers=MARKERS
 c=sqlite3.connect('file:/data/platform.db?mode=ro',uri=True)
-rows=c.execute('select effective_spec from publication_versions order by id').fetchall()
+# 保留SQLite原始storage class与bytes编码；BLOB不能直接交给JSON，也不能丢失TEXT/BLOB差异。
+rows=c.execute('select id,typeof(effective_spec),hex(effective_spec) from publication_versions order by id').fetchall()
+c.close()
 fingerprint=hashlib.sha256(json.dumps(rows,separators=(',',':')).encode()).hexdigest()
 leak=any(m.encode() in open(p,'rb').read() for p in glob.glob('/data/platform.db*') for m in markers)
 print(json.dumps({'noMarker':not leak,'frozenFingerprint':fingerprint}))""".replace('MARKERS',repr(markers))
