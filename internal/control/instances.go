@@ -131,6 +131,9 @@ func (s *Store) CreateInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	if _, e = tx.ExecContext(ctx, `INSERT INTO drafts VALUES(?,1,?)`, id, raw); e != nil {
 		return nil, Error("UNAVAILABLE", "草稿保存失败")
 	}
+	if e = s.recordInstanceActivity(ctx, tx, id); e != nil {
+		return nil, e
+	}
 	i, e := instanceByID(ctx, tx, id)
 	if e != nil {
 		return nil, e
@@ -160,7 +163,7 @@ func (s *Store) ListInstances(ctx context.Context, c *rpc.RequestContext, r *rpc
 	if _, e := s.GetCluster(ctx, c, r); e != nil {
 		return nil, e
 	}
-	rows, e := s.DB.QueryContext(ctx, `SELECT `+instanceColumns+` FROM instances WHERE cluster_id=? AND lifecycle!='DELETED' ORDER BY activity_at DESC,id`, r.Id)
+	rows, e := s.DB.QueryContext(ctx, `SELECT `+instanceColumns+` FROM instances WHERE cluster_id=? AND lifecycle!='DELETED' ORDER BY activity_sequence DESC,id`, r.Id)
 	if e != nil {
 		return nil, Error("UNAVAILABLE", "列表读取失败")
 	}
@@ -280,7 +283,7 @@ func (s *Store) SaveDraft(ctx context.Context, c *rpc.RequestContext, r *rpc.Sav
 			return nil, Error("CONFLICT", "CR 身份重复")
 		}
 	}
-	if _, e = tx.ExecContext(ctx, `UPDATE instances SET activity_at=? WHERE id=?`, s.Now().UTC().Format(time.RFC3339Nano), r.Id); e != nil {
+	if e = s.recordInstanceActivity(ctx, tx, r.Id); e != nil {
 		return nil, e
 	}
 	out := draftDTO(cfg, rev+1)
@@ -316,7 +319,7 @@ func (s *Store) RecordEditingActivity(ctx context.Context, c *rpc.RequestContext
 	if _, _, e = s.instanceTx(ctx, tx, c, r.Id); e != nil {
 		return nil, e
 	}
-	_, e = tx.ExecContext(ctx, `UPDATE instances SET activity_at=? WHERE id=?`, s.Now().UTC().Format(time.RFC3339Nano), r.Id)
+	e = s.recordInstanceActivity(ctx, tx, r.Id)
 	if e != nil {
 		return nil, e
 	}
@@ -348,7 +351,10 @@ func (s *Store) DeleteDraft(ctx context.Context, c *rpc.RequestContext, r *rpc.I
 	if hit {
 		return &replay, nil
 	}
-	if _, e = tx.ExecContext(ctx, `UPDATE instances SET lifecycle='DELETED',activity_at=? WHERE id=?`, s.Now().UTC().Format(time.RFC3339Nano), r.Id); e != nil {
+	if _, e = tx.ExecContext(ctx, `UPDATE instances SET lifecycle='DELETED' WHERE id=?`, r.Id); e != nil {
+		return nil, e
+	}
+	if e = s.recordInstanceActivity(ctx, tx, r.Id); e != nil {
 		return nil, e
 	}
 	if e = s.finishCommand(ctx, tx, cmd, &rpc.Empty{}); e != nil {

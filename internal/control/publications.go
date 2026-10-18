@@ -356,11 +356,13 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		{`INSERT INTO execution_attempts(id,operation_id,state,possibly_sent,created_at,updated_at,actor_id) VALUES(?,?,?,0,?,?,?)`, []any{attempt, o.OperationId, "QUEUED", now, now, p.Account.Id}},
 		{`INSERT INTO operation_lifecycle VALUES(?,?,1,2)`, []any{o.OperationId, attempt}},
 		{`INSERT INTO instance_protections VALUES(?,?)`, []any{i.Id, o.OperationId}},
-		{`UPDATE instances SET activity_at=? WHERE id=?`, []any{now, i.Id}},
 	} {
 		if _, e = tx.ExecContext(ctx, q.sql, q.args...); e != nil {
 			return nil, Error("UNAVAILABLE", "受理事务失败，未受理")
 		}
+	}
+	if e = s.recordInstanceActivity(ctx, tx, i.Id); e != nil {
+		return nil, e
 	}
 	if e = s.finishCommand(ctx, tx, cmd, o); e != nil {
 		return nil, e

@@ -87,3 +87,6 @@ lifecycle-q-receipt: ## 生命周期Q层逐稳定子例收据，保留真实宿�
 	$(PYTHON) scripts/acceptance/lifecycle.py --layer Q $(E2E_ARGS)
 lifecycle-fixture-image: ## 仅验收应用派发屏障镜像，产品源码和基础镜像必须同源
 	docker build --platform "$(PLATFORM)" --provenance=false --sbom=false --build-arg PLATFORM_IMAGE="$(IMAGE)" --build-arg SOURCE_SHA="$(SOURCE_SHA)" -f scripts/acceptance/Dockerfile.lifecycle -t "$(LIFECYCLE_FIXTURE_IMAGE)" .
+
+workbench-seed-check: ## 工作台活动序号与旧库安全迁移检查，真实HTTP/Kitex/SQLite
+	$(GO) test ./internal/platform -count=1 -run 'Test(WorkbenchActivity|SharedSchema4|F04Encrypted)'
