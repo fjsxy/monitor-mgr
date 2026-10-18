@@ -72,6 +72,36 @@ func TestAgentFixedCapacityRevalidated(t *testing.T) {
 	}
 }
 
+// 可能已发但尚无UID时也锁定版本容量，不能等到首次成功回读后才建立约束。
+func TestAgentFixedCapacityPossiblySent(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once, released sync.Once
+	p, c, cluster, _, _ := agentSafetyFixture(t, func(stage, id string) error {
+		if stage == "afterSendMarker" {
+			once.Do(func() { close(entered) })
+			<-release
+		}
+		return nil
+	})
+	defer released.Do(func() { close(release) })
+	cfg := agentConfig("sent-capacity", "monitoring")
+	i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
+	id := i["id"].(string)
+	preview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "preview", 200)
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("未到达持久可能已发屏障")
+	}
+	cfg["storage"].(map[string]any)["capacity"] = "2Gi"
+	clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": cfg}, c, "change-after-marker", 409)
+	released.Do(func() { close(release) })
+	if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
+		t.Fatal("原冻结版本发布失败")
+	}
+}
+
 // REG18-HEADERS-009：合法Agent remoteWrite.headers任意值必须投影脱敏，原值仍参与漂移指纹。
 func TestAgentHeadersReadProjection(t *testing.T) {
 	p, c, cluster, dir, f := agentSafetyFixture(t, nil)
