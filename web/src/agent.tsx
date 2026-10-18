@@ -1,3 +1,4 @@
+import type { Int64 } from "./api";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, APIError } from "./api";
 import type { Cluster } from "./clusters";
@@ -98,17 +99,17 @@ type Instance = {
   crNamespace?: string;
   sources?: Source[];
 };
-type Draft = { revision: number; agent: AgentConfiguration; yaml: string };
+type Draft = { revision: Int64; agent: AgentConfiguration; yaml: string };
 type Version = {
   versionId: string;
-  sourceDraftRevision: number;
+  sourceDraftRevision: Int64;
   agent: AgentConfiguration;
   yaml: string;
   createdAt: string;
 };
 type Preview = {
   previewId: string;
-  draftRevision: number;
+  draftRevision: Int64;
   leftYAML: string;
   rightYAML: string;
   drift: boolean;
@@ -253,7 +254,7 @@ export function AgentEditor({
     [runtimeSources, setRuntimeSources] = useState<Source[]>(
       selection.instance?.sources ?? [],
     ),
-    [previewSources, setPreviewSources] = useState<{ draftRevision: number; sources: Source[] } | null>(null),
+    [previewSources, setPreviewSources] = useState<{ draftRevision: Int64; sources: Source[] } | null>(null),
     [preview, setPreview] = useState<Preview | null>(null),
     [overwrite, setOverwrite] = useState(false),
     [operation, setOperation] = useState<Operation | null>(null),
@@ -577,7 +578,7 @@ export function AgentEditor({
   async function associationPreview() {
     if (!current || !draft || dirty) return;
     await run(async () => {
-      const result = await api<{ draftRevision: number; sources: Source[] }>(
+      const result = await api<{ draftRevision: Int64; sources: Source[] }>(
         `/instances/${current.id}/association-previews`,
         "POST",
         { draftRevision: draft.revision },

@@ -39,16 +39,16 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	}
 	if len(parts) == 3 && parts[0] == "operations" && r.Method == "POST" && (parts[2] == "retry" || parts[2] == "cancel" || parts[2] == "continue-unsent") {
 		var b struct {
-			ExpectedOperationRevision int64   `json:"expectedOperationRevision"`
+			ExpectedOperationRevision httpI64 `json:"expectedOperationRevision"`
 			ExpectedAttemptId         string  `json:"expectedAttemptId"`
-			ExpectedAttemptRevision   int64   `json:"expectedAttemptRevision"`
+			ExpectedAttemptRevision   httpI64 `json:"expectedAttemptRevision"`
 			DeletePreviewId           *string `json:"deletePreviewId"`
 		}
 		if e := decode(r, &b); e != nil {
 			p.writeError(w, e, id)
 			return true
 		}
-		req := &rpc.LifecycleRequest{OperationId: parts[1], ExpectedOperationRevision: b.ExpectedOperationRevision, ExpectedAttemptId: b.ExpectedAttemptId, ExpectedAttemptRevision: b.ExpectedAttemptRevision, DeletePreviewId: b.DeletePreviewId}
+		req := &rpc.LifecycleRequest{OperationId: parts[1], ExpectedOperationRevision: int64(b.ExpectedOperationRevision), ExpectedAttemptId: b.ExpectedAttemptId, ExpectedAttemptRevision: int64(b.ExpectedAttemptRevision), DeletePreviewId: b.DeletePreviewId}
 		var v *rpc.Operation
 		var e error
 		status := 202
@@ -127,7 +127,7 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 				return true
 			case "PUT":
 				var b struct {
-					ExpectedDraftRevision int64                   `json:"expectedDraftRevision"`
+					ExpectedDraftRevision httpI64                 `json:"expectedDraftRevision"`
 					Ksm                   *rpc.KSMConfiguration   `json:"ksm"`
 					Agent                 *rpc.AgentConfiguration `json:"agent"`
 				}
@@ -135,7 +135,7 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.SaveDraft(r.Context(), c, &rpc.SaveDraftRequest{Id: req.Id, ExpectedDraftRevision: b.ExpectedDraftRevision, Ksm: b.Ksm, Agent: b.Agent})
+				v, e := p.client.SaveDraft(r.Context(), c, &rpc.SaveDraftRequest{Id: req.Id, ExpectedDraftRevision: int64(b.ExpectedDraftRevision), Ksm: b.Ksm, Agent: b.Agent})
 				p.respond(w, 200, v, e, id)
 				return true
 			}
@@ -154,41 +154,41 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 		case "association-previews":
 			if r.Method == "POST" {
 				var body struct {
-					DraftRevision int64 `json:"draftRevision"`
+					DraftRevision httpI64 `json:"draftRevision"`
 				}
 				if e := decode(r, &body); e != nil {
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.PreviewAssociations(r.Context(), c, &rpc.AssociationPreviewRequest{Id: req.Id, DraftRevision: body.DraftRevision})
+				v, e := p.client.PreviewAssociations(r.Context(), c, &rpc.AssociationPreviewRequest{Id: req.Id, DraftRevision: int64(body.DraftRevision)})
 				p.respond(w, 200, v, e, id)
 				return true
 			}
 		case "previews":
 			if r.Method == "POST" {
 				var b struct {
-					DraftRevision int64 `json:"draftRevision"`
+					DraftRevision httpI64 `json:"draftRevision"`
 				}
 				if e := decode(r, &b); e != nil {
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.PreviewPublication(r.Context(), c, &rpc.PreviewRequest{Id: req.Id, DraftRevision: b.DraftRevision})
+				v, e := p.client.PreviewPublication(r.Context(), c, &rpc.PreviewRequest{Id: req.Id, DraftRevision: int64(b.DraftRevision)})
 				p.respond(w, 200, v, e, id)
 				return true
 			}
 		case "publications":
 			if r.Method == "POST" {
 				var b struct {
-					PreviewId      string `json:"previewId"`
-					DraftRevision  int64  `json:"draftRevision"`
-					OverwriteDrift bool   `json:"overwriteDrift"`
+					PreviewId      string  `json:"previewId"`
+					DraftRevision  httpI64 `json:"draftRevision"`
+					OverwriteDrift bool    `json:"overwriteDrift"`
 				}
 				if e := decode(r, &b); e != nil {
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.PublishConfiguration(r.Context(), c, &rpc.PublishRequest{Id: req.Id, PreviewId: b.PreviewId, DraftRevision: b.DraftRevision, OverwriteDrift: b.OverwriteDrift})
+				v, e := p.client.PublishConfiguration(r.Context(), c, &rpc.PublishRequest{Id: req.Id, PreviewId: b.PreviewId, DraftRevision: int64(b.DraftRevision), OverwriteDrift: b.OverwriteDrift})
 				p.respond(w, 202, v, e, id)
 				return true
 			}

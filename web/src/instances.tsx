@@ -1,3 +1,4 @@
+import type { Int64 } from "./api";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, APIError, type Account } from "./api";
 import type { Cluster } from "./clusters";
@@ -54,18 +55,18 @@ type Instance = {
   ownership: string;
   yaml?: string;
 };
-type Draft = { revision: number; ksm: KSM; yaml: string };
+type Draft = { revision: Int64; ksm: KSM; yaml: string };
 type Version = {
   versionId: string;
   instanceId: string;
-  sourceDraftRevision: number;
+  sourceDraftRevision: Int64;
   ksm: KSM;
   yaml: string;
   createdAt: string;
 };
 type Preview = {
   previewId: string;
-  draftRevision: number;
+  draftRevision: Int64;
   leftYAML: string;
   rightYAML: string;
   drift: boolean;

@@ -1,10 +1,11 @@
+import type { Int64 } from "./api";
 import { useEffect, useRef, useState } from "react";
 import { api, APIError } from "./api";
 
 // 通用生命周期界面只发送类型化意图；服务端以当前权限和修订决定能否执行。
-export type Operation = { operationId:string; action?:string; state:string; message:string; createdAt:string; versionId?:string; attemptId?:string; instanceId?:string; revision?:number; storageResult?:string };
+export type Operation = { operationId:string; action?:string; state:string; message:string; createdAt:string; versionId?:string; attemptId?:string; instanceId?:string; revision?: Int64; storageResult?:string };
 export type DeletionPreview={previewId:string;instanceId:string;versionId:string;uid:string;name:string;namespace:string;impactNamespaces:string[]};
-type Attempt = { attemptId:string; state:string; possiblySent:boolean; revision:number; sequence:number; actorId:string; message:string; createdAt:string };
+type Attempt = { attemptId:string; state:string; possiblySent:boolean; revision: Int64; sequence: Int64; actorId:string; message:string; createdAt:string };
 const names:Record<string,string> = {QUEUED:"已受理",CHECKING:"检查中",DISPATCHED:"可能已发送",SUCCEEDED:"已完成",FAILED:"失败",CANCELLED:"已取消",WAITING_CONFIRMATION:"等待明确继续",RESULT_UNCERTAIN:"结果待确认",IDENTITY_UNCERTAIN:"资源身份无法确认",DELETION_VERIFYING:"清理核验中",DELETION_BLOCKED:"清理受阻"};
 export function LifecycleActions({operation,onOperation}:{operation:Operation;onOperation:(value:Operation)=>Promise<void>|void}) {
  const [attempts,setAttempts]=useState<Attempt[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[deleteConfirm,setDeleteConfirm]=useState<{action:string;preview:DeletionPreview}|null>(null);

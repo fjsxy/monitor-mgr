@@ -93,3 +93,6 @@ e2e-agent-lifecycle-q: ## Agent存储生命周期Q层，公开HTTP/真实Kitex�
 
 workbench-seed-check: ## 工作台活动序号与旧库安全迁移检查，真实HTTP/Kitex/SQLite
 	$(GO) test ./internal/platform -count=1 -run 'Test(WorkbenchActivity|SharedSchema4|F04Encrypted)'
+
+workbench-i64-check: ## HTTP大i64精确往返与RPC保持协议检查
+	$(GO) test ./internal/platform -count=1 -run '^TestWorkbenchHTTPInt64RoundTrip$$'
