@@ -75,9 +75,14 @@ class ExporterTests(unittest.TestCase):
 
     def test_raw_db(self):
         path = self.run / 'evidence/approved.json'
-        with sqlite3.connect(path) as database:
-            database.execute('CREATE TABLE fixture(value TEXT)')
-            database.execute("INSERT INTO fixture VALUES ('synthetic')")
+        database = sqlite3.connect(path)
+        try:
+            with database:
+                database.execute('CREATE TABLE fixture(value TEXT)')
+                database.execute("INSERT INTO fixture VALUES ('synthetic')")
+        finally:
+            # 事务上下文只提交/回滚；连接须显式关闭，避免后续Host测试收到延迟泄漏警告。
+            database.close()
         self.add_evidence(path)
         result = self.invoke()
         self.assertNotEqual(result.returncode, 0, result.stdout)
