@@ -120,3 +120,14 @@
 | --- | --- | --- | --- | --- |
 | REG18-FIXED-008 | 首次发布在途保存的草稿不能绕过存储固定字段 | 以1Gi预览并受理首次发布，在实际派发/确认前另保存2Gi草稿；首次写入成功或可能已发后用新草稿预览/确认，并从旧预览/固定版本恢复派发。 | 预览、受理和派发均重新对照已确认或可能已发的冻结版本；原PVC容量不可被改写，目标实际PVC仍1Gi；本例复现容量链，统一fixed-field接缝继续供后续存储模式规则复用，单点SaveDraft校验不构成唯一防线。 | #18 |
 | REG18-HEADERS-009 | remoteWrite任意header值不进入平台读模型 | 外部及已纳管目标加入Authorization、X-API-Key及任意自定义header值，读取发现/运行/左右YAML/历史并检查DB/日志；仅修改header值后确认旧预览，最后明确覆盖。 | headers上下文全部值脱敏，HMAC按原配置识别变化；秘密不持久化或输出；Secret refs保持可读，更新不以脱敏覆盖目标metadata/status/finalizers。 | #18 |
+
+## Operator 参数解析边界补充回归
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG18-CAP-010.positional | Go flag首个非参数终止不能误扩大范围 | 实际Pod与模板均为 `--namespaces=other positional --namespaces=`，Agent在monitoring；原Podmetrics与当前SAR均可读，预览/发布。 | 明确unsupported；不继续解析positional后的伪范围，不写Agent，不将解析失败当作全范围。 | #18 |
+| REG18-CAP-010.terminator | 双横线终止不能误扩大范围 | 实际Pod与模板均为 `--namespaces=other -- --namespaces=`，Agent在monitoring，发起预览。 | 明确unsupported；不把终止后的参数作为实际范围，不写Agent。 | #18 |
+| REG18-CAP-010.duplicate-scope | 重复集合flag不得按last-wins丢失deny范围 | 实际Pod与模板均为 `--deny-namespaces=monitoring --deny-namespaces=other`，Agent在monitoring，发起预览。 | 明确unsupported；固定源码StringSet累加语义不能被普通map覆盖，不写Agent。 | #18 |
+| REG18-CAP-010.boolean-arity | Go布尔flag的空格值不能被当作值消费 | 实际Pod与模板均为 `--deny-namespaces=monitoring --kubelet-endpoints false --deny-namespaces=other`，Agent在monitoring；发起预览。 | 明确unsupported；false是Go flag停止点，不能继续采用后面的伪deny范围；不写Agent。 | #18 |
+| REG18-CAP-010.known-scope-space | 已知scope字符串的空格形式仍可核验 | 实际Pod和模板均用 `-namespaces monitoring -prometheus-instance-selector ''`，Agent在monitoring；固定controller与依赖可用后预览。 | 正常预览，保留已知字符串参数的单/双横线及空格形式，不把安全拒绝退化为拒绝所有有效参数。 | #18 |
+| REG18-CAP-010.env-expansion | Pod声明中的变量引用不能冒充进程实参 | 实际Pod和模板args为 `--deny-namespaces=$(BLOCKED_NS)`，容器env中BLOCKED_NS=monitoring；原Podcontroller/metrics正常，在monitoring预览。 | 明确unsupported；平台不猜测Kubelet展开后的scope，也不读取Secret env值来扩大能力，不写Agent。 | #18 |

@@ -84,8 +84,12 @@ func (t *Target) verifyOperatorRuntime(ctx context.Context, o *operatorAccess, r
 		}
 		name, uid := objectString(meta, "name"), objectString(meta, "uid")
 		container := operatorContainer(pod)
+		podArgs, parseErr := argumentMap(container["args"])
+		if parseErr != nil {
+			return parseErr
+		}
 		// 关键：同Deployment旧RS并不能代表当前template；滚动中不同scope/身份一律阻止，不能任选绿Pod。
-		if uid == "" || container == nil || expected == nil || objectString(objectMap(pod, "spec"), "serviceAccountName") != objectString(objectMap(template, "spec"), "serviceAccountName") || container["image"] != expected["image"] || canonical(argumentMap(container["args"])) != canonical(o.args) || len(anySlice(container["command"])) > 0 || !operatorFlagsSafe(argumentMap(container["args"])) {
+		if uid == "" || container == nil || expected == nil || objectString(objectMap(pod, "spec"), "serviceAccountName") != objectString(objectMap(template, "spec"), "serviceAccountName") || container["image"] != expected["image"] || canonical(podArgs) != canonical(o.args) || len(anySlice(container["command"])) > 0 || !operatorFlagsSafe(podArgs) {
 			return Error("CONFLICT", "Operator实际Pod的访问身份/目标/参数与当前配置无法一致确认")
 		}
 		containerID, ready := operatorContainerID(pod, objectString(container, "name"))

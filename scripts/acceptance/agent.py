@@ -30,7 +30,8 @@ REGCASES={
  'REG18-VALID-006':['TestAgentDurationRange'],
  'REG18-SOURCE-007':['TestAgentDraftSourceIsolation'],
  'REG18-FIXED-008':['TestAgentFixedCapacityRevalidated','TestAgentFixedCapacityPossiblySent'],
- 'REG18-HEADERS-009':['TestAgentHeadersReadProjection']}
+ 'REG18-HEADERS-009':['TestAgentHeadersReadProjection'],
+ **{'REG18-CAP-010.'+v:['TestAgentOperatorCapabilityBoundaries/'+v] for v in ['positional','terminator','duplicate-scope','boolean-arity','known-scope-space','env-expansion']}}
 
 def run_regressions(a):
  """补充回归单独计数：真实HTTP/Kitex/SQLite加受控目标，不冒充Operator真实启动故障。"""

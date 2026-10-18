@@ -129,29 +129,47 @@ type operatorAccess struct {
 	deployment                 map[string]any
 }
 
-func argumentMap(raw any) map[string]string {
+// argumentMap只解释无歧义字面参数；Go停止点、集合重复及Kubelet展开不能被当作全scope。
+func argumentMap(raw any) (map[string]string, error) {
 	m := map[string]string{}
-	values, _ := raw.([]any)
+	unsupported := func() (map[string]string, error) {
+		return nil, Error("CONFLICT", "Operator参数语法暂不支持，无法可靠确认实际范围；请使用无展开且无重复的明确参数")
+	}
+	values, ok := raw.([]any)
+	if raw != nil && !ok {
+		return unsupported()
+	}
+	stringsFlags := map[string]bool{"namespaces": true, "deny-namespaces": true, "prometheus-instance-namespaces": true, "prometheus-instance-selector": true, "controller-id": true}
+	boolFlags := map[string]bool{"kubelet-endpoints": true, "kubelet-endpointslice": true, "tls-insecure": true}
 	for n := 0; n < len(values); n++ {
-		v, _ := values[n].(string)
-		if !strings.HasPrefix(v, "-") || v == "-" {
-			continue
+		v, ok := values[n].(string)
+		if !ok || !strings.HasPrefix(v, "-") || strings.HasPrefix(v, "---") || v == "-" || v == "--" || strings.Contains(v, "$(") {
+			return unsupported()
 		}
 		p := strings.SplitN(strings.TrimLeft(v, "-"), "=", 2)
+		if p[0] == "" {
+			return unsupported()
+		}
+		if _, duplicate := m[p[0]]; duplicate && stringsFlags[p[0]] {
+			return unsupported()
+		}
 		if len(p) == 2 {
 			m[p[0]] = p[1]
-		} else if n+1 < len(values) {
-			m[p[0]] = "true"
-			next, _ := values[n+1].(string)
-			if !strings.HasPrefix(next, "-") {
-				m[p[0]] = next
-				n++
+		} else if stringsFlags[p[0]] && n+1 < len(values) {
+			next, ok := values[n+1].(string)
+			if !ok || strings.HasPrefix(next, "-") || strings.Contains(next, "$(") {
+				return unsupported()
 			}
-		} else {
+			m[p[0]] = next
+			n++
+		} else if boolFlags[p[0]] {
+			// Go bool flag不消费空格后的false/true；下一轮会明确拒绝该停止点。
 			m[p[0]] = "true"
+		} else {
+			return unsupported()
 		}
 	}
-	return m
+	return m, nil
 }
 func inCSV(list, value string) bool {
 	for _, v := range strings.Split(list, ",") {
@@ -191,7 +209,11 @@ func (t *Target) agentOperator(ctx context.Context, cfg *AgentConfig) (*operator
 			if version != "0.83.0" || (!strings.HasSuffix(image, ":v0.83.0") && !strings.Contains(image, "@sha256:")) {
 				continue
 			}
-			o := operatorAccess{namespace: objectString(meta, "namespace"), name: objectString(meta, "name"), uid: objectString(meta, "uid"), args: argumentMap(container["args"]), deployment: d}
+			args, e := argumentMap(container["args"])
+			if e != nil {
+				return nil, e
+			}
+			o := operatorAccess{namespace: objectString(meta, "namespace"), name: objectString(meta, "name"), uid: objectString(meta, "uid"), args: args, deployment: d}
 			o.user = "system:serviceaccount:" + o.namespace + ":" + objectString(pod, "serviceAccountName")
 			if !o.visible(cfg.Namespace, true) || o.args["controller-id"] != "" {
 				continue

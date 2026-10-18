@@ -18,7 +18,7 @@ func operatorPodDoc(name string, args []string) map[string]any {
 
 // CAP补充回归通过HTTP公开预览边界验证，缺启动能力、单-范围、override及旧RS均不能误放行。
 func TestAgentOperatorCapabilityBoundaries(t *testing.T) {
-	cases := []string{"missing-agent-controller", "missing-scrape-informer", "single-dash-namespace", "single-dash-selector", "identity-override", "old-rs-mismatch", "mixed-pod-scope", "none-without-scrape-api"}
+	cases := []string{"missing-agent-controller", "missing-scrape-informer", "single-dash-namespace", "single-dash-selector", "identity-override", "old-rs-mismatch", "mixed-pod-scope", "none-without-scrape-api", "positional", "terminator", "duplicate-scope", "boolean-arity", "known-scope-space", "env-expansion"}
 	for _, variant := range cases {
 		t.Run(variant, func(t *testing.T) {
 			f, target := agentTarget(t)
@@ -39,16 +39,42 @@ func TestAgentOperatorCapabilityBoundaries(t *testing.T) {
 			case "old-rs-mismatch":
 				args = []string{"--namespaces=monitoring"}
 			case "mixed-pod-scope":
+			case "positional":
+				args = []string{"--namespaces=other", "positional", "--namespaces="}
+				podArgs = args
+			case "terminator":
+				args = []string{"--namespaces=other", "--", "--namespaces="}
+				podArgs = args
+			case "duplicate-scope":
+				args = []string{"--deny-namespaces=monitoring", "--deny-namespaces=other"}
+				podArgs = args
+			case "boolean-arity":
+				args = []string{"--deny-namespaces=monitoring", "--kubelet-endpoints", "false", "--deny-namespaces=other"}
+				podArgs = args
+			case "known-scope-space":
+				args = []string{"-namespaces", "monitoring", "-prometheus-instance-selector", ""}
+				podArgs = args
+			case "env-expansion":
+				args = []string{"--deny-namespaces=$(BLOCKED_NS)"}
+				podArgs = args
 			}
 			var scrapeReads atomic.Int32
 			f.mu.Lock()
 			f.hook = func(w http.ResponseWriter, r *http.Request) bool {
 				switch {
 				case r.URL.Path == "/apis/apps/v1/deployments":
-					json.NewEncoder(w).Encode(operatorDoc(args))
+					document := operatorDoc(args)
+					if variant == "env-expansion" {
+						pod := document["items"].([]any)[0].(map[string]any)["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
+						pod["containers"].([]any)[0].(map[string]any)["env"] = []any{map[string]any{"name": "BLOCKED_NS", "value": "monitoring"}}
+					}
+					json.NewEncoder(w).Encode(document)
 					return true
 				case r.URL.Path == "/api/v1/namespaces/operators/pods":
 					items := []any{operatorPodDoc("operator-pod", podArgs)}
+					if variant == "env-expansion" {
+						items[0].(map[string]any)["spec"].(map[string]any)["containers"].([]any)[0].(map[string]any)["env"] = []any{map[string]any{"name": "BLOCKED_NS", "value": "monitoring"}}
+					}
 					if variant == "mixed-pod-scope" {
 						items = append(items, operatorPodDoc("operator-pod-old", []string{"--namespaces=other"}))
 					}
@@ -90,10 +116,15 @@ func TestAgentOperatorCapabilityBoundaries(t *testing.T) {
 			}
 			i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": config}, c, "create", 201)
 			want := 409
-			if variant == "none-without-scrape-api" {
+			if variant == "none-without-scrape-api" || variant == "known-scope-space" {
 				want = 200
 			}
-			clusterCall(t, p, "POST", "/instances/"+i["id"].(string)+"/previews", map[string]any{"draftRevision": 1}, c, "preview", want)
+			result := clusterCall(t, p, "POST", "/instances/"+i["id"].(string)+"/previews", map[string]any{"draftRevision": 1}, c, "preview", want)
+			if variant == "positional" || variant == "terminator" || variant == "duplicate-scope" || variant == "boolean-arity" || variant == "env-expansion" {
+				if !strings.Contains(result["message"].(string), "暂不支持") {
+					t.Fatal("参数解析失败没有明确unsupported结果")
+				}
+			}
 			if variant == "none-without-scrape-api" && scrapeReads.Load() != 0 {
 				t.Fatal("None仍读取未关联SC API")
 			}

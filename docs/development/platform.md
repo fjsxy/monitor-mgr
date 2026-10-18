@@ -74,6 +74,6 @@ HTTP/真实 RPC 集成测试覆盖 I01、I02 默认/配置寿命/安全 Cookie�
 
 四类采集关联分别保存对象 None/All/Labels 和 namespace Own/All/Labels。None/Own 对应省略，All 对应 `{}`；缺失和空对象不能合并。POST `/instances/{id}/association-previews` 绑定 `draftRevision`，只计算草稿匹配；运行来源来自实际 CR，并按 `PVC`、`association:ServiceMonitor`、`association:PodMonitor`、`association:Probe`、`association:ScrapeConfig` 独立保存 UID、成功/尝试时间和失败历史。匹配数、Pod Ready 和 CR 写入都不证明远端已收到样本。
 
-remoteWrite 仅开放 URL、name、remoteTimeout、BasicAuth/Bearer 与 TLS 的 Secret name/key 引用，不回显或持久化 Secret 值。平台身份需能核验目标身份、相关 CR/依赖、SAR，以及读取固定 Operator Deployment/ReplicaSet/Pod 和 `pods/proxy` metrics；Operator 的实际 Pod 身份、范围及 Agent controller 启动证据单独核对。非 None ScrapeConfig 还需同一 Pod 的 informer 请求证据。采集 SA 的实际发现权限独立检查；平台不自动创建或修补 SA、Secret、RBAC、StorageClass。
+remoteWrite 仅开放 URL、name、remoteTimeout、BasicAuth/Bearer 与 TLS 的 Secret name/key 引用，不回显或持久化 Secret 值。平台身份需能核验目标身份、相关 CR/依赖、SAR，以及读取固定 Operator Deployment/ReplicaSet/Pod 和 `pods/proxy` metrics；Operator 的实际 Pod 身份、范围及 Agent controller 启动证据单独核对。非 None ScrapeConfig 还需同一 Pod 的 informer 请求证据。Operator 参数只解释明确字面形式及已知 scope 字符串，位置参数、重复 scope、未知参数 arity 和未展开的 `$(VAR)` 会明确受阻。采集 SA 的实际发现权限独立检查；平台不自动创建或修补 SA、Secret、RBAC、StorageClass。
 
 重复验收入口为 `make agent-q-receipt`、`make e2e-agent`、`make e2e-agent-b` 和 `make agent-regressions`。后者独立记录补充安全回归，不增加69个 owned 子例；真实 K/B 要求 `E2E_ARGS` 显式提供 kubectl、两份目标 kubeconfig、两个 context、Pod 可达配置、镜像、源码、输出和跨票 API 锁。每例创建独立平台 Pod/数据库及目标 fixture，整批持锁至 finally 完成；CI profile 不能由宿主 LOCAL_FULL 冒充。
