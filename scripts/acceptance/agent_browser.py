@@ -30,13 +30,15 @@ def run_browser(s,case):
  visit(data.get('suites',[]));assert len(tests)==1 and tests[0]['status']=='expected' and tests[0]['results'][-1]['status']=='passed' and result.returncode==0,'真实浏览器未通过，见脱敏browser报告'
  artifacts=out/'evidence';artifacts.mkdir(exist_ok=True)
  for attachment in tests[0]['results'][-1].get('attachments',[]):
-  if attachment.get('name') not in ['browser-console.json','browser-layout.json']:continue
+  if attachment.get('name') not in ['browser-console.json','browser-layout.json','account-pattern-login.json','account-pattern-create.json']:continue
   if attachment.get('body'):content=base64.b64decode(attachment['body']).decode()
   else:content=pathlib.Path(attachment['path']).read_text()
   for value in values:
    if value in content:content=content.replace(value,'[敏感内容已隐藏]');leaked=True
   (artifacts/attachment['name']).write_text(content)
  assert (artifacts/'browser-console.json').exists() and (artifacts/'browser-layout.json').exists(),'缺少浏览器console/layout实际证据'
+ if case=='U02.primary':
+  assert all((artifacts/f'account-pattern-{name}.json').exists() for name in ['login','create']),'缺少PATTERN011实际input证据'
  assert not leaked,'浏览器输出出现敏感值，已脱敏但门禁失败'
  # 独占fixture可能同时创建KSM；namespace清理前保存其原UID并显式清理cluster-scoped CR。
  ksms=s.get('kubestatemetrics')['items']
@@ -44,4 +46,4 @@ def run_browser(s,case):
   if cr['spec'].get('targetNamespace')==s.targetns:
    s.ksms.append((s.target,cr['metadata']['name'],cr['metadata']['uid']))
  refs=[{'path':str(p.relative_to(s.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(out.rglob('*')) if p.is_file()]
- return {'selector':case,'browserAnnotations':tests[0].get('annotations',[]),'report':str(report.relative_to(s.out)),'command':command,'exitCode':result.returncode,'trace':'off','evidenceRefs':refs,'platformPodUID':s.initial_uid}
+ return {'selector':case,'supplementalVariants':['REG18-PATTERN-011'] if case=='U02.primary' else [],'browserAnnotations':tests[0].get('annotations',[]),'report':str(report.relative_to(s.out)),'command':command,'exitCode':result.returncode,'trace':'off','evidenceRefs':refs,'platformPodUID':s.initial_uid}

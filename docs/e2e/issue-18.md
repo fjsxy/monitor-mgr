@@ -131,3 +131,11 @@
 | REG18-CAP-010.boolean-arity | Go布尔flag的空格值不能被当作值消费 | 实际Pod与模板均为 `--deny-namespaces=monitoring --kubelet-endpoints false --deny-namespaces=other`，Agent在monitoring；发起预览。 | 明确unsupported；false是Go flag停止点，不能继续采用后面的伪deny范围；不写Agent。 | #18 |
 | REG18-CAP-010.known-scope-space | 已知scope字符串的空格形式仍可核验 | 实际Pod和模板均用 `-namespaces monitoring -prometheus-instance-selector ''`，Agent在monitoring；固定controller与依赖可用后预览。 | 正常预览，保留已知字符串参数的单/双横线及空格形式，不把安全拒绝退化为拒绝所有有效参数。 | #18 |
 | REG18-CAP-010.env-expansion | Pod声明中的变量引用不能冒充进程实参 | 实际Pod和模板args为 `--deny-namespaces=$(BLOCKED_NS)`，容器env中BLOCKED_NS=monitoring；原Podcontroller/metrics正常，在monitoring预览。 | 明确unsupported；平台不猜测Kubelet展开后的scope，也不读取Secret env值来扩大能力，不写Agent。 | #18 |
+
+## 浏览器账号规则补充回归
+
+此条为真实浏览器B补充，可嵌入U02独立记录；固定69个owned责任子例及20个Go补充回归保持原计数。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG18-PATTERN-011 | 初始化、登录与新账号的账号规则在Chromium实际生效 | 在U02真实Chromium中读取初始化/登录和新账号input.pattern，以JavaScript `v` flag实际编译；逐项填写含点、横线、下划线的合法账号及中文、空格、斜线等非法账号，检查patternMismatch并记录console。 | 两处共用明确安全写法；合法账号无patternMismatch，非法字符被拒绝；console无非法正则语法错误，独立输出此B补充证据，不把它计为额外Go回归或owned子例。 | #18 |

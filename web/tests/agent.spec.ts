@@ -67,8 +67,28 @@ test.afterEach(async ({ page }, info) => {
   await info.attach("browser-layout.json", { body: Buffer.from(JSON.stringify(layout)), contentType: "application/json" });
   info.annotations.push({ type: "pageErrorCount", description: String(value.pageErrors.length) }, { type: "observedHTTPErrorCount", description: String(value.httpErrors.length) });
   expect(value.pageErrors, "浏览器无未处理脚本错误").toEqual([]);
+  expect(value.console.filter(item => /(?:pattern.*(?:invalid|SyntaxError)|Invalid regular expression)/i.test(JSON.stringify(item))), "浏览器无非法pattern正则错误").toEqual([]);
   if (layout) expect(layout.scrollWidth, "页面无全局水平溢出").toBeLessThanOrEqual(layout.viewport);
 });
+
+// PATTERN011嵌入U02：读取实际页面属性，在同一Chromium中验证v语法及HTML约束。
+async function accountPattern(page: Page, label: string, name: string, info: TestInfo) {
+  const result = await page.getByLabel(label, { exact: true }).evaluate((input: HTMLInputElement) => {
+    const pattern = input.pattern, original = input.value;
+    let compilationError = "";
+    try { new RegExp(`^(?:${pattern})$`, "v"); }
+    catch (error) { compilationError = String(error); }
+    const inputs = [
+      ...["a", "user.name", "user-name", "user_name", "aA09._-"].map(value => ({ value, valid: true })),
+      ...["中文", "a b", "a/b", "-name", "a".repeat(64)].map(value => ({ value, valid: false })),
+    ].map(item => { input.value = item.value; return { ...item, patternMismatch: input.validity.patternMismatch }; });
+    input.value = original;
+    return { pattern, compilationError, inputs };
+  });
+  await info.attach(`account-pattern-${name}.json`, { body: Buffer.from(JSON.stringify(result, null, 2)), contentType: "application/json" });
+  expect(result.compilationError, "实际input.pattern可按v语法编译").toBe("");
+  for (const input of result.inputs) expect(input.patternMismatch, `账号${input.value}有效性`).toBe(!input.valid);
+}
 
 // 每例独立前置；凭据只从私有 fixture 读取，所有真实浏览器/namespace 准备须由调用方持有全局 fcntl lane。
 async function prepare(page: Page, baseURL: string, info: TestInfo) {
@@ -99,12 +119,22 @@ async function prepare(page: Page, baseURL: string, info: TestInfo) {
       ).status(),
     ).toBe(201);
   await page.goto("/");
+  const patternRegression = info.title.startsWith("U02.primary ");
+  if (patternRegression) {
+    info.annotations.push({ type: "supplementalVariantId", description: "REG18-PATTERN-011" });
+    await accountPattern(page, "账号", "login", info);
+  }
   await page.getByLabel("账号", { exact: true }).fill(username);
   await page.getByLabel("密码", { exact: true }).fill(password);
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "账号管理", exact: true }),
   ).toBeVisible();
+  if (patternRegression) {
+    await page.getByRole("button", { name: "创建账号", exact: true }).click();
+    await accountPattern(page, "新账号", "create", info);
+    await page.getByRole("button", { name: "取消", exact: true }).click();
+  }
   if (!fixture!.clusterId) {
     const session = await (await page.request.get("/api/v1/session")).json(),
       kubeconfig = readFileSync(fixture!.kubeconfigPath, "utf8"),
@@ -489,7 +519,7 @@ test("U06.primary 两类 CR 左右 YAML、发布导航与冻结配置保留编�
         agentCRDDefaults(next.spec),
       );
     else expect(actual.spec).toEqual(next.spec);
-    await drawer.getByRole("tab", { name: "下发历史", exact: true }).click();
+    await drawer.getByRole("tab", { name: component === "agent" ? "下发历史" : "变更历史", exact: true }).click();
     await expect(drawer.getByText(/执行尝试/).first()).toBeVisible();
     await expect(
       drawer.getByText(new RegExp(operation.operationId)),
@@ -666,6 +696,7 @@ test("REG18-SOURCE-007 草稿关联预览与已部署运行来源隔离", async 
     await expect(cpu).toBeFocused();
     await expect(region).toContainText(monitorB);
     await expect(region).not.toContainText(monitorA);
+    await region.scrollIntoViewIfNeeded();
     await page.screenshot({
       path: info.outputPath("REG18-SOURCE-007-draft-b-expired.png"),
     });
@@ -676,6 +707,7 @@ test("REG18-SOURCE-007 草稿关联预览与已部署运行来源隔离", async 
     await drawer.getByRole("tab", { name: "运行信息", exact: true }).click();
     await expect(region).toContainText(monitorA);
     await expect(region).not.toContainText(monitorB);
+    await region.scrollIntoViewIfNeeded();
     await page.screenshot({
       path: info.outputPath("REG18-SOURCE-007-runtime-a.png"),
     });
