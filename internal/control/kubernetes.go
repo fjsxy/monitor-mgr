@@ -268,6 +268,14 @@ func (t *Target) request(ctx context.Context, method, path string, body any, out
 	if out == nil {
 		return nil
 	}
+	if text, ok := out.(*targetText); ok {
+		raw, e := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+		if e != nil {
+			return Error("TARGET_ERROR", "目标文本响应读取失败")
+		}
+		*text = targetText(raw)
+		return nil
+	}
 	if json.NewDecoder(io.LimitReader(res.Body, 8<<20)).Decode(out) != nil {
 		return Error("TARGET_ERROR", "目标 API 响应无效")
 	}
@@ -417,3 +425,6 @@ func (s *Store) ListKubeconfigContexts(ctx context.Context, c *rpc.RequestContex
 	}
 	return &rpc.ContextsResult_{Contexts: names}, nil
 }
+
+// targetText仅用于受控只读运行指标，不用于凭据或目标CR持久化。
+type targetText string

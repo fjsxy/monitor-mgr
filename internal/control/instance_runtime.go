@@ -96,6 +96,7 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	cr, e := t.readComponent(ctx, i)
+	projected := safeTargetDocument(cr)
 	var out *rpc.InstanceRuntime
 	if e != nil {
 		out = &rpc.InstanceRuntime{Summary: "Unknown", ObservedAt: now, Error: "CR 读取失败，当前未知"}
@@ -104,12 +105,16 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 	} else if i.Uid == "" || objectString(objectMap(cr, "metadata"), "uid") != i.Uid {
 		out = &rpc.InstanceRuntime{Summary: "Unknown", ObservedAt: now, Error: "资源身份无法确认"}
 	} else {
-		out = componentFor(i.Component).interpret(cr, now)
+		// 关键：Agent/KSM摘要只从同一安全副本派生，status.reason不能越过YAML投影进入运行缓存。
+		out = componentFor(i.Component).interpret(projected, now)
 	}
 	raw, _ := json.Marshal(savedObservation{Epoch: s.observationEpoch, Runtime: out})
-	obj, _ := json.Marshal(safeTargetDocument(cr))
+	obj, _ := json.Marshal(projected)
 	if _, saveErr := s.DB.ExecContext(ctx, `INSERT INTO instance_observations VALUES(?,?,?,?) ON CONFLICT(instance_id) DO UPDATE SET runtime=excluded.runtime,cr=excluded.cr,observed_at=excluded.observed_at`, id, raw, obj, now); saveErr != nil {
 		return nil, Error("UNAVAILABLE", "观测保存失败")
+	}
+	if i.Component == AgentComponent && e == nil && cr != nil && i.Uid != "" && objectString(objectMap(cr, "metadata"), "uid") == i.Uid {
+		s.refreshAgentAuxiliary(ctx, i, t, cr)
 	}
 	return out, nil
 }

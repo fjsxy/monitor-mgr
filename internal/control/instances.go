@@ -15,6 +15,14 @@ func scanInstance(row interface{ Scan(...any) error }) (*rpc.ObservationInstance
 	i := new(rpc.ObservationInstance)
 	e := row.Scan(&i.Id, &i.ClusterId, &i.Component, &i.Name, &i.TargetNamespace, &i.Uid, &i.Lifecycle, &i.CurrentVersionId, &i.ActivityAt)
 	i.Type = "exporter"
+	scope, ns := "Cluster", ""
+	if i.Component == AgentComponent {
+		i.Type = "collector"
+		scope = "Namespaced"
+		ns = i.TargetNamespace
+	}
+	i.Scope = &scope
+	i.CrNamespace = &ns
 	i.Ownership = "managed"
 	return i, e
 }
@@ -104,15 +112,12 @@ func (s *Store) CreateInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	if hit {
 		return &replay, nil
 	}
-	if r.Component != "kube-state-metrics" {
-		return nil, fieldError("component", "不支持的组件")
-	}
-	cfg, e := decodeKSM(r.Ksm)
+	cfg, e := decodeRequestConfiguration(r.Component, r.Ksm, r.Agent)
 	if e != nil {
 		return nil, e
 	}
 	var n int
-	if tx.QueryRowContext(ctx, `SELECT count(*) FROM instances WHERE cluster_id=? AND component=? AND name=?`, cl.Id, r.Component, cfg.Name).Scan(&n) != nil {
+	if tx.QueryRowContext(ctx, `SELECT count(*) FROM instances WHERE cluster_id=? AND component=? AND cr_namespace=? AND name=?`, cl.Id, r.Component, cfg.identity().Namespace, cfg.identity().Name).Scan(&n) != nil {
 		return nil, Error("UNAVAILABLE", "身份不可读")
 	}
 	if n > 0 {
@@ -120,7 +125,7 @@ func (s *Store) CreateInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	}
 	id, now := ID(), s.Now().UTC().Format(time.RFC3339Nano)
 	raw, _ := json.Marshal(cfg)
-	if _, e = tx.ExecContext(ctx, `INSERT INTO instances(id,cluster_id,component,name,target_namespace,activity_at) VALUES(?,?,?,?,?,?)`, id, cl.Id, r.Component, cfg.Name, cfg.TargetNamespace, now); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO instances(id,cluster_id,component,name,target_namespace,activity_at,cr_namespace) VALUES(?,?,?,?,?,?,?)`, id, cl.Id, r.Component, cfg.identity().Name, cfg.identity().DeploymentNamespace, now, cfg.identity().Namespace); e != nil {
 		return nil, Error("CONFLICT", "实例身份冲突")
 	}
 	if _, e = tx.ExecContext(ctx, `INSERT INTO drafts VALUES(?,1,?)`, id, raw); e != nil {
@@ -145,6 +150,9 @@ func (s *Store) GetInstance(ctx context.Context, c *rpc.RequestContext, r *rpc.I
 	}
 	if !i.ReadOnly {
 		i.Runtime, e = s.GetRuntime(ctx, c, r)
+		if i.Component == AgentComponent {
+			i.Sources = s.agentSources(ctx, i)
+		}
 	}
 	return i, e
 }
@@ -176,6 +184,9 @@ func (s *Store) ListInstances(ctx context.Context, c *rpc.RequestContext, r *rpc
 			return nil, e
 		}
 		i.Runtime = runtime
+		if i.Component == AgentComponent {
+			i.Sources = s.agentSources(ctx, i)
+		}
 	}
 	cl, e := s.GetCluster(ctx, c, r)
 	if e != nil {
@@ -235,7 +246,7 @@ func (s *Store) SaveDraft(ctx context.Context, c *rpc.RequestContext, r *rpc.Sav
 	if hit {
 		return &replay, nil
 	}
-	cfg, e := decodeKSM(r.Ksm)
+	cfg, e := decodeRequestConfiguration(i.Component, r.Ksm, r.Agent)
 	if e != nil {
 		return nil, e
 	}
@@ -254,15 +265,18 @@ func (s *Store) SaveDraft(ctx context.Context, c *rpc.RequestContext, r *rpc.Sav
 		return nil, Error("UNAVAILABLE", "保护无法读取")
 	}
 	// 关键：已创建或结果不明时固定身份，不能通过保存草稿把后续写入转向另一CR。
-	if (i.Uid != "" || protected > 0) && (cfg.Name != i.Name || cfg.TargetNamespace != i.TargetNamespace) {
+	if (i.Uid != "" || protected > 0) && (cfg.identity().Name != i.Name || cfg.identity().DeploymentNamespace != i.TargetNamespace) {
 		return nil, Error("CONFLICT", "下发中或创建后 name/targetNamespace 固定，请新建实例")
+	}
+	if e = validateFixedSpec(ctx, tx, i, cfg.spec()); e != nil {
+		return nil, e
 	}
 	raw, _ := json.Marshal(cfg)
 	if _, e = tx.ExecContext(ctx, `UPDATE drafts SET config=?,revision=revision+1 WHERE instance_id=? AND revision=?`, raw, r.Id, rev); e != nil {
 		return nil, Error("UNAVAILABLE", "保存失败")
 	}
 	if i.Uid == "" && protected == 0 {
-		if _, e = tx.ExecContext(ctx, `UPDATE instances SET name=?,target_namespace=? WHERE id=?`, cfg.Name, cfg.TargetNamespace, r.Id); e != nil {
+		if _, e = tx.ExecContext(ctx, `UPDATE instances SET name=?,target_namespace=?,cr_namespace=? WHERE id=?`, cfg.identity().Name, cfg.identity().DeploymentNamespace, cfg.identity().Namespace, r.Id); e != nil {
 			return nil, Error("CONFLICT", "CR 身份重复")
 		}
 	}
@@ -283,7 +297,12 @@ func (s *Store) CopyTemplate(ctx context.Context, c *rpc.RequestContext, r *rpc.
 	if e != nil {
 		return nil, e
 	}
-	d.Ksm.Name = ""
+	if d.Ksm != nil {
+		d.Ksm.Name = ""
+	}
+	if d.Agent != nil {
+		d.Agent.Name = ""
+	}
 	d.Revision = 0
 	d.Yaml = ""
 	return d, nil

@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
-	"net/url"
 	"sort"
 )
 
@@ -18,27 +17,12 @@ func (s *Store) discoverKSM(ctx context.Context, c *rpc.RequestContext, cluster 
 	}
 	defer t.Close()
 	objects := []map[string]any{}
-	continuation := ""
-	seen := map[string]bool{}
-	for {
-		var list struct {
-			Metadata struct {
-				Continue string `json:"continue"`
-			} `json:"metadata"`
-			Items []map[string]any `json:"items"`
-		}
-		if e = t.Request(ctx, "GET", ksmPath+"?limit=500&continue="+url.QueryEscape(continuation), nil, &list); e != nil {
+	for _, component := range []string{KSMComponent, AgentComponent} {
+		items, e := t.listObjects(ctx, componentFor(component).collectionPath(""))
+		if e != nil {
 			return nil, e
 		}
-		objects = append(objects, list.Items...)
-		if list.Metadata.Continue == "" {
-			break
-		}
-		if seen[list.Metadata.Continue] {
-			return nil, Error("TARGET_ERROR", "KSM 分页未前进，发现结果不完整")
-		}
-		seen[list.Metadata.Continue] = true
-		continuation = list.Metadata.Continue
+		objects = append(objects, items...)
 	}
 	byUID := map[string]bool{}
 	for _, i := range managed {
@@ -59,8 +43,17 @@ func (s *Store) discoverKSM(ctx context.Context, c *rpc.RequestContext, cluster 
 		}
 		h := sha256.Sum256([]byte(cluster + ":" + uid))
 		id := "external-" + hex.EncodeToString(h[:])
-		text := yamlText(safeTargetDocument(cr))
-		i := &rpc.ObservationInstance{Id: id, ClusterId: cluster, Component: "kube-state-metrics", Type: "exporter", ReadOnly: true, Ownership: "unmanaged", Name: name, TargetNamespace: objectString(objectMap(cr, "spec"), "targetNamespace"), Uid: uid, Lifecycle: "DISCOVERED", Runtime: interpretKSM(cr, now), Yaml: &text}
+		projected := safeTargetDocument(cr)
+		text := yamlText(projected)
+		component, typ, namespace, scope, crNamespace := KSMComponent, "exporter", objectString(objectMap(cr, "spec"), "targetNamespace"), "Cluster", ""
+		if objectString(cr, "kind") == "PrometheusAgent" {
+			component, typ, namespace, scope, crNamespace = AgentComponent, "collector", objectString(meta, "namespace"), "Namespaced", objectString(meta, "namespace")
+			if namespace == "" {
+				return nil, Error("TARGET_ERROR", "Agent namespace身份缺失")
+			}
+		}
+		// 关键：运行错误也来自目标status，必须和YAML共用安全来源，不能从原reason旁路泄漏认证URL。
+		i := &rpc.ObservationInstance{Id: id, ClusterId: cluster, Component: component, Type: typ, ReadOnly: true, Ownership: "unmanaged", Name: name, TargetNamespace: namespace, CrNamespace: &crNamespace, Scope: &scope, Uid: uid, Lifecycle: "DISCOVERED", Runtime: componentFor(component).interpret(projected, now), Yaml: &text}
 		out = append(out, i)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

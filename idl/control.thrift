@@ -69,22 +69,39 @@ struct KSMConfiguration {
  9: required bool advancedResources, 10: optional i32 shards,
  11: optional RoleResources nodeResources, 12: optional RoleResources clusterResources, 13: optional RoleResources unscheduledResources
 }
+// Agent配置仅表达平台支持字段；所有认证仅引用同namespace的既有Secret。
+struct LabelExpression { 1: required string key, 2: required string operator, 3: optional list<string> values }
+struct LabelSelector { 1: optional map<string,string> matchLabels, 2: optional list<LabelExpression> matchExpressions }
+struct SelectorRule { 1: required string mode, 2: optional LabelSelector selector }
+struct AssociationRule { 1: required SelectorRule object, 2: required SelectorRule namespace }
+struct AgentAssociations { 1: required AssociationRule serviceMonitor, 2: required AssociationRule podMonitor, 3: required AssociationRule probe, 4: required AssociationRule scrapeConfig }
+struct SecretKeyReference { 1: required string name, 2: required string key }
+struct RemoteWriteAuth { 1: required string mode, 2: optional SecretKeyReference username, 3: optional SecretKeyReference password, 4: optional SecretKeyReference credentials }
+struct AgentTLS { 1: optional SecretKeyReference ca, 2: optional SecretKeyReference cert, 3: optional SecretKeyReference key, 4: optional string serverName }
+struct RemoteWriteEndpoint { 1: required string url, 2: optional string name, 3: optional string remoteTimeout, 4: required RemoteWriteAuth auth, 5: optional AgentTLS tls }
+struct AgentStorage { 1: required string mode, 2: optional string capacity, 3: required string whenScaled, 4: required string whenDeleted }
+struct AgentConfiguration { 1: required string name, 2: required string namespace, 3: required string desiredState, 4: required i32 shards, 5: required ContainerResources resources, 6: required AgentStorage storage, 7: required string serviceAccountName, 8: required AgentAssociations associations, 9: required list<RemoteWriteEndpoint> remoteWrite }
+struct MatchedResource { 1: required string kind, 2: required string namespace, 3: required string name, 4: required string uid }
+struct VolumeObservation { 1: required string namespace, 2: required string name, 3: required string uid, 4: required string phase, 5: required string requestedStorage, 6: required list<string> accessModes, 7: required string storageClass, 8: required list<string> mountedByPods }
+struct SourceObservation { 1: required string source, 2: required string lastAttemptAt, 3: required string lastSuccessAt, 4: required string error, 5: required bool historical, 6: optional list<MatchedResource> matches, 7: optional list<VolumeObservation> volumes }
+struct AssociationPreviewRequest { 1: required string id, 2: required i64 draftRevision }
+struct AssociationPreview { 1: required i64 draftRevision, 2: required list<SourceObservation> sources }
 struct InstanceID { 1: required string id }
-struct CreateInstanceRequest { 1: required string clusterId, 2: required string component, 3: optional KSMConfiguration ksm }
-struct SaveDraftRequest { 1: required string id, 2: required i64 expectedDraftRevision, 3: optional KSMConfiguration ksm }
-struct ConfigurationDraft { 1: required i64 revision, 2: optional KSMConfiguration ksm, 3: required string yaml }
-struct InstanceRuntime { 1: required string summary, 2: required string desiredState, 3: required string deploymentMode, 4: optional i32 availablePods, 5: optional i32 desiredPods, 6: required string lastSuccessAt, 7: required string error, 8: required string observedAt }
+struct CreateInstanceRequest { 1: required string clusterId, 2: required string component, 3: optional KSMConfiguration ksm, 4: optional AgentConfiguration agent }
+struct SaveDraftRequest { 1: required string id, 2: required i64 expectedDraftRevision, 3: optional KSMConfiguration ksm, 4: optional AgentConfiguration agent }
+struct ConfigurationDraft { 1: required i64 revision, 2: optional KSMConfiguration ksm, 3: required string yaml, 4: optional AgentConfiguration agent }
+struct InstanceRuntime { 1: required string summary, 2: required string desiredState, 3: required string deploymentMode, 4: optional i32 availablePods, 5: optional i32 desiredPods, 6: required string lastSuccessAt, 7: required string error, 8: required string observedAt, 9: optional i32 shards, 10: optional bool paused }
 struct ObservationInstance {
  1: required string id, 2: required string clusterId, 3: required string name, 4: required string targetNamespace,
  5: required string component, 6: required string type, 7: required bool readOnly, 8: required string uid,
  9: required string lifecycle, 10: required string currentVersionId, 11: required string activityAt, 12: optional InstanceRuntime runtime,
- 13: required string ownership, 14: optional string yaml
+ 13: required string ownership, 14: optional string yaml, 15: optional string crNamespace, 16: optional string scope, 17: optional list<SourceObservation> sources
 }
 struct InstancesResult { 1: required list<ObservationInstance> instances }
 struct PreviewRequest { 1: required string id, 2: required i64 draftRevision }
 struct PublicationPreview { 1: required string previewId, 2: required i64 draftRevision, 3: required string leftYAML, 4: required string rightYAML, 5: required bool drift, 6: required list<string> warnings }
 struct PublishRequest { 1: required string id, 2: required string previewId, 3: required i64 draftRevision, 4: required bool overwriteDrift }
-struct PublicationVersion { 1: required string versionId, 2: required string instanceId, 3: required i64 sourceDraftRevision, 4: optional KSMConfiguration ksm, 5: required string yaml, 6: required string createdAt }
+struct PublicationVersion { 1: required string versionId, 2: required string instanceId, 3: required i64 sourceDraftRevision, 4: optional KSMConfiguration ksm, 5: required string yaml, 6: required string createdAt, 7: optional AgentConfiguration agent }
 struct VersionsResult { 1: required list<PublicationVersion> versions }
 struct VersionRequest { 1: required string id, 2: required string versionId }
 struct OperationLookup { 1: required string instanceId, 2: required string idempotencyKey }
@@ -97,6 +114,7 @@ struct DeletionPreviewRequest { 1: required string id, 2: optional string operat
 struct DeletionPreview { 1: required string previewId, 2: required string instanceId, 3: required string versionId, 4: required string uid, 5: required string name, 6: required string namespace, 7: required list<string> impactNamespaces }
 struct AttemptsResult { 1: required list<ExecutionAttempt> attempts }
 service ControlService {
+ AssociationPreview PreviewAssociations(1: RequestContext ctx, 2: AssociationPreviewRequest request) throws (1: APIError error)
  DeletionPreview PreviewDeletion(1: RequestContext ctx, 2: DeletionPreviewRequest request) throws (1: APIError error)
  Operation RetryLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)
  Operation CancelLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)

@@ -19,14 +19,15 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 			return true
 		case "POST":
 			var b struct {
-				Component string                `json:"component"`
-				Ksm       *rpc.KSMConfiguration `json:"ksm"`
+				Component string                  `json:"component"`
+				Ksm       *rpc.KSMConfiguration   `json:"ksm"`
+				Agent     *rpc.AgentConfiguration `json:"agent"`
 			}
 			if e := decode(r, &b); e != nil {
 				p.writeError(w, e, id)
 				return true
 			}
-			v, e := p.client.CreateInstance(r.Context(), c, &rpc.CreateInstanceRequest{ClusterId: parts[1], Component: b.Component, Ksm: b.Ksm})
+			v, e := p.client.CreateInstance(r.Context(), c, &rpc.CreateInstanceRequest{ClusterId: parts[1], Component: b.Component, Ksm: b.Ksm, Agent: b.Agent})
 			p.respond(w, 201, v, e, id)
 			return true
 		}
@@ -126,14 +127,15 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 				return true
 			case "PUT":
 				var b struct {
-					ExpectedDraftRevision int64                 `json:"expectedDraftRevision"`
-					Ksm                   *rpc.KSMConfiguration `json:"ksm"`
+					ExpectedDraftRevision int64                   `json:"expectedDraftRevision"`
+					Ksm                   *rpc.KSMConfiguration   `json:"ksm"`
+					Agent                 *rpc.AgentConfiguration `json:"agent"`
 				}
 				if e := decode(r, &b); e != nil {
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.SaveDraft(r.Context(), c, &rpc.SaveDraftRequest{Id: req.Id, ExpectedDraftRevision: b.ExpectedDraftRevision, Ksm: b.Ksm})
+				v, e := p.client.SaveDraft(r.Context(), c, &rpc.SaveDraftRequest{Id: req.Id, ExpectedDraftRevision: b.ExpectedDraftRevision, Ksm: b.Ksm, Agent: b.Agent})
 				p.respond(w, 200, v, e, id)
 				return true
 			}
@@ -146,6 +148,19 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 		case "editing-activity":
 			if r.Method == "POST" {
 				v, e := p.client.RecordEditingActivity(r.Context(), c, req)
+				p.respond(w, 200, v, e, id)
+				return true
+			}
+		case "association-previews":
+			if r.Method == "POST" {
+				var body struct {
+					DraftRevision int64 `json:"draftRevision"`
+				}
+				if e := decode(r, &body); e != nil {
+					p.writeError(w, e, id)
+					return true
+				}
+				v, e := p.client.PreviewAssociations(r.Context(), c, &rpc.AssociationPreviewRequest{Id: req.Id, DraftRevision: body.DraftRevision})
 				p.respond(w, 200, v, e, id)
 				return true
 			}

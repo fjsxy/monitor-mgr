@@ -46,6 +46,16 @@ func checkTarget(i *rpc.ObservationInstance, cr map[string]any) error {
 	return nil
 }
 func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, value configuration, create bool, frozenSpec ...map[string]any) error {
+	if cfg, ok := value.(*AgentConfig); ok {
+		if len(frozenSpec) > 0 {
+			var e error
+			cfg, e = agentDependenciesFromSpec(cfg, frozenSpec[0])
+			if e != nil {
+				return e
+			}
+		}
+		return t.agentDependencies(ctx, cl, cfg, create)
+	}
 	cfg, ok := value.(*KSMConfig)
 	if !ok {
 		return Error("INVALID_INPUT", "组件依赖暂不支持")
@@ -128,6 +138,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if rev != r.DraftRevision {
 		return nil, Error("CONFLICT", "草稿修订已变化")
 	}
+	if e = validateFixedSpec(ctx, s.DB, i, cfg.spec()); e != nil {
+		return nil, e
+	}
 	t, e := s.TargetForCluster(ctx, c, i.ClusterId)
 	if e != nil {
 		return nil, e
@@ -172,7 +185,11 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 		return nil, e
 	}
 	defer tx.Rollback()
-	if _, _, e = s.instanceTx(ctx, tx, c, r.Id); e != nil {
+	_, latestInstance, e := s.instanceTx(ctx, tx, c, r.Id)
+	if e != nil {
+		return nil, e
+	}
+	if e = validateFixedSpec(ctx, tx, latestInstance, cfg.spec()); e != nil {
 		return nil, e
 	}
 	_, latest, e := readDraft(ctx, tx, r.Id)
@@ -315,6 +332,9 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	}
 	baseline, e := readPreview(ctx, tx, r.PreviewId, i.Id)
 	if e != nil {
+		return nil, e
+	}
+	if e = validateFixedSpec(ctx, tx, i, cfg.spec()); e != nil {
 		return nil, e
 	}
 	if e = s.validatePublication(i, cfg, rev, baseline, r, cr); e != nil {

@@ -13,6 +13,13 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
+	"PreviewAssociations": kitex.NewMethodInfo(
+		previewAssociationsHandler,
+		newControlServicePreviewAssociationsArgs,
+		newControlServicePreviewAssociationsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"PreviewDeletion": kitex.NewMethodInfo(
 		previewDeletionHandler,
 		newControlServicePreviewDeletionArgs,
@@ -392,6 +399,30 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 		Extra:           extra,
 	}
 	return svcInfo
+}
+
+func previewAssociationsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServicePreviewAssociationsArgs)
+	realResult := result.(*control.ControlServicePreviewAssociationsResult)
+	success, err := handler.(control.ControlService).PreviewAssociations(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServicePreviewAssociationsArgs() interface{} {
+	return control.NewControlServicePreviewAssociationsArgs()
+}
+
+func newControlServicePreviewAssociationsResult() interface{} {
+	return control.NewControlServicePreviewAssociationsResult()
 }
 
 func previewDeletionHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -1482,6 +1513,21 @@ func newServiceClient(c client.Client) *kClient {
 	return &kClient{
 		c: c,
 	}
+}
+
+func (p *kClient) PreviewAssociations(ctx context.Context, ctx_ *control.RequestContext, request *control.AssociationPreviewRequest) (r *control.AssociationPreview, err error) {
+	var _args control.ControlServicePreviewAssociationsArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServicePreviewAssociationsResult
+	if err = p.c.Call(ctx, "PreviewAssociations", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
 }
 
 func (p *kClient) PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest) (r *control.DeletionPreview, err error) {
