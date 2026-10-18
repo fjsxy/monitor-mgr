@@ -140,6 +140,7 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 }
 
 type ksmFixture struct {
+	targetConfiguration string
 	mu                  sync.Mutex
 	cr                  map[string]any
 	writes              int
@@ -326,7 +327,8 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 	}))
 	t.Cleanup(srv.Close)
 	pem := base64.StdEncoding.EncodeToString([]byte(pemCert(srv.Certificate().Raw)))
-	return f, `{"clusters":[{"name":"t","cluster":{"server":"` + srv.URL + `","certificate-authority-data":"` + pem + `"}}],"users":[{"name":"u","user":{"token":"fixture"}}],"contexts":[{"name":"explicit","context":{"cluster":"t","user":"u"}}]}`
+	f.targetConfiguration = `{"clusters":[{"name":"t","cluster":{"server":"` + srv.URL + `","certificate-authority-data":"` + pem + `"}}],"users":[{"name":"u","user":{"token":"fixture"}}],"contexts":[{"name":"explicit","context":{"cluster":"t","user":"u"}}]}`
+	return f, f.targetConfiguration
 }
 func ksmPublishedFixture(t *testing.T) (*platform.Runtime, *http.Cookie, string, *ksmFixture) {
 	t.Helper()

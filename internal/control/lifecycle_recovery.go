@@ -22,7 +22,7 @@ func (s *Store) targetForRecovery(ctx context.Context, cluster string) (*Target,
 		return nil, nil, Error("CONFLICT", "集群已注销，停止同步")
 	}
 	var cipher []byte
-	if s.DB.QueryRowContext(ctx, `SELECT credential FROM clusters WHERE id=? AND state='ACTIVE'`, cluster).Scan(&cipher) != nil {
+	if s.DB.QueryRowContext(ctx, `SELECT credential,credential_revision,uid FROM clusters WHERE id=? AND state='ACTIVE'`, cluster).Scan(&cipher, &cl.CredentialRevision, &cl.Uid) != nil {
 		return nil, nil, Error("UNAVAILABLE", "当前凭据不可读")
 	}
 	cred, e := s.openCredential(cipher, cluster)

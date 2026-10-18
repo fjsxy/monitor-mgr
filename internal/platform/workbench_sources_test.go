@@ -91,3 +91,110 @@ func TestR01WorkbenchEarlyError(t *testing.T) {
 		t.Fatal("立即失败不能丢失历史或等30秒才未知", instance)
 	}
 }
+
+// REG19-SOURCE-001：注销后的旧在途读取不能继续推进原来源。
+func TestWorkbenchLateObservationAfterUnregister(t *testing.T) {
+	p, c, id, f, clock := workbenchSourceFixture(t)
+	original := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	before := workbenchSource(t, original, "CR")
+	gate := make(chan struct{})
+	entered := make(chan struct{})
+	f.mu.Lock()
+	f.observationGate = gate
+	f.observationEntered = entered
+	f.mu.Unlock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		req, _ := http.NewRequest("POST", p.URL()+"/api/v1/instances/"+id+"/refresh", nil)
+		req.Header.Set("Origin", p.URL())
+		req.AddCookie(c)
+		if resp, e := http.DefaultClient.Do(req); e == nil {
+			resp.Body.Close()
+		}
+	}()
+	defer func() {
+		select {
+		case <-gate:
+		default:
+			close(gate)
+		}
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+		}
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("旧读取没有到达目标API")
+	}
+	clock.Add(int64(time.Second))
+	clusterCall(t, p, "POST", "/clusters/"+original["clusterId"].(string)+"/unregister", map[string]any{}, c, "unregister", 200)
+	close(gate)
+	<-done
+	current := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	after := workbenchSource(t, current, "CR")
+	if after["lastAttemptAt"] != before["lastAttemptAt"] || after["lastSuccessAt"] != before["lastSuccessAt"] || after["historical"] != true || current["runtime"].(map[string]any)["summary"] != "Unknown" {
+		t.Fatal("注销后迟到读取改变来源", after)
+	}
+}
+
+// REG19-SOURCE-001：旧凭据读取失败不得覆盖新修订已经提交的成功观察。
+func TestWorkbenchLateObservationAfterCredentialSwitch(t *testing.T) {
+	p, c, id, f, clock := workbenchSourceFixture(t)
+	instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	gate := make(chan struct{})
+	entered := make(chan struct{})
+	f.mu.Lock()
+	f.observationGate = gate
+	f.observationEntered = entered
+	f.mu.Unlock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		req, _ := http.NewRequest("POST", p.URL()+"/api/v1/instances/"+id+"/refresh", nil)
+		req.Header.Set("Origin", p.URL())
+		req.AddCookie(c)
+		if resp, e := http.DefaultClient.Do(req); e == nil {
+			resp.Body.Close()
+		}
+	}()
+	defer func() {
+		select {
+		case <-gate:
+		default:
+			close(gate)
+		}
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+		}
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("旧读取没有到达目标API")
+	}
+	updated := clusterCall(t, p, "POST", "/clusters/"+instance["clusterId"].(string)+"/credentials", map[string]any{"context": "explicit", "kubeconfig": f.targetConfiguration}, c, "rotate", 202)
+	if awaitClusterOperation(t, p, c, updated["operationId"].(string))["state"] != "SUCCEEDED" {
+		t.Fatal("凭据切换失败")
+	}
+	f.mu.Lock()
+	f.observationGate = nil
+	f.mu.Unlock()
+	clock.Add(int64(time.Second))
+	clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "", 200)
+	before := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200), "CR")
+	clock.Add(int64(time.Second))
+	f.mu.Lock()
+	f.crReadFailure = true
+	f.mu.Unlock()
+	close(gate)
+	<-done
+	current := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	after := workbenchSource(t, current, "CR")
+	if after["lastAttemptAt"] != before["lastAttemptAt"] || after["lastSuccessAt"] != before["lastSuccessAt"] || after["error"] != "" || current["runtime"].(map[string]any)["summary"] != "Available" {
+		t.Fatal("旧修订失败覆盖了新成功", after)
+	}
+}
