@@ -19,11 +19,15 @@ import (
 )
 
 type Store struct {
-	DB         *sql.DB
-	lock       *os.File
-	Now        func() time.Time
-	SessionTTL time.Duration
-	Key        []byte
+	DB           *sql.DB
+	lock         *os.File
+	Now          func() time.Time
+	SessionTTL   time.Duration
+	Key          []byte
+	limits       *targetLimits
+	workerCancel context.CancelFunc
+	workerWake   chan struct{}
+	workerDone   chan struct{}
 }
 
 func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, error) {
@@ -98,9 +102,36 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 		return fail(err)
 	}
 
-	return &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key}, nil
+	s := &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key, limits: newTargetLimits()}
+	rows, err := db.Query(`SELECT id,credential FROM clusters WHERE credential IS NOT NULL UNION ALL SELECT operation_id,cipher FROM cluster_candidates`)
+	if err != nil {
+		db.Close()
+		return fail(errors.New("凭据结构无法读取"))
+	}
+	for rows.Next() {
+		var aad string
+		var data []byte
+		if rows.Scan(&aad, &data) != nil {
+			rows.Close()
+			db.Close()
+			return fail(errors.New("凭据结构无法读取"))
+		}
+		if _, err = s.openCredential(data, aad); err != nil {
+			rows.Close()
+			db.Close()
+			return fail(errors.New("原密钥无法解密已保存集群凭据"))
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		db.Close()
+		return fail(errors.New("凭据结构无法读取"))
+	}
+	return s, nil
 }
 func (s *Store) Close() error {
+	s.StopWorkers()
 	err := s.DB.Close()
 	unix.Flock(int(s.lock.Fd()), unix.LOCK_UN)
 	s.lock.Close()

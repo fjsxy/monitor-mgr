@@ -461,7 +461,7 @@ func TestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL(t *testing.T) {
 	}
 	defer p.Close(context.Background())
 	request(t, p, "GET", "/session", "", &http.Cookie{Name: "monitor_session", Value: "schema-one-session-token"}, 200)
-	snapshots, err := filepath.Glob(filepath.Join(dir, "backups", "schema-1-to-2-*.db"))
+	snapshots, err := filepath.Glob(filepath.Join(dir, "backups", "schema-1-to-*-*.db"))
 	if err != nil || len(snapshots) != 1 {
 		t.Fatalf("缺一致快照: %v %v", snapshots, err)
 	}

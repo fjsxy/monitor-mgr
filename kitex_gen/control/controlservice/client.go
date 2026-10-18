@@ -11,6 +11,19 @@ import (
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
+	ListKubeconfigContexts(ctx context.Context, ctx_ *control.RequestContext, request *control.KubeconfigRequest, callOptions ...callopt.Option) (r *control.ContextsResult_, err error)
+	ListClusters(ctx context.Context, ctx_ *control.RequestContext, callOptions ...callopt.Option) (r *control.ClustersResult_, err error)
+	GetCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.Cluster, err error)
+	RegisterCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.RegisterClusterRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
+	UpdateCredential(ctx context.Context, ctx_ *control.RequestContext, request *control.CredentialRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
+	ReactivateCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.CredentialRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
+	TransferCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.TransferClusterRequest, callOptions ...callopt.Option) (r *control.Cluster, err error)
+	UnregisterCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.Cluster, err error)
+	GetOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID, callOptions ...callopt.Option) (r *control.Operation, err error)
+	ContinueOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID, callOptions ...callopt.Option) (r *control.Operation, err error)
+	ListClusterOperations(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.OperationsResult_, err error)
+	ListNamespaces(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.NamespacesResult_, err error)
+	ListReferences(ctx context.Context, ctx_ *control.RequestContext, request *control.ReferencesRequest, callOptions ...callopt.Option) (r *control.ReferencesResult_, err error)
 	Probe(ctx context.Context, ctx_ *control.RequestContext, callOptions ...callopt.Option) (r *control.ProbeResult_, err error)
 	Initialize(ctx context.Context, ctx_ *control.RequestContext, request *control.InitializeRequest, callOptions ...callopt.Option) (r *control.Account, err error)
 	Login(ctx context.Context, ctx_ *control.RequestContext, request *control.LoginRequest, callOptions ...callopt.Option) (r *control.LoginResult_, err error)
@@ -50,6 +63,71 @@ func MustNewClient(destService string, opts ...client.Option) Client {
 
 type kControlServiceClient struct {
 	*kClient
+}
+
+func (p *kControlServiceClient) ListKubeconfigContexts(ctx context.Context, ctx_ *control.RequestContext, request *control.KubeconfigRequest, callOptions ...callopt.Option) (r *control.ContextsResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListKubeconfigContexts(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ListClusters(ctx context.Context, ctx_ *control.RequestContext, callOptions ...callopt.Option) (r *control.ClustersResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListClusters(ctx, ctx_)
+}
+
+func (p *kControlServiceClient) GetCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.Cluster, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetCluster(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) RegisterCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.RegisterClusterRequest, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RegisterCluster(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) UpdateCredential(ctx context.Context, ctx_ *control.RequestContext, request *control.CredentialRequest, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UpdateCredential(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ReactivateCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.CredentialRequest, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ReactivateCluster(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) TransferCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.TransferClusterRequest, callOptions ...callopt.Option) (r *control.Cluster, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.TransferCluster(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) UnregisterCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.Cluster, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UnregisterCluster(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) GetOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetOperation(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ContinueOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ContinueOperation(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ListClusterOperations(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.OperationsResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListClusterOperations(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ListNamespaces(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.NamespacesResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListNamespaces(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ListReferences(ctx context.Context, ctx_ *control.RequestContext, request *control.ReferencesRequest, callOptions ...callopt.Option) (r *control.ReferencesResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListReferences(ctx, ctx_, request)
 }
 
 func (p *kControlServiceClient) Probe(ctx context.Context, ctx_ *control.RequestContext, callOptions ...callopt.Option) (r *control.ProbeResult_, err error) {

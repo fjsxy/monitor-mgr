@@ -13,6 +13,97 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
+	"ListKubeconfigContexts": kitex.NewMethodInfo(
+		listKubeconfigContextsHandler,
+		newControlServiceListKubeconfigContextsArgs,
+		newControlServiceListKubeconfigContextsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ListClusters": kitex.NewMethodInfo(
+		listClustersHandler,
+		newControlServiceListClustersArgs,
+		newControlServiceListClustersResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetCluster": kitex.NewMethodInfo(
+		getClusterHandler,
+		newControlServiceGetClusterArgs,
+		newControlServiceGetClusterResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"RegisterCluster": kitex.NewMethodInfo(
+		registerClusterHandler,
+		newControlServiceRegisterClusterArgs,
+		newControlServiceRegisterClusterResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UpdateCredential": kitex.NewMethodInfo(
+		updateCredentialHandler,
+		newControlServiceUpdateCredentialArgs,
+		newControlServiceUpdateCredentialResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ReactivateCluster": kitex.NewMethodInfo(
+		reactivateClusterHandler,
+		newControlServiceReactivateClusterArgs,
+		newControlServiceReactivateClusterResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"TransferCluster": kitex.NewMethodInfo(
+		transferClusterHandler,
+		newControlServiceTransferClusterArgs,
+		newControlServiceTransferClusterResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UnregisterCluster": kitex.NewMethodInfo(
+		unregisterClusterHandler,
+		newControlServiceUnregisterClusterArgs,
+		newControlServiceUnregisterClusterResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetOperation": kitex.NewMethodInfo(
+		getOperationHandler,
+		newControlServiceGetOperationArgs,
+		newControlServiceGetOperationResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ContinueOperation": kitex.NewMethodInfo(
+		continueOperationHandler,
+		newControlServiceContinueOperationArgs,
+		newControlServiceContinueOperationResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ListClusterOperations": kitex.NewMethodInfo(
+		listClusterOperationsHandler,
+		newControlServiceListClusterOperationsArgs,
+		newControlServiceListClusterOperationsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ListNamespaces": kitex.NewMethodInfo(
+		listNamespacesHandler,
+		newControlServiceListNamespacesArgs,
+		newControlServiceListNamespacesResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ListReferences": kitex.NewMethodInfo(
+		listReferencesHandler,
+		newControlServiceListReferencesArgs,
+		newControlServiceListReferencesResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"Probe": kitex.NewMethodInfo(
 		probeHandler,
 		newControlServiceProbeArgs,
@@ -147,6 +238,318 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 		Extra:           extra,
 	}
 	return svcInfo
+}
+
+func listKubeconfigContextsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceListKubeconfigContextsArgs)
+	realResult := result.(*control.ControlServiceListKubeconfigContextsResult)
+	success, err := handler.(control.ControlService).ListKubeconfigContexts(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceListKubeconfigContextsArgs() interface{} {
+	return control.NewControlServiceListKubeconfigContextsArgs()
+}
+
+func newControlServiceListKubeconfigContextsResult() interface{} {
+	return control.NewControlServiceListKubeconfigContextsResult()
+}
+
+func listClustersHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceListClustersArgs)
+	realResult := result.(*control.ControlServiceListClustersResult)
+	success, err := handler.(control.ControlService).ListClusters(ctx, realArg.Ctx)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceListClustersArgs() interface{} {
+	return control.NewControlServiceListClustersArgs()
+}
+
+func newControlServiceListClustersResult() interface{} {
+	return control.NewControlServiceListClustersResult()
+}
+
+func getClusterHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceGetClusterArgs)
+	realResult := result.(*control.ControlServiceGetClusterResult)
+	success, err := handler.(control.ControlService).GetCluster(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceGetClusterArgs() interface{} {
+	return control.NewControlServiceGetClusterArgs()
+}
+
+func newControlServiceGetClusterResult() interface{} {
+	return control.NewControlServiceGetClusterResult()
+}
+
+func registerClusterHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceRegisterClusterArgs)
+	realResult := result.(*control.ControlServiceRegisterClusterResult)
+	success, err := handler.(control.ControlService).RegisterCluster(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceRegisterClusterArgs() interface{} {
+	return control.NewControlServiceRegisterClusterArgs()
+}
+
+func newControlServiceRegisterClusterResult() interface{} {
+	return control.NewControlServiceRegisterClusterResult()
+}
+
+func updateCredentialHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceUpdateCredentialArgs)
+	realResult := result.(*control.ControlServiceUpdateCredentialResult)
+	success, err := handler.(control.ControlService).UpdateCredential(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceUpdateCredentialArgs() interface{} {
+	return control.NewControlServiceUpdateCredentialArgs()
+}
+
+func newControlServiceUpdateCredentialResult() interface{} {
+	return control.NewControlServiceUpdateCredentialResult()
+}
+
+func reactivateClusterHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceReactivateClusterArgs)
+	realResult := result.(*control.ControlServiceReactivateClusterResult)
+	success, err := handler.(control.ControlService).ReactivateCluster(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceReactivateClusterArgs() interface{} {
+	return control.NewControlServiceReactivateClusterArgs()
+}
+
+func newControlServiceReactivateClusterResult() interface{} {
+	return control.NewControlServiceReactivateClusterResult()
+}
+
+func transferClusterHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceTransferClusterArgs)
+	realResult := result.(*control.ControlServiceTransferClusterResult)
+	success, err := handler.(control.ControlService).TransferCluster(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceTransferClusterArgs() interface{} {
+	return control.NewControlServiceTransferClusterArgs()
+}
+
+func newControlServiceTransferClusterResult() interface{} {
+	return control.NewControlServiceTransferClusterResult()
+}
+
+func unregisterClusterHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceUnregisterClusterArgs)
+	realResult := result.(*control.ControlServiceUnregisterClusterResult)
+	success, err := handler.(control.ControlService).UnregisterCluster(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceUnregisterClusterArgs() interface{} {
+	return control.NewControlServiceUnregisterClusterArgs()
+}
+
+func newControlServiceUnregisterClusterResult() interface{} {
+	return control.NewControlServiceUnregisterClusterResult()
+}
+
+func getOperationHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceGetOperationArgs)
+	realResult := result.(*control.ControlServiceGetOperationResult)
+	success, err := handler.(control.ControlService).GetOperation(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceGetOperationArgs() interface{} {
+	return control.NewControlServiceGetOperationArgs()
+}
+
+func newControlServiceGetOperationResult() interface{} {
+	return control.NewControlServiceGetOperationResult()
+}
+
+func continueOperationHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceContinueOperationArgs)
+	realResult := result.(*control.ControlServiceContinueOperationResult)
+	success, err := handler.(control.ControlService).ContinueOperation(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceContinueOperationArgs() interface{} {
+	return control.NewControlServiceContinueOperationArgs()
+}
+
+func newControlServiceContinueOperationResult() interface{} {
+	return control.NewControlServiceContinueOperationResult()
+}
+
+func listClusterOperationsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceListClusterOperationsArgs)
+	realResult := result.(*control.ControlServiceListClusterOperationsResult)
+	success, err := handler.(control.ControlService).ListClusterOperations(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceListClusterOperationsArgs() interface{} {
+	return control.NewControlServiceListClusterOperationsArgs()
+}
+
+func newControlServiceListClusterOperationsResult() interface{} {
+	return control.NewControlServiceListClusterOperationsResult()
+}
+
+func listNamespacesHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceListNamespacesArgs)
+	realResult := result.(*control.ControlServiceListNamespacesResult)
+	success, err := handler.(control.ControlService).ListNamespaces(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceListNamespacesArgs() interface{} {
+	return control.NewControlServiceListNamespacesArgs()
+}
+
+func newControlServiceListNamespacesResult() interface{} {
+	return control.NewControlServiceListNamespacesResult()
+}
+
+func listReferencesHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceListReferencesArgs)
+	realResult := result.(*control.ControlServiceListReferencesResult)
+	success, err := handler.(control.ControlService).ListReferences(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceListReferencesArgs() interface{} {
+	return control.NewControlServiceListReferencesArgs()
+}
+
+func newControlServiceListReferencesResult() interface{} {
+	return control.NewControlServiceListReferencesResult()
 }
 
 func probeHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -397,6 +800,200 @@ func newServiceClient(c client.Client) *kClient {
 	return &kClient{
 		c: c,
 	}
+}
+
+func (p *kClient) ListKubeconfigContexts(ctx context.Context, ctx_ *control.RequestContext, request *control.KubeconfigRequest) (r *control.ContextsResult_, err error) {
+	var _args control.ControlServiceListKubeconfigContextsArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceListKubeconfigContextsResult
+	if err = p.c.Call(ctx, "ListKubeconfigContexts", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListClusters(ctx context.Context, ctx_ *control.RequestContext) (r *control.ClustersResult_, err error) {
+	var _args control.ControlServiceListClustersArgs
+	_args.Ctx = ctx_
+	var _result control.ControlServiceListClustersResult
+	if err = p.c.Call(ctx, "ListClusters", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID) (r *control.Cluster, err error) {
+	var _args control.ControlServiceGetClusterArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceGetClusterResult
+	if err = p.c.Call(ctx, "GetCluster", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) RegisterCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.RegisterClusterRequest) (r *control.Operation, err error) {
+	var _args control.ControlServiceRegisterClusterArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceRegisterClusterResult
+	if err = p.c.Call(ctx, "RegisterCluster", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UpdateCredential(ctx context.Context, ctx_ *control.RequestContext, request *control.CredentialRequest) (r *control.Operation, err error) {
+	var _args control.ControlServiceUpdateCredentialArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceUpdateCredentialResult
+	if err = p.c.Call(ctx, "UpdateCredential", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ReactivateCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.CredentialRequest) (r *control.Operation, err error) {
+	var _args control.ControlServiceReactivateClusterArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceReactivateClusterResult
+	if err = p.c.Call(ctx, "ReactivateCluster", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) TransferCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.TransferClusterRequest) (r *control.Cluster, err error) {
+	var _args control.ControlServiceTransferClusterArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceTransferClusterResult
+	if err = p.c.Call(ctx, "TransferCluster", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UnregisterCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID) (r *control.Cluster, err error) {
+	var _args control.ControlServiceUnregisterClusterArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceUnregisterClusterResult
+	if err = p.c.Call(ctx, "UnregisterCluster", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID) (r *control.Operation, err error) {
+	var _args control.ControlServiceGetOperationArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceGetOperationResult
+	if err = p.c.Call(ctx, "GetOperation", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ContinueOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID) (r *control.Operation, err error) {
+	var _args control.ControlServiceContinueOperationArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceContinueOperationResult
+	if err = p.c.Call(ctx, "ContinueOperation", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListClusterOperations(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID) (r *control.OperationsResult_, err error) {
+	var _args control.ControlServiceListClusterOperationsArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceListClusterOperationsResult
+	if err = p.c.Call(ctx, "ListClusterOperations", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListNamespaces(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID) (r *control.NamespacesResult_, err error) {
+	var _args control.ControlServiceListNamespacesArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceListNamespacesResult
+	if err = p.c.Call(ctx, "ListNamespaces", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListReferences(ctx context.Context, ctx_ *control.RequestContext, request *control.ReferencesRequest) (r *control.ReferencesResult_, err error) {
+	var _args control.ControlServiceListReferencesArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceListReferencesResult
+	if err = p.c.Call(ctx, "ListReferences", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
 }
 
 func (p *kClient) Probe(ctx context.Context, ctx_ *control.RequestContext) (r *control.ProbeResult_, err error) {
