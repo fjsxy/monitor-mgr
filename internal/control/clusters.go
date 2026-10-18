@@ -159,7 +159,8 @@ func (s *Store) acceptCredential(ctx context.Context, c *rpc.RequestContext, act
 		return nil, e
 	}
 	if hit {
-		return &replay, nil
+		// 关键：幂等快照只找回操作身份；当前核验结果须在同一授权事务回读，不能回放旧QUEUED。
+		return scanOperation(tx.QueryRowContext(ctx, `SELECT `+operationColumns+` FROM operations WHERE id=?`, replay.OperationId))
 	}
 	if action == "REGISTER" {
 		if strings.TrimSpace(name) == "" || len(name) > 100 {
@@ -404,7 +405,8 @@ func (s *Store) ContinueOperation(ctx context.Context, c *rpc.RequestContext, r 
 		return nil, e
 	}
 	if hit {
-		return &replay, nil
+		// 关键：继续的幂等键也只找回原任务；成功、失败和再次重启后的状态不能被旧受理值遮盖。
+		return scanOperation(tx.QueryRowContext(ctx, `SELECT `+operationColumns+` FROM operations WHERE id=?`, replay.OperationId))
 	}
 	if o.State != "WAITING_CONFIRMATION" {
 		return nil, Error("CONFLICT", "此操作不等待人工继续")

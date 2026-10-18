@@ -37,3 +37,20 @@
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
 | REG19-SOURCE-001 | 迟到观察不能跨当前管理范围覆盖来源 | 先成功观测，再在目标 GET 在途时注销集群或切换凭据修订；释放旧读取，查询来源及历史；新有效凭据读取后核对身份。 | 旧 UID/旧凭据修订或已注销范围的迟到结果不能推进来源时间、覆盖新成功或恢复当前可用；读取不重新产生写请求。 | #19 |
+
+
+提前两轴评审补充回归（Q9/B2），只追加稳定 REG，不修改上述15固定责任及3条既有REG。Q经真实HTTP→生成Kitex→SQLite/受控TLS目标；B经真实平台Pod Service→Chromium，申请独占lane后执行。Pending存储任务正常阻止注销/转移，保留该guard，不用DB旁路构造不可达注销；凭据轮换允许与只读存储核验并行。以下均为计划，不代表通过。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG19-STORAGE-SCOPE-001 | Q：旧凭据身份预读失败不能推进独立存储任务 | 经真实HTTP建立已发布Agent及Pending卷核验；阻塞原凭据kube-system身份读取，确认正常注销/转移被Pending guard拒绝；另行受理并完成凭据轮换，再释放旧身份读取返回403/网络失败，读取同operation卷结果；最后用当前凭据核验。 | 旧失败不改变卷task lastAttempt、原卷结果/错误或完成状态；当前有效凭据后续只读核验可推进；不重放写、不认领新UID、不放宽Pending注销/转移guard。 | #19 |
+| REG19-STORAGE-SCOPE-002 | Q：旧凭据成功结果也受同一提交范围限制 | 同样建立Pending卷核验；令旧目标身份成功后的原PVC读取在途，完成独立凭据轮换后释放旧PVC成功响应，再读同operation卷结果并用当前凭据核验。 | 旧成功不推进task/volume时间或确认Retained/Deleted；当前cluster UID、ACTIVE、credentialRevision与原实例UID比较适用于成功和失败；当前凭据后续核验可确认原卷。 | #19 |
+| REG19-HTTP-DELETE-001 | Q：规范DELETE入口复用安全删除受理 | 经HTTP建立未部署草稿并DELETE；另发布实例，创建删除预览，以DELETE /instances/{id}携versionId/previewId与幂等键受理；覆盖缺/过期预览、异主、原UID替换及同键回读。 | 草稿同步200；有效已部署删除202并返回原operation；HMAC影响基线、当前授权、原UID/RV与同实例保护保持，不删除同名新UID，不生成第二次执行；兼容POST/deletions。 | #19 |
+| REG19-HTTP-CONTINUE-PUBLISH-001 | Q：规范continue继续明确未发发布 | 建立受理后未派发发布，保留原目录/密钥重启成为WAITING；经POST /operations/{id}/continue提交当前operation/attempt修订，覆盖错误修订、异主和可能已发送输入。 | 明确未发且修订正确返回202并继续原operation/不可变版本，新增attempt并保留原attempt；错误修订/当前无权/可能已发拒绝，不能借alias重放；兼容continue-unsent。 | #19 |
+| REG19-HTTP-CONTINUE-DELETE-001 | Q：规范continue继续明确未发删除 | 建立已部署实例并受理删除但阻止派发，重启后以新有效删除预览及原operation/attempt修订请求规范continue；覆盖旧影响预览、错误修订和可能已发送。 | 新预览/原UID/修订正确才202；陈旧影响/HMAC、错误修订、可能已发均拒绝；不另建状态机或解除结果待确认保护。 | #19 |
+| REG19-HTTP-CONTINUE-CREDENTIAL-001 | Q：规范continue保留凭据只读恢复 | 受理注册或凭据候选后重启，当前管理员经同一规范continue入口继续；非管理员/禁用账号重送。 | 管理员继续原候选只读验证202，不产生配置写；当前无权先拒绝；与发布/删除按实际operation.action分派。 | #19 |
+| REG19-HTTP-CAPABILITIES-001 | Q：规范能力查询使用安全当前授权投影 | 注册带已知组件能力的受控TLS集群；所属用户GET /clusters/{id}/capabilities，再以异主、禁用/未登录与不存在ID读取，并与GetCluster.capabilities比较。 | 合法GET 200返回同一typed capabilities安全投影；异主/禁用/未认证/不存在遵守原错误与授权边界；HTTP不直连DB/Kube。 | #19 |
+| REG19-CREDENTIAL-REPLAY-001 | Q：凭据受理幂等命中回读当前operation | 参数化REGISTER/CREDENTIAL/REACTIVATE同键同内容，等待SUCCEEDED/FAILED，另保留原目录重启形成WAITING后重送；切换当前管理员权限再重送，并核对实际目标访问/操作数。 | 返回原operationId的当前状态而非缓存QUEUED；无第二操作/候选/目标写；当前授权先于hit，规范内容变化仍冲突。 | #19 |
+| REG19-CONTINUE-REPLAY-001 | Q：凭据继续幂等命中回读当前operation | 对原WAITING候选以固定continue键受理，分别完成成功/失败及再次重启；原键同内容重送，含当前撤权输入。 | 命中返回当前SUCCEEDED/FAILED/WAITING及同operation，不再次入队；当前授权和action白名单仍先于hit。 | #19 |
+| REG19-AGENT-DELETE-OP-001 | B：Agent删除受理后保留原operation运行入口 | 真实平台Pod/Operator建立本run Agent，浏览器列表删除确认后检查自动打开的运行页；读取返回operation并观察任务轮询、卷核验及状态相应的LifecycleActions。 | Agent接收selection.operation，与列表受理原ID一致；运行页持续显示原删除任务/独立卷结果及合法核验/恢复入口，不因组件切换丢失任务。 | #19 |
+| REG19-AGENT-HISTORY-OP-001 | B：Agent重开历史按原失败版本恢复 | 真实Pod浏览器发布Agent原版本，保存并发布一版配置后精确拒绝写使其FAILED；另存不同新草稿，关闭抽屉再打开下发历史，在原任务行使用合法重试，恢复目标后回读版本与attempt。 | 历史行复用LifecycleActions，重试原operation/不可变发布版本而非当前新草稿；新attempt可确认原版本，当前草稿仍保留；受保护/待确认状态只展示允许的继续、取消或只读核验入口。 | #19 |

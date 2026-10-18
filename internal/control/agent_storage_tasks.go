@@ -199,7 +199,12 @@ func (s *Store) verifyAgentStorageTasksLocked(ctx context.Context, operation str
 		if json.Unmarshal(v.raw, &volumes) != nil {
 			continue
 		}
-		target, currentCluster, targetErr := s.targetForRecovery(ctx, v.cluster)
+		// 关键：身份预读本身也可能失败并丢失Target；必须在任何网络前固定范围，错误结果不能免于CAS。
+		originalCluster, scopeErr := clusterByID(ctx, s.DB, v.cluster)
+		if scopeErr != nil || originalCluster.State != "ACTIVE" {
+			continue
+		}
+		target, _, targetErr := s.targetForRecovery(ctx, v.cluster)
 		now := s.Now().UTC().Format(time.RFC3339Nano)
 		done := true
 		for _, volume := range volumes {
@@ -260,11 +265,8 @@ func (s *Store) verifyAgentStorageTasksLocked(ctx context.Context, operation str
 		if err != nil {
 			continue
 		}
-		valid := true
-		if targetErr == nil {
-			var n int
-			valid = tx.QueryRowContext(ctx, `SELECT count(*) FROM clusters c JOIN instances i ON i.cluster_id=c.id WHERE c.id=? AND c.uid=? AND c.state='ACTIVE' AND c.credential_revision=? AND i.id=? AND i.uid=?`, v.cluster, currentCluster.Uid, currentCluster.CredentialRevision, v.instance, v.uid).Scan(&n) == nil && n == 1
-		}
+		var n int
+		valid := tx.QueryRowContext(ctx, `SELECT count(*) FROM clusters c JOIN instances i ON i.cluster_id=c.id WHERE c.id=? AND c.uid=? AND c.state='ACTIVE' AND c.credential_revision=? AND i.id=? AND i.uid=?`, v.cluster, originalCluster.Uid, originalCluster.CredentialRevision, v.instance, v.uid).Scan(&n) == nil && n == 1
 		// 关键：迟到的旧凭据结果不能结束当前存储责任；已删除实例仍允许原UID只读核验。
 		if valid {
 			if _, err = tx.ExecContext(ctx, `UPDATE agent_storage_tasks SET state=?,volumes=?,last_attempt_at=? WHERE attempt_id=? AND state='PENDING'`, state, raw, now, v.attempt); err == nil {

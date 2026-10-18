@@ -61,6 +61,17 @@ func (p *Runtime) clusterRoutes(w http.ResponseWriter, r *http.Request, c *rpc.R
 		}
 		if len(parts) == 2 {
 			switch parts[1] {
+			case "capabilities":
+				if r.Method == "GET" {
+					// 关键：沿GetCluster的当前授权与安全投影，不在HTTP旁路读取凭据或目标API。
+					v, e := p.client.GetCluster(r.Context(), c, req)
+					if e != nil {
+						p.respond(w, 200, nil, e, id)
+					} else {
+						p.respond(w, 200, v.Capabilities, nil, id)
+					}
+					return
+				}
 			case "credentials", "reactivate":
 				if r.Method == "POST" {
 					var b struct {

@@ -62,9 +62,9 @@ def prepare(s,case,index):
  evidence['independentStatisticsInput']={'explicitManagedInstances':3,'targetObjectCount':len(actual_uids),'managedTargetObjectCount':len(managed_uids),'unmanaged':len(actual_uids-managed_uids)}
  service_access(s);pod=s.get('pod',s.pod,'-n',s.ns);evidence['browserPlatform']={'service':'monitor-mgr','namespace':s.ns,'podUID':pod['metadata']['uid'],'imageID':pod['status']['containerStatuses'][0]['imageID']};return fixture,evidence
 
-def execute(s,selector,fixture):
+def execute(s,selector,fixture,test_file='tests/workbench.spec.ts'):
  out=s.out/'browser'/selector;out.mkdir(parents=True,exist_ok=True);os.chmod(out,0o700);report=out/'playwright.json'
- command=['npm','--prefix','web','run','test:e2e','--','tests/workbench.spec.ts','--grep',r'(?:^|\s)'+re.escape(selector)+' ','--output',str(out/'artifacts')]
+ command=['npm','--prefix','web','run','test:e2e','--',test_file,'--grep',r'(?:^|\s)'+re.escape(selector)+' ','--output',str(out/'artifacts')]
  with tempfile.TemporaryDirectory(prefix='mm19-private-browser-') as private:
   path=pathlib.Path(private)/'fixture.json';path.write_text(json.dumps(fixture));os.chmod(path,0o600)
   env=dict(os.environ,BASE_URL=s.base,WORKBENCH_UI_FIXTURE=str(path),PLAYWRIGHT_JSON_OUTPUT_FILE=str(report));result=subprocess.run(command,cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
@@ -103,6 +103,9 @@ def execute(s,selector,fixture):
  return {'selector':selector,'browserAnnotations':tests[0].get('annotations',[]),'command':command,'exitCode':result.returncode,'trace':'off','report':str(report.relative_to(s.out)),'evidenceRefs':[{'path':str(p.relative_to(s.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(out.rglob('*')) if p.is_file()]}
 
 def run_browser(s,case,index):
+ if case.startswith('REG19-AGENT-'):
+  from review_browser import run_browser as review_browser
+  return review_browser(s,case,index)
  fixture,evidence=prepare(s,case,index);evidence['browser']=execute(s,case,fixture)
  if case=='U05.primary':
   evidence['i64Browser']=execute(s,'REG19-HTTP-I64-001',fixture)
