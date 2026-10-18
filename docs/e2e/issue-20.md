@@ -45,3 +45,12 @@
 | REG20-STORAGE-001.new-name | 新的干净名称获得新的CR和卷 | 独立fixture保存孤立旧Retain PVC UID；复制配置填写另一个无碰撞新名，明确预览发布，回读原CR→ST→Pod→PVC UID链和实际挂载，finally清理。 | 新CR与新PVC UID不同于旧卷，原孤卷UID及内容不变；平台未清理旧卷。 | #20 |
 | REG20-STORAGE-001.owned-retain-suspend | 旧实例挂起后恢复自己已确认的Retain卷 | 独立真实运行实例并持久记录原CR/ST/Pod/PVC UID；确认实际whenScaled=Retain后挂起、等待原Pod消失，再明确恢复并回读原PVC UID及挂载，finally清理。 | 可信原实例/原PVC UID的挂起恢复允许；不被新实例碰撞规则误拒绝，不自动迁移/删除旧数据。 | #20 |
 | REG20-STORAGE-001.owned-retain-shard | 旧实例恢复被移除shard的原Retain卷 | 独立真实多shard实例记录原CR/ST/Pod/PVC UID；确认实际whenDeleted=Retain后减少shard、等待移除ST/Pod消失，再明确恢复该shard并核对原PVC UID与挂载，finally清理。 | 可信原实例/原PVC UID的shard恢复允许，确实复用其历史身份；不认领同名不同UID卷，不迁移/删除旧数据。 | #20 |
+
+## 独立PVC任务的集群管理责任
+
+以下2项Q补充由父规格§3/§8导出，不增加12个owned计数。实例与operation可在原CR/workload/Pod清空后完成；只有仍需原凭据核验的独立存储任务保留集群管理责任，不能重新套回实例protection。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG20-STORAGE-002.transfer | 未决存储核验期间不丢集群归属责任 | 经真实HTTP→生成Kitex→SQLite和受控TLS API完成原UID Agent删除，使实例/operation已完成，而whenDeleted=Delete原PVC读取Unknown/待核；通过transfer尝试转移。恢复当前凭据/读取并核实原PVC结果，再重新转移。独立Retain正控保留合法原PVC且实际核实Retain后转移。 | pending/Unknown独立卷任务时transfer409，实例与operation仍完成且不重建实例protection；只读核实完成后允许转移，凭据更新不受此责任阻塞。已确认Retain合法残卷是终态，不阻塞转移。 | #20 |
+| REG20-STORAGE-002.unregister | 未决存储核验期间不提前清除原凭据 | 独立应用fixture完成原UID Agent删除，使CR/workload/Pod消失、实例/operation完成但Delete/PVC结果未知；调用unregister，再恢复读取并核实原PVC消失后重试。另以实际核实Retain原PVC仍存在作为独立正控。全程公开HTTP/真实Kitex，不直接改业务表制造结果。 | pending/Unknown任务时unregister409、保留可用凭据供只读核验；实例完成不被回滚/延迟。任务核实终态后注销允许；已确认Retain残卷不阻塞注销，平台不删除该卷。 | #20 |

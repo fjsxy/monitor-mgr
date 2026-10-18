@@ -97,3 +97,39 @@ func TestAgentStorageIncompleteListRemainsUnknown(t *testing.T) {
 	}
 	t.Fatal("PVC来源未保留独立错误")
 }
+
+// A06：首次emptyDir不依赖StorageClass，也不能把PVC模板或保留策略写入CR。
+func TestAgentStorageEmptyDirDoesNotRequirePVCClass(t *testing.T) {
+	p, c, cluster, _, f := agentSafetyFixture(t, nil)
+	f.mu.Lock()
+	f.hook = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path == "/apis/storage.k8s.io/v1/storageclasses" {
+			w.WriteHeader(403)
+			json.NewEncoder(w).Encode(map[string]any{})
+			return true
+		}
+		return false
+	}
+	f.mu.Unlock()
+	cfg := agentConfig("ephemeral-agent", "monitoring")
+	cfg["storage"].(map[string]any)["mode"] = "emptyDir"
+	delete(cfg["storage"].(map[string]any), "capacity")
+	i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
+	id := i["id"].(string)
+	preview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "", 200)
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
+	if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
+		t.Fatal("emptyDir发布失败")
+	}
+	f.mu.Lock()
+	spec := f.objects["monitoring/ephemeral-agent"]["spec"].(map[string]any)
+	_, pvc := spec["storage"].(map[string]any)["volumeClaimTemplate"]
+	_, ephemeral := spec["storage"].(map[string]any)["emptyDir"]
+	_, policy := spec["persistentVolumeClaimRetentionPolicy"]
+	f.mu.Unlock()
+	if pvc || !ephemeral || policy {
+		t.Fatal("emptyDir映射含PVC语义", spec)
+	}
+	changed := agentConfig("ephemeral-agent", "monitoring")
+	clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": changed}, c, "change-mode", 409)
+}

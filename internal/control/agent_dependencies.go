@@ -34,6 +34,15 @@ func agentDependenciesFromSpec(original *AgentConfig, spec map[string]any) (*Age
 		}
 		return &SecretReference{Name: objectString(m, "name"), Key: objectString(m, "key")}
 	}
+	mode, capacity := agentStorageIdentity(spec)
+	if mode == "" {
+		return nil, Error("CONFLICT", "冻结Agent存储模式缺失")
+	}
+	copy.Storage.Mode = mode
+	copy.Storage.Capacity = nil
+	if mode == "PVC" {
+		copy.Storage.Capacity = &capacity
+	}
 	copy.RemoteWrite = []RemoteEndpoint{}
 	for _, raw := range anySlice(spec["remoteWrite"]) {
 		m, ok := raw.(map[string]any)
@@ -265,20 +274,23 @@ func (t *Target) agentDependencies(ctx context.Context, cl *rpc.Cluster, cfg *Ag
 	if objectString(objectMap(sa, "metadata"), "name") != cfg.ServiceAccountName {
 		return Error("CONFLICT", "Agent ServiceAccount身份无法确认")
 	}
-	classes, e := t.listObjects(ctx, "/apis/storage.k8s.io/v1/storageclasses")
-	if e != nil {
-		return Error("CONFLICT", "默认StorageClass无法读取")
-	}
-	available := false
-	for _, sc := range classes {
-		a := objectMap(objectMap(sc, "metadata"), "annotations")
-		if (a["storageclass.kubernetes.io/is-default-class"] == "true" || a["storageclass.beta.kubernetes.io/is-default-class"] == "true") && objectString(sc, "provisioner") != "" && objectString(sc, "provisioner") != "kubernetes.io/no-provisioner" {
-			available = true
+	if cfg.Storage.Mode == "PVC" {
+		classes, e := t.listObjects(ctx, "/apis/storage.k8s.io/v1/storageclasses")
+		if e != nil {
+			return Error("CONFLICT", "默认StorageClass无法读取")
+		}
+		available := false
+		for _, sc := range classes {
+			a := objectMap(objectMap(sc, "metadata"), "annotations")
+			if (a["storageclass.kubernetes.io/is-default-class"] == "true" || a["storageclass.beta.kubernetes.io/is-default-class"] == "true") && objectString(sc, "provisioner") != "" && objectString(sc, "provisioner") != "kubernetes.io/no-provisioner" {
+				available = true
+			}
+		}
+		if !available {
+			return Error("CONFLICT", "PVC发布需要可用默认动态StorageClass")
 		}
 	}
-	if !available {
-		return Error("CONFLICT", "PVC发布需要可用默认动态StorageClass")
-	}
+
 	// 关键：Secret值只保留在当前栈的内存缓存，既不写配置/观察表，也不进入错误正文。
 	secrets := map[string]map[string][]byte{}
 	for _, endpoint := range cfg.RemoteWrite {

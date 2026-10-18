@@ -194,16 +194,21 @@ func (c *AgentConfig) validate() error {
 	if e := c.Resources.validate("agent.resources"); e != nil {
 		return e
 	}
-	if c.Storage.Mode != "PVC" {
-		return fieldError("agent.storage.mode", "当前只支持PVC；emptyDir生命周期尚未开放")
+	if c.Storage.Mode != "PVC" && c.Storage.Mode != "emptyDir" {
+		return fieldError("agent.storage.mode", "只支持PVC或emptyDir")
 	}
-	if c.Storage.Capacity == nil {
-		return fieldError("agent.storage.capacity", "PVC容量必填")
+	if c.Storage.Mode == "PVC" {
+		if c.Storage.Capacity == nil {
+			return fieldError("agent.storage.capacity", "PVC容量必填")
+		}
+		q, e := resource.ParseQuantity(*c.Storage.Capacity)
+		if e != nil || q.Sign() <= 0 {
+			return fieldError("agent.storage.capacity", "PVC容量必须为正quantity")
+		}
+	} else if c.Storage.Capacity != nil {
+		return fieldError("agent.storage.capacity", "emptyDir不设置PVC容量")
 	}
-	q, e := resource.ParseQuantity(*c.Storage.Capacity)
-	if e != nil || q.Sign() <= 0 {
-		return fieldError("agent.storage.capacity", "PVC容量必须为正quantity")
-	}
+
 	for _, p := range []string{c.Storage.WhenScaled, c.Storage.WhenDeleted} {
 		if p != "Retain" && p != "Delete" {
 			return fieldError("agent.storage", "保留策略必须为Retain或Delete")
@@ -359,7 +364,11 @@ func (r RemoteEndpoint) references() []*SecretReference {
 }
 func (r *SecretReference) cr() map[string]any { return map[string]any{"name": r.Name, "key": r.Key} }
 func (c *AgentConfig) spec() map[string]any {
-	spec := map[string]any{"mode": "StatefulSet", "version": "v2.55.1", "image": "quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3", "shards": c.Shards, "replicas": 1, "paused": false, "serviceAccountName": c.ServiceAccountName, "resources": c.Resources.cr(), "storage": map[string]any{"volumeClaimTemplate": map[string]any{"spec": map[string]any{"accessModes": []string{"ReadWriteOnce"}, "resources": map[string]any{"requests": map[string]any{"storage": *c.Storage.Capacity}}}}}, "persistentVolumeClaimRetentionPolicy": map[string]any{"whenScaled": c.Storage.WhenScaled, "whenDeleted": c.Storage.WhenDeleted}}
+	spec := map[string]any{"mode": "StatefulSet", "version": "v2.55.1", "image": "quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3", "shards": c.Shards, "replicas": 1, "paused": false, "serviceAccountName": c.ServiceAccountName, "resources": c.Resources.cr(), "storage": map[string]any{"emptyDir": map[string]any{}}}
+	if c.Storage.Mode == "PVC" {
+		spec["storage"] = map[string]any{"volumeClaimTemplate": map[string]any{"spec": map[string]any{"accessModes": []string{"ReadWriteOnce"}, "resources": map[string]any{"requests": map[string]any{"storage": *c.Storage.Capacity}}}}}
+		spec["persistentVolumeClaimRetentionPolicy"] = map[string]any{"whenScaled": c.Storage.WhenScaled, "whenDeleted": c.Storage.WhenDeleted}
+	}
 	for kind, rule := range c.associationRules() {
 		prefix := strings.ToLower(kind[:1]) + kind[1:]
 		if x := rule.Object.cr(); x != nil {
