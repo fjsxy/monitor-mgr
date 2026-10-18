@@ -140,7 +140,10 @@ def run_case(s,case):
    found=s.call('GET','/operations?instanceId='+i['id']+'&idempotencyKey='+key)['operations'];assert len(found)==1 and found[0]['operationId']==box['operation']['operationId'];again=s.call('POST','/instances/'+i['id']+'/publications',body,key,202);assert again['operationId']==found[0]['operationId'];done=s.operation(again);assert done['state']=='SUCCEEDED';s.runtime(i);return {'operation':done,'lookup':found,'realAcceptanceBeforeClientDeadline':True,**s.evidence(i)}
   finally:conn.close();front.shutdown();front.server_close();thread.join(timeout=2)
  if case=='C04.ksm-crd':
-  name='kubestatemetrics.monitoring.fjsxy.github.io';original=json.loads(s.k('get','crd',name,'-o','json',target=s.target).stdout);s.crd_restore=original
+  name='kubestatemetrics.monitoring.fjsxy.github.io';original=json.loads(s.k('get','crd',name,'-o','json',target=s.target).stdout)
+  # CRD删除会级联所有CR；独占lane仍须确认无其他fixture对象，不能删除不属于本run的实例。
+  existing=json.loads(s.k('get','kubestatemetrics','-o','json',target=s.target).stdout)['items'];assert not existing,'全局CRD故障前存在其他KSM对象，拒绝影响其生命周期'
+  s.crd_restore=original
   s.k('delete','crd',name,'--wait=true',target=s.target);op=s.operation(s.accept(s.config(s.target),path='/clusters/'+s.cluster['id']+'/credentials'));assert op['state']=='SUCCEEDED';cl=s.call('GET','/clusters/'+s.cluster['id']);cap=next(x for x in cl['capabilities'] if x['component']=='kube-state-metrics');assert cap['allowed'] is False
   i=s.create();denied=s.call('POST','/instances/'+i['id']+'/previews',{'draftRevision':1},status=409);s.call('POST','/instances/'+i['id']+'/publications',{'previewId':'missing-crd','draftRevision':1,'overwriteDrift':False},status=409);return {'cluster':cl,'denied':denied,'registeredWithoutCRD':True}
  if case=='C05.primary':return restricted_namespace(s)
