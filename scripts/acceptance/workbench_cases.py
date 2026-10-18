@@ -141,6 +141,9 @@ class Suite(AgentSuite):
  def r08(self,index):
   proxy=self.use_proxy();cluster=self.register('control',proxy.config);item=self.new_ksm(index,cluster=cluster);i=item['instance'];before=self.current(i)['CR'];session=self.call('GET','/session');key=self.proof('key-before')
   self.call('POST','/instances/'+i['id']+'/refresh',{});self.faults(proxy,'all');before=self.current(i)['CR'];rebuild=self.restart();unknown=self.observe(i);source=next(s for s in unknown['sources'] if s['source']=='CR')
+  # 关键：必须在失败尝试落盘前证明新epoch使新鲜成功历史未知，不能用普通读取失败代替重启边界。
+  assert not before['historical'] and not before['error'],'旧进程已先观察到故障，需从头重建本例前置'
+  assert not source['error'] and source['lastAttemptAt']==before['lastAttemptAt'],'首次断联尝试已落盘，不能冒充首次读取前未知'
   assert unknown['runtime']['summary']=='Unknown' and source['historical'] and source['runtimeSnapshot']['summary']=='Available' and source['lastSuccessAt']==before['lastSuccessAt']
   age=(datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(source['lastSuccessAt'].replace('Z','+00:00'))).total_seconds();assert age<=30,'历史已自然过期，不能证明首次读取前epoch独立未知'
   assert self.call('GET','/session')['expiresAt']==session['expiresAt'];afterkey=self.proof('key-after');assert key==afterkey
