@@ -68,11 +68,11 @@ e2e-agent: ## Agent逐例真实Pod验收；E2E_ARGS必须显式环境、context�
 	$(PYTHON) scripts/acceptance/agent.py $(E2E_ARGS)
 agent-q-receipt: ## Agent Q逐例收据；E2E_ARGS指定output/profile/cases
 	$(PYTHON) scripts/acceptance/agent.py --layer Q $(E2E_ARGS)
-agent-projection-check: ## 解析失败URL安全投影Q，真实HTTP/Kitex/SQLite/TLS
+agent-projection-check: ## 解析失败URL/状态文本及旧cache迁移Q，真实HTTP/Kitex/SQLite/TLS
 	$(GO) test ./internal/platform -count=1 -run '^TestAgentMalformedURLReadProjection$$'
 agent-regressions: ## Agent已发布28项Q补充回归，单独收据，不增加69 owned计数
 	$(PYTHON) scripts/acceptance/agent.py --layer REG $(E2E_ARGS)
-agent-projection-fixture-check: ## 013证据命中后不留原文，仅验收工具纯检查
+agent-projection-fixture-check: ## 013证据不留原文及真实状态分支门禁，仅验收工具纯检查
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/acceptance/agent_projection_test.py
 agent-projection-k: ## 仅两项显式PROJECTION K；E2E_ARGS必须明确环境/独立来源/镜像/API锁
 	$(PYTHON) scripts/acceptance/agent.py --layer K $(E2E_ARGS) --cases REG18-PROJECTION-013.url-parse-error REG18-PROJECTION-013.proxy-parse-error

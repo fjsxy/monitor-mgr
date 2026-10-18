@@ -1,8 +1,20 @@
 """013验收工具的公开证据边界；纯fixture检查不计为产品Q或真实K通过。"""
 import contextlib,hashlib,io,json,pathlib,secrets,sqlite3,tempfile,types,unittest
-from agent_projection import database_probe,projection_artifact_scan
+from agent_projection import database_probe,projection_artifact_scan,wait_operator_status
 
 class ProjectionArtifactSafety(unittest.TestCase):
+ def test_operator_branch_requires_actual_status_and_failure_is_safe(self):
+  marker=secrets.token_hex(24)
+  suite=types.SimpleNamespace(cr=lambda name:{'status':{'message':'waiting'}})
+  with self.assertRaises(AssertionError) as failure:wait_operator_status(suite,['managed','external'],[marker],timeout=0)
+  self.assertNotIn(marker,str(failure.exception))
+  self.assertFalse(suite.projection_status_branch['branchObserved'])
+  suite.cr=lambda name:{'status':{'message':'parse https://reader:'+marker+'@example.invalid/%zz'}}
+  actual=wait_operator_status(suite,['managed','external'],[marker],timeout=0)
+  self.assertTrue(set(actual)=={'managed','external'})
+  self.assertTrue(suite.projection_status_branch['branchObserved'])
+  self.assertNotIn(marker,json.dumps(suite.projection_status_branch))
+
  def test_hit_is_failed_but_public_record_and_file_are_safe(self):
   with tempfile.TemporaryDirectory(prefix='projection-artifact-') as directory:
    marker=secrets.token_hex(24);out=pathlib.Path(directory);trace=out/'case.http.jsonl'
