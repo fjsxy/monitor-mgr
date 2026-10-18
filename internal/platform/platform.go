@@ -23,6 +23,7 @@ import (
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
 )
 
+// Config 收集进程监听、持久目录、会话寿命与受控测试边界。
 type Config struct {
 	// OperationBoundary 仅供确定性进程/事务故障测试，不由 HTTP 或运行参数开放。
 	OperationBoundary                                   func(stage, operationID string) error
@@ -32,6 +33,8 @@ type Config struct {
 	Now                                                 func() time.Time
 	Logger                                              *slog.Logger
 }
+
+// Runtime 组合 HTTP adapter、真实 loopback Kitex 服务与单实例管控存储。
 type Runtime struct {
 	cfg     Config
 	store   *control.Store
@@ -44,6 +47,7 @@ type Runtime struct {
 	closed  bool
 }
 
+// Start 依次建立单 writer、监听器和真实 RPC，完成数据库/RPC 探测后才提供 HTTP。
 func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	if cfg.HTTPAddr == "" {
 		cfg.HTTPAddr = ":8080"
@@ -54,6 +58,7 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	// 关键：RPC 仅监听 loopback，浏览器业务经 HTTP adapter 传递真实会话，不能旁路授权。
 	host, _, e := net.SplitHostPort(cfg.RPCAddr)
 	if e != nil || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() {
 		return nil, errors.New("RPC 必须监听 loopback IP")
@@ -91,6 +96,7 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	}
 	p.client, err = controlservice.NewClient("monitor-mgr-control", clientOptions...)
 	if err == nil {
+		// 关键：启动就绪必须经过真实生成 client 和服务端数据库，不能由监听成功代替。
 		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		for {
@@ -125,8 +131,14 @@ failed:
 	store.Close()
 	return nil, err
 }
-func (p *Runtime) URL() string        { return "http://" + p.ln.Addr().String() }
+
+// URL 返回当前 HTTP 监听地址，供测试和本地接入使用。
+func (p *Runtime) URL() string { return "http://" + p.ln.Addr().String() }
+
+// RPCAddress 返回实际 loopback RPC 地址，供明确的协议边界测试使用。
 func (p *Runtime) RPCAddress() string { return p.rpcAddr }
+
+// Close 先阻止新派发，再关闭 HTTP、RPC 和持久化存储。
 func (p *Runtime) Close(ctx context.Context) error {
 	p.mu.Lock()
 	if p.closed {
@@ -135,6 +147,7 @@ func (p *Runtime) Close(ctx context.Context) error {
 	}
 	p.closed = true
 	p.mu.Unlock()
+	// 关键：先保存 worker 恢复状态再释放数据库，退出不自动重放或把未确认结果取消。
 	p.store.StopWorkers()
 	var err error
 	if p.http != nil {
@@ -144,6 +157,8 @@ func (p *Runtime) Close(ctx context.Context) error {
 	p.store.Close()
 	return err
 }
+
+// handle 执行 HTTP 协议转换、Cookie/Origin 防护和 requestId 传播；业务通过 Kitex 执行。
 func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 	requestID := control.ID()
 	w.Header().Set("X-Request-Id", requestID)
@@ -165,6 +180,7 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ready"))
 		return
 	}
+	// 关键：变更请求先校验 Origin，HttpOnly Cookie 不作为跨站提交的授权替代品。
 	if r.Method != "GET" && r.Method != "HEAD" {
 		origin := p.cfg.PublicOrigin
 		if origin == "" {
@@ -179,6 +195,7 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// 只转发会话凭据和幂等键；账号角色及归属由 RPC 服务按当前数据库判定。
 	ctx := &rpc.RequestContext{RequestId: requestID}
 	if key := r.Header.Get("Idempotency-Key"); key != "" {
 		ctx.IdempotencyKey = &key
@@ -221,6 +238,7 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		expires, _ := time.Parse(time.RFC3339Nano, result.ExpiresAt)
+		// 关键：会话只通过专用 HttpOnly Set-Cookie 交付，不能进入 JSON 或脚本可读内容。
 		http.SetCookie(w, &http.Cookie{Name: "monitor_session", Value: result.SessionToken, Path: "/", HttpOnly: true, Secure: r.TLS != nil || strings.HasPrefix(p.cfg.PublicOrigin, "https://"), SameSite: http.SameSiteStrictMode, Expires: expires})
 		p.respond(w, 201, map[string]any{"account": accountDTO(result.Account), "expiresAt": result.ExpiresAt}, nil, requestID)
 	case "GET /api/v1/session":
@@ -286,6 +304,8 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 		p.writeError(w, control.Error("NOT_FOUND", "入口不存在"), requestID)
 	}
 }
+
+// decode 读取有大小边界的单个 JSON 对象，并拒绝未知字段和尾随输入。
 func decode(r *http.Request, v any) error {
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 65537))
 	decoder.DisallowUnknownFields()
@@ -298,12 +318,16 @@ func decode(r *http.Request, v any) error {
 	}
 	return nil
 }
+
+// accountDTO 显式输出账号的非敏感 HTTP 字段。
 func accountDTO(a *rpc.Account) any {
 	if a == nil {
 		return nil
 	}
 	return map[string]any{"id": a.Id, "username": a.Username, "role": a.Role, "enabled": a.Enabled, "mustChangePassword": a.MustChangePassword, "createdAt": a.CreatedAt}
 }
+
+// respond 统一写入成功 JSON，业务错误交由安全错误映射处理。
 func (p *Runtime) respond(w http.ResponseWriter, status int, v any, err error, id string) {
 	if err != nil {
 		p.writeError(w, err, id)
@@ -313,6 +337,8 @@ func (p *Runtime) respond(w http.ResponseWriter, status int, v any, err error, i
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
+
+// writeError 仅向页面返回安全业务错误与 requestId，不暴露底层异常或凭据。
 func (p *Runtime) writeError(w http.ResponseWriter, err error, id string) {
 	code, message, status := "UNAVAILABLE", "服务暂不可用", 503
 	var apiErr *rpc.APIError
@@ -352,6 +378,7 @@ func (p *Runtime) writeError(w http.ResponseWriter, err error, id string) {
 	json.NewEncoder(w).Encode(body)
 }
 
+// accountMutation 将账号路径和 HTTP 请求转换为类型化 RPC 变更。
 func (p *Runtime) accountMutation(w http.ResponseWriter, r *http.Request, ctx *rpc.RequestContext, requestID string) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/accounts/")
 	parts := strings.Split(path, "/")

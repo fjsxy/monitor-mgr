@@ -19,8 +19,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Only the selected context is materialized; no kubeconfig loader, environment proxy,
-// external file, plugin or Pod service-account fallback can supply credentials.
+// targetCredential 保存所选 context 的内嵌材料，只供加密存储和目标客户端使用。
+// 关键：不从外部文件、环境 proxy、插件或 Pod ServiceAccount 补充身份，避免隐式越权。
 type targetCredential struct {
 	Server     string `json:"server"`
 	CA         []byte `json:"ca"`
@@ -29,6 +29,8 @@ type targetCredential struct {
 	Token      string `json:"token,omitempty"`
 	ServerName string `json:"serverName,omitempty"`
 }
+
+// kubeFile 只解析核验所选 context 所需字段，不执行 kubeconfig loader。
 type kubeFile struct {
 	Clusters []struct {
 		Name    string `yaml:"name"`
@@ -65,6 +67,8 @@ type kubeFile struct {
 	} `yaml:"contexts"`
 }
 
+// parseCredential 静态验证所选 context，并提取允许的内嵌 HTTPS 凭据。
+// 关键：先拒绝外部文件、插件和 proxy，再构造客户端，防止上传配置触发额外访问或执行。
 func parseCredential(raw, contextName string) (*targetCredential, error) {
 	if len(raw) > 131072 || strings.TrimSpace(contextName) == "" {
 		return nil, Error("INVALID_INPUT", "须上传内嵌 kubeconfig 并明确选择 context")
@@ -149,7 +153,7 @@ func parseCredential(raw, contextName string) (*targetCredential, error) {
 	return result, nil
 }
 
-// Target makes bounded, TLS-verified requests. Error text never contains uploaded material.
+// Target 提供有预算与 TLS 校验的目标 API 访问，错误不回显上传材料。
 type Target struct {
 	credential *targetCredential
 	client     *http.Client
@@ -157,6 +161,7 @@ type Target struct {
 	clusterID  string
 }
 
+// newTarget 仅使用上传的 CA 与身份材料建立客户端，保持 TLS 校验并拒绝重定向。
 func newTarget(c *targetCredential) (*Target, error) {
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(c.CA) {
@@ -172,7 +177,11 @@ func newTarget(c *targetCredential) (*Target, error) {
 	}
 	return &Target{credential: c, client: &http.Client{Transport: &http.Transport{TLSClientConfig: cfg, Proxy: nil}, Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("API 重定向被拒绝") }}}, nil
 }
+
+// Close 释放目标连接池中的空闲连接。
 func (t *Target) Close() { t.client.CloseIdleConnections() }
+
+// Request 在目标预算内执行一次 API 请求，将失败转换为不含上传材料的业务错误。
 func (t *Target) Request(ctx context.Context, method, path string, body any, out any) error {
 	return t.request(ctx, method, path, body, out, nil)
 }
@@ -195,6 +204,7 @@ func (t *Target) Mutate(ctx context.Context, method, path string, body any) Muta
 	return o
 }
 func (t *Target) request(ctx context.Context, method, path string, body any, out any, status *int) error {
+	// 关键：排队与网络共用原调用的剩余预算，不能借等待或重试突破目标请求上限。
 	bounded, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	ctx = bounded
@@ -264,12 +274,15 @@ func (t *Target) request(ctx context.Context, method, path string, body any, out
 	return nil
 }
 
+// verifiedTarget 保存已核验的集群身份与本次基础组件能力。
 type verifiedTarget struct {
 	uid, identity, version string
 	capabilities           []*rpc.ClusterCapability
 }
 
+// verify 依次核验实际访问身份、集群 UID 和基础能力，不创建业务资源。
 func (t *Target) verify(ctx context.Context) (*verifiedTarget, error) {
+	// 关键：必须由非匿名 SelfSubjectReview 证明身份，version 或权限审查成功不能替代。
 	var ssr struct {
 		Status struct {
 			UserInfo struct {
@@ -290,6 +303,7 @@ func (t *Target) verify(ctx context.Context) (*verifiedTarget, error) {
 			return nil, Error("TARGET_UNAUTHENTICATED", "SelfSubjectReview 返回匿名身份")
 		}
 	}
+	// 关键：kube-system Namespace UID 是关联锚点，只有取得它才允许切换有效凭据。
 	var ns struct {
 		Metadata struct {
 			UID string `json:"uid"`
@@ -308,6 +322,7 @@ func (t *Target) verify(ctx context.Context) (*verifiedTarget, error) {
 	if e := t.Request(ctx, "GET", "/version", nil, &v); e == nil && v.GitVersion != "" {
 		version = v.GitVersion
 	}
+	// 组件能力不足允许受限登记；实际发布仍需按 namespace、动作和依赖再次核验。
 	caps := []*rpc.ClusterCapability{}
 	for _, c := range []struct{ name, group, version, resource string }{{"kube-state-metrics", "monitoring.fjsxy.github.io", "v1alpha1", "kubestatemetrics"}, {"Prometheus Agent", "monitoring.coreos.com", "v1alpha1", "prometheusagents"}} {
 		cap := &rpc.ClusterCapability{Component: c.name, Allowed: true, Reason: "注册时基础能力通过；发布前按目标 namespace、动作和依赖重新核验"}
@@ -337,6 +352,8 @@ func (t *Target) verify(ctx context.Context) (*verifiedTarget, error) {
 	}
 	return &verifiedTarget{ns.Metadata.UID, u.Username, version, caps}, nil
 }
+
+// Namespaces 完整读取 namespace 分页；任一页失败均不返回伪装完整的部分列表。
 func (t *Target) Namespaces(ctx context.Context) ([]string, error) {
 	result := []string{}
 	cont := ""
@@ -370,6 +387,7 @@ func (t *Target) Namespaces(ctx context.Context) ([]string, error) {
 	return result, nil
 }
 
+// ListKubeconfigContexts 仅向当前管理员列出 context 名称，不返回凭据或选择默认身份。
 func (s *Store) ListKubeconfigContexts(ctx context.Context, c *rpc.RequestContext, r *rpc.KubeconfigRequest) (*rpc.ContextsResult_, error) {
 	p, e := s.Authorize(ctx, token(c))
 	if e != nil {

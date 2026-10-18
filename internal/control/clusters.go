@@ -1,3 +1,4 @@
+// 本文件提供集群生命周期、当前归属授权和只读元信息的管控入口。
 package control
 
 import (
@@ -14,6 +15,7 @@ import (
 const clusterColumns = `id,name,owner_id,uid,identity,kubernetes_version,state,credential_revision,revision,capabilities,created_at`
 const operationColumns = `id,action,state,cluster_id,actor_id,message,created_at,updated_at,credential_revision,owner_id,owner_before`
 
+// scanCluster 将持久化的非敏感集群列转换为 RPC 对象。
 func scanCluster(row interface{ Scan(...any) error }) (*rpc.Cluster, error) {
 	c := new(rpc.Cluster)
 	var caps []byte
@@ -26,16 +28,20 @@ func scanCluster(row interface{ Scan(...any) error }) (*rpc.Cluster, error) {
 	}
 	return c, nil
 }
+
+// scanOperation 读取可展示的操作历史，不读取当前或候选凭据。
 func scanOperation(row interface{ Scan(...any) error }) (*rpc.Operation, error) {
 	o := new(rpc.Operation)
 	e := row.Scan(&o.OperationId, &o.Action, &o.State, &o.ClusterId, &o.ActorId, &o.Message, &o.CreatedAt, &o.UpdatedAt, &o.CredentialRevision, &o.OwnerId, &o.PreviousOwnerId)
 	return o, e
 }
 
+// clusterQuery 统一数据库与事务内的单行读取边界。
 type clusterQuery interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
+// clusterByID 读取同一 clusterId 的管理记录，并区分不存在与读取失败。
 func clusterByID(ctx context.Context, q clusterQuery, id string) (*rpc.Cluster, error) {
 	c, e := scanCluster(q.QueryRowContext(ctx, `SELECT `+clusterColumns+` FROM clusters WHERE id=?`, id))
 	if e == sql.ErrNoRows {
@@ -46,12 +52,17 @@ func clusterByID(ctx context.Context, q clusterQuery, id string) (*rpc.Cluster, 
 	}
 	return c, nil
 }
+
+// clusterPermission 按当前管理员角色或唯一归属决定访问权。
+// 关键：历史操作者不是授权依据，转移后旧所属用户不能凭历史继续访问。
 func clusterPermission(p *Principal, c *rpc.Cluster) error {
 	if p.Account.Role != "ADMIN" && c.OwnerId != p.Account.Id {
 		return Error("FORBIDDEN", "无权访问此集群")
 	}
 	return nil
 }
+
+// enabledOwner 验证注册、转移或重新启用指定的所属用户仍存在且启用。
 func enabledOwner(ctx context.Context, q clusterQuery, id string) error {
 	var enabled bool
 	e := q.QueryRowContext(ctx, `SELECT enabled FROM accounts WHERE id=?`, id).Scan(&enabled)
@@ -60,6 +71,8 @@ func enabledOwner(ctx context.Context, q clusterQuery, id string) error {
 	}
 	return nil
 }
+
+// ListClusters 仅列出当前账号有权访问的集群，管理员可查看全部记录。
 func (s *Store) ListClusters(ctx context.Context, c *rpc.RequestContext) (*rpc.ClustersResult_, error) {
 	p, e := s.Authorize(ctx, token(c))
 	if e != nil {
@@ -89,6 +102,8 @@ func (s *Store) ListClusters(ctx context.Context, c *rpc.RequestContext) (*rpc.C
 	}
 	return &rpc.ClustersResult_{Clusters: out}, nil
 }
+
+// GetCluster 先校验真实会话与当前归属，再返回集群元信息。
 func (s *Store) GetCluster(ctx context.Context, c *rpc.RequestContext, r *rpc.ClusterID) (*rpc.Cluster, error) {
 	p, e := s.Authorize(ctx, token(c))
 	if e != nil {
@@ -103,15 +118,23 @@ func (s *Store) GetCluster(ctx context.Context, c *rpc.RequestContext, r *rpc.Cl
 	}
 	return cl, nil
 }
+
+// RegisterCluster 受理一个新集群的异步凭据核验，不把候选立即视为有效登记。
 func (s *Store) RegisterCluster(ctx context.Context, c *rpc.RequestContext, r *rpc.RegisterClusterRequest) (*rpc.Operation, error) {
 	return s.acceptCredential(ctx, c, "REGISTER", ID(), r.OwnerId, r.Name, r.Context, r.Kubeconfig, r)
 }
+
+// UpdateCredential 受理候选验证；成功前旧凭据继续作为有效访问材料。
 func (s *Store) UpdateCredential(ctx context.Context, c *rpc.RequestContext, r *rpc.CredentialRequest) (*rpc.Operation, error) {
 	return s.acceptCredential(ctx, c, "CREDENTIAL", r.Id, "", "", r.Context, r.Kubeconfig, r)
 }
+
+// ReactivateCluster 为已注销记录受理新凭据与启用归属，原 UID 必须在核验时一致。
 func (s *Store) ReactivateCluster(ctx context.Context, c *rpc.RequestContext, r *rpc.CredentialRequest) (*rpc.Operation, error) {
 	return s.acceptCredential(ctx, c, "REACTIVATE", r.Id, r.GetOwnerId(), "", r.Context, r.Kubeconfig, r)
 }
+
+// acceptCredential 将当前授权、幂等结果、操作与候选密文原子受理。
 func (s *Store) acceptCredential(ctx context.Context, c *rpc.RequestContext, action, id, owner, name, contextName, raw string, request any) (*rpc.Operation, error) {
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
@@ -130,6 +153,7 @@ func (s *Store) acceptCredential(ctx context.Context, c *rpc.RequestContext, act
 		scope = "clusters"
 	}
 	var replay rpc.Operation
+	// 关键：先在事务内授权再命中幂等；旧结果不能绕过账号角色或归属生命周期。
 	cmd, hit, e := s.beginCommand(ctx, tx, p, c, action, scope, request, &replay)
 	if e != nil {
 		return nil, e
@@ -176,6 +200,7 @@ func (s *Store) acceptCredential(ctx context.Context, c *rpc.RequestContext, act
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	o := &rpc.Operation{OperationId: ID(), Action: action, State: "QUEUED", ClusterId: id, ActorId: p.Account.Id, Message: "已受理，候选尚未核验生效", CreatedAt: now, UpdatedAt: now, OwnerId: owner}
+	// 关键：操作记录只保存身份与修订，候选单独加密，避免历史成为明文凭据旁路。
 	cipher, e := s.sealCredential(cred, o.OperationId)
 	if e != nil {
 		return nil, Error("UNAVAILABLE", "候选凭据无法加密")
@@ -199,8 +224,8 @@ func (s *Store) acceptCredential(ctx context.Context, c *rpc.RequestContext, act
 	return o, nil
 }
 
-// HasUnfinishedChangesTx protects ownership and unregister against every operation kind,
-// including future publish/delete states and uncertain results. Unknown states fail closed.
+// HasUnfinishedChangesTx 在当前事务内检查集群的全部未结束变更。
+// 关键：包括未来操作及未知状态，不能只检查凭据类型而放行仍受保护的转移或注销。
 func (s *Store) HasUnfinishedChangesTx(ctx context.Context, tx *sql.Tx, id string) error {
 	var n int
 	if tx.QueryRowContext(ctx, `SELECT count(*) FROM operations WHERE cluster_id=? AND state NOT IN ('SUCCEEDED','FAILED','CANCELLED')`, id).Scan(&n) != nil {
@@ -211,12 +236,18 @@ func (s *Store) HasUnfinishedChangesTx(ctx context.Context, tx *sql.Tx, id strin
 	}
 	return nil
 }
+
+// TransferCluster 在无未结束变更时调整唯一归属并保留前后归属历史。
 func (s *Store) TransferCluster(ctx context.Context, c *rpc.RequestContext, r *rpc.TransferClusterRequest) (*rpc.Cluster, error) {
 	return s.clusterMutation(ctx, c, "TRANSFER", r.Id, r.OwnerId, r)
 }
+
+// UnregisterCluster 结束平台管理并清除访问凭据，本身不删除目标资源。
 func (s *Store) UnregisterCluster(ctx context.Context, c *rpc.RequestContext, r *rpc.ClusterID) (*rpc.Cluster, error) {
 	return s.clusterMutation(ctx, c, "UNREGISTER", r.Id, "", r)
 }
+
+// clusterMutation 在同一事务内执行转移或注销及对应审计、幂等结果。
 func (s *Store) clusterMutation(ctx context.Context, c *rpc.RequestContext, action, id, owner string, request any) (*rpc.Cluster, error) {
 	s.dispatch.Lock()
 	defer s.dispatch.Unlock()
@@ -247,6 +278,7 @@ func (s *Store) clusterMutation(ctx context.Context, c *rpc.RequestContext, acti
 	if cl.State != "ACTIVE" {
 		return nil, Error("CONFLICT", "集群已注销")
 	}
+	// 关键：转移与注销保护所有未结束类型，结果不明时不能丢失管理责任。
 	if e = s.HasUnfinishedChangesTx(ctx, tx, id); e != nil {
 		return nil, e
 	}
@@ -259,6 +291,7 @@ func (s *Store) clusterMutation(ctx context.Context, c *rpc.RequestContext, acti
 			return nil, Error("UNAVAILABLE", "转移失败")
 		}
 	} else {
+		// 关键：注销同时清除当前与全部候选凭据；保留历史不能保留可继续访问的材料。
 		if _, e = tx.ExecContext(ctx, `UPDATE clusters SET state='ARCHIVED',credential=NULL,revision=revision+1 WHERE id=?`, id); e != nil {
 			return nil, Error("UNAVAILABLE", "注销失败")
 		}
@@ -285,6 +318,8 @@ func (s *Store) clusterMutation(ctx context.Context, c *rpc.RequestContext, acti
 	}
 	return cl, nil
 }
+
+// GetOperation 按当前集群归属授权查询结果，未登记候选仅管理员可查。
 func (s *Store) GetOperation(ctx context.Context, c *rpc.RequestContext, r *rpc.OperationID) (*rpc.Operation, error) {
 	p, e := s.Authorize(ctx, token(c))
 	if e != nil {
@@ -309,6 +344,8 @@ func (s *Store) GetOperation(ctx context.Context, c *rpc.RequestContext, r *rpc.
 	s.enrichPublicationOperation(ctx, s.DB, o)
 	return o, nil
 }
+
+// ListClusterOperations 在当前授权后列出集群的脱敏管理历史。
 func (s *Store) ListClusterOperations(ctx context.Context, c *rpc.RequestContext, r *rpc.ClusterID) (*rpc.OperationsResult_, error) {
 	if _, e := s.GetCluster(ctx, c, r); e != nil {
 		return nil, e
@@ -331,6 +368,8 @@ func (s *Store) ListClusterOperations(ctx context.Context, c *rpc.RequestContext
 	}
 	return &rpc.OperationsResult_{Operations: out}, nil
 }
+
+// ContinueOperation 仅允许管理员明确继续集群注册或凭据的只读核验。
 func (s *Store) ContinueOperation(ctx context.Context, c *rpc.RequestContext, r *rpc.OperationID) (*rpc.Operation, error) {
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
@@ -348,6 +387,7 @@ func (s *Store) ContinueOperation(ctx context.Context, c *rpc.RequestContext, r 
 	if e != nil {
 		return nil, Error("NOT_FOUND", "操作不存在")
 	}
+	// 关键：白名单先于幂等回读，禁止借此入口重排发布、删除或未知操作。
 	if o.Action != "REGISTER" && o.Action != "CREDENTIAL" && o.Action != "REACTIVATE" {
 		return nil, Error("CONFLICT", "此入口仅可继续集群注册或凭据只读核验")
 	}
@@ -378,6 +418,8 @@ func (s *Store) ContinueOperation(ctx context.Context, c *rpc.RequestContext, r 
 	s.wakeWorker()
 	return o, nil
 }
+
+// TargetForCluster 通过当前授权读取有效凭据，再创建受统一预算限制的目标客户端。
 func (s *Store) TargetForCluster(ctx context.Context, c *rpc.RequestContext, id string) (*Target, error) {
 	cl, e := s.GetCluster(ctx, c, &rpc.ClusterID{Id: id})
 	if e != nil {
@@ -402,6 +444,8 @@ func (s *Store) TargetForCluster(ctx context.Context, c *rpc.RequestContext, id 
 	target.clusterID = id
 	return target, nil
 }
+
+// ListNamespaces 返回有权访问集群的完整 namespace 列表，失败不冒充空集。
 func (s *Store) ListNamespaces(ctx context.Context, c *rpc.RequestContext, r *rpc.ClusterID) (*rpc.NamespacesResult_, error) {
 	t, e := s.TargetForCluster(ctx, c, r.Id)
 	if e != nil {
@@ -416,6 +460,8 @@ func (s *Store) ListNamespaces(ctx context.Context, c *rpc.RequestContext, r *rp
 	}
 	return &rpc.NamespacesResult_{Namespaces: names}, nil
 }
+
+// ListReferences 返回 Secret/ServiceAccount 引用元信息，不返回 Secret value。
 func (s *Store) ListReferences(ctx context.Context, c *rpc.RequestContext, r *rpc.ReferencesRequest) (*rpc.ReferencesResult_, error) {
 	t, e := s.TargetForCluster(ctx, c, r.Id)
 	if e != nil {
@@ -429,6 +475,7 @@ func (s *Store) ListReferences(ctx context.Context, c *rpc.RequestContext, r *rp
 	bounded, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	out := []*rpc.ReferenceMetadata{}
+	// 关键：只有所有分页成功才返回完整引用集，避免部分结果使依赖校验误判。
 	continuation := ""
 	seen := map[string]bool{}
 	for {

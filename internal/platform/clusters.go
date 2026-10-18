@@ -1,3 +1,4 @@
+// 本文件仅负责集群/操作 HTTP 路由与类型化 RPC 转换，不直接访问数据库或目标集群。
 package platform
 
 import (
@@ -7,6 +8,7 @@ import (
 	"strings"
 )
 
+// clusterRoutes 转换集群生命周期、候选核验及只读元信息请求，授权由 RPC 服务统一执行。
 func (p *Runtime) clusterRoutes(w http.ResponseWriter, r *http.Request, c *rpc.RequestContext, id string) {
 	if r.URL.Path == "/api/v1/clusters/contexts" && r.Method == "POST" {
 		var b rpc.KubeconfigRequest

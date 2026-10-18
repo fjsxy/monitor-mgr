@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 )
 
+// schemaVersion 定义本程序能够读取和升级到的数据库版本。
 const schemaVersion = 4
 
+// migrationSQL 按版本依次保存结构变更，不修改已经发布的旧版本语句。
 var migrationSQL = [][]string{
 	{`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY)`,
 		`CREATE TABLE accounts(id TEXT PRIMARY KEY,username TEXT NOT NULL UNIQUE,password_hash BLOB NOT NULL,role TEXT NOT NULL CHECK(role IN ('ADMIN','USER')),enabled INTEGER NOT NULL,must_change INTEGER NOT NULL,auth_version INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL)`,
@@ -32,6 +34,7 @@ var migrationSQL = [][]string{
 		`CREATE TABLE instance_observations(instance_id TEXT PRIMARY KEY REFERENCES instances(id),runtime BLOB NOT NULL,cr BLOB NOT NULL,observed_at TEXT NOT NULL)`},
 }
 
+// migrate 配置 SQLite WAL，并在保留恢复依据的前提下原子升级数据库。
 func migrate(db *sql.DB, dataDir string) error {
 	for _, q := range []string{`PRAGMA journal_mode=WAL`, `PRAGMA synchronous=FULL`, `PRAGMA foreign_keys=ON`, `PRAGMA busy_timeout=5000`} {
 		if _, err := db.Exec(q); err != nil {
@@ -48,6 +51,7 @@ func migrate(db *sql.DB, dataDir string) error {
 		if err := db.QueryRow(`SELECT coalesce(max(version),0),count(*) FROM schema_migrations`).Scan(&current, &count); err != nil {
 			return err
 		}
+		// 关键：未知或不连续版本停止启动，避免按错误结构继续写入管理状态。
 		if current > schemaVersion || count != current {
 			return errors.New("数据库版本不支持，保留原库并停止启动")
 		}
@@ -63,7 +67,7 @@ func migrate(db *sql.DB, dataDir string) error {
 				return fmt.Errorf("迁移前快照目录失败: %w", err)
 			}
 			path := filepath.Join(dir, fmt.Sprintf("schema-%d-to-%d-%s.db", current, schemaVersion, ID()))
-			// VACUUM INTO obtains a consistent SQLite snapshot including committed WAL data.
+			// 关键：变更结构前先同步包含已提交 WAL 的一致快照，失败时保留可恢复的原库。
 			if _, err := db.Exec(`VACUUM INTO ?`, path); err != nil {
 				return fmt.Errorf("迁移前一致快照失败: %w", err)
 			}
@@ -89,6 +93,7 @@ func migrate(db *sql.DB, dataDir string) error {
 				return err
 			}
 		}
+		// 关键：所有 DDL 与版本标记共同提交；失败回滚，避免出现半迁移结构。
 		tx, err := db.Begin()
 		if err != nil {
 			return err

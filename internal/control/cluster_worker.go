@@ -1,3 +1,4 @@
+// 本文件在应用生命周期内执行持久化的集群凭据核验，不绑定原 HTTP 请求或 Cookie 寿命。
 package control
 
 import (
@@ -9,12 +10,15 @@ import (
 	"time"
 )
 
+// wakeWorker 合并唤醒信号，通知后台检查已持久化的排队操作。
 func (s *Store) wakeWorker() {
 	select {
 	case s.workerWake <- struct{}{}:
 	default:
 	}
 }
+
+// StartWorkers 建立后台核验循环，并先将重启遗留操作转为等待明确继续。
 func (s *Store) StartWorkers() error {
 	// 关键：重启不能重放已受理变更；未发等待人工继续，可能已发保持不确定保护。
 	if _, e := s.DB.Exec(`UPDATE operations SET state='WAITING_CONFIRMATION',message='平台已重启，等待管理员明确继续核验' WHERE state IN ('QUEUED','RUNNING','CHECKING')`); e != nil {
@@ -51,12 +55,16 @@ func (s *Store) StartWorkers() error {
 	}()
 	return nil
 }
+
+// StopWorkers 停止新核验并等待当前工作保存恢复状态后退出。
 func (s *Store) StopWorkers() {
 	if s.workerCancel != nil {
 		s.workerCancel()
 		<-s.workerDone
 	}
 }
+
+// actorAdmin 按账号当前启用、改密及角色状态核验发起者，不依赖原 Session。
 func actorAdmin(ctx context.Context, tx *sql.Tx, id string) error {
 	var role string
 	var enabled bool
@@ -66,6 +74,8 @@ func actorAdmin(ctx context.Context, tx *sql.Tx, id string) error {
 	}
 	return nil
 }
+
+// verifyOperation 领取已受理候选，在当前授权后执行有预算的 TLS/身份/UID 核验。
 func (s *Store) verifyOperation(life context.Context, id string) {
 	tx, e := s.DB.BeginTx(life, nil)
 	if e != nil {
@@ -76,6 +86,7 @@ func (s *Store) verifyOperation(life context.Context, id string) {
 		tx.Rollback()
 		return
 	}
+	// 关键：派发前重新读取发起账号权限，受理时的授权不能支持失权后的新访问。
 	e = actorAdmin(life, tx, o.ActorId)
 	if e != nil {
 		tx.Rollback()
@@ -111,10 +122,12 @@ func (s *Store) verifyOperation(life context.Context, id string) {
 	}
 	s.finishVerification(life, o, cred, verified, e)
 }
+
+// finishVerification 在事务内保存验证结果，仅成功且身份一致时切换有效凭据。
 func (s *Store) finishVerification(life context.Context, o *rpc.Operation, cred *targetCredential, v *verifiedTarget, verifyErr error) {
 	s.dispatch.Lock()
 	defer s.dispatch.Unlock()
-	// Shutdown writes recovery state with an independent bounded context after transport cancellation.
+	// 关键：网络取消后仍用独立限时事务保存等待状态，退出不能把未核实结果误报失败或完成。
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	tx, e := s.DB.BeginTx(ctx, nil)
@@ -132,6 +145,7 @@ func (s *Store) finishVerification(life context.Context, o *rpc.Operation, cred 
 		tx.Commit()
 		return
 	}
+	// 关键：核验期间权限可能变化，切换事务必须再次检查发起账号和指定归属。
 	if e = actorAdmin(ctx, tx, o.ActorId); e != nil {
 		verifyErr = e
 	}
@@ -145,6 +159,7 @@ func (s *Store) finishVerification(life context.Context, o *rpc.Operation, cred 
 	var current *rpc.Cluster
 	if verifyErr == nil && o.Action != "REGISTER" {
 		current, verifyErr = clusterByID(ctx, tx, o.ClusterId)
+		// 关键：候选 UID 必须匹配原记录，避免把旧配置和历史继承给重建后的另一集群。
 		if verifyErr == nil && current.Uid != v.uid {
 			verifyErr = Error("CONFLICT", "候选属于不同集群 UID，请独立注册；原记录与历史保留")
 		}
@@ -165,6 +180,7 @@ func (s *Store) finishVerification(life context.Context, o *rpc.Operation, cred 
 	if current != nil {
 		revision = current.CredentialRevision + 1
 	}
+	// 关键：只有核验成功才原子切换当前密文；失败保留原凭据，恢复读取也不重放其他写入。
 	if verifyErr == nil {
 		cipher, e := s.sealCredential(cred, o.ClusterId)
 		if e != nil {
