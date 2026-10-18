@@ -1,3 +1,4 @@
+// 本文件将集群当前/候选凭据封装为绑定实体身份的 AES-GCM 密文。
 package control
 
 import (
@@ -8,6 +9,8 @@ import (
 	"io"
 )
 
+// sealCredential 使用独立随机 nonce 加密凭据，不把明文放入操作历史。
+// 关键：AAD 绑定 clusterId 或 operationId，避免密文被移用到其他集群或候选操作。
 func (s *Store) sealCredential(c *targetCredential, aad string) ([]byte, error) {
 	block, e := aes.NewCipher(s.Key)
 	if e != nil {
@@ -27,6 +30,8 @@ func (s *Store) sealCredential(c *targetCredential, aad string) ([]byte, error) 
 	}
 	return g.Seal(nonce, nonce, raw, []byte(aad)), nil
 }
+
+// openCredential 校验密文及其所属身份，只向管控服务内部返回解密材料。
 func (s *Store) openCredential(data []byte, aad string) (*targetCredential, error) {
 	block, _ := aes.NewCipher(s.Key)
 	g, _ := cipher.NewGCM(block)

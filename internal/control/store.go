@@ -1,3 +1,4 @@
+// Package control 统一处理当前授权、持久化管理状态和目标集群访问。
 package control
 
 import (
@@ -18,6 +19,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// Store 持有单 writer 数据库、独立密钥和应用生命周期 worker。
 type Store struct {
 	DB           *sql.DB
 	lock         *os.File
@@ -30,6 +32,7 @@ type Store struct {
 	workerDone   chan struct{}
 }
 
+// Open 在单 writer 锁、密钥校验与数据库迁移均通过后提供存储服务。
 func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, error) {
 	if now == nil {
 		now = time.Now
@@ -47,6 +50,7 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 	if err != nil {
 		return nil, err
 	}
+	// 关键：同一目录只允许一个 writer，避免并行实例破坏任务和数据库的一致性。
 	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		lock.Close()
 		return nil, errors.New("数据目录已有 writer")
@@ -59,6 +63,7 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 	keyPath := filepath.Join(dataDir, "master.key")
 	dbPath := filepath.Join(dataDir, "platform.db")
 	key, err := os.ReadFile(keyPath)
+	// 关键：已有数据库缺原密钥必须停止；生成替代密钥会使历史凭据永久不可解密。
 	if os.IsNotExist(err) {
 		if _, e := os.Stat(dbPath); e == nil {
 			return fail(errors.New("已有数据库缺少原密钥"))
@@ -82,6 +87,7 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 	} else if err != nil {
 		return fail(err)
 	}
+	// 关键：密钥只允许当前运行 UID 的 0600 普通文件，防止泄露或意外替换。
 	info, err := os.Lstat(keyPath)
 	if err != nil {
 		return fail(err)
@@ -103,6 +109,7 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 	}
 
 	s := &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key, limits: newTargetLimits()}
+	// 关键：启动时验证全部当前及候选密文，错误原密钥不能伪装成可用平台。
 	rows, err := db.Query(`SELECT id,credential FROM clusters WHERE credential IS NOT NULL UNION ALL SELECT operation_id,cipher FROM cluster_candidates`)
 	if err != nil {
 		db.Close()
@@ -130,6 +137,8 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 	}
 	return s, nil
 }
+
+// Close 先停止 worker，再关闭数据库并释放 writer 锁。
 func (s *Store) Close() error {
 	s.StopWorkers()
 	err := s.DB.Close()
@@ -137,6 +146,8 @@ func (s *Store) Close() error {
 	s.lock.Close()
 	return err
 }
+
+// ID 生成不可预测的独立标识，供实体、操作和会话等入口使用。
 func ID() string {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
@@ -144,22 +155,29 @@ func ID() string {
 	}
 	return hex.EncodeToString(b)
 }
+
+// Error 将安全的业务错误转换为统一 RPC 错误，不包含凭据材料。
 func Error(code, message string) error { return &rpc.APIError{Code: code, Message: message} }
 
 var usernameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$`)
 
+// validCredentials 组合账号名称和密码的输入约束。
 func validCredentials(name, password string) error {
 	if !usernameRE.MatchString(name) {
 		return Error("INVALID_INPUT", "账号须为 1–63 位英文字母、数字、点、下划线或连字符")
 	}
 	return validPassword(password)
 }
+
+// validPassword 限制密码字节长度，与 bcrypt 支持范围保持一致。
 func validPassword(password string) error {
 	if len(password) < 12 || len(password) > 72 {
 		return Error("INVALID_INPUT", "密码须为 12–72 字节")
 	}
 	return nil
 }
+
+// scanAccount 将账号的非敏感列转换为 RPC 返回对象。
 func scanAccount(row interface{ Scan(...any) error }) (*rpc.Account, error) {
 	a := new(rpc.Account)
 	err := row.Scan(&a.Id, &a.Username, &a.Role, &a.Enabled, &a.MustChangePassword, &a.CreatedAt)
@@ -168,6 +186,7 @@ func scanAccount(row interface{ Scan(...any) error }) (*rpc.Account, error) {
 
 const accountColumns = `id,username,role,enabled,must_change,created_at`
 
+// Probe 通过实际数据库查询报告初始化状态，不依赖目标集群是否在线。
 func (s *Store) Probe(ctx context.Context, _ *rpc.RequestContext) (*rpc.ProbeResult_, error) {
 	var n int
 	if err := s.DB.QueryRowContext(ctx, `SELECT count(*) FROM accounts`).Scan(&n); err != nil {
@@ -175,6 +194,8 @@ func (s *Store) Probe(ctx context.Context, _ *rpc.RequestContext) (*rpc.ProbeRes
 	}
 	return &rpc.ProbeResult_{Initialized: n > 0}, nil
 }
+
+// Initialize 仅在空账号库中原子建立首个管理员及审计记录。
 func (s *Store) Initialize(ctx context.Context, _ *rpc.RequestContext, r *rpc.InitializeRequest) (*rpc.Account, error) {
 	if err := validCredentials(r.Username, r.Password); err != nil {
 		return nil, err
@@ -192,6 +213,7 @@ func (s *Store) Initialize(ctx context.Context, _ *rpc.RequestContext, r *rpc.In
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM accounts`).Scan(&count); err != nil {
 		return nil, Error("UNAVAILABLE", "数据库暂不可用")
 	}
+	// 关键：事务内再次确认空库，避免并发初始化覆盖既有管理员。
 	if count != 0 {
 		return nil, Error("ALREADY_INITIALIZED", "管理员已初始化")
 	}
