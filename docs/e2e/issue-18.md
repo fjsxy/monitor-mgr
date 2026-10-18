@@ -139,3 +139,18 @@
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
 | REG18-PATTERN-011 | 初始化、登录与新账号的账号规则在Chromium实际生效 | 在U02真实Chromium中读取初始化/登录和新账号input.pattern，以JavaScript `v` flag实际编译；逐项填写含点、横线、下划线的合法账号及中文、空格、斜线等非法账号，检查patternMismatch并记录console。 | 两处共用明确安全写法；合法账号无patternMismatch，非法字符被拒绝；console无非法正则语法错误，独立输出此B补充证据，不把它计为额外Go回归或owned子例。 | #18 |
+
+## LabelSelector CR 输出补充回归
+
+以下6条为独立Q补充：经真实HTTP、生成Kitex RPC、SQLite与受控TLS Kubernetes API验证完整发布链，API按固定CRD省略非nullable的null字段；真实集群四类关联继续由A11完整矩阵覆盖。原69个owned责任子例保持不变；补充回归共27个唯一ID，其中26个Q，PATTERN-011为B，SOURCE-007同时执行Q/B，共28个补充执行键。
+
+关键：平台typed模型与Thrift往返继续区分缺失和显式空集合；仅CR输出边界省略nil的表达式values，显式空数组继续保留。不得全局删除null、折叠外层selector的省略/{}，或改写未知字段语义。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG18-SELECTOR-012.exists-nil | Exists缺失values不产生API裁剪后的身份误判 | 经HTTP/RPC保存并预览含Exists且values缺失的Labels规则，确认发布；受控API按固定CRD省略null，回读实际CR及操作终态。并检查外层None/All映射。 | CR表达式省略values，发布成功且无IDENTITY_UNCERTAIN；typed缺失语义保留；None仍省略、All仍{}，无额外写入或不安全重试。 | #18 |
+| REG18-SELECTOR-012.exists-empty | Exists显式空values保持已约定的空集合语义 | 经HTTP/RPC保存values=[]的Exists规则，检查生成类型、DB草稿、预览YAML及发布后的实际CR。 | typed/RPC/DB中的显式空集合不变，CR保持values: []且发布成功；不把合法空数组改成null或与外层selector省略混同。 | #18 |
+| REG18-SELECTOR-012.not-exists-nil | DoesNotExist缺失values不产生身份误判 | 经HTTP/RPC保存并预览含DoesNotExist且values缺失的Labels规则，确认发布；API按固定CRD省略null，再回读操作。 | CR表达式省略values，实际CR与冻结版本一致，发布成功且无IDENTITY_UNCERTAIN；不放宽未知字段或依赖校验。 | #18 |
+| REG18-SELECTOR-012.not-exists-empty | DoesNotExist显式空values保持空集合 | 经HTTP/RPC保存values=[]的DoesNotExist规则，检查RPC/DB/预览并完成发布回读。 | 显式[]在typed和CR中保持，发布成功；没有null字段和重复创建，不改变外层None/All。 | #18 |
+| REG18-SELECTOR-012.in | In的非空values不可被省略规则吞掉 | 经HTTP/RPC保存In及两个合法values，预览、发布、回读实际CR与冻结版本。 | 非空values内容及顺序保持，正确匹配并发布成功；空值规范化不能改变集合选择含义。 | #18 |
+| REG18-SELECTOR-012.not-in | NotIn的非空values不可被省略规则吞掉 | 经HTTP/RPC保存NotIn及两个合法values，预览、发布、回读实际CR与冻结版本。 | 非空values完整保留，正确排除并发布成功；未越过当前集群授权或原UID校验。 | #18 |
