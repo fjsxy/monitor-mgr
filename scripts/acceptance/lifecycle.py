@@ -108,7 +108,7 @@ class Suite(KSMSuite):
   if case in ['P13.unsent','P13.possibly-sent']:
    stage='beforeDispatch' if case.endswith('unsent') else 'afterSendMarker';i=self.create();self.gate('arm',{'stage':stage});o=self.publish(i,wait=False);barrier=self.barrier(stage);before=self.call('GET','/operations/'+o['operationId']+'/attempts')['attempts'];rebuild=self.rebuild(force=True);pending=self.state(o,'WAITING_CONFIRMATION' if case.endswith('unsent') else 'IDENTITY_UNCERTAIN');assert self.cr_absent();time.sleep(1.2);assert self.cr_absent()
    if case.endswith('unsent'):
-    cfg=self.cfg();cfg['resources']['requestCPU']='900m';self.save(i,cfg);next=self.action(o,'continue-unsent');assert next['operationId']==o['operationId'] and next['versionId']==o['versionId'] and next['attemptId']!=o['attemptId'];self.state(o,'SUCCEEDED');assert self.cr()['spec']['podResources']['requests']['cpu']=='100m'
+    cfg=self.cfg();cfg['resources']['requestCPU']='900m';self.save(i,cfg);continued=self.action(o,'continue-unsent');assert continued['operationId']==o['operationId'] and continued['versionId']==o['versionId'] and continued['attemptId']!=o['attemptId'];self.state(o,'SUCCEEDED');assert self.cr()['spec']['podResources']['requests']['cpu']=='100m'
    else:
     self.action(o,'retry',409);self.action(o,'continue-unsent',409);self.action(o,'cancel',409);assert self.call('GET','/instances/'+i['id'])['uid']==''
    return {'barrier':barrier,'beforeAttempts':before,'rebuild':rebuild,'pending':pending,'afterAttempts':self.call('GET','/operations/'+o['operationId']+'/attempts')['attempts'],'noAutomaticReplay':True}
