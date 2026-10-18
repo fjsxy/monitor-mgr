@@ -133,6 +133,16 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 			return nil, Error("UNAVAILABLE", "观测保存失败")
 		}
 	}
+	if e == nil && cr != nil && i.Uid != "" && objectString(objectMap(cr, "metadata"), "uid") == i.Uid {
+		records, err := s.observeOwnerGraphRecords(ctx, i, t, i.TargetNamespace)
+		matches := []*rpc.MatchedResource{}
+		for _, record := range records {
+			if record.kind == "Pod" {
+				matches = append(matches, &rpc.MatchedResource{Kind: "Pod", Namespace: record.namespace, Name: record.name, Uid: record.uid})
+			}
+		}
+		s.saveSourceObservation(ctx, i, "Pod", &rpc.SourceObservation{Source: "Pod", Matches: matches}, err)
+	}
 	if i.Component == AgentComponent && e == nil && cr != nil && i.Uid != "" && objectString(objectMap(cr, "metadata"), "uid") == i.Uid {
 		s.refreshAgentAuxiliary(ctx, i, t, cr)
 	}

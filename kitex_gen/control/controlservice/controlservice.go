@@ -69,6 +69,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"QueryInstances": kitex.NewMethodInfo(
+		queryInstancesHandler,
+		newControlServiceQueryInstancesArgs,
+		newControlServiceQueryInstancesResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"ListInstances": kitex.NewMethodInfo(
 		listInstancesHandler,
 		newControlServiceListInstancesArgs,
@@ -591,6 +598,30 @@ func newControlServiceCreateInstanceArgs() interface{} {
 
 func newControlServiceCreateInstanceResult() interface{} {
 	return control.NewControlServiceCreateInstanceResult()
+}
+
+func queryInstancesHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceQueryInstancesArgs)
+	realResult := result.(*control.ControlServiceQueryInstancesResult)
+	success, err := handler.(control.ControlService).QueryInstances(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceQueryInstancesArgs() interface{} {
+	return control.NewControlServiceQueryInstancesArgs()
+}
+
+func newControlServiceQueryInstancesResult() interface{} {
+	return control.NewControlServiceQueryInstancesResult()
 }
 
 func listInstancesHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -1626,6 +1657,21 @@ func (p *kClient) CreateInstance(ctx context.Context, ctx_ *control.RequestConte
 	_args.Request = request
 	var _result control.ControlServiceCreateInstanceResult
 	if err = p.c.Call(ctx, "CreateInstance", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) QueryInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.QueryInstancesRequest) (r *control.QueryInstancesResult_, err error) {
+	var _args control.ControlServiceQueryInstancesArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceQueryInstancesResult
+	if err = p.c.Call(ctx, "QueryInstances", &_args, &_result); err != nil {
 		return
 	}
 	switch {

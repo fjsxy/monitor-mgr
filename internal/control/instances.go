@@ -158,6 +158,7 @@ func (s *Store) GetInstance(ctx context.Context, c *rpc.RequestContext, r *rpc.I
 		i.Runtime, e = s.GetRuntime(ctx, c, r)
 		i.Sources = s.instanceSources(ctx, i)
 	}
+	projectCurrentVersion(i)
 	return i, e
 }
 func (s *Store) ListInstances(ctx context.Context, c *rpc.RequestContext, r *rpc.ClusterID) (*rpc.InstancesResult_, error) {

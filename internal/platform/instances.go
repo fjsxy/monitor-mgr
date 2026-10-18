@@ -5,6 +5,7 @@ import (
 	"github.com/fjsxy/monitor-mgr/internal/control"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -14,6 +15,16 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	if len(parts) == 3 && parts[0] == "clusters" && parts[2] == "instances" {
 		switch r.Method {
 		case "GET":
+			if r.URL.RawQuery != "" {
+				query, e := instanceQuery(r, parts[1])
+				if e != nil {
+					p.writeError(w, e, id)
+					return true
+				}
+				v, e := p.client.QueryInstances(r.Context(), c, query)
+				p.respond(w, 200, v, e, id)
+				return true
+			}
 			v, e := p.client.ListInstances(r.Context(), c, &rpc.ClusterID{Id: parts[1]})
 			p.respond(w, 200, v, e, id)
 			return true
@@ -219,4 +230,40 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	}
 	p.writeError(w, control.Error("NOT_FOUND", "入口不存在"), id)
 	return true
+}
+
+// instanceQuery 仅转换HTTP查询参数；授权、筛选与统计始终在真实RPC应用层执行。
+func instanceQuery(r *http.Request, cluster string) (*rpc.QueryInstancesRequest, error) {
+	q := r.URL.Query()
+	request := &rpc.QueryInstancesRequest{ClusterId: cluster}
+	for key, values := range q {
+		if len(values) != 1 {
+			return nil, control.Error("BAD_REQUEST", "查询参数重复")
+		}
+		value := values[0]
+		switch key {
+		case "name":
+			request.Name = &value
+		case "type":
+			request.Type = &value
+		case "component":
+			request.Component = &value
+		case "summary":
+			request.Summary = &value
+		case "page", "pageSize":
+			n, e := strconv.ParseInt(value, 10, 32)
+			if e != nil {
+				return nil, control.Error("BAD_REQUEST", "分页参数无效")
+			}
+			number := int32(n)
+			if key == "page" {
+				request.Page = &number
+			} else {
+				request.PageSize = &number
+			}
+		default:
+			return nil, control.Error("BAD_REQUEST", "查询参数不支持")
+		}
+	}
+	return request, nil
 }

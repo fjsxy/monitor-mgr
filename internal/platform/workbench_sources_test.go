@@ -226,3 +226,21 @@ func TestR03WorkbenchIncompleteStatus(t *testing.T) {
 		}
 	}
 }
+
+// R07.pod的来源隔离回归：CR成功不能续期读取失败的Pod来源。
+func TestWorkbenchPodSourceIndependent(t *testing.T) {
+	p, c, id, f, clock := workbenchSourceFixture(t)
+	original := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	pod := workbenchSource(t, original, "Pod")
+	clock.Add(int64(time.Second))
+	f.mu.Lock()
+	f.readFailure = true
+	f.mu.Unlock()
+	clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "", 200)
+	current := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	cr := workbenchSource(t, current, "CR")
+	failed := workbenchSource(t, current, "Pod")
+	if cr["lastSuccessAt"] == pod["lastSuccessAt"] || cr["error"] != "" || failed["lastSuccessAt"] != pod["lastSuccessAt"] || failed["error"] == "" || failed["historical"] != true || current["runtime"].(map[string]any)["summary"] != "Available" {
+		t.Fatal("CR成功污染Pod独立失败来源", current)
+	}
+}
