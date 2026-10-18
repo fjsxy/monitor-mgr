@@ -132,6 +132,43 @@ class ExporterTests(unittest.TestCase):
         self.assertEqual(private.stat().st_mode & 0o777, 0o700)
         self.assertEqual(original.read_text().count(canary), 2)
         self.assertEqual(ref(original, private)['sha256'], summary['privateRef']['sha256'])
+        self._diagnostic_failure_stays_failed()
+
+    def _diagnostic_failure_stays_failed(self):
+        value = json.loads(self.index.read_text())
+        value.update(state='failed', cleanup=dict(success=False))
+        item = value['results'][0]
+        receipt_path = self.run / item['receipt']['path']
+        record = json.loads(receipt_path.read_text())
+        record.update(outcome='failed', cleanup=dict(success=False), commandExitCode=17)
+        record['evidenceRefs'].append(dict(path='missing.json', sha256='f' * 64,
+                                           visibility='public', kind='safe-json'))
+        private = self.run / '.private/raw.log'
+        private.parent.mkdir()
+        canary = 'diagnostic-private-only-canary-a11e19'
+        private.write_text(canary)
+        record['evidenceRefs'].append(ref(private, self.run, 'raw-output', 'private'))
+        dump(receipt_path, record)
+        item['receipt'] = ref(receipt_path, self.run, 'receipt')
+        dump(self.index, value)
+        result = self.invoke('--diagnostic')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = json.loads(result.stdout)
+        self.assertIs(summary['gatePassed'], False)
+        self.assertIs(summary['diagnosticOnly'], True)
+        self.assertEqual((self.destination / 'index.json').read_bytes(), self.index.read_bytes())
+        metadata = json.loads((self.destination / 'diagnostic-summary.json').read_text())
+        self.assertEqual(len(metadata['results']), 58)
+        self.assertEqual(metadata['results'][0]['outcome'], 'failed')
+        self.assertIn('missing-or-symlink-artifact', {r['code'] for r in metadata['excludedRefs']})
+        self.assertIn('private-or-unapproved-artifact', {r['code'] for r in metadata['excludedRefs']})
+        for path in self.destination.rglob('*'):
+            if path.is_file():
+                self.assertNotIn(canary.encode(), path.read_bytes())
+        verified = subprocess.run([sys.executable, str(self.destination / 'scripts/acceptance/gate.py'),
+            'validate', '--index', str(self.destination / 'index.json'), '--candidate', CANDIDATE,
+            '--profile', 'CI_FAST', '--validator-test'], cwd='/', capture_output=True, text=True)
+        self.assertNotEqual(verified.returncode, 0, verified.stdout + verified.stderr)
 
 
 if __name__ == '__main__':

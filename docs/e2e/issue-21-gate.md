@@ -37,4 +37,6 @@ cd /
 python "$NEW_BUNDLE_DIR/scripts/acceptance/gate.py" validate --index "$NEW_BUNDLE_DIR/index.json" --candidate "$C" --profile CI_FAST
 ```
 
+失败、not_run 或 cleanup 失败时可加 `exporter.py export --diagnostic`，等价 `export(..., diagnostic=True)`。诊断包保留安全原始 index、可公开原始结果和证据，另写 `diagnostic-summary.json`，逐键保留实际状态/来源，缺失或排除 ref 以 hash 与安全错误码记账；private/raw 文件不读不复制。原始 index 自身不安全时拒绝导出。诊断成功固定为 `gatePassed=false/diagnosticOnly=true/productGate=false`，从包内运行严格 gate 仍非零；不得用于成功门禁或替代未执行键。
+
 本说明与协议 fixture 不构成产品 `fresh282`、真实 Kubernetes/B 或 CI 通过证据；最终候选 C 必须按正式计划实际执行。
