@@ -13,6 +13,8 @@ python scripts/acceptance/exporter.py export --index "$RUN_DIR/index.json" --des
 
 `gate.validate(index_path, candidate, profile, supplemental=False)` 失败抛 `GateError`；CLI 非零并只输出稳定错误码。index 的 `schemaVersion=1`，包含 `runId/profile/candidateCommit/testedCommit/testedTree/runnerCommit/dirty/manifestHash/supplemental/expectedKeys/results/environment/startedAt/finishedAt/state/cleanup`。`results` 每项为 `{variantId, layer, receipt:{path,sha256,visibility,kind}}`。门禁从 registry 独立重算必选键，不信 index 自报总数与 `expectedKeys`。
 
+index 的正式 `executionBoundary` 必须明确为 `acceptance`；夹具必须为 `validator-test`，未知、缺失或 `protocol-fixture` 不能通过，不能只修改夹具 header 变成产品成功。index 另含必需 `sourceCommitRef`（public、kind=`source-commit`、扩展名 `.commit`），字节为实际 `git cat-file commit "$C"` 原始输出；门禁独立计算 Git commit 对象 SHA1 并读取首行 tree，绑定 C 与 `testedTree`。原始 commit 字节进入导出闭包，离线复验不依赖 Git。
+
 receipt 包含同一候选的来源字段、`contractFingerprint/outcome/cleanup/testSelectors/executionBoundary/originalReceipt/evidenceRefs`。所有规范 ref 相对 index 所在 run 根；禁止绝对路径、`..`、根内 symlink、缺失或 hash 不符。run 根先 canonicalize，因此 macOS `/tmp` 的系统入口有效。原组件 `originalReceipt` 保留原字节，嵌套原 ref 默认相对原件所在目录；wrapper 必须将每项重新定位到 run 根，并显式引用原路径/hash。新原件若本身采用 run 根，可设 `originalEvidenceBase=""`。原件本身的 tested/runner/source.commit/tree/dirty/bridge、失败与 cleanup 都必须核验，不能借新 wrapper 包装旧源通过。
 
 `environment` 使用真实 `runtimeOS/runtimeArch`；FULL 为 darwin/arm64，control 3 节点加 data 1 节点；FAST 为 linux/amd64 无集群；SMOKE 为 linux/amd64 仅 control 3 节点。`targets` 每项含 `name/clusterUID/nodeCount`，不同目标必须不同 UID。K/B receipt 的 runtime 为 linux 与对应架构，`platform` 绑定实际 `podUID/nodeName/imageID/clusterUID/serviceName`；`productImage` 包含 `revision/os/architecture/manifestDigest/configDigest/manifestRef/configRef`，原始 OCI 字节必须闭合 manifest→config→候选 revision，与 Pod imageID 对齐。
@@ -34,5 +36,7 @@ exporter 在完整门禁后，仅复制显式 public 类型白名单闭包；私
 cd /
 python "$NEW_BUNDLE_DIR/scripts/acceptance/gate.py" validate --index "$NEW_BUNDLE_DIR/index.json" --candidate "$C" --profile CI_FAST
 ```
+
+失败、not_run 或 cleanup 失败时可加 `exporter.py export --diagnostic`，等价 `export(..., diagnostic=True)`。诊断包保留安全原始 index、可公开原始结果和证据，另写 `diagnostic-summary.json`，逐键保留实际状态/来源，缺失或排除 ref 以 hash 与安全错误码记账；private/raw 文件不读不复制。原始 index 自身不安全时拒绝导出。诊断成功固定为 `gatePassed=false/diagnosticOnly=true/productGate=false`，从包内运行严格 gate 仍非零；不得用于成功门禁或替代未执行键。
 
 本说明与协议 fixture 不构成产品 `fresh282`、真实 Kubernetes/B 或 CI 通过证据；最终候选 C 必须按正式计划实际执行。

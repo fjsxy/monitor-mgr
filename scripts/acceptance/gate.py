@@ -182,8 +182,10 @@ def _original(record, entry, reader, candidate, tree):
         if field in original:
             require(original[field] == (record['profile'] if field == 'profile' else entry[field]), 'contract-mismatch')
     base = record.get('originalEvidenceBase', str(pathlib.PurePosixPath(record['originalReceipt']['path']).parent))
-    require(isinstance(base, str) and '\\' not in base and not base.startswith('/') and
-            all(part not in ['..', ''] for part in base.split('/')) if base else True, 'path-escape')
+    require(isinstance(base, str), 'path-escape')
+    if base:
+        require('\\' not in base and not base.startswith('/') and
+                all(part not in ['..', ''] for part in base.split('/')), 'path-escape')
     def references(value):
         if isinstance(value, dict):
             if 'path' in value and 'sha256' in value:
@@ -258,7 +260,17 @@ def inspect(index_path, candidate, profile, supplemental=False, validator_test=F
     _source(index, candidate, tree)
     require(index.get('profile') == profile and index.get('supplemental') is supplemental, 'wrong-profile')
     boundary = index.get('executionBoundary')
-    require(validator_test == (boundary == 'validator-test'), 'fixture-scope')
+    require(boundary == ('validator-test' if validator_test else 'acceptance'), 'fixture-scope')
+    require(index.get('productGate', not validator_test) is (not validator_test), 'fixture-scope')
+    # 关键：离线以真实Git commit对象绑定C→tree，不能只让所有声明互相一致。
+    commit_ref = index.get('sourceCommitRef')
+    require(isinstance(commit_ref, dict) and commit_ref.get('kind') == 'source-commit' and
+            commit_ref.get('visibility') == 'public', 'missing-source-commit')
+    commit_bytes = reader.read(commit_ref)
+    commit_hash = hashlib.sha1(b'commit ' + str(len(commit_bytes)).encode() + b'\0' + commit_bytes).hexdigest()
+    require(commit_hash == candidate, 'wrong-source-object')
+    first_line = commit_bytes.split(b'\n', 1)[0]
+    require(first_line == b'tree ' + tree.encode('ascii'), 'wrong-source-tree')
     require(index.get('state') == 'completed', 'incomplete-run')
     require(index.get('cleanup', {}).get('success') is True, 'cleanup-failure')
     require(all(isinstance(index.get(k), str) and index[k] for k in
@@ -295,6 +307,8 @@ def inspect(index_path, candidate, profile, supplemental=False, validator_test=F
         require(record.get('outcome') == 'passed', 'not-passed')
         require(record.get('cleanup', {}).get('success') is True, 'cleanup-failure')
         require(record.get('testSelectors') == entry['testSelectors'], 'selector-mismatch')
+        require(record.get('executionBoundary') == ('validator-test' if validator_test else entry['executionBoundary']),
+                'fixture-scope')
         require(isinstance(record.get('evidenceRefs'), list) and record['evidenceRefs'], 'missing-artifact')
         reader.closure(record)
         _original(record, entry, reader, candidate, tree)

@@ -10,8 +10,10 @@ import unittest
 import registry
 
 HERE = pathlib.Path(__file__).resolve().parent
-CANDIDATE = '1' * 40
 TREE = '2' * 40
+COMMIT_BYTES = (f'tree {TREE}\nauthor Validator <fixture@example.invalid> 0 +0000\n'
+                'committer Validator <fixture@example.invalid> 0 +0000\n\nvalidator-test\n').encode()
+CANDIDATE = hashlib.sha1(b'commit ' + str(len(COMMIT_BYTES)).encode() + b'\0' + COMMIT_BYTES).hexdigest()
 
 
 def dump(path, value):
@@ -37,6 +39,8 @@ def fixture(root, profile='CI_FAST'):
                   testedTree=TREE, dirty=False, manifestHash=registry.MANIFEST_HASH, profile=profile)
     events = root / 'evidence/go.jsonl'
     events.parent.mkdir(parents=True)
+    commit = root / 'evidence/source.commit'
+    commit.write_bytes(COMMIT_BYTES)
     selectors = sorted({s for e in entries if e['layer'] == 'Q' for s in e['testSelectors']})
     events.write_text(''.join(json.dumps(dict(Action='pass', Test=s)) + '\n' for s in selectors))
     config = root / 'evidence/config.json'
@@ -52,6 +56,7 @@ def fixture(root, profile='CI_FAST'):
         for e in entries if e['layer'] == 'B' for selector in e['testSelectors']])]))
     index = dict(schemaVersion=1, runId='validator-test-unique-attempt', **common, supplemental=False,
                  executionBoundary='validator-test', environment=environment,
+                 sourceCommitRef=ref(commit, root, 'source-commit'),
                  expectedKeys=[dict(variantId=e['variantId'], layer=e['layer']) for e in entries],
                  results=[], startedAt='2026-10-19T00:00:00Z', finishedAt='2026-10-19T00:01:00Z',
                  state='completed', cleanup=dict(success=True))
@@ -174,10 +179,32 @@ class ValidatorTests(unittest.TestCase):
                 item['receipt'] = ref(path, self.root, 'receipt')
                 dump(self.index, value)
                 self.rejected('wrong-source')
+        self.root = pathlib.Path(self.temp.name) / 'tree-mismatch'
+        self.index = fixture(self.root)
+        value = json.loads(self.index.read_text())
+        value['testedTree'] = '4' * 40
+        for item in value['results']:
+            path = self.root / item['receipt']['path']
+            record = json.loads(path.read_text())
+            original_path = self.root / record['originalReceipt']['path']
+            original = json.loads(original_path.read_text())
+            original['testedTree'] = original['source']['tree'] = value['testedTree']
+            dump(original_path, original)
+            record.update(testedTree=value['testedTree'], originalReceipt=ref(original_path, self.root, 'receipt'))
+            dump(path, record)
+            item['receipt'] = ref(path, self.root, 'receipt')
+        dump(self.index, value)
+        self.rejected('wrong-source-tree')
 
     def test_wrong_profile(self):
         self.change_receipt(lambda record: record.update(profile='LOCAL_FULL', runtimeOS='darwin', runtimeArch='arm64'))
         self.rejected('wrong-profile')
+        self.root = pathlib.Path(self.temp.name) / 'scope'
+        self.index = fixture(self.root)
+        self._reject_missing_or_unknown_scope()
+        self.root = pathlib.Path(self.temp.name) / 'relabel'
+        self.index = fixture(self.root)
+        self._reject_fixture_relabelled()
 
     def test_changed_artifact(self):
         (self.root / 'evidence/go.jsonl').write_text('changed bytes')
@@ -259,6 +286,22 @@ class ValidatorTests(unittest.TestCase):
         item['receipt'] = ref(path, self.root, 'receipt')
         dump(self.index, value)
         self.rejected('missing-original-reference')
+
+    def _reject_missing_or_unknown_scope(self):
+        for boundary in [None, 'protocol-fixture', 'unknown']:
+            with self.subTest(boundary=boundary):
+                self.change_index(lambda value: value.update(executionBoundary=boundary))
+                result = subprocess.run([sys.executable, str(HERE / 'gate.py'), 'validate',
+                    '--index', str(self.index), '--candidate', CANDIDATE, '--profile', 'CI_FAST'],
+                    capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def _reject_fixture_relabelled(self):
+        self.change_index(lambda value: value.update(executionBoundary='acceptance'))
+        result = subprocess.run([sys.executable, str(HERE / 'gate.py'), 'validate',
+            '--index', str(self.index), '--candidate', CANDIDATE, '--profile', 'CI_FAST'],
+            capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
 
 
 class ProtocolRunnerTests(unittest.TestCase):
