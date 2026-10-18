@@ -244,3 +244,49 @@ func TestWorkbenchPodSourceIndependent(t *testing.T) {
 		t.Fatal("CR成功污染Pod独立失败来源", current)
 	}
 }
+
+// REG19-SOURCE-001：后台集群身份预读失败也必须保留读取开始时的凭据范围。
+func TestWorkbenchLateObservationIdentityRead(t *testing.T) {
+	ticks := make(chan time.Time, 1)
+	p, c, id, f, clock := workbenchSourceFixture(t, func(cfg *platform.Config) { cfg.ObservationTicks = ticks })
+	instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	gate, entered := make(chan struct{}), make(chan struct{})
+	f.mu.Lock()
+	f.identityGate = gate
+	f.identityEntered = entered
+	f.mu.Unlock()
+	defer func() {
+		select {
+		case <-gate:
+		default:
+			close(gate)
+		}
+	}()
+	clock.Add(int64(10 * time.Second))
+	ticks <- time.Unix(0, clock.Load())
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("后台没有读取原集群身份")
+	}
+	f.mu.Lock()
+	f.identityGate = nil
+	f.mu.Unlock()
+	updated := clusterCall(t, p, "POST", "/clusters/"+instance["clusterId"].(string)+"/credentials", map[string]any{"context": "explicit", "kubeconfig": f.targetConfiguration}, c, "rotate-identity", 202)
+	if awaitClusterOperation(t, p, c, updated["operationId"].(string))["state"] != "SUCCEEDED" {
+		t.Fatal("凭据切换失败")
+	}
+	clock.Add(int64(time.Second))
+	clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "", 200)
+	before := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200), "CR")
+	clock.Add(int64(time.Second))
+	f.mu.Lock()
+	f.identityFailure = true
+	f.mu.Unlock()
+	close(gate)
+	time.Sleep(75 * time.Millisecond)
+	after := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200), "CR")
+	if after["lastAttemptAt"] != before["lastAttemptAt"] || after["error"] != "" {
+		t.Fatal("旧身份预读错误覆盖新凭据成功", after)
+	}
+}

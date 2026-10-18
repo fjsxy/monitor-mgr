@@ -54,11 +54,19 @@ func (s *Store) launchObservations(life context.Context) {
 			defer s.observationPolls.Delete(i.id)
 			ctx, cancel := context.WithTimeout(life, 8*time.Second)
 			defer cancel()
+			instance, err := instanceByID(ctx, s.DB, i.id)
+			if err != nil {
+				return
+			}
+			cluster, err := clusterByID(ctx, s.DB, i.cluster)
+			if err != nil {
+				return
+			}
+			// 关键：身份预读本身也可能失败；在网络前固定范围，不能把迟到失败标到新凭据修订。
+			failedScope := context.WithValue(ctx, observationScopeKey{}, observationScope{instance.Id, instance.Uid, instance.ClusterId, cluster.Uid, instance.Name, instance.TargetNamespace, cluster.CredentialRevision})
 			target, _, err := s.targetForRecovery(ctx, i.cluster)
 			if err != nil {
-				if instance, e := instanceByID(ctx, s.DB, i.id); e == nil {
-					s.saveSourceObservation(ctx, instance, "CR", nil, err)
-				}
+				s.saveSourceObservation(failedScope, instance, "CR", nil, err)
 				return
 			}
 			defer target.Close()

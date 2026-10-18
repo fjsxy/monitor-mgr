@@ -140,6 +140,10 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 }
 
 type ksmFixture struct {
+	identityGate        chan struct{}
+	identityEntered     chan struct{}
+	identityOnce        sync.Once
+	identityFailure     bool
 	readDelay           time.Duration
 	clusterUID          string
 	targetConfiguration string
@@ -191,6 +195,23 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 		}
 		if r.URL.Path == "/api/v1/namespaces/kube-system" {
 			f.mu.Lock()
+			if f.identityGate != nil {
+				gate := f.identityGate
+				f.identityOnce.Do(func() { close(f.identityEntered) })
+				f.mu.Unlock()
+				select {
+				case <-gate:
+				case <-r.Context().Done():
+					return
+				}
+				f.mu.Lock()
+			}
+			if f.identityFailure {
+				f.mu.Unlock()
+				w.WriteHeader(403)
+				io.WriteString(w, `{}`)
+				return
+			}
 			uid := f.clusterUID
 			f.mu.Unlock()
 			if uid != "" {

@@ -96,3 +96,8 @@ workbench-i64-check: ## HTTP大i64精确往返与RPC保持协议检查
 
 e2e-workbench-q: ## 工作台Q层，真实HTTP/Kitex/SQLite与受控时钟/API
 	$(GO) test ./internal/platform -count=1 -run 'Test(R0[1356]Workbench|Workbench)' $(E2E_ARGS)
+
+e2e-workbench: ## 工作台逐例Q/K/B入口；真实目标须E2E_ARGS显式指定独占lane和环境
+	$(PYTHON) scripts/acceptance/workbench.py $(E2E_ARGS)
+workbench-q-receipt: ## 工作台Q8逐variant收据；显式profile/output，不能冒充Pod验收
+	$(PYTHON) scripts/acceptance/workbench.py --layer Q $(E2E_ARGS)
