@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """#18真实Agent门禁：每例独立平台Pod和目标fixture，完整批次持有跨票API互斥锁。"""
-import argparse,base64,copy,datetime,fcntl,gzip,hashlib,http.cookiejar,json,os,pathlib,platform,re,secrets,subprocess,sys,tempfile,time,traceback,urllib.error,urllib.request,uuid
+import argparse,base64,copy,datetime,fcntl,gzip,hashlib,http.cookiejar,json,os,pathlib,platform,re,secrets,subprocess,sys,tarfile,tempfile,time,traceback,urllib.error,urllib.request,uuid
 import yaml
 from clusters import Suite as ClusterSuite
 from ksm import manifest,source_state,fingerprint
@@ -22,7 +22,13 @@ class Suite(ClusterSuite):
   assert not self.source['dirty'] or a.allow_dirty_runner,'门禁来源必须干净'
   assert a.source==self.source['commit'],'运行器与产品必须同源'
   m=json.loads(subprocess.check_output(['docker','image','inspect',a.image],text=True))[0]
-  self.image_metadata={'configID':m['Id'],'manifest':m.get('Descriptor',{}).get('digest'),'os':m['Os'],'architecture':m['Architecture'],'source':m['Config'].get('Labels',{}).get('org.opencontainers.image.revision')}
+  # Docker29 inspect.Id可能是manifest摘要；真正config摘要必须对docker-save中的配置字节实算。
+  with tempfile.TemporaryFile() as saved:
+   subprocess.run(['docker','save',a.image],stdout=saved,check=True);saved.seek(0)
+   with tarfile.open(fileobj=saved) as archive:
+    entry=json.load(archive.extractfile('manifest.json'))[0];config_bytes=archive.extractfile(entry['Config']).read();config=json.loads(config_bytes)
+  config_digest='sha256:'+hashlib.sha256(config_bytes).hexdigest()
+  self.image_metadata={'dockerInspectId':m['Id'],'manifestDigest':m.get('Descriptor',{}).get('digest'),'configDigest':config_digest,'configDigestMethod':'docker-save manifest.json Config bytes SHA256','os':config['os'],'architecture':config['architecture'],'source':config.get('config',{}).get('Labels',{}).get('org.opencontainers.image.revision')}
   assert self.image_metadata['source']==a.source and m['Os']=='linux' and m['Architecture']=='arm64','镜像来源/架构不符'
   self.environment={}
   for target,count in [('control',3),('data',1)]:
@@ -71,6 +77,13 @@ class Suite(ClusterSuite):
  def publish(self,i):
   p=self.preview(i);o=self.call('POST','/instances/'+i['id']+'/publications',{'draftRevision':p['draftRevision'],'previewId':p['previewId'],'overwriteDrift':False},status=202);done=self.operation(o)
   assert done['state']=='SUCCEEDED',done;return done
+ def operation(self,op):
+  end=time.monotonic()+45;last={}
+  while time.monotonic()<end:
+   last=self.call('GET','/operations/'+op['operationId'])
+   if last['state'] not in ['QUEUED','RUNNING','CHECKING','DISPATCHED']:return last
+   time.sleep(.15)
+  raise AssertionError('操作未结束：'+json.dumps(last,ensure_ascii=False))
  def cr(self,name=None,namespace=None,target=None):return self.get('prometheusagent',name or self.crname,'-n',namespace or self.targetns,target=target)
  def sources(self,i):return {s['source']:s for s in self.call('GET','/instances/'+i['id']).get('sources',[])}
  def association_preview(self,i):
@@ -157,12 +170,17 @@ class Suite(ClusterSuite):
   for index,case in enumerate(self.a.cases or KCASES):
    self.case=case;self.traces=[];self.targetns=None;record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.source['tree'],'runnerCommit':self.source['commit'],'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
    try:
-    record['platform']=self.deploy(case,index);assert record['platform']['imageID'].endswith(self.image_metadata.get('manifest') or self.image_metadata['configID'])
+    record['platform']=self.deploy(case,index);assert record['platform']['imageID'].endswith(self.image_metadata.get('manifestDigest') or self.image_metadata['dockerInspectId'])
     self.prepare_target(index,'data' if case in ['C04.agent-crd','A05.primary'] else 'control');record['evidence']=run_case(self,case);record['outcome']='passed'
    except Exception as e:
     record['error']=str(e);record['traceback']=traceback.format_exc()
+    try:
+     record['platformLogs']=self.k('logs','pod/'+self.pod,'-n',self.ns,'--tail=150').stdout.decode()
+    except Exception:record['platformLogsError']='平台日志不可读'
     if self.targetns:
-     try:record['failureEvents']=[{'reason':e.get('reason'),'message':e.get('message'),'object':e.get('involvedObject',{}),'lastTimestamp':e.get('lastTimestamp')} for e in self.get('events','-n',self.targetns)['items']]
+     try:
+      record['failureEvents']=[{'reason':e.get('reason'),'message':e.get('message'),'object':e.get('involvedObject',{}),'lastTimestamp':e.get('lastTimestamp')} for e in self.get('events','-n',self.targetns)['items']]
+      record['actualFixtureAgents']=self.get('prometheusagents','-n',self.targetns)['items']
      except Exception:record['failureEventsError']='事件读取失败'
    finally:
     record['traces']=self.traces
