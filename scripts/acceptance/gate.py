@@ -255,6 +255,20 @@ def _image(record, reader, candidate, arch, cluster_uids):
     require(any(platform['imageID'].endswith(digest) for digest in [config_digest, manifest_digest]), 'wrong-image-digest')
 
 
+def _protocol_node_response(value, arch, code):
+    """独立核节点原响应；kubectl 的通用 v1 List 必须全部是具备原身份的 Node。"""
+    require(isinstance(value, dict) and value.get('apiVersion') == 'v1' and
+            value.get('kind') in ['List', 'NodeList'] and isinstance(value.get('items'), list), code)
+    nodes = value['items']
+    require(len(nodes) == 3 and all(
+        isinstance(n, dict) and n.get('kind') == 'Node' and isinstance(n.get('metadata'), dict) and
+        isinstance(n.get('status'), dict) and isinstance(n['status'].get('nodeInfo'), dict) and
+        n['metadata'].get('uid') and n['metadata'].get('name') and
+        n['status']['nodeInfo'].get('operatingSystem') == 'linux' and
+        n['status']['nodeInfo'].get('architecture') == arch for n in nodes), code)
+    return nodes
+
+
 def kubernetes_protocol(proof, entry, reader, cluster_uids, arch, candidate, tree, validator_test=False):
     """八个 REG21 K 独立核 API/UID/信号/恢复原件；不要求合法缺席的产品 Pod。"""
     variant = entry['variantId']
@@ -311,11 +325,7 @@ def kubernetes_protocol(proof, entry, reader, cluster_uids, arch, candidate, tre
     require(system.get('kind') == 'Namespace' and system.get('metadata', {}).get('name') == 'kube-system' and
             system.get('metadata', {}).get('uid') == proof['targetUID'], 'wrong-environment')
     nodes = data('nodeResponseRef')
-    actual_nodes = nodes.get('items', [])
-    require(nodes.get('kind') == 'NodeList' and len(actual_nodes) == 3 and
-            all(n.get('metadata', {}).get('uid') and n.get('metadata', {}).get('name') and
-                n.get('status', {}).get('nodeInfo', {}).get('operatingSystem') == 'linux' and
-                n.get('status', {}).get('nodeInfo', {}).get('architecture') == arch for n in actual_nodes), 'wrong-profile')
+    actual_nodes = _protocol_node_response(nodes, arch, 'wrong-profile')
     environment = data('environmentRef')
     _source(environment, candidate, tree)
     bound(environment)
@@ -395,14 +405,10 @@ def kubernetes_protocol(proof, entry, reader, cluster_uids, arch, candidate, tre
         _source(recovered_environment, candidate, tree)
         recovered_system = reader.json(report.get('clusterSystemResponseRef'))
         recovered_nodes = reader.json(report.get('nodeResponseRef'))
-        items = recovered_nodes.get('items', [])
+        items = _protocol_node_response(recovered_nodes, arch, 'wrong-environment')
         require(recovered_system.get('kind') == 'Namespace' and
                 recovered_system.get('metadata', {}).get('name') == 'kube-system' and
                 recovered_system.get('metadata', {}).get('uid') == proof['targetUID'] and
-                recovered_nodes.get('kind') == 'NodeList' and len(items) == 3 and all(
-                    n.get('status', {}).get('nodeInfo', {}).get('operatingSystem') == 'linux' and
-                    n.get('status', {}).get('nodeInfo', {}).get('architecture') == arch and
-                    n.get('metadata', {}).get('uid') and n.get('metadata', {}).get('name') for n in items) and
                 recovered_environment.get('clusterUID') == proof['targetUID'] and
                 recovered_environment.get('runtimeOS') == 'linux' and recovered_environment.get('runtimeArch') == arch and
                 recovered_environment.get('nodes') == [{'name': n['metadata']['name'], 'uid': n['metadata']['uid'],

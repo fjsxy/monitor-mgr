@@ -220,9 +220,6 @@ class KubernetesFixture:
                     # 原 API JSON 字节不做摘要替换；此 fixture 的 Namespace 没有用户数据或认证字段。
                     destination = self.directory / filename
                     atomic_bytes(destination, result.stdout)
-                elif isinstance(value, dict) and value.get('kind') == 'NodeList':
-                    destination = self.directory / 'node-response.json'
-                    atomic_bytes(destination, result.stdout)
             except (ValueError, UnicodeError):
                 pass
         return result
@@ -244,14 +241,22 @@ class KubernetesFixture:
         require(system and system['metadata']['uid'] == self.request['targetUID'], 'wrong-actual-cluster')
         result = self.kt.command(target, ['get', 'nodes', '-o', 'json'])
         require(result.returncode == 0, 'node-read-failed')
-        nodes = json.loads(result.stdout).get('items', [])
+        response = json.loads(result.stdout)
+        require(isinstance(response, dict) and response.get('apiVersion') == 'v1' and
+                response.get('kind') in ['List', 'NodeList'] and isinstance(response.get('items'), list),
+                'wrong-actual-nodes')
+        nodes = response['items']
         environment = self.request['environment']
         expected = next(t for t in environment['targets'] if t['name'] == target)
         arch = environment['runtimeArch']
         require(len(nodes) == expected['nodeCount'] and all(
-            n.get('metadata', {}).get('uid') and n.get('metadata', {}).get('name') and
+            isinstance(n, dict) and n.get('kind') == 'Node' and isinstance(n.get('metadata'), dict) and
+            isinstance(n.get('status'), dict) and isinstance(n['status'].get('nodeInfo'), dict) and
+            n['metadata'].get('uid') and n['metadata'].get('name') and
             n.get('status', {}).get('nodeInfo', {}).get('operatingSystem') == 'linux' and
             n.get('status', {}).get('nodeInfo', {}).get('architecture') == arch for n in nodes), 'wrong-actual-nodes')
+        # 关键：只封存明确 get nodes 的成功原 bytes；不把通用 List 认作节点或改写成 NodeList。
+        atomic_bytes(self.directory / 'node-response.json', result.stdout)
         value = {**common(self.request), 'clusterUID': system['metadata']['uid'], 'runtimeOS': 'linux',
                  'runtimeArch': arch, 'nodes': [{'name': n['metadata']['name'], 'uid': n['metadata']['uid'],
                      'os': n['status']['nodeInfo']['operatingSystem'], 'arch': n['status']['nodeInfo']['architecture']}

@@ -18,6 +18,64 @@ import gate
 HERE = pathlib.Path(__file__).resolve().parent
 
 
+def node_response(kind='NodeList'):
+    """两种合法容器都保留 v1 和项目类型，避免简化 fixture 掩盖真实 kubectl 输出。"""
+    return {'apiVersion': 'v1', 'kind': kind, 'items': [
+        {'apiVersion': 'v1', 'kind': 'Node', 'metadata': {'name': f'node-{n}', 'uid': f'uid-{n}'},
+         'status': {'nodeInfo': {'operatingSystem': 'linux', 'architecture': 'arm64'}}} for n in range(3)]}
+
+
+class KubernetesNodeResponseTests(unittest.TestCase):
+    def verify_raw(self, root, raw):
+        """受控只读执行器验证原响应通道；未知命令立即失败，不调用 Kubernetes。"""
+        from ledger import Ledger
+        request = {'runId': 'validator-only', 'profile': 'LOCAL_FULL', 'candidateCommit': '1' * 40,
+                   'runnerCommit': '1' * 40, 'testedTree': '2' * 40, 'dirty': False,
+                   'variantId': 'REG21-RESULT-005.setup-failure',
+                   'source': {'commit': '1' * 40, 'tree': '2' * 40, 'dirty': False},
+                   'output': str(root), 'target': 'control', 'targetUID': 'validator-control',
+                   'targets': {'control': {'clusterUID': 'validator-control', 'kubeconfig': '/not-read',
+                                           'context': 'validator-only'}}, 'kubectl': ['/not-executed/kubectl'],
+                   'environment': {'runtimeArch': 'arm64', 'targets': [{'name': 'control', 'nodeCount': 3}]}}
+        system = {'apiVersion': 'v1', 'kind': 'Namespace',
+                  'metadata': {'name': 'kube-system', 'uid': request['targetUID']}}
+        def read_only(argv, **kwargs):
+            args = argv[argv.index('get'):]
+            if args == ['get', 'namespaces', 'kube-system', '-o', 'json']:
+                return subprocess.CompletedProcess(argv, 0, json.dumps(system).encode(), b'')
+            self.assertEqual(args, ['get', 'nodes', '-o', 'json'])
+            return subprocess.CompletedProcess(argv, 0, raw, b'')
+        ledger = Ledger(root / 'ledger.json', run_id='validator-only', candidate='1' * 40,
+                        targets={'control': request['targetUID']})
+        fixture = protocol_cases.KubernetesFixture(request, SimpleNamespace(run=read_only), ledger,
+                                                   SimpleNamespace(checkpoint=lambda: None))
+        fixture.verify_environment()
+
+    def test_node_read_preserves_both_legal_container_bytes(self):
+        for kind in ['List', 'NodeList']:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                raw = (json.dumps(node_response(kind), indent=2) + '\n').encode()
+                self.verify_raw(root, raw)
+                self.assertEqual((root / 'node-response.json').read_bytes(), raw)
+
+    def test_node_read_rejects_wrong_container_items_identity_and_arch(self):
+        mutations = [('unknown-kind', lambda v: v.update(kind='PodList')),
+                     ('unknown-version', lambda v: v.update(apiVersion='v2')),
+                     ('mixed-items', lambda v: v['items'][0].update(kind='Pod')),
+                     ('missing-item-kind', lambda v: v['items'][0].pop('kind')),
+                     ('missing-uid', lambda v: v['items'][0]['metadata'].pop('uid')),
+                     ('wrong-arch', lambda v: v['items'][0]['status']['nodeInfo'].update(architecture='amd64'))]
+        for name, mutate in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                value = node_response('List')
+                mutate(value)
+                with self.assertRaises(protocol_cases.ProtocolError):
+                    self.verify_raw(root, json.dumps(value).encode())
+                self.assertFalse((root / 'node-response.json').exists())
+
+
 def validator_protocol_fixture(root, variant):
     """仅构造标记 validator-test 的门禁输入；不是 API 结果或产品 K 收据。"""
     mode = protocol_cases.MODES[variant]
@@ -73,9 +131,7 @@ def validator_protocol_fixture(root, variant):
                      {'name': f'node-{n}', 'uid': f'uid-{n}', 'os': 'linux', 'arch': 'arm64'} for n in range(3)]}),
              'clusterSystemResponseRef': artifact('system.json', {'apiVersion': 'v1', 'kind': 'Namespace',
                  'metadata': {'name': 'kube-system', 'uid': request['targetUID']}}),
-             'nodeResponseRef': artifact('nodes.json', {'kind': 'NodeList', 'items': [
-                 {'metadata': {'name': f'node-{n}', 'uid': f'uid-{n}'}, 'status': {'nodeInfo':
-                     {'operatingSystem': 'linux', 'architecture': 'arm64'}}} for n in range(3)]}), 'recoveryRefs': []}
+             'nodeResponseRef': artifact('nodes.json', node_response()), 'recoveryRefs': []}
     final = json.loads(json.dumps(ledger))
     final['processes']['aux']['stage'] = 'recovered-exit' if mode == 'kill' else 'exited'
     proof['childLedgerRef'] = artifact('child/ledger.json', final)
@@ -145,6 +201,48 @@ def validator_protocol_fixture(root, variant):
 
 
 class KubernetesProtocolGateTests(unittest.TestCase):
+    def node_gate_fixture(self, root, location, mutate):
+        """从主证明或恢复原件独立读取节点，不让外层摘要替代原响应。"""
+        variant = 'REG21-RECOVER-008.kill-then-recover'
+        proof = validator_protocol_fixture(root, variant)
+        container = proof if location == 'main' else json.loads(
+            (root / proof['recoveryRefs'][0]['path']).read_bytes())
+        path = root / container['nodeResponseRef']['path']
+        value = json.loads(path.read_bytes())
+        mutate(value)
+        path.write_text(json.dumps(value))
+        container['nodeResponseRef'] = protocol_cases.reference(path, root)
+        if location == 'recovery':
+            report = root / proof['recoveryRefs'][0]['path']
+            report.write_text(json.dumps(container))
+            proof['recoveryRefs'][0] = protocol_cases.reference(report, root)
+        return proof, registry.entries('LOCAL_FULL', True, [variant])[0]
+
+    def test_main_and_recovery_accept_v1_list_and_nodelist(self):
+        for location in ['main', 'recovery']:
+            for kind in ['List', 'NodeList']:
+                with self.subTest(location=location, kind=kind), tempfile.TemporaryDirectory() as directory:
+                    root = pathlib.Path(directory)
+                    proof, entry = self.node_gate_fixture(root, location, lambda v: v.update(kind=kind))
+                    result = gate.kubernetes_protocol(proof, entry, gate.Evidence(root), {'validator-control'},
+                                                      'arm64', '1' * 40, '2' * 40, validator_test=True)
+                    self.assertIs(result['productGate'], False)
+
+    def test_main_and_recovery_reject_wrong_node_response(self):
+        mutations = [('kind', lambda v: v.update(kind='PodList')),
+                     ('version', lambda v: v.update(apiVersion='v2')),
+                     ('mixed', lambda v: v['items'][0].update(kind='Pod')),
+                     ('uid', lambda v: v['items'][0]['metadata'].pop('uid')),
+                     ('arch', lambda v: v['items'][0]['status']['nodeInfo'].update(architecture='amd64'))]
+        for location in ['main', 'recovery']:
+            for name, mutate in mutations:
+                with self.subTest(location=location, mutation=name), tempfile.TemporaryDirectory() as directory:
+                    root = pathlib.Path(directory)
+                    proof, entry = self.node_gate_fixture(root, location, mutate)
+                    with self.assertRaises(gate.GateError):
+                        gate.kubernetes_protocol(proof, entry, gate.Evidence(root), {'validator-control'},
+                                                  'arm64', '1' * 40, '2' * 40, validator_test=True)
+
     def test_validator_fixtures_cover_all_eight_without_product_pass(self):
         for variant in protocol_cases.MODES:
             with self.subTest(variant=variant), tempfile.TemporaryDirectory() as directory:
