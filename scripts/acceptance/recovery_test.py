@@ -77,8 +77,50 @@ else:print(json.dumps({'apiVersion':'v1','kind':'Namespace','metadata':{'name':'
         args.update(updates)
         command = [sys.executable,'-c','import json,sys,types,recovery;sys.exit(recovery.recover(types.SimpleNamespace(**json.loads(sys.argv[1]))))',json.dumps(args)]
         descriptors=(args['inherited_lane_fd'],) if args.get('inherited_lane_fd') is not None else ()
-        result = subprocess.run(command,cwd=repo,env=dict(os.environ,PYTHONPATH=str(repo/'scripts/acceptance')),capture_output=True,text=True,pass_fds=descriptors)
+        result = subprocess.run(command,cwd=repo,env=dict(os.environ,PYTHONPATH=str(repo/'scripts/acceptance'),
+            PATH=str(root/'fake-bin')+os.pathsep+os.environ['PATH']),capture_output=True,text=True,pass_fds=descriptors)
         return result,json.loads((Path(args['recovery_output'])/'recovery.json').read_text())
+
+    def test_environment_only_writes_workflow_exact_public_safe_receipt_on_success_and_failure(self):
+        workflow=(HERE.parents[1]/'.github/workflows/phase1.yml').read_text()
+        self.assertIn('path: ${{ runner.temp }}/phase1-recovery/public/environment-cleanup.json',workflow)
+        for mode in ['absent','unknown-container','wrong-source']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);repo,old,candidate,calls=self.fixture(root)
+                bin_dir=root/'fake-bin';bin_dir.mkdir()
+                # Host 的 docker 只返回空容器集；真实 Docker/kind 绝不能被本测试触及。
+                docker=bin_dir/'docker';docker.write_text('#!'+sys.executable+'\n');docker.chmod(0o755)
+                path=old/'.private/environment.json';descriptor=json.loads(path.read_text())
+                canary='PRIVATE-ENV-RAW-MUST-NOT-BE-EXPORTED'
+                descriptor['credentials']={'token':canary};descriptor['targets']['control']['rawProof']=canary
+                if mode=='unknown-container':descriptor['targets']['control'].pop('containers')
+                path.write_text(json.dumps(descriptor))
+                before={str(p.relative_to(old)):p.read_bytes() for p in old.rglob('*') if p.is_file()}
+                result,report=self.invoke(root,repo,old,'f'*40 if mode=='wrong-source' else candidate,environment_only=True)
+                public=root/'recovery/public/environment-cleanup.json'
+                self.assertTrue(public.is_file(),'workflow 的固定 artifact 路径必须有安全收据')
+                value=json.loads(public.read_bytes())
+                self.assertEqual(set(value),{'schemaVersion','kind','executionBoundary','productGate','runId','candidateCommit',
+                    'executionRunId','environmentOwnerRunId','source','success','state','errorCode','targets','startedAt','finishedAt'})
+                self.assertIs(value['productGate'],False)
+                self.assertEqual(value['kind'],'environment-cleanup')
+                self.assertEqual(value['success'],mode=='absent');self.assertEqual(result.returncode,0 if mode=='absent' else 1)
+                self.assertEqual(value['success'],report['success'])
+                self.assertNotIn(canary,public.read_text());self.assertNotIn(str(old),public.read_text())
+                self.assertNotIn('kubeconfig',public.read_text());self.assertNotIn('containers',public.read_text())
+                if mode!='wrong-source':
+                    self.assertEqual(value['executionRunId'],'host-protocol-original')
+                    self.assertEqual(value['environmentOwnerRunId'],'host-protocol-original')
+                    self.assertEqual(value['source']['commit'],candidate);self.assertIs(value['source']['dirty'],False)
+                    self.assertEqual(value['targets']['control']['clusterUID'],'original-cluster')
+                    self.assertEqual(value['targets']['control']['success'],mode=='absent')
+                    self.assertEqual(set(value['targets']['control']),{'clusterUID','success','absent','errorCode'})
+                    if mode=='unknown-container':self.assertEqual(value['targets']['control']['errorCode'],'RECOVER_CONTAINER_UID_UNKNOWN')
+                else:
+                    self.assertIsNone(value['source']);self.assertEqual(value['targets'],{})
+                    self.assertIsNone(value['executionRunId']);self.assertIsNone(value['environmentOwnerRunId'])
+                self.assertFalse(calls.exists())
+                self.assertEqual(before,{str(p.relative_to(old)):p.read_bytes() for p in old.rglob('*') if p.is_file()})
 
     def test_actual_clean_source_uid_normal_gc_keeps_original_run_immutable(self):
         with tempfile.TemporaryDirectory() as directory:

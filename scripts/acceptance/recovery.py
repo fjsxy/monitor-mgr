@@ -43,6 +43,22 @@ def durable(path, value):
     except Exception:raise PersistenceStop('recovery-report-fsync-failed') from None
 
 
+def environment_receipt(report, targets, failure):
+    """公开清理结果仅投影已核身份；私有 descriptor、命令及诊断不能进入 artifact。"""
+    source = report.get('source')
+    results = report.get('environment', {}).get('targets', {})
+    return dict(schemaVersion=1, kind='environment-cleanup', executionBoundary='recovery', productGate=False,
+                runId=report['runId'], candidateCommit=report['candidateCommit'],
+                executionRunId=report.get('executionRunId'), environmentOwnerRunId=report.get('environmentOwnerRunId'),
+                source={key: source[key] for key in ['commit', 'tree', 'dirty']} if source else None,
+                success=bool(report['success'] and failure is None), state=report['state'],
+                errorCode=report.get('errorCode'), startedAt=report['startedAt'], finishedAt=report.get('finishedAt'),
+                targets={role: dict(clusterUID=uid, success=results.get(role, {}).get('success') is True,
+                                    absent=results.get(role, {}).get('absent') is True,
+                                    errorCode=results.get(role, {}).get('error', report.get('errorCode')))
+                         for role, uid in targets.items()})
+
+
 def read_input(root, relative):
     """固定旧 run 根内逐级拒绝 symlink；恢复不能从任意旁路文件认领身份。"""
     relative = Path(relative)
@@ -215,7 +231,7 @@ def stop_processes(records, execute, persist, grace=1):
 
 def recover(args):
     """run.py recover的唯一调用入口；返回exit并只向console输出固定安全摘要。"""
-    session = None;failure = None;report = None
+    session = None;failure = None;report = None;verified_targets = {}
     try:
         original = Path(args.output).resolve();output = Path(args.recovery_output)
         require(output.is_absolute() and original.is_dir(), 'recovery-output-invalid')
@@ -278,6 +294,7 @@ def recover(args):
         elif index and index.get('caseRuns'):manifests = index['caseRuns']
         # 关键：执行run与环境创建owner可不同；复用同C环境不能改写原owner/cluster标签。
         report.update(executionRunId=execution_run_id, environmentOwnerRunId=descriptor.get('runId'))
+        verified_targets = targets
         paths = [('ledger.json', execution_run_id)] if (original / 'ledger.json').exists() else []
         process_roots = [original]
         for entry in manifests:
@@ -357,8 +374,20 @@ def recover(args):
                 except BaseException as error:
                     failure = error
                     if report is not None:report.update(success=False, state='failed', errorCode='recovery-report-fsync-failed')
+                if report is not None and report['environmentOnly']:
+                    try:
+                        # 关键：workflow只上传此白名单文件；失败也必须留安全结果，绝不借清理变成产品passing。
+                        durable(session.out / 'public/environment-cleanup.json', environment_receipt(report, verified_targets, failure))
+                    except BaseException as error:
+                        failure = error;report.update(success=False, state='failed', errorCode='recovery-report-fsync-failed')
                 try:session.close(failure, cleanup={'success': bool(report and report['success'] and failure is None), 'scope': '独立恢复；原run不改'})
-                except BaseException as error:failure = error
+                except BaseException as error:
+                    failure = error
+                    if report is not None:
+                        report.update(success=False, state='failed', errorCode='recovery-report-fsync-failed')
+                        if report['environmentOnly']:
+                            try:durable(session.out / 'public/environment-cleanup.json', environment_receipt(report, verified_targets, failure))
+                            except BaseException:pass
     success = bool(report and report['success'] and failure is None)
     print(json.dumps(dict(kind='recovery', productGate=False, runId=report['runId'] if report else None,
                           success=success, exit=0 if success else 1,
