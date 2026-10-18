@@ -14,7 +14,7 @@ PLATFORM ?= linux/arm64
 BASE_URL ?= http://127.0.0.1:18080
 E2E_ARGS ?=
 
-.PHONY: help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check
+.PHONY: web-workbench-host help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check
 .PHONY: workbench-seed-check workbench-i64-check e2e-workbench-q e2e-workbench workbench-q-receipt fault-proxy-check
 help: ## 查看重复操作入口
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -34,6 +34,8 @@ web-build: ## 构建前端
 	$(NPM) --prefix web run build
 web-e2e: ## 对 BASE_URL 运行真实浏览器测试
 	BASE_URL="$(BASE_URL)" $(NPM) --prefix web run test:e2e -- $(E2E_ARGS)
+web-workbench-host: web-build ## 受控TLS目标的真实Host工作台诊断；显式私有fixture/stop文件，不计Pod B
+	$(GO) test ./internal/platform -count=1 -run '^TestWorkbenchBrowserFixture$$' -v -timeout 12m
 build: ## 构建平台二进制
 	mkdir -p bin
 	$(GO) build -o bin/monitor-mgr ./cmd/monitor-mgr

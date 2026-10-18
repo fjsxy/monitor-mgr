@@ -1,7 +1,10 @@
+import { SourceHistory, type SourceStatus } from "./source-history";
+import { useDraftBookmark } from "./draft-bookmark";
 import type { Int64 } from "./api";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, APIError, type Account } from "./api";
 import type { Cluster } from "./clusters";
+import { ClusterPicker } from "./cluster-picker";
 import { YAML, YAMLDiff } from "./instance-yaml";
 import { AgentEditor, type AgentConfiguration } from "./agent";
 import {LifecycleActions,type Operation,type DeletionPreview} from "./lifecycle";
@@ -54,7 +57,11 @@ type Instance = {
   runtime?: Runtime;
   ownership: string;
   yaml?: string;
+  sources?: SourceStatus[];
 };
+type Statistics = { managed: number; unmanaged: number; available: number; blocked: number };
+type Pagination = { number: number; size: number; total: number; pages: number };
+type QueryResult = { instances: Instance[]; statistics: Statistics; page: Pagination };
 type Draft = { revision: Int64; ksm: KSM; yaml: string };
 type Version = {
   versionId: string;
@@ -243,13 +250,19 @@ export function Instances({
     [summaryFilter, setSummaryFilter] = useState(""),
     [typeFilter, setTypeFilter] = useState(""),
     [componentFilter, setComponentFilter] = useState(""),
+    [pageNumber, setPageNumber] = useState(1),
+    [pageSize, setPageSize] = useState(20),
+    [statistics, setStatistics] = useState<Statistics>({ managed: 0, unmanaged: 0, available: 0, blocked: 0 }),
+    [pagination, setPagination] = useState<Pagination>({ number: 1, size: 20, total: 0, pages: 0 }),
     [deleting, setDeleting] = useState<Instance | null>(null),
     [deletePreview,setDeletePreview]=useState<DeletionPreview|null>(null),
-    [deletePreviewError,setDeletePreviewError]=useState(""),
-    [blockedCount, setBlockedCount] = useState<number | null>(0);
+    [deletePreviewError,setDeletePreviewError]=useState("");
   const current = clusters.find((cluster) => cluster.id === clusterId);
   const currentId = useRef(clusterId);
   currentId.current = clusterId;
+  const requestSequence = useRef(0);
+  const queryState = useRef({ query, summaryFilter, typeFilter, componentFilter, pageNumber, pageSize });
+  queryState.current = { query, summaryFilter, typeFilter, componentFilter, pageNumber, pageSize };
   const username = (id: string) =>
     accounts.find((item) => item.id === id)?.username ??
     (id === account.id ? account.username : id);
@@ -265,50 +278,28 @@ export function Instances({
     if (account.role === "ADMIN")
       setAccounts((await api<{ accounts: Account[] }>("/accounts")).accounts);
   }
+  // 关键：始终携带分页参数进入授权全集查询；轮询读取最新条件，迟到响应不能覆盖新筛选。
   async function load(id = clusterId) {
     if (!id) return;
+    const sequence = ++requestSequence.current;
+    const value = queryState.current;
+    const params = new URLSearchParams({ page: String(value.pageNumber), pageSize: String(value.pageSize) });
+    for (const [key, text] of Object.entries({ name: value.query, summary: value.summaryFilter, type: value.typeFilter, component: value.componentFilter }))
+      if (text) params.set(key, text);
     try {
-      const result = await api<{ instances: Instance[] }>(
-        `/clusters/${id}/instances`,
-      );
-      if (currentId.current === id) {
-        setInstances(result.instances);
-        setError("");
-        const results = await Promise.allSettled(
-          result.instances
-            .filter((item) => !item.readOnly)
-            .map((item) =>
-              api<{ operations: Operation[] }>(
-                `/operations?instanceId=${encodeURIComponent(item.id)}`,
-              ),
-            ),
-        );
-        if (currentId.current === id)
-          setBlockedCount(
-            results.some((value) => value.status === "rejected")
-              ? null
-              : results
-                  .flatMap((value) =>
-                    value.status === "fulfilled" ? value.value.operations : [],
-                  )
-                  .filter(
-                    (item) =>
-                      uncertain.has(item.state) || item.state === "FAILED",
-                  ).length,
-          );
-      }
+      const result = await api<QueryResult>(`/clusters/${id}/instances?${params}`);
+      if (currentId.current !== id || requestSequence.current !== sequence) return;
+      setInstances(result.instances);
+      setStatistics(result.statistics);
+      setPagination(result.page);
+      setError("");
     } catch (e) {
-      if (currentId.current !== id) return;
+      if (currentId.current !== id || requestSequence.current !== sequence) return;
       setError(errorMessage(e));
-      if (
-        e instanceof APIError &&
-        ["FORBIDDEN", "UNAUTHENTICATED"].includes(e.code)
-      ) {
+      if (e instanceof APIError && ["FORBIDDEN", "UNAUTHENTICATED"].includes(e.code)) {
         setInstances([]);
         setSelection(null);
-        void onAction(async () => {
-          throw e;
-        });
+        void onAction(async () => { throw e; });
       }
     }
   }
@@ -325,8 +316,14 @@ export function Instances({
   useEffect(() => {
     setInstances([]);
     setSelection(null);
+    setPageNumber(1);
+    setStatistics({ managed: 0, unmanaged: 0, available: 0, blocked: 0 });
+  }, [clusterId]);
+  useEffect(() => {
+    if (clusterId) void load(clusterId);
+  }, [clusterId, query, summaryFilter, typeFilter, componentFilter, pageNumber, pageSize]);
+  useEffect(() => {
     if (!clusterId) return;
-    void load(clusterId);
     const timer = setInterval(() => void load(clusterId), 10000);
     return () => clearInterval(timer);
   }, [clusterId]);
@@ -338,18 +335,8 @@ export function Instances({
       versionId,
     });
   }
-  const filtered = instances.filter(
-    (item) =>
-      item.name.toLowerCase().includes(query.toLowerCase()) &&
-      (!summaryFilter || item.runtime?.summary === summaryFilter) &&
-      (!typeFilter || item.type === typeFilter) &&
-      (!componentFilter || item.component === componentFilter),
-  );
-  const ordered = [...filtered].sort(
-    (a, b) =>
-      Number(a.readOnly) - Number(b.readOnly) ||
-      b.activityAt.localeCompare(a.activityAt),
-  );
+  // 后端已经按持久活动序号排序，前端不能用时间戳或当前页重新排序。
+  const ordered = instances;
   async function openDeletion(item:Instance){
     setDeleting(item);setDeletePreview(null);setDeletePreviewError("");
     if(item.uid)try{setDeletePreview(await api<DeletionPreview>(`/instances/${item.id}/deletion-previews`,"POST",{}))}
@@ -376,44 +363,9 @@ export function Instances({
         </button>
       </div>
       <div className="cluster-toolbar">
-        <details className="cluster-selector">
-          <summary aria-label="选择已注册集群">
-            <span>
-              <strong>{current?.name ?? "选择已注册集群"}</strong>
-              {current && (
-                <span className="help">
-                  Kubernetes {current.kubernetesVersion.replace(/^v/, "")} ·
-                  所属 {username(current.ownerId)}
-                </span>
-              )}
-            </span>
-            <span aria-hidden="true">⌄</span>
-          </summary>
-          <div className="cluster-options">
-            {clusters.map((item) => (
-              <button
-                key={item.id}
-                className={item.id === clusterId ? "selected" : ""}
-                onClick={(event) => {
-                  setInstances([]);
-                  setSelection(null);
-                  setBlockedCount(0);
-                  setClusterId(item.id);
-                  event.currentTarget.closest("details")!.open = false;
-                }}
-              >
-                <strong>{item.name}</strong>
-                <span className="help">
-                  Kubernetes {item.kubernetesVersion.replace(/^v/, "")} · 所属{" "}
-                  {username(item.ownerId)}
-                </span>
-              </button>
-            ))}
-            {clusters.length === 0 && (
-              <p className="help">暂无有权访问的已注册集群</p>
-            )}
-          </div>
-        </details>
+        <ClusterPicker clusters={clusters} value={clusterId} ownerName={username} onChange={id => {
+          setInstances([]); setSelection(null); setClusterId(id);
+        }} />
         <button
           className="primary"
           onClick={() => setAdding(true)}
@@ -430,32 +382,19 @@ export function Instances({
       <div className="instance-stats">
         <div>
           <span className="help">平台纳管实例</span>
-          <strong>{instances.filter((item) => !item.readOnly).length}</strong>
+          <strong>{statistics.managed}</strong>
         </div>
         <div>
           <span className="help">当前可用</span>
-          <strong>
-            {
-              instances.filter((item) => item.runtime?.summary === "Available")
-                .length
-            }
-          </strong>
+          <strong>{statistics.available}</strong>
         </div>
         <div>
           <span className="help">待确认 / 受阻任务</span>
-          <strong
-            title={
-              blockedCount === null
-                ? "操作记录读取失败，数量当前未知"
-                : undefined
-            }
-          >
-            {blockedCount ?? "—"}
-          </strong>
+          <strong>{statistics.blocked}</strong>
         </div>
         <div>
           <span className="help">平台未纳管实例</span>
-          <strong>{instances.filter((item) => item.readOnly).length}</strong>
+          <strong>{statistics.unmanaged}</strong>
         </div>
       </div>
       <div className="instance-filters">
@@ -463,15 +402,17 @@ export function Instances({
           名称搜索
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { setPageNumber(1); setQuery(event.target.value); }}
             placeholder="输入名称关键词"
           />
         </label>
         <label>
           类型
           <select
+            aria-label="类型"
             value={typeFilter}
             onChange={(event) => {
+              setPageNumber(1);
               setTypeFilter(event.target.value);
               setComponentFilter("");
             }}
@@ -484,19 +425,21 @@ export function Instances({
         <label>
           组件
           <select
+            aria-label="组件"
             value={componentFilter}
-            onChange={(event) => setComponentFilter(event.target.value)}
+            onChange={(event) => { setPageNumber(1); setComponentFilter(event.target.value); }}
           >
             <option value="">全部组件</option>
-            <option value="kube-state-metrics">kube-state-metrics</option>
-            <option value="Prometheus Agent">Prometheus Agent</option>
+            {typeFilter !== "collector" && <option value="kube-state-metrics">kube-state-metrics</option>}
+            {typeFilter !== "exporter" && <option value="Prometheus Agent">Prometheus Agent</option>}
           </select>
         </label>
         <label>
           运行状态
           <select
+            aria-label="运行状态"
             value={summaryFilter}
-            onChange={(event) => setSummaryFilter(event.target.value)}
+            onChange={(event) => { setPageNumber(1); setSummaryFilter(event.target.value); }}
           >
             <option value="">全部状态</option>
             {[
@@ -516,6 +459,7 @@ export function Instances({
         </label>
         <button
           onClick={() => {
+            setPageNumber(1);
             setQuery("");
             setTypeFilter("");
             setComponentFilter("");
@@ -527,7 +471,7 @@ export function Instances({
         </button>
       </div>
       <p className="help">
-        显示 {filtered.length} / {instances.length} 个实例
+        <span>共 {pagination.total} 个实例</span> · 本页 {instances.length} 个
       </p>
       <div className="table-wrap instance-table">
         <table>
@@ -707,6 +651,14 @@ export function Instances({
           </section>
         </div>
       )}
+      <nav className="instance-pagination" aria-label="实例分页">
+        <label>每页条数<select aria-label="每页条数" value={pageSize} onChange={event => { setPageNumber(1); setPageSize(parseInt(event.target.value, 10)); }}>
+          {[20, 50, 100].map(size => <option key={size} value={size}>{size}</option>)}
+        </select></label>
+        <span className="help">第 {pagination.number} / {pagination.pages || 1} 页</span>
+        <button disabled={pagination.number <= 1} onClick={() => setPageNumber(pagination.number - 1)}>上一页</button>
+        <button disabled={pagination.pages === 0 || pagination.number >= pagination.pages} onClick={() => setPageNumber(pagination.number + 1)}>下一页</button>
+      </nav>
       {selection &&
         current &&
         (selection.instance?.component === "Prometheus Agent" ||
@@ -819,9 +771,8 @@ function Editor({
     commandRef = useRef<{
       key: ReturnType<typeof crypto.randomUUID>;
       signature: string;
-    } | null>(null),
-    versionScroll = useRef(0),
-    editFocus = useRef("");
+    } | null>(null);
+  const bookmark = useDraftBookmark(bodyRef);
   currentRef.current = current;
   async function run(work: () => Promise<void>) {
     setError("");
@@ -885,14 +836,14 @@ function Editor({
       onChange();
     } catch (e) {
       setRuntime((previous) => ({
-        ...previous,
         summary: "Unknown",
-        desiredState: previous?.desiredState ?? "",
+        desiredState: "",
         deploymentMode: "",
         error: errorMessage(e),
         lastSuccessAt: previous?.lastSuccessAt ?? "",
         observedAt: new Date().toISOString(),
       }));
+      setCurrent(previous => previous ? { ...previous, sources: previous.sources?.map(source => ({ ...source, historical: true })) } : previous);
       setError(errorMessage(e));
     }
   }
@@ -1051,7 +1002,7 @@ function Editor({
   async function openVersion(id: string) {
     if (!current) return;
     await run(async () => {
-      versionScroll.current = bodyRef.current?.scrollTop ?? 0;
+      bookmark.capture();
       setViewedVersion(
         await api<Version>(`/instances/${current.id}/versions/${id}`),
       );
@@ -1059,16 +1010,8 @@ function Editor({
   }
   function closeVersion() {
     setViewedVersion(null);
-    requestAnimationFrame(() => {
-      if (bodyRef.current) {
-        bodyRef.current.scrollTop = versionScroll.current;
-        bodyRef.current
-          .querySelector<HTMLElement>(
-            `[aria-label="${CSS.escape(editFocus.current)}"]`,
-          )
-          ?.focus({ preventScroll: true });
-      }
-    });
+    setTab("draft");
+    bookmark.restore();
   }
   async function copy() {
     if (!current) return;
@@ -1119,6 +1062,7 @@ function Editor({
               aria-selected={tab === value && !viewedVersion}
               disabled={readOnly && value === "draft"}
               onClick={() => {
+                bookmark.capture();
                 setViewedVersion(null);
                 setTab(value);
               }}
@@ -1130,15 +1074,9 @@ function Editor({
         <div
           className="drawer-body"
           ref={bodyRef}
-          onFocusCapture={(event) => {
-            const target = event.target;
-            if (
-              target instanceof HTMLElement &&
-              target.matches("input,textarea,select") &&
-              !viewedVersion
-            )
-              editFocus.current = target.getAttribute("aria-label") ?? "";
-          }}
+          onFocusCapture={bookmark.remember}
+          onBlurCapture={bookmark.remember}
+          onSelectCapture={bookmark.remember}
         >
           {error && !preview && (
             <div className="alert error" role="alert">
@@ -1227,6 +1165,7 @@ function Editor({
                   {runtime?.error && (
                     <div className="alert error">{runtime.error}</div>
                   )}
+                  {(current?.sources ?? []).map(source => <SourceHistory key={source.source} source={source} />)}
                   {operation && (
                     <div
                       className={

@@ -1,3 +1,5 @@
+import { SourceHistory, type SourceStatus } from "./source-history";
+import { useDraftBookmark } from "./draft-bookmark";
 import type { Int64 } from "./api";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, APIError } from "./api";
@@ -69,12 +71,7 @@ type Runtime = {
   shards?: number;
   paused?: boolean;
 };
-export type Source = {
-  source: string;
-  lastAttemptAt: string;
-  lastSuccessAt: string;
-  error: string;
-  historical: boolean;
+export type Source = SourceStatus & {
   matches?: { kind: string; namespace: string; name: string; uid: string }[];
   volumes?: {
     namespace: string;
@@ -264,14 +261,13 @@ export function AgentEditor({
     [viewed, setViewed] = useState<Version | null>(null);
   const currentRef = useRef(current),
     bodyRef = useRef<HTMLDivElement>(null),
-    viewScroll = useRef(0),
-    editFocus = useRef(""),
     editingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
     referenceEpoch = useRef(0),
     command = useRef<{
       key: ReturnType<typeof crypto.randomUUID>;
       signature: string;
     } | null>(null);
+  const bookmark = useDraftBookmark(bodyRef);
   currentRef.current = current;
   const readOnly = Boolean(current?.readOnly),
     fixed = Boolean(current?.uid),
@@ -397,7 +393,6 @@ export function AgentEditor({
       onChange();
     } catch (e) {
       setRuntime((previous) => ({
-        ...previous,
         summary: "Unknown",
         desiredState: "",
         deploymentMode: "",
@@ -405,6 +400,7 @@ export function AgentEditor({
         observedAt: "",
         error: errorText(e),
       }));
+      setRuntimeSources(previous => previous.map(source => ({ ...source, historical: true })));
       setError(errorText(e));
     }
   }
@@ -558,22 +554,14 @@ export function AgentEditor({
   async function openVersion(id: string) {
     if (!current) return;
     await run(async () => {
-      viewScroll.current = bodyRef.current?.scrollTop ?? 0;
+      bookmark.capture();
       setViewed(await api<Version>(`/instances/${current.id}/versions/${id}`));
     });
   }
   function closeVersion() {
     setViewed(null);
-    requestAnimationFrame(() => {
-      if (bodyRef.current) {
-        bodyRef.current.scrollTop = viewScroll.current;
-        bodyRef.current
-          .querySelector<HTMLElement>(
-            `[aria-label="${CSS.escape(editFocus.current)}"]`,
-          )
-          ?.focus({ preventScroll: true });
-      }
-    });
+    setTab("draft");
+    bookmark.restore();
   }
   async function associationPreview() {
     if (!current || !draft || dirty) return;
@@ -629,6 +617,7 @@ export function AgentEditor({
                 aria-selected={tab === value && !viewed}
                 disabled={readOnly && value === "draft"}
                 onClick={() => {
+                  bookmark.capture();
                   setViewed(null);
                   setTab(value);
                 }}
@@ -641,15 +630,9 @@ export function AgentEditor({
         <div
           className="drawer-body"
           ref={bodyRef}
-          onFocusCapture={(event) => {
-            const target = event.target;
-            if (
-              target instanceof HTMLElement &&
-              target.matches("input,textarea,select") &&
-              !viewed
-            )
-              editFocus.current = target.getAttribute("aria-label") ?? "";
-          }}
+          onFocusCapture={bookmark.remember}
+          onBlurCapture={bookmark.remember}
+          onSelectCapture={bookmark.remember}
         >
           {error && !preview && (
             <div className="alert error" role="alert">
@@ -1714,33 +1697,7 @@ function SourceViews({ sources }: { sources: Source[] }) {
   return (
     <div>
       {sources.map((source) => (
-        <section
-          className="publication-item"
-          key={source.source}
-          aria-label={`来源 ${source.source}`}
-        >
-          <h4>
-            {source.source === "PVC"
-              ? "PVC"
-              : source.source.replace("association:", "")}{" "}
-            <span
-              className={`badge ${source.error || source.historical ? "warn" : "gray"}`}
-            >
-              {source.error
-                ? "读取失败"
-                : source.historical
-                  ? "历史数据"
-                  : "已读取"}
-            </span>
-          </h4>
-          <p className="help">
-            最后尝试：{timestamp(source.lastAttemptAt)} · 最后成功：
-            {timestamp(source.lastSuccessAt)}
-          </p>
-          {source.error && <p className="alert error">{source.error}</p>}
-          {(source.error || source.historical) && (
-            <p className="help">以下仅为历史记录，当前状态未知。</p>
-          )}
+        <SourceHistory key={source.source} source={source}>
           {source.matches !== undefined && (
             <>
               <p>
@@ -1788,10 +1745,10 @@ function SourceViews({ sources }: { sources: Source[] }) {
               </table>
             </div>
           )}
-          {source.matches === undefined && source.volumes === undefined && (
+          {source.matches === undefined && source.volumes === undefined && !source.runtimeSnapshot && (
             <p className="help">当前读取结果未知</p>
           )}
-        </section>
+        </SourceHistory>
       ))}
     </div>
   );
