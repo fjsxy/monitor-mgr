@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, APIError } from "./api";
 import type { Cluster } from "./clusters";
 import { YAML, YAMLDiff } from "./instance-yaml";
+import { LifecycleActions, type Operation } from "./lifecycle";
 
 // Agent 仅表达平台支持的类型化配置；认证/TLS 始终引用同 namespace 的既有 Secret。
 type Resources = {
@@ -112,14 +113,6 @@ type Preview = {
   rightYAML: string;
   drift: boolean;
   warnings: string[];
-};
-type Operation = {
-  operationId: string;
-  state: string;
-  message: string;
-  createdAt: string;
-  versionId?: string;
-  attemptId?: string;
 };
 type Attempt = {
   attemptId: string;
@@ -771,6 +764,7 @@ export function AgentEditor({
                         <strong>{stateText(operation.state)}</strong>
                         <p>{operation.message}</p>
                         <p className="help">操作 {operation.operationId}</p>
+                        <LifecycleActions operation={operation} onOperation={async value => { setOperation(value); await refresh(); if (current) await loadHistory(current.id); }} />
                       </article>
                     )}
                     <p className="help">

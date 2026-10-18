@@ -64,6 +64,10 @@ agent-seed-check: ## 共享组件/旧预览迁移与脱敏回归，不替代Agen
 
 e2e-agent-q: ## Agent快速层，仍经过真实HTTP/Kitex/SQLite
 	$(GO) test ./internal/platform -count=1 -run 'Test(Agent|F01Agent|F03Agent|R03Agent|Shared)'
+e2e-agent: ## Agent逐例真实Pod验收；E2E_ARGS必须显式环境、context、来源、API锁
+	$(PYTHON) scripts/acceptance/agent.py $(E2E_ARGS)
+agent-q-receipt: ## Agent Q逐例收据；E2E_ARGS指定output/profile/cases
+	$(PYTHON) scripts/acceptance/agent.py --layer Q $(E2E_ARGS)
 e2e-lifecycle-q: ## 生命周期快速层，真实HTTP/Kitex/SQLite与确定性派发边界
 	$(GO) test ./internal/platform -count=1 -run 'Test(P08Cancellation|P07Retry|PublicationUnknown|T08Shutdown|P14Foreground|I06Cookie|P13Restart|DeletionCross|DeletionCompletion|Deletion404|ShutdownCloses|F04Lifecycle|Shared|F04Encrypted)' $(E2E_ARGS)
 

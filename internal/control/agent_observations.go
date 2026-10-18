@@ -243,6 +243,21 @@ func (s *Store) readAgentVolumes(ctx context.Context, i *rpc.ObservationInstance
 			continue
 		}
 		name := objectString(objectMap(pod, "metadata"), "name")
+		ready := false
+		for _, raw := range anySlice(objectMap(pod, "status")["conditions"]) {
+			condition, _ := raw.(map[string]any)
+			if condition["type"] == "Ready" && condition["status"] == "True" {
+				ready = true
+			}
+		}
+		mountedVolumes := map[string]bool{}
+		for _, raw := range anySlice(objectMap(pod, "spec")["containers"]) {
+			container, _ := raw.(map[string]any)
+			for _, rawMount := range anySlice(container["volumeMounts"]) {
+				mount, _ := rawMount.(map[string]any)
+				mountedVolumes[objectString(mount, "name")] = true
+			}
+		}
 		for _, raw := range anySlice(objectMap(pod, "spec")["volumes"]) {
 			v, ok := raw.(map[string]any)
 			if !ok {
@@ -250,7 +265,13 @@ func (s *Store) readAgentVolumes(ctx context.Context, i *rpc.ObservationInstance
 			}
 			claim := objectString(objectMap(v, "persistentVolumeClaim"), "claimName")
 			if claim != "" {
-				claims[claim] = append(claims[claim], name)
+				if _, known := claims[claim]; !known {
+					claims[claim] = []string{}
+				}
+				// Ready及真实volumeMount共同证明Pod采用该卷；仅spec声明不冒充挂载成功。
+				if ready && mountedVolumes[objectString(v, "name")] {
+					claims[claim] = append(claims[claim], name)
+				}
 			}
 		}
 	}
