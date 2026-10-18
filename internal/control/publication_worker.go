@@ -7,6 +7,8 @@ import (
 	"errors"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"log/slog"
+	"net/http/httptrace"
+	"sync"
 	"time"
 )
 
@@ -72,14 +74,12 @@ func (s *Store) targetForActor(ctx context.Context, actor, cluster string) (*Tar
 	return t, cl, nil
 }
 func (s *Store) executePublication(life context.Context, id string) {
-	// 关键：与账号/归属/凭据切换共用保护；从当前授权至实际网络写不会穿过失权窗口。
+	// 只读预检不占派发保护，避免目标读取阻塞账号撤权；最终派发事务会重新授权。
 	if s.OperationBoundary != nil {
 		if s.OperationBoundary("beforeDispatch", id) != nil {
 			return
 		}
 	}
-	s.dispatch.RLock()
-	defer s.dispatch.RUnlock()
 	o, e := scanOperation(s.DB.QueryRowContext(life, `SELECT `+operationColumns+` FROM operations WHERE id=? AND state='CHECKING'`, id))
 	if e != nil {
 		return
@@ -143,12 +143,21 @@ func (s *Store) executePublication(life context.Context, id string) {
 			return
 		}
 	}
+	// 关键：与账号/归属/凭据切换共用保护，从最后授权直到请求实际发出，消除失权窗口。
+	s.dispatch.RLock()
+	releaseDispatch := sync.OnceFunc(s.dispatch.RUnlock)
+	defer releaseDispatch()
 	// 关键：网络调用前先持久化可能已发送，崩溃后不能猜测未发送并重放。
 	tx, e := s.DB.BeginTx(life, nil)
 	if e != nil {
 		return
 	}
-	if _, e = actorCluster(life, tx, o.ActorId, i.ClusterId); e != nil {
+	currentCluster, authErr := actorCluster(life, tx, o.ActorId, i.ClusterId)
+	e = authErr
+	if e == nil && currentCluster.CredentialRevision != cl.CredentialRevision {
+		e = Error("CONFLICT", "预检期间凭据已变化，请重新预览")
+	}
+	if e != nil {
 		tx.Rollback()
 		s.finishPublication(id, "FAILED", e, nil)
 		return
@@ -181,7 +190,10 @@ func (s *Store) executePublication(life context.Context, id string) {
 		}
 	}
 	slog.Info("目标API写请求", "operationId", id, "instanceId", i.Id, "clusterId", i.ClusterId, "method", method, "path", path)
-	outcome := t.Mutate(life, method, path, body)
+	// 请求已写入transport后允许撤权；响应仍独立核实，不把原账号失权当成回滚。
+	dispatchContext := httptrace.WithClientTrace(life, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { releaseDispatch() }})
+	outcome := t.Mutate(dispatchContext, method, path, body)
+	releaseDispatch()
 	written, e := outcome.Object, outcome.Err
 	if e != nil {
 		state := "RESULT_UNCERTAIN"

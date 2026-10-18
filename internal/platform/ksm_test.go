@@ -126,11 +126,14 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 }
 
 type ksmFixture struct {
-	mu      sync.Mutex
-	cr      map[string]any
-	writes  int
-	block   chan struct{}
-	entered chan struct{}
+	mu          sync.Mutex
+	cr          map[string]any
+	writes      int
+	block       chan struct{}
+	entered     chan struct{}
+	readGate    chan struct{}
+	readEntered chan struct{}
+	readOnce    sync.Once
 }
 
 func ksmTarget(t *testing.T) (*ksmFixture, string) {
@@ -140,6 +143,17 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/api/v1/namespaces/monitoring" {
+			f.mu.Lock()
+			gate, entered := f.readGate, f.readEntered
+			f.mu.Unlock()
+			if gate != nil {
+				f.readOnce.Do(func() { close(entered) })
+				select {
+				case <-gate:
+				case <-r.Context().Done():
+					return
+				}
+			}
 			io.WriteString(w, `{"metadata":{"name":"monitoring","uid":"namespace-uid"}}`)
 			return
 		}
@@ -606,4 +620,62 @@ func TestF02KSMHTTPHasRealRPCAndCannotBypassUnavailableRPC(t *testing.T) {
 	d.breakConnections()
 	request(t, p, "GET", "/clusters", "", c, 503)
 	request(t, p, "POST", "/clusters/forged-cluster/instances", `{"component":"kube-state-metrics","ksm":{}}`, c, 503)
+}
+
+func TestPublicationPreflightDoesNotBlockCurrentAccountRevocation(t *testing.T) {
+	p, c, id, f := ksmPublishedFixture(t)
+	actor := readJSON(t, p, "/session", c)["account"].(map[string]any)["id"].(string)
+	clusterCall(t, p, "POST", "/accounts", map[string]any{"username": "other-admin", "password": "temporary-password", "role": "ADMIN"}, c, "other-admin", 201)
+	other := request(t, p, "POST", "/sessions", `{"username":"other-admin","password":"temporary-password"}`, nil, 201).Cookies()[0]
+	request(t, p, "POST", "/session/password", `{"currentPassword":"temporary-password","newPassword":"personal-password"}`, other, 200)
+	other = request(t, p, "POST", "/sessions", `{"username":"other-admin","password":"personal-password"}`, nil, 201).Cookies()[0]
+	preview := ksmPreview(t, p, c, id, 1)
+	f.mu.Lock()
+	f.readGate = make(chan struct{})
+	f.readEntered = make(chan struct{})
+	f.mu.Unlock()
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
+	select {
+	case <-f.readEntered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("未进入预检读取")
+	}
+	result := make(chan int, 1)
+	go func() {
+		req, _ := http.NewRequest("PATCH", p.URL()+"/api/v1/accounts/"+actor, strings.NewReader(`{"enabled":false}`))
+		req.AddCookie(other)
+		req.Header.Set("Origin", p.URL())
+		req.Header.Set("Idempotency-Key", "revoke-current-actor")
+		resp, e := http.DefaultClient.Do(req)
+		if e != nil {
+			result <- 0
+			return
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		result <- resp.StatusCode
+	}()
+	timely := true
+	select {
+	case status := <-result:
+		if status != 200 {
+			t.Error(status)
+		}
+	case <-time.After(2 * time.Second):
+		timely = false
+		t.Error("只读预检持有派发保护，阻止当前账号及时撤权")
+	}
+	close(f.readGate)
+	if !timely {
+		<-result
+	}
+	done := awaitClusterOperation(t, p, other, op["operationId"].(string))
+	if timely && done["state"] != "FAILED" {
+		t.Fatal("撤权后仍派发", done)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if timely && f.writes != 0 {
+		t.Fatal("撤权后仍产生KSM写")
+	}
 }
