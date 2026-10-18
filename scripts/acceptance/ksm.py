@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """#16 KSM验收：真实平台Pod→HTTP→Kitex→目标API；每例独立前置并finally清理。"""
-import argparse,copy,datetime,platform,concurrent.futures,traceback,hashlib,http.cookiejar,json,os,pathlib,subprocess,time,urllib.error,urllib.request,uuid
+import argparse,copy,datetime,platform,concurrent.futures,traceback,hashlib,sys,http.cookiejar,json,os,pathlib,subprocess,time,urllib.error,urllib.request,uuid
 from clusters import Suite as ClusterSuite
 from ksm_cases import run_case
 from ksm_proxy import Proxy
@@ -121,7 +121,7 @@ class Suite(ClusterSuite):
   return {'success':not failures,'failures':failures}
  def run(self):
   for index,case in enumerate(self.a.cases or KCASES):
-   self.case=case;self.extra_namespaces=[];self.traces=[];self.cookies=http.cookiejar.CookieJar();record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'runnerCommit':self.source['commit'],'profile':self.a.profile,'environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()};error=None
+   self.case=case;self.extra_namespaces=[];self.traces=[];self.cookies=http.cookiejar.CookieJar();record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'runnerCommit':self.source['commit'],'profile':self.a.profile,'testedTree':subprocess.check_output(['git','rev-parse',self.a.source+'^{tree}'],cwd=ROOT,text=True).strip(),'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()};error=None
    try:
     product_image=self.a.image
     if case=='I03.primary':
@@ -142,6 +142,7 @@ class Suite(ClusterSuite):
     record['traces']=self.traces
     try:record['cleanup']=self.cleanup()
     except Exception as cleanup_error:record['cleanup']={'success':False,'failures':[str(cleanup_error)]}
+    record['evidenceRefs']=[{'path':str(p.relative_to(self.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(self.out.rglob('*')) if p.is_file() and p.name not in [case+'.json','results.json'] and (p.name.startswith(case+'.') or 'browser' in p.parts)]
     record['finishedAt']=stamp()
     if not record['cleanup']['success']:record['outcome']='failed'
     (self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
