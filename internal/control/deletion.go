@@ -109,11 +109,13 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 		{`INSERT INTO operation_lifecycle VALUES(?,?,1,2)`, []any{o.OperationId, attempt}},
 		{`INSERT INTO deletion_operations(operation_id,instance_id,version_id,original_uid,cr_path,target_namespace,preview_id) VALUES(?,?,?,?,?,?,?)`, []any{o.OperationId, i.Id, v.VersionId, i.Uid, componentFor(i.Component).objectPath(i), deploymentNamespace, r.GetPreviewId()}},
 		{`INSERT INTO instance_protections VALUES(?,?)`, []any{i.Id, o.OperationId}},
-		{`UPDATE instances SET activity_at=? WHERE id=?`, []any{now, i.Id}},
 	} {
 		if _, e = tx.ExecContext(ctx, q.sql, q.args...); e != nil {
 			return nil, Error("UNAVAILABLE", "删除受理事务失败")
 		}
+	}
+	if e = s.recordInstanceActivity(ctx, tx, i.Id); e != nil {
+		return nil, e
 	}
 	if e = s.finishCommand(ctx, tx, cmd, o); e != nil {
 		return nil, e

@@ -179,7 +179,7 @@ func (s *Store) lifecycleCommandObserved(ctx context.Context, c *rpc.RequestCont
 	if _, e = tx.ExecContext(ctx, `UPDATE operation_lifecycle SET revision=revision+1 WHERE operation_id=?`, o.OperationId); e != nil {
 		return nil, e
 	}
-	if _, e = tx.ExecContext(ctx, `UPDATE instances SET activity_at=? WHERE id=?`, now, i.Id); e != nil {
+	if e = s.recordInstanceActivity(ctx, tx, i.Id); e != nil {
 		return nil, e
 	}
 	if e = s.finishCommand(ctx, tx, cmd, o); e != nil {

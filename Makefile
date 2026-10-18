@@ -90,3 +90,6 @@ lifecycle-fixture-image: ## 仅验收应用派发屏障镜像，产品源码和�
 
 e2e-agent-lifecycle-q: ## Agent存储生命周期Q层，公开HTTP/真实Kitex与受控目标边界
 	$(GO) test ./internal/platform -count=1 -run 'Test(AgentStorage|R03AgentZero)' $(E2E_ARGS)
+
+workbench-seed-check: ## 工作台活动序号与旧库安全迁移检查，真实HTTP/Kitex/SQLite
+	$(GO) test ./internal/platform -count=1 -run 'Test(WorkbenchActivity|SharedSchema4|F04Encrypted)'

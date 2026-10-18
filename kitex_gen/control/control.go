@@ -3170,14 +3170,17 @@ var fieldIDToName_VolumeObservation = map[int16]string{
 }
 
 type SourceObservation struct {
-	Source         string               `thrift:"source,1,required" frugal:"1,required,string" json:"source"`
-	LastAttemptAt  string               `thrift:"lastAttemptAt,2,required" frugal:"2,required,string" json:"lastAttemptAt"`
-	LastSuccessAt  string               `thrift:"lastSuccessAt,3,required" frugal:"3,required,string" json:"lastSuccessAt"`
-	Error          string               `thrift:"error,4,required" frugal:"4,required,string" json:"error"`
-	Historical     bool                 `thrift:"historical,5,required" frugal:"5,required,bool" json:"historical"`
-	Matches        []*MatchedResource   `thrift:"matches,6,optional" frugal:"6,optional,list<MatchedResource>" json:"matches,omitempty"`
-	Volumes        []*VolumeObservation `thrift:"volumes,7,optional" frugal:"7,optional,list<VolumeObservation>" json:"volumes,omitempty"`
-	_unknownFields unknown.Fields
+	Source          string               `thrift:"source,1,required" frugal:"1,required,string" json:"source"`
+	LastAttemptAt   string               `thrift:"lastAttemptAt,2,required" frugal:"2,required,string" json:"lastAttemptAt"`
+	LastSuccessAt   string               `thrift:"lastSuccessAt,3,required" frugal:"3,required,string" json:"lastSuccessAt"`
+	Error           string               `thrift:"error,4,required" frugal:"4,required,string" json:"error"`
+	Historical      bool                 `thrift:"historical,5,required" frugal:"5,required,bool" json:"historical"`
+	Matches         []*MatchedResource   `thrift:"matches,6,optional" frugal:"6,optional,list<MatchedResource>" json:"matches,omitempty"`
+	Volumes         []*VolumeObservation `thrift:"volumes,7,optional" frugal:"7,optional,list<VolumeObservation>" json:"volumes,omitempty"`
+	RuntimeSnapshot *InstanceRuntime     `thrift:"runtimeSnapshot,8,optional" frugal:"8,optional,InstanceRuntime" json:"runtimeSnapshot,omitempty"`
+	Uid             *string              `thrift:"uid,9,optional" frugal:"9,optional,string" json:"uid,omitempty"`
+	Stale           *bool                `thrift:"stale,10,optional" frugal:"10,optional,bool" json:"stale,omitempty"`
+	_unknownFields  unknown.Fields
 }
 
 func NewSourceObservation() *SourceObservation {
@@ -3224,6 +3227,33 @@ func (p *SourceObservation) GetVolumes() (v []*VolumeObservation) {
 	}
 	return p.Volumes
 }
+
+var SourceObservation_RuntimeSnapshot_DEFAULT *InstanceRuntime
+
+func (p *SourceObservation) GetRuntimeSnapshot() (v *InstanceRuntime) {
+	if !p.IsSetRuntimeSnapshot() {
+		return SourceObservation_RuntimeSnapshot_DEFAULT
+	}
+	return p.RuntimeSnapshot
+}
+
+var SourceObservation_Uid_DEFAULT string
+
+func (p *SourceObservation) GetUid() (v string) {
+	if !p.IsSetUid() {
+		return SourceObservation_Uid_DEFAULT
+	}
+	return *p.Uid
+}
+
+var SourceObservation_Stale_DEFAULT bool
+
+func (p *SourceObservation) GetStale() (v bool) {
+	if !p.IsSetStale() {
+		return SourceObservation_Stale_DEFAULT
+	}
+	return *p.Stale
+}
 func (p *SourceObservation) SetSource(val string) {
 	p.Source = val
 }
@@ -3245,6 +3275,15 @@ func (p *SourceObservation) SetMatches(val []*MatchedResource) {
 func (p *SourceObservation) SetVolumes(val []*VolumeObservation) {
 	p.Volumes = val
 }
+func (p *SourceObservation) SetRuntimeSnapshot(val *InstanceRuntime) {
+	p.RuntimeSnapshot = val
+}
+func (p *SourceObservation) SetUid(val *string) {
+	p.Uid = val
+}
+func (p *SourceObservation) SetStale(val *bool) {
+	p.Stale = val
+}
 
 func (p *SourceObservation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -3258,6 +3297,18 @@ func (p *SourceObservation) IsSetVolumes() bool {
 	return p.Volumes != nil
 }
 
+func (p *SourceObservation) IsSetRuntimeSnapshot() bool {
+	return p.RuntimeSnapshot != nil
+}
+
+func (p *SourceObservation) IsSetUid() bool {
+	return p.Uid != nil
+}
+
+func (p *SourceObservation) IsSetStale() bool {
+	return p.Stale != nil
+}
+
 func (p *SourceObservation) String() string {
 	if p == nil {
 		return "<nil>"
@@ -3266,13 +3317,16 @@ func (p *SourceObservation) String() string {
 }
 
 var fieldIDToName_SourceObservation = map[int16]string{
-	1: "source",
-	2: "lastAttemptAt",
-	3: "lastSuccessAt",
-	4: "error",
-	5: "historical",
-	6: "matches",
-	7: "volumes",
+	1:  "source",
+	2:  "lastAttemptAt",
+	3:  "lastSuccessAt",
+	4:  "error",
+	5:  "historical",
+	6:  "matches",
+	7:  "volumes",
+	8:  "runtimeSnapshot",
+	9:  "uid",
+	10: "stale",
 }
 
 type AssociationPreviewRequest struct {
