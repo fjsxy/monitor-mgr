@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -34,6 +35,9 @@ type Store struct {
 	workerDone        chan struct{}
 	dispatch          sync.RWMutex
 	publicationWG     sync.WaitGroup
+	workerLaunch      sync.Mutex
+	stopping          atomic.Bool
+	stopMu            sync.Mutex
 	observationEpoch  string
 }
 
@@ -214,3 +218,6 @@ func (s *Store) Initialize(ctx context.Context, _ *rpc.RequestContext, r *rpc.In
 	}
 	return a, nil
 }
+
+// Accepting 报告应用是否仍允许受理新业务，不代表已受理任务已结束。
+func (s *Store) Accepting() bool { return !s.stopping.Load() }

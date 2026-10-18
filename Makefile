@@ -13,7 +13,7 @@ PLATFORM ?= linux/arm64
 BASE_URL ?= http://127.0.0.1:18080
 E2E_ARGS ?=
 
-.PHONY: help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check
+.PHONY: help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q
 help: ## 查看重复操作入口
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 generate: ## 按锁定版本生成 Thrift/Kitex
@@ -60,3 +60,6 @@ e2e-ksm-b: ## KSM真实平台Pod浏览器验收；凭据和trace不进入收据
 
 agent-seed-check: ## 共享组件/旧预览迁移与脱敏回归，不替代Agent真实验收
 	$(GO) test ./internal/platform -count=1 -run 'Test(Shared|P04|F04Encrypted|F03KSM)'
+
+e2e-lifecycle-q: ## 生命周期快速层，真实HTTP/Kitex/SQLite与确定性派发边界
+	$(GO) test ./internal/platform -count=1 -run 'Test(P08Cancellation|P07Retry|PublicationUnknown|T08Shutdown|P14Foreground|I06Cookie|P13Restart|Shared|F04Encrypted)' $(E2E_ARGS)

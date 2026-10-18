@@ -213,14 +213,17 @@ func (s *Store) validatePublication(i *rpc.ObservationInstance, cfg configuratio
 	}
 	return nil
 }
+
+// enrichPublicationOperation 读取固定版本关系，再通过显式当前指针补充尝试；不使用随机ID排序。
 func (s *Store) enrichPublicationOperation(ctx context.Context, q clusterQuery, o *rpc.Operation) {
-	var instance, version, attempt string
-	if q.QueryRowContext(ctx, `SELECT p.instance_id,p.version_id,(SELECT id FROM execution_attempts WHERE operation_id=p.operation_id ORDER BY created_at DESC,id DESC LIMIT 1) FROM publication_operations p WHERE p.operation_id=?`, o.OperationId).Scan(&instance, &version, &attempt) == nil {
+	var instance, version string
+	if q.QueryRowContext(ctx, `SELECT instance_id,version_id FROM publication_operations WHERE operation_id=?`, o.OperationId).Scan(&instance, &version) == nil {
 		o.InstanceId = &instance
 		o.VersionId = &version
-		o.AttemptId = &attempt
+		s.enrichLifecycle(ctx, q, o)
 	}
 }
+
 func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext, r *rpc.PublishRequest) (*rpc.Operation, error) {
 	// 关键：授权必须先于幂等命中，否则旧请求键可绕过当前归属或账号失效。
 	tx, e := s.DB.BeginTx(ctx, nil)
@@ -242,6 +245,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		o, e := scanOperation(tx.QueryRowContext(ctx, `SELECT `+operationColumns+` FROM operations WHERE id=?`, replay.OperationId))
 		if e == nil {
 			s.enrichPublicationOperation(ctx, tx, o)
+			s.enrichLifecycle(ctx, tx, o)
 		}
 		tx.Rollback()
 		return o, e
@@ -273,6 +277,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		o, e := scanOperation(tx.QueryRowContext(ctx, `SELECT `+operationColumns+` FROM operations WHERE id=?`, replay.OperationId))
 		if e == nil {
 			s.enrichPublicationOperation(ctx, tx, o)
+			s.enrichLifecycle(ctx, tx, o)
 		}
 		return o, e
 	}
@@ -299,7 +304,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	version, attempt := ID(), ID()
-	o := &rpc.Operation{OperationId: ID(), Action: "PUBLISH", State: "QUEUED", ClusterId: i.ClusterId, ActorId: p.Account.Id, OwnerId: p.Account.Id, CreatedAt: now, UpdatedAt: now, Message: "已受理，尚未确认 CR 写入", InstanceId: &i.Id, VersionId: &version, AttemptId: &attempt}
+	o := &rpc.Operation{OperationId: ID(), Action: "PUBLISH", State: "QUEUED", ClusterId: i.ClusterId, ActorId: p.Account.Id, OwnerId: p.Account.Id, CreatedAt: now, UpdatedAt: now, Message: "已受理，尚未确认 CR 写入", InstanceId: &i.Id, VersionId: &version, AttemptId: &attempt, Revision: reference(int64(1))}
 	// 关键：版本来源、操作、首次尝试、幂等和保护必须同事务提交，避免返回受理后缺少恢复依据。
 	config, _ := json.Marshal(cfg)
 	spec, _ := json.Marshal(cfg.spec())
@@ -310,7 +315,8 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		{`INSERT INTO publication_versions VALUES(?,?,?,?,?,?)`, []any{version, i.Id, rev, config, spec, now}},
 		{`INSERT INTO operations(id,action,state,cluster_id,actor_id,owner_id,name,message,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, []any{o.OperationId, o.Action, o.State, o.ClusterId, o.ActorId, o.OwnerId, i.Name, o.Message, now, now}},
 		{`INSERT INTO publication_operations VALUES(?,?,?,?,?)`, []any{o.OperationId, i.Id, version, r.PreviewId, r.OverwriteDrift}},
-		{`INSERT INTO execution_attempts VALUES(?,?,?,0,?,?)`, []any{attempt, o.OperationId, "QUEUED", now, now}},
+		{`INSERT INTO execution_attempts(id,operation_id,state,possibly_sent,created_at,updated_at,actor_id) VALUES(?,?,?,0,?,?,?)`, []any{attempt, o.OperationId, "QUEUED", now, now, p.Account.Id}},
+		{`INSERT INTO operation_lifecycle VALUES(?,?,1,2)`, []any{o.OperationId, attempt}},
 		{`INSERT INTO instance_protections VALUES(?,?)`, []any{i.Id, o.OperationId}},
 		{`UPDATE instances SET activity_at=? WHERE id=?`, []any{now, i.Id}},
 	} {
@@ -401,7 +407,7 @@ func (s *Store) LookupOperations(ctx context.Context, c *rpc.RequestContext, r *
 	ids := []string{}
 	if r.IdempotencyKey == "" {
 		// 实例历史继承当前集群授权；查看不改变活动排序，也不伪造外部发布关系。
-		rows, e := s.DB.QueryContext(ctx, `SELECT operation_id FROM publication_operations WHERE instance_id=? ORDER BY operation_id`, r.InstanceId)
+		rows, e := s.DB.QueryContext(ctx, `SELECT operation_id FROM publication_operations WHERE instance_id=? UNION SELECT operation_id FROM deletion_operations WHERE instance_id=? ORDER BY operation_id`, r.InstanceId, r.InstanceId)
 		if e != nil {
 			return nil, e
 		}
@@ -457,7 +463,7 @@ func (s *Store) GetAttempts(ctx context.Context, c *rpc.RequestContext, r *rpc.O
 	if _, e := s.GetOperation(ctx, c, r); e != nil {
 		return nil, e
 	}
-	rows, e := s.DB.QueryContext(ctx, `SELECT id,operation_id,state,possibly_sent,created_at,updated_at FROM execution_attempts WHERE operation_id=? ORDER BY created_at,id`, r.OperationId)
+	rows, e := s.DB.QueryContext(ctx, `SELECT id,operation_id,state,possibly_sent,created_at,updated_at,revision,sequence,actor_id,message FROM execution_attempts WHERE operation_id=? ORDER BY sequence`, r.OperationId)
 	if e != nil {
 		return nil, e
 	}
@@ -465,7 +471,7 @@ func (s *Store) GetAttempts(ctx context.Context, c *rpc.RequestContext, r *rpc.O
 	out := []*rpc.ExecutionAttempt{}
 	for rows.Next() {
 		a := new(rpc.ExecutionAttempt)
-		if e = rows.Scan(&a.AttemptId, &a.OperationId, &a.State, &a.PossiblySent, &a.CreatedAt, &a.UpdatedAt); e != nil {
+		if e = rows.Scan(&a.AttemptId, &a.OperationId, &a.State, &a.PossiblySent, &a.CreatedAt, &a.UpdatedAt, &a.Revision, &a.Sequence, &a.ActorId, &a.Message); e != nil {
 			return nil, e
 		}
 		out = append(out, a)

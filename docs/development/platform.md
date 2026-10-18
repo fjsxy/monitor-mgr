@@ -1,6 +1,6 @@
 # 平台部署与账号管理
 
-本入口交付 #14。产品使用 React/TypeScript/Vite 与单 Go 进程；HTTP adapter 只映射 DTO、Cookie 与安全错误，每个账号请求通过生成的 Thrift client 连接实际 Kitex server，服务统一授权和访问 SQLite。`requestId` 相同的 `http-to-kitex` 与 `kitex-server` 日志用于确认调用链，不记录请求体、密码或 token。
+本入口覆盖平台账号、集群与异步实例生命周期。产品使用 React/TypeScript/Vite 与单 Go 进程；HTTP adapter 只映射 DTO、Cookie 与安全错误，每个账号请求通过生成的 Thrift client 连接实际 Kitex server，服务统一授权和访问 SQLite。`requestId` 相同的 `http-to-kitex` 与 `kitex-server` 日志用于确认调用链，不记录请求体、密码或 token。
 
 ## 固定构建
 
@@ -13,7 +13,7 @@ Go 1.27.1；Kitex runtime/tool v0.16.3；thriftgo v0.4.4；modernc SQLite v1.60.
 git diff --exit-code -- kitex_gen
 ```
 
-参数 `-module github.com/fjsxy/monitor-mgr -thrift no_default_serdes idl/control.thrift` 生成类型化 client/server 与 binary codec；没有 generic JSON RPC，也没有 local caller。兼容扩展新增 optional 字段，不复用已发布字段编号。当前 Go 1.27 下 CloudWeGo 动态 JSON 加速发出 fallback 警告，使用标准 JSON 路径；真实 Thrift 编解码和网络调用另有测试，不据此宣称性能结论。
+参数 `-module github.com/fjsxy/monitor-mgr -thrift no_default_serdes,keep_unknown_fields idl/control.thrift` 生成类型化 client/server 与 binary codec；没有 generic JSON RPC，也没有 local caller。兼容扩展新增 optional 字段，不复用已发布字段编号。当前 Go 1.27 下 CloudWeGo 动态 JSON 加速发出 fallback 警告，使用标准 JSON 路径；真实 Thrift 编解码和网络调用另有测试，不据此宣称性能结论。
 
 ## 本地运行
 
@@ -44,7 +44,7 @@ sed "s/monitor-mgr:development/monitor-mgr:$SOURCE_SHA/" deploy/platform.yaml |
 
 示例固定 replicas=1、Recreate、UID/GID=10001，HTTP Service 只公开 8080；Kitex 只绑定 Pod loopback 127.0.0.1:8888。关闭 Pod 身份自动挂载，目标集群必须经后续明确注册。数据卷保留整个数据目录；无需 shell、init container 或 root chown。底层卷需支持 fsGroup 或预先以正确 owner 准备。Pod 重建应在卷可用节点完成；不承诺节点级 HA。
 
-`GET /readyz` 每次实际调用生成的 Kitex Probe，Probe 查询数据库。仅 listener 或静态页面可用不会 ready。任一 listener 或 RPC 探测失败回收半启动资源。SIGTERM 先关闭新 HTTP 入口，默认等待 10 秒，再停止 RPC，最后关闭数据库。
+`GET /readyz` 每次实际调用生成的 Kitex Probe，Probe 查询数据库。仅 listener 或静态页面可用不会 ready。任一 listener 或 RPC 探测失败回收半启动资源。SIGTERM 先撤销就绪并停止 HTTP/RPC 新业务受理和新派发，默认排空 10 秒；超时后保存明确未发或可能已发状态，再停止 RPC，最后关闭数据库。重启不自动重放；明确未发的任务等待继续/取消，可能已发的任务只恢复原 UID 读取核验。
 
 ## 验证与证据
 
@@ -64,4 +64,6 @@ HTTP/真实 RPC 集成测试覆盖 I01、I02 默认/配置寿命/安全 Cookie�
 
 账号创建、角色/启用变更与管理员重置密码必须携带 `Idempotency-Key`，HTTP 通过 optional Thrift `RequestContext.idempotencyKey` 传递。服务在同一事务内先验证当前 Session 与管理员权限，再按 actor/action/target/key 查询；同键同规范化请求返回原安全结果，异内容返回 409，结果与账号变更、审计一起提交。含密码的规范化请求只保存独立 master key 计算的 HMAC-SHA256，不存密码或裸摘要。初始化、登录、退出、本人改密属于认证命令，不缓存会话凭据；改密或自行重置使旧 Session 失效后，旧凭据重复请求仍须 401。
 
-当前 schema 版本为 2。已有库升级前通过 SQLite `VACUUM INTO` 保存一致快照至数据目录 `backups/`（0600）；所有待应用 DDL 和版本记录一次事务提交。快照失败不迁移，迁移失败保留原库及恢复依据；不初始化替代数据库。新版本启动拒绝不兼容版本，schema1 账号和有效 Session 升级后保持可用。`control.Store.Authorize` / `AuthorizeTx` 从持久会话与当前账号读取角色及失效依据，后续业务必须复用当前授权，不接受浏览器角色断言。
+当前 schema 版本为 6；v5 收口独立 CR namespace 与敏感读模型指纹，v6 保存当前执行尝试、修订和原 UID 清理图。已有库升级前通过 SQLite `VACUUM INTO` 保存一致快照至数据目录 `backups/`（0600）；所有待应用 DDL 和版本记录一次事务提交。快照失败不迁移，迁移失败保留原库及恢复依据；不初始化替代数据库。新版本启动拒绝不兼容版本，schema1 账号和有效 Session 升级后保持可用。`control.Store.Authorize` / `AuthorizeTx` 从持久会话与当前账号读取角色及失效依据，后续业务必须复用当前授权，不接受浏览器角色断言。
+
+生命周期入口：POST `/operations/{id}/retry`、`/cancel`、`/continue-unsent` 绑定 `expectedOperationRevision`、`expectedAttemptId`、`expectedAttemptRevision`，仍需当前授权及幂等键。普通重试只接受确定失败，同 operationId 和固定发布版本产生新 attempt；旧 attempt 与原发起者保留。POST `/operations/{id}/refresh` 只读核验结果，身份不明不能补认。POST `/instances/{id}/deletions` 使用确认的 `versionId`，按原 UID/新读 RV 发送唯一 Foreground DELETE；只有原 CR 及持久 owner UID 图中的 workload、ReplicaSet、Pod 全部核验消失才解除保护。平台不直接清理 Pod、PVC 或 finalizer。

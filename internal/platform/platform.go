@@ -82,6 +82,9 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	p = &Runtime{cfg: cfg, store: store, ln: httpLn, rpcAddr: rpcLn.Addr().String()}
 	p.rpc = controlservice.NewServer(store, server.WithListener(rpcLn), server.WithExitWaitTime(time.Second), server.WithMiddleware(func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, req, resp any) error {
+			if !store.Accepting() {
+				return control.Error("UNAVAILABLE", "平台退出中，停止接收业务请求")
+			}
 			if args, ok := req.(interface{ GetCtx() *rpc.RequestContext }); ok && args.GetCtx() != nil {
 				cfg.Logger.Info("管控服务请求", "requestId", args.GetCtx().RequestId, "transport", "kitex-server")
 			}
@@ -148,7 +151,7 @@ func (p *Runtime) Close(ctx context.Context) error {
 	p.closed = true
 	p.mu.Unlock()
 	// 关键：先保存 worker 恢复状态再释放数据库，退出不自动重放或把未确认结果取消。
-	p.store.StopWorkers()
+	p.store.StopWorkersContext(ctx)
 	var err error
 	if p.http != nil {
 		err = p.http.Shutdown(ctx)
@@ -178,6 +181,13 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(200)
 		w.Write([]byte("ready"))
+		return
+	}
+	p.mu.Lock()
+	closing := p.closed
+	p.mu.Unlock()
+	if closing && strings.HasPrefix(r.URL.Path, "/api/") {
+		p.writeError(w, control.Error("UNAVAILABLE", "平台退出中，停止接收业务请求"), requestID)
 		return
 	}
 	// 关键：变更请求先校验 Origin，HttpOnly Cookie 不作为跨站提交的授权替代品。
