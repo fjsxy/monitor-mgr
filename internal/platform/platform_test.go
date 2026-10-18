@@ -338,3 +338,26 @@ func TestT07ActualRPCProbeRequiredBeforeReady(t *testing.T) {
 		t.Fatal("RPC transport 不可用仍 ready")
 	}
 }
+
+func TestI02HTTPSOriginSetsSecureCookie(t *testing.T) {
+	p, err := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", PublicOrigin: "https://platform.example.invalid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close(context.Background())
+	for _, path := range []string{"initialization", "sessions"} {
+		req, _ := http.NewRequest("POST", p.URL()+"/api/v1/"+path, strings.NewReader(`{"username":"admin","password":"first-password-123"}`))
+		req.Header.Set("Origin", "https://platform.example.invalid")
+		resp, e := http.DefaultClient.Do(req)
+		if e != nil {
+			t.Fatal(e)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 201 {
+			t.Fatalf("HTTPS入口返回%d", resp.StatusCode)
+		}
+		if path == "sessions" && (len(resp.Cookies()) != 1 || !resp.Cookies()[0].Secure) {
+			t.Fatal("HTTPS入口未标记Secure Cookie")
+		}
+	}
+}

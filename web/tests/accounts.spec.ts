@@ -1,5 +1,11 @@
 import {test,expect} from '@playwright/test';
 const adminPassword=process.env.ADMIN_PASSWORD??'first-password-123';
+// Each I07 case establishes its own administrator precondition; no dependency on I01.
+test.beforeEach(async({page,baseURL},info)=>{
+ if(!info.title.startsWith('I07.'))return;
+ const state=await (await page.request.get('/api/v1/initialization')).json();
+ if(!state.initialized){const response=await page.request.post('/api/v1/initialization',{headers:{Origin:new URL(baseURL!).origin},data:{username:'admin',password:adminPassword}});expect(response.status()).toBe(201)}
+});
 test('I01.primary 初始化与临时密码流程',async({page})=>{
  await page.goto('/');
  await expect(page.getByRole('heading',{name:'初始化管理员'})).toBeVisible();

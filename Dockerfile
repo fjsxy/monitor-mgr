@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM node:26.4.0-bookworm-slim@sha256:ec82d089a8ae2cf02628da7b34ea57dc357b24db724d557fe2d240e6beb659c1 AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
