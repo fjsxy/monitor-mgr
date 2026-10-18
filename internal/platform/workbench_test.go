@@ -81,4 +81,31 @@ func TestWorkbenchActivitySequencePersists(t *testing.T) {
 	stamp.Add(-int64(time.Second))
 	clusterCall(t, p, "POST", "/instances/"+a+"/editing-activity", nil, c, "edit-after-restart", 200)
 	assertOrder(a)
+	// 原schema8在同一毫秒内仍有可判定顺序，不能让浮点时间丢纳秒后回退为ID排序。
+	if e = p.Close(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	db, err = sql.Open("sqlite", filepath.Join(cfg.DataDir, "platform.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DELETE FROM schema_migrations WHERE version>8`); err != nil {
+		t.Fatal(err)
+	}
+	earlier, later := a, b
+	if a < b {
+		earlier, later = b, a
+	}
+	if _, err = db.Exec(`UPDATE instances SET activity_at=? WHERE id=?`, "2026-10-19T01:00:00.123000001Z", earlier); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`UPDATE instances SET activity_at=? WHERE id=?`, "2026-10-19T01:00:00.123000999Z", later); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	p, e = platform.Start(context.Background(), cfg)
+	if e != nil {
+		t.Fatal(e)
+	}
+	assertOrder(later)
 }

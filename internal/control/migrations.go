@@ -126,6 +126,11 @@ func migrate(db *sql.DB, dataDir string, key []byte) error {
 					return fmt.Errorf("数据库迁移失败，原库与快照保留: %w", err)
 				}
 			}
+			if v == 9 {
+				if err = migrateActivityOrder(tx); err != nil {
+					return fmt.Errorf("活动顺序迁移失败: %w", err)
+				}
+			}
 			if v == 5 || v == 8 {
 				if err = migrateTargetProjections(tx, key); err != nil {
 					return fmt.Errorf("敏感读模型迁移失败，原库与快照保留: %w", err)
