@@ -3,6 +3,7 @@ namespace go control
 exception APIError {
  1: required string code
  2: required string message
+ 3: optional map<string,string> fieldErrors
 }
 struct RequestContext {
  1: required string requestId
@@ -48,7 +49,7 @@ struct TransferClusterRequest { 1: required string id, 2: required string ownerI
 struct Operation {
  1: required string operationId, 2: required string action, 3: required string state,
  4: required string clusterId, 5: required string actorId, 6: required string message,
- 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId
+ 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId, 12: optional string instanceId, 13: optional string versionId, 14: optional string attemptId
 }
 struct OperationID { 1: required string operationId }
 struct OperationsResult { 1: required list<Operation> operations }
@@ -56,7 +57,57 @@ struct NamespacesResult { 1: required list<string> namespaces }
 struct ReferenceMetadata { 1: required string kind, 2: required string name, 3: required string namespace, 4: required list<string> keys }
 struct ReferencesRequest { 1: required string id, 2: required string namespace, 3: required string kind }
 struct ReferencesResult { 1: required list<ReferenceMetadata> references }
+struct ContainerResources { 1: optional string requestCPU, 2: optional string requestMemory, 3: optional string limitCPU, 4: optional string limitMemory }
+struct CollectorSelection { 1: required string mode, 2: optional list<string> names }
+struct MetricSelection { 1: required string mode, 2: optional list<string> patterns }
+struct NamespaceSelection { 1: required string mode, 2: optional list<string> names, 3: optional list<string> namePatterns }
+struct RoleResources { 1: required string mode, 2: optional ContainerResources resources }
+struct KSMConfiguration {
+ 1: required string name, 2: required string targetNamespace, 3: required string deploymentMode,
+ 4: required string desiredState, 5: required ContainerResources resources,
+ 6: required CollectorSelection collectors, 7: required MetricSelection metricFilter, 8: required NamespaceSelection namespaceFilter,
+ 9: required bool advancedResources, 10: optional i32 shards,
+ 11: optional RoleResources nodeResources, 12: optional RoleResources clusterResources, 13: optional RoleResources unscheduledResources
+}
+struct InstanceID { 1: required string id }
+struct CreateInstanceRequest { 1: required string clusterId, 2: required string component, 3: optional KSMConfiguration ksm }
+struct SaveDraftRequest { 1: required string id, 2: required i64 expectedDraftRevision, 3: optional KSMConfiguration ksm }
+struct ConfigurationDraft { 1: required i64 revision, 2: optional KSMConfiguration ksm, 3: required string yaml }
+struct InstanceRuntime { 1: required string summary, 2: required string desiredState, 3: required string deploymentMode, 4: optional i32 availablePods, 5: optional i32 desiredPods, 6: required string lastSuccessAt, 7: required string error, 8: required string observedAt }
+struct ObservationInstance {
+ 1: required string id, 2: required string clusterId, 3: required string name, 4: required string targetNamespace,
+ 5: required string component, 6: required string type, 7: required bool readOnly, 8: required string uid,
+ 9: required string lifecycle, 10: required string currentVersionId, 11: required string activityAt, 12: optional InstanceRuntime runtime,
+ 13: required string ownership, 14: optional string yaml
+}
+struct InstancesResult { 1: required list<ObservationInstance> instances }
+struct PreviewRequest { 1: required string id, 2: required i64 draftRevision }
+struct PublicationPreview { 1: required string previewId, 2: required i64 draftRevision, 3: required string leftYAML, 4: required string rightYAML, 5: required bool drift, 6: required list<string> warnings }
+struct PublishRequest { 1: required string id, 2: required string previewId, 3: required i64 draftRevision, 4: required bool overwriteDrift }
+struct PublicationVersion { 1: required string versionId, 2: required string instanceId, 3: required i64 sourceDraftRevision, 4: optional KSMConfiguration ksm, 5: required string yaml, 6: required string createdAt }
+struct VersionsResult { 1: required list<PublicationVersion> versions }
+struct VersionRequest { 1: required string id, 2: required string versionId }
+struct OperationLookup { 1: required string instanceId, 2: required string idempotencyKey }
+struct ExecutionAttempt { 1: required string attemptId, 2: required string operationId, 3: required string state, 4: required bool possiblySent, 5: required string createdAt, 6: required string updatedAt }
+struct AttemptsResult { 1: required list<ExecutionAttempt> attempts }
 service ControlService {
+ ObservationInstance CreateInstance(1: RequestContext ctx, 2: CreateInstanceRequest request) throws (1: APIError error)
+ InstancesResult ListInstances(1: RequestContext ctx, 2: ClusterID request) throws (1: APIError error)
+ ObservationInstance GetInstance(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
+ ConfigurationDraft GetDraft(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
+ ConfigurationDraft SaveDraft(1: RequestContext ctx, 2: SaveDraftRequest request) throws (1: APIError error)
+ ConfigurationDraft CopyTemplate(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
+ Empty RecordEditingActivity(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
+ PublicationPreview PreviewPublication(1: RequestContext ctx, 2: PreviewRequest request) throws (1: APIError error)
+ Operation PublishConfiguration(1: RequestContext ctx, 2: PublishRequest request) throws (1: APIError error)
+ VersionsResult ListVersions(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
+ PublicationVersion GetVersion(1: RequestContext ctx, 2: VersionRequest request) throws (1: APIError error)
+ InstanceRuntime GetRuntime(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
+ InstanceRuntime RefreshInstance(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
+ Empty DeleteDraft(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
+ OperationsResult LookupOperations(1: RequestContext ctx, 2: OperationLookup request) throws (1: APIError error)
+ AttemptsResult GetAttempts(1: RequestContext ctx, 2: OperationID request) throws (1: APIError error)
+
  ContextsResult ListKubeconfigContexts(1: RequestContext ctx, 2: KubeconfigRequest request) throws (1: APIError error)
  ClustersResult ListClusters(1: RequestContext ctx) throws (1: APIError error)
  Cluster GetCluster(1: RequestContext ctx, 2: ClusterID request) throws (1: APIError error)

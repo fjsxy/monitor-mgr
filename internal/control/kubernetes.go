@@ -174,6 +174,27 @@ func newTarget(c *targetCredential) (*Target, error) {
 }
 func (t *Target) Close() { t.client.CloseIdleConnections() }
 func (t *Target) Request(ctx context.Context, method, path string, body any, out any) error {
+	return t.request(ctx, method, path, body, out, nil)
+}
+
+// MutationOutcome 不把已发后断连或成功 HTTP 后解码失败当成明确拒绝。
+type MutationOutcome struct {
+	Object     map[string]any
+	HTTPStatus int
+	Rejected   bool
+	Err        error
+}
+
+func (t *Target) Mutate(ctx context.Context, method, path string, body any) MutationOutcome {
+	o := MutationOutcome{}
+	o.Err = t.request(ctx, method, path, body, &o.Object, &o.HTTPStatus)
+	switch o.HTTPStatus {
+	case 401, 403, 404, 409, 422:
+		o.Rejected = true
+	}
+	return o
+}
+func (t *Target) request(ctx context.Context, method, path string, body any, out any, status *int) error {
 	bounded, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	ctx = bounded
@@ -206,9 +227,20 @@ func (t *Target) Request(ctx context.Context, method, path string, body any, out
 		return Error("TARGET_UNAVAILABLE", "目标 API 无法连接或读取超时")
 	}
 	defer res.Body.Close()
+	if status != nil {
+		*status = res.StatusCode
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		code := "TARGET_ERROR"
 		msg := "目标 API 返回错误"
+		if res.StatusCode == 409 {
+			code = "TARGET_CONFLICT"
+			msg = "目标资源版本或身份冲突"
+		}
+		if res.StatusCode == 422 {
+			code = "TARGET_REJECTED"
+			msg = "目标 API 明确拒绝配置"
+		}
 		if res.StatusCode == 403 {
 			code = "TARGET_FORBIDDEN"
 			msg = "目标 API 权限不足"

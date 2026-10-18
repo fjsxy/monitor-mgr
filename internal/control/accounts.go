@@ -97,6 +97,8 @@ func (s *Store) Logout(ctx context.Context, c *rpc.RequestContext) (*rpc.Empty, 
 	return &rpc.Empty{}, nil
 }
 func (s *Store) ChangePassword(ctx context.Context, c *rpc.RequestContext, r *rpc.ChangePasswordRequest) (*rpc.Empty, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	if err := validPassword(r.NewPassword_); err != nil {
 		return nil, err
 	}
@@ -226,6 +228,8 @@ func audit(ctx context.Context, tx *sql.Tx, actor, action, target string, now ti
 }
 
 func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc.UpdateAccountRequest) (*rpc.Account, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")
@@ -295,6 +299,8 @@ func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	return a, nil
 }
 func (s *Store) ResetPassword(ctx context.Context, c *rpc.RequestContext, r *rpc.ResetPasswordRequest) (*rpc.Empty, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")

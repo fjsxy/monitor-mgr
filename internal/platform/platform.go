@@ -184,6 +184,9 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 		ctx.SessionToken = &cookie.Value
 	}
 	p.cfg.Logger.Info("业务请求", "requestId", requestID, "transport", "http-to-kitex", "method", r.Method, "path", r.URL.Path)
+	if p.instanceRoutes(w, r, ctx, requestID) {
+		return
+	}
 	switch r.Method + " " + r.URL.Path {
 	case "GET /api/v1/initialization":
 		result, err := p.client.Probe(r.Context(), ctx)
@@ -322,6 +325,10 @@ func (p *Runtime) writeError(w http.ResponseWriter, err error, id string) {
 			status = 404
 		case "ALREADY_INITIALIZED", "CONFLICT", "LAST_ADMIN":
 			status = 409
+		case "TARGET_CONFLICT":
+			status = 409
+		case "TARGET_REJECTED":
+			status = 422
 		case "TARGET_FORBIDDEN":
 			status = 403
 		case "TARGET_NOT_FOUND":
@@ -334,7 +341,11 @@ func (p *Runtime) writeError(w http.ResponseWriter, err error, id string) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message, "requestId": id})
+	body := map[string]any{"code": code, "message": message, "requestId": id}
+	if apiErr != nil && len(apiErr.FieldErrors) > 0 {
+		body["fieldErrors"] = apiErr.FieldErrors
+	}
+	json.NewEncoder(w).Encode(body)
 }
 
 func (p *Runtime) accountMutation(w http.ResponseWriter, r *http.Request, ctx *rpc.RequestContext, requestID string) {

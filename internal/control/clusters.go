@@ -218,6 +218,8 @@ func (s *Store) UnregisterCluster(ctx context.Context, c *rpc.RequestContext, r 
 	return s.clusterMutation(ctx, c, "UNREGISTER", r.Id, "", r)
 }
 func (s *Store) clusterMutation(ctx context.Context, c *rpc.RequestContext, action, id, owner string, request any) (*rpc.Cluster, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")
@@ -304,6 +306,7 @@ func (s *Store) GetOperation(ctx context.Context, c *rpc.RequestContext, r *rpc.
 			return nil, e
 		}
 	}
+	s.enrichPublicationOperation(ctx, s.DB, o)
 	return o, nil
 }
 func (s *Store) ListClusterOperations(ctx context.Context, c *rpc.RequestContext, r *rpc.ClusterID) (*rpc.OperationsResult_, error) {

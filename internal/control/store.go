@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,15 +20,18 @@ import (
 )
 
 type Store struct {
-	DB           *sql.DB
-	lock         *os.File
-	Now          func() time.Time
-	SessionTTL   time.Duration
-	Key          []byte
-	limits       *targetLimits
-	workerCancel context.CancelFunc
-	workerWake   chan struct{}
-	workerDone   chan struct{}
+	DB               *sql.DB
+	lock             *os.File
+	Now              func() time.Time
+	SessionTTL       time.Duration
+	Key              []byte
+	limits           *targetLimits
+	workerCancel     context.CancelFunc
+	workerWake       chan struct{}
+	workerDone       chan struct{}
+	dispatch         sync.RWMutex
+	publicationWG    sync.WaitGroup
+	observationEpoch string
 }
 
 func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, error) {
@@ -97,37 +101,18 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 		return fail(err)
 	}
 	db.SetMaxOpenConns(1)
+
+	s := &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key, limits: newTargetLimits(), observationEpoch: ID()}
+	// 有密文的旧库必须先用原密钥验证，再制作迁移快照或推进 schema。
+	if err = s.verifyExistingCredentials(); err != nil {
+		db.Close()
+		return fail(err)
+	}
 	if err = migrate(db, dataDir); err != nil {
 		db.Close()
 		return fail(err)
 	}
 
-	s := &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key, limits: newTargetLimits()}
-	rows, err := db.Query(`SELECT id,credential FROM clusters WHERE credential IS NOT NULL UNION ALL SELECT operation_id,cipher FROM cluster_candidates`)
-	if err != nil {
-		db.Close()
-		return fail(errors.New("凭据结构无法读取"))
-	}
-	for rows.Next() {
-		var aad string
-		var data []byte
-		if rows.Scan(&aad, &data) != nil {
-			rows.Close()
-			db.Close()
-			return fail(errors.New("凭据结构无法读取"))
-		}
-		if _, err = s.openCredential(data, aad); err != nil {
-			rows.Close()
-			db.Close()
-			return fail(errors.New("原密钥无法解密已保存集群凭据"))
-		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		db.Close()
-		return fail(errors.New("凭据结构无法读取"))
-	}
 	return s, nil
 }
 func (s *Store) Close() error {
