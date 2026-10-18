@@ -209,7 +209,8 @@ class Suite(ClusterSuite):
   actual=node_json('crictl','inspect',container_id)['status']
   # 关键：CRI查询限定原容器ID及原Pod UID，不能用同节点另一绿色容器冒充当前Pod。
   assert actual['id']==container_id and actual['labels']['io.kubernetes.pod.uid']==pod['metadata']['uid'] and actual['metadata']['name']=='prometheus'
-  actual_ref=actual['imageRef'];image=node_json('crictl','inspecti',actual_ref)['status'];assert image['id']==config_digest
+  actual_ref=actual['imageRef'];assert actual['image']['image']==config_digest,'原容器实际config与官方内容链不符'
+  image=node_json('crictl','inspecti',config_digest)['status'];assert image['id']==config_digest
   reported=re.search(r'sha256:[0-9a-f]{64}$',status['imageID']);assert reported and reported[0] in {index,child,config_digest},'kubelet镜像ID不在已验证的官方内容链'
   return {'podUID':pod['metadata']['uid'],'containerID':container_id,'node':node,'indexDigest':index,'arm64ManifestDigest':child,'configDigest':config_digest,'criImageId':image['id'],'criImageRef':actual_ref,'kubeletImageID':status['imageID'],'contentBytesSHA256Verified':True,'os':config['os'],'architecture':config['architecture']}
  def collection(self,kind,namespace,name='matched',label='yes'):
