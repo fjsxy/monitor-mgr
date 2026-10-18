@@ -56,7 +56,8 @@ func (a componentAdapter) normalizeSpec(spec map[string]any) string {
 		if m == nil {
 			m = map[string]any{}
 		}
-		for k, v := range map[string]any{"mode": "StatefulSet", "replicas": 1, "shards": 1, "paused": false} {
+		// 固定v0.83.0 CRD默认portName/scrapeInterval；只补合法默认，绝不合并selector nil与{}。
+		for k, v := range map[string]any{"mode": "StatefulSet", "replicas": 1, "shards": 1, "paused": false, "portName": "web", "scrapeInterval": "30s"} {
 			if _, ok := m[k]; !ok {
 				m[k] = v
 			}

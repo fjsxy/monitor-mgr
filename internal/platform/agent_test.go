@@ -148,6 +148,14 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 				m["uid"] = "uid-" + key
 				m["resourceVersion"] = "1"
 				m["generation"] = 1
+				// 固定v0.83.0 CRD在真实API默认这两项；响应确认必须识别等价默认值。
+				spec := body["spec"].(map[string]any)
+				if _, ok := spec["portName"]; !ok {
+					spec["portName"] = "web"
+				}
+				if _, ok := spec["scrapeInterval"]; !ok {
+					spec["scrapeInterval"] = "30s"
+				}
 				body["status"] = map[string]any{"replicas": 1, "availableReplicas": 1, "conditions": []any{map[string]any{"type": "Available", "status": "True", "observedGeneration": 1}}}
 				f.objects[key] = body
 				json.NewEncoder(w).Encode(body)
