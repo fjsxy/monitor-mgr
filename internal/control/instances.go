@@ -1,3 +1,4 @@
+// 实例与草稿：平台ID独立于CR身份；保存仅静态验证并同步递增修订，不访问集群写接口。
 package control
 
 import (
@@ -253,6 +254,7 @@ func (s *Store) SaveDraft(ctx context.Context, c *rpc.RequestContext, r *rpc.Sav
 	if tx.QueryRowContext(ctx, `SELECT count(*) FROM instance_protections WHERE instance_id=?`, r.Id).Scan(&protected) != nil {
 		return nil, Error("UNAVAILABLE", "保护无法读取")
 	}
+	// 关键：已创建或结果不明时固定身份，不能通过保存草稿把后续写入转向另一CR。
 	if (i.Uid != "" || protected > 0) && (cfg.Name != i.Name || cfg.TargetNamespace != i.TargetNamespace) {
 		return nil, Error("CONFLICT", "下发中或创建后 name/targetNamespace 固定，请新建实例")
 	}

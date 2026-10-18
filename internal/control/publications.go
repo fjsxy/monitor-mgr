@@ -1,3 +1,4 @@
+// 发布受理负责冻结来源、校验预览并原子建立版本、操作、尝试、幂等和实例保护。
 package control
 
 import (
@@ -228,7 +229,7 @@ func (s *Store) enrichPublicationOperation(ctx context.Context, q clusterQuery, 
 	}
 }
 func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext, r *rpc.PublishRequest) (*rpc.Operation, error) {
-	// 当前授权先于幂等命中；命中不依赖目标 API 或已变化的草稿。
+	// 关键：授权必须先于幂等命中，否则旧请求键可绕过当前归属或账号失效。
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return nil, e
@@ -287,7 +288,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	}
 	var n int
 	if tx.QueryRowContext(ctx, `SELECT count(*) FROM instance_protections WHERE instance_id=?`, i.Id).Scan(&n) != nil {
-		return nil, e
+		return nil, Error("UNAVAILABLE", "实例保护无法核验")
 	}
 	if n > 0 {
 		return nil, Error("CONFLICT", "实例仍有未结束变更")
@@ -306,6 +307,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	version, attempt := ID(), ID()
 	o := &rpc.Operation{OperationId: ID(), Action: "PUBLISH", State: "QUEUED", ClusterId: i.ClusterId, ActorId: p.Account.Id, OwnerId: p.Account.Id, CreatedAt: now, UpdatedAt: now, Message: "已受理，尚未确认 CR 写入", InstanceId: &i.Id, VersionId: &version, AttemptId: &attempt}
+	// 关键：版本来源、操作、首次尝试、幂等和保护必须同事务提交，避免返回受理后缺少恢复依据。
 	config, _ := json.Marshal(cfg)
 	spec, _ := json.Marshal(cfg.spec())
 	for _, q := range []struct {
@@ -329,8 +331,16 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	if e = audit(ctx, tx, p.Account.Id, "PUBLISH_ACCEPTED", i.Id, s.Now()); e != nil {
 		return nil, e
 	}
+	if s.OperationBoundary != nil {
+		if e = s.OperationBoundary("beforeAcceptanceCommit", o.OperationId); e != nil {
+			return nil, Error("UNAVAILABLE", "受理事务未提交")
+		}
+	}
 	if tx.Commit() != nil {
 		return nil, Error("UNAVAILABLE", "受理提交失败")
+	}
+	if s.OperationBoundary != nil {
+		s.OperationBoundary("afterAcceptanceCommit", o.OperationId)
 	}
 	s.wakeWorker()
 	return o, nil
@@ -391,20 +401,52 @@ func (s *Store) LookupOperations(ctx context.Context, c *rpc.RequestContext, r *
 	if _, e = s.authorizedInstance(ctx, c, r.InstanceId); e != nil {
 		return nil, e
 	}
-	rows, e := s.DB.QueryContext(ctx, `SELECT result_json FROM command_results WHERE actor_id=? AND action='PUBLISH' AND target_id=? AND command_key=?`, p.Account.Id, r.InstanceId, r.IdempotencyKey)
-	if e != nil {
-		return nil, e
-	}
+
 	ids := []string{}
-	for rows.Next() {
-		var raw []byte
-		rows.Scan(&raw)
-		var o rpc.Operation
-		if json.Unmarshal(raw, &o) == nil {
+	if r.IdempotencyKey == "" {
+		// 实例历史继承当前集群授权；查看不改变活动排序，也不伪造外部发布关系。
+		rows, e := s.DB.QueryContext(ctx, `SELECT operation_id FROM publication_operations WHERE instance_id=? ORDER BY operation_id`, r.InstanceId)
+		if e != nil {
+			return nil, e
+		}
+		for rows.Next() {
+			var id string
+			if e = rows.Scan(&id); e != nil {
+				rows.Close()
+				return nil, e
+			}
+			ids = append(ids, id)
+		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			return nil, e
+		}
+	} else {
+		// 关键：请求键查找仍限定当前发起账号，不能通过猜测旧账号的键读取去重结果。
+		rows, e := s.DB.QueryContext(ctx, `SELECT result_json FROM command_results WHERE actor_id=? AND action='PUBLISH' AND target_id=? AND command_key=?`, p.Account.Id, r.InstanceId, r.IdempotencyKey)
+		if e != nil {
+			return nil, e
+		}
+		for rows.Next() {
+			var raw []byte
+			if e = rows.Scan(&raw); e != nil {
+				rows.Close()
+				return nil, e
+			}
+			var o rpc.Operation
+			if json.Unmarshal(raw, &o) != nil {
+				rows.Close()
+				return nil, Error("UNAVAILABLE", "操作结果不可读")
+			}
 			ids = append(ids, o.OperationId)
 		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			return nil, e
+		}
 	}
-	rows.Close()
 	out := []*rpc.Operation{}
 	for _, id := range ids {
 		o, e := s.GetOperation(ctx, c, &rpc.OperationID{OperationId: id})

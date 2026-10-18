@@ -1,3 +1,4 @@
+// HTTP实例适配器只做路径、JSON和状态码转换，全部业务经生成的Kitex client。
 package platform
 
 import (

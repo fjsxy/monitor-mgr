@@ -1,4 +1,4 @@
-// Package platform assembles the HTTP adapter and real loopback Kitex service.
+// Package platform 组装HTTP入口与真实loopback Kitex服务，业务规则由管控服务统一执行。
 package platform
 
 import (
@@ -24,6 +24,8 @@ import (
 )
 
 type Config struct {
+	// OperationBoundary 仅供确定性进程/事务故障测试，不由 HTTP 或运行参数开放。
+	OperationBoundary                                   func(stage, operationID string) error
 	RPCDialer                                           remote.Dialer
 	DataDir, HTTPAddr, RPCAddr, PublicOrigin, StaticDir string
 	SessionTTL                                          time.Duration
@@ -60,6 +62,7 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	if err != nil {
 		return nil, err
 	}
+	store.OperationBoundary = cfg.OperationBoundary
 	rpcLn, err := net.Listen("tcp", cfg.RPCAddr)
 	if err != nil {
 		store.Close()
@@ -184,6 +187,7 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 		ctx.SessionToken = &cookie.Value
 	}
 	p.cfg.Logger.Info("业务请求", "requestId", requestID, "transport", "http-to-kitex", "method", r.Method, "path", r.URL.Path)
+	// 关键：实例入口同样只调用真实RPC，不以数据库/目标API旁路降级。
 	if p.instanceRoutes(w, r, ctx, requestID) {
 		return
 	}

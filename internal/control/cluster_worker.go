@@ -16,7 +16,7 @@ func (s *Store) wakeWorker() {
 	}
 }
 func (s *Store) StartWorkers() error {
-	// Restart never silently resumes an accepted mutation. All candidates remain encrypted.
+	// 关键：重启不能重放已受理变更；未发等待人工继续，可能已发保持不确定保护。
 	if _, e := s.DB.Exec(`UPDATE operations SET state='WAITING_CONFIRMATION',message='平台已重启，等待管理员明确继续核验' WHERE state IN ('QUEUED','RUNNING','CHECKING')`); e != nil {
 		return e
 	}

@@ -1,6 +1,16 @@
 package platform_test
 
 import (
+	"bytes"
+	"log/slog"
+
+	"github.com/cloudwego/kitex/client"
+	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
+	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
+
+	"errors"
+	"os/exec"
+
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -244,6 +254,10 @@ func TestP02PublicationFreezesSourceAndP03Idempotency(t *testing.T) {
 	if v["sourceDraftRevision"] != float64(1) || v["ksm"].(map[string]any)["resources"].(map[string]any)["requestCPU"] != "100m" {
 		t.Fatal(v)
 	}
+	history := clusterCall(t, p, "GET", "/operations?instanceId="+id, nil, c, "", 200)["operations"].([]any)
+	if len(history) != 1 {
+		t.Fatal("实例历史未返回固定操作", history)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.writes != 1 {
@@ -343,9 +357,253 @@ func TestP05DriftOverwritePreservesMetadataAndP06Equivalent(t *testing.T) {
 	if awaitClusterOperation(t, p, c, o["operationId"].(string))["state"] != "SUCCEEDED" {
 		t.Fatal("等价默认值/status/RV错误冲突")
 	}
+	cli, e := controlservice.NewClient("fixed-target-direct", client.WithHostPorts(p.RPCAddress()))
+	if e != nil {
+		t.Fatal(e)
+	}
+	directKey := "fixed-target"
+	token := c.Value
 	for _, field := range []string{"name", "targetNamespace"} {
 		cfg := ksmConfig("instance")
 		cfg[field] = "other"
 		clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "ksm": cfg}, c, "fixed-"+field, 409)
+		raw, _ := json.Marshal(cfg)
+		var typed rpc.KSMConfiguration
+		json.Unmarshal(raw, &typed)
+		_, e := cli.SaveDraft(context.Background(), &rpc.RequestContext{RequestId: "fixed-target", SessionToken: &token, IdempotencyKey: &directKey}, &rpc.SaveDraftRequest{Id: id, ExpectedDraftRevision: 1, Ksm: &typed})
+		var api *rpc.APIError
+		if !errors.As(e, &api) || api.Code != "CONFLICT" {
+			t.Fatal("RPC允许修改固定身份", e)
+		}
 	}
+}
+
+func TestF05PublicationCrashBoundaries(t *testing.T) {
+	if stage := os.Getenv("MM_F05_STAGE"); stage != "" {
+		p, e := platform.Start(context.Background(), platform.Config{DataDir: os.Getenv("MM_F05_DIR"), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", OperationBoundary: func(s, id string) error {
+			if s == stage {
+				os.Exit(97)
+			}
+			return nil
+		}})
+		if e != nil {
+			t.Fatal(e)
+		}
+		c := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
+		clusterCall(t, p, "POST", "/instances/"+os.Getenv("MM_F05_INSTANCE")+"/publications", map[string]any{"previewId": os.Getenv("MM_F05_PREVIEW"), "draftRevision": 1, "overwriteDrift": false}, c, "crash-key", 202)
+		t.Fatal("未触发崩溃边界")
+		return
+	}
+	for _, stage := range []string{"beforeAcceptanceCommit", "afterAcceptanceCommit"} {
+		t.Run(stage, func(t *testing.T) {
+			f, target := ksmTarget(t)
+			dir := t.TempDir()
+			cfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
+			p, e := platform.Start(context.Background(), cfg)
+			if e != nil {
+				t.Fatal(e)
+			}
+			request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
+			c := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
+			owner := readJSON(t, p, "/session", c)["account"].(map[string]any)["id"].(string)
+			op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "fixture", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
+			cl := awaitClusterOperation(t, p, c, op["operationId"].(string))["clusterId"].(string)
+			i := clusterCall(t, p, "POST", "/clusters/"+cl+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": ksmConfig("instance")}, c, "create", 201)
+			id := i["id"].(string)
+			preview := ksmPreview(t, p, c, id, 1)
+			p.Close(context.Background())
+			cmd := exec.Command(os.Args[0], "-test.run=^TestF05PublicationCrashBoundaries$")
+			cmd.Env = append(os.Environ(), "MM_F05_STAGE="+stage, "MM_F05_DIR="+dir, "MM_F05_INSTANCE="+id, "MM_F05_PREVIEW="+preview["previewId"].(string))
+			raw, e := cmd.CombinedOutput()
+			var exited *exec.ExitError
+			if !errors.As(e, &exited) || exited.ExitCode() != 97 {
+				t.Fatalf("没有在正确边界退出：%v %s", e, raw)
+			}
+			reopened, e := platform.Start(context.Background(), cfg)
+			if e != nil {
+				t.Fatal(e)
+			}
+			defer reopened.Close(context.Background())
+			found := clusterCall(t, reopened, "GET", "/operations?instanceId="+id+"&idempotencyKey=crash-key", nil, c, "", 200)["operations"].([]any)
+			versions := clusterCall(t, reopened, "GET", "/instances/"+id+"/versions", nil, c, "", 200)["versions"].([]any)
+			f.mu.Lock()
+			writes := f.writes
+			f.mu.Unlock()
+			if writes != 0 {
+				t.Fatal("重启自动重放")
+			}
+			count := 0
+			if stage == "afterAcceptanceCommit" {
+				count = 1
+			}
+			if len(found) != count || len(versions) != count {
+				t.Fatalf("受理关系不完整 %d/%d want%d", len(found), len(versions), count)
+			}
+			if count == 1 {
+				old := found[0].(map[string]any)
+				if old["state"] != "WAITING_CONFIRMATION" {
+					t.Fatal(old)
+				}
+				replay := clusterCall(t, reopened, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "crash-key", 202)
+				if replay["operationId"] != old["operationId"] {
+					t.Fatal("崩溃后重复受理")
+				}
+				attempts := clusterCall(t, reopened, "GET", "/operations/"+old["operationId"].(string)+"/attempts", nil, c, "", 200)["attempts"].([]any)
+				if len(attempts) != 1 || attempts[0].(map[string]any)["possiblySent"] != false {
+					t.Fatal(attempts)
+				}
+				request(t, reopened, "POST", "/operations/"+old["operationId"].(string)+"/continue", `{}`, c, 409)
+			}
+		})
+	}
+}
+
+func TestF03KSMValidationThroughHTTPAndDirectRPC(t *testing.T) {
+	p, c, id, f := ksmPublishedFixture(t)
+	instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	cluster := instance["clusterId"].(string)
+	cli, e := controlservice.NewClient("ksm-direct-validation", client.WithHostPorts(p.RPCAddress()))
+	if e != nil {
+		t.Fatal(e)
+	}
+	key := "direct-key"
+	token := c.Value
+	ctx := &rpc.RequestContext{RequestId: "ksm-direct-validation", SessionToken: &token, IdempotencyKey: &key}
+	cases := []struct {
+		name   string
+		change func(map[string]any)
+	}{
+		{"quantity", func(x map[string]any) { x["resources"].(map[string]any)["requestCPU"] = "not-quantity" }},
+		{"negative", func(x map[string]any) { x["resources"].(map[string]any)["requestMemory"] = "-1Mi" }},
+		{"request-greater", func(x map[string]any) { x["resources"].(map[string]any)["requestMemory"] = "600Mi" }},
+		{"limit-without-request", func(x map[string]any) { delete(x["resources"].(map[string]any), "requestMemory") }},
+		{"empty-not-omitted", func(x map[string]any) { x["resources"].(map[string]any)["requestCPU"] = "" }},
+		{"regexp", func(x map[string]any) {
+			x["metricFilter"] = map[string]any{"mode": "Allow", "patterns": []string{"(?=unsupported)"}}
+		}},
+		{"comma", func(x map[string]any) {
+			x["metricFilter"] = map[string]any{"mode": "Deny", "patterns": []string{"a,b"}}
+		}},
+		{"namespace-regexp", func(x map[string]any) {
+			x["namespaceFilter"] = map[string]any{"mode": "Include", "namePatterns": []string{"["}}
+		}},
+		{"collectors-empty", func(x map[string]any) { x["collectors"] = map[string]any{"mode": "Include", "names": []string{}} }},
+		{"collectors-unknown", func(x map[string]any) {
+			x["collectors"] = map[string]any{"mode": "Include", "names": []string{"unknown"}}
+		}},
+		{"collectors-duplicate", func(x map[string]any) {
+			x["collectors"] = map[string]any{"mode": "Include", "names": []string{"pods", "pods"}}
+		}},
+		{"ds-pod-only", func(x map[string]any) {
+			x["deploymentMode"] = "DaemonSetSharded"
+			x["collectors"] = map[string]any{"mode": "Include", "names": []string{"pods"}}
+		}},
+		{"shards", func(x map[string]any) { x["deploymentMode"] = "StatefulSetSharded"; x["shards"] = 1 }},
+		{"unknown-mode", func(x map[string]any) { x["deploymentMode"] = "unknown" }},
+		{"empty-name", func(x map[string]any) { x["name"] = "" }},
+		{"chinese-name", func(x map[string]any) { x["name"] = "中文" }},
+		{"invalid-name", func(x map[string]any) { x["name"] = "invalid_name" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := ksmConfig("invalid")
+			tc.change(cfg)
+			out := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": cfg}, c, "invalid-"+tc.name, 422)
+			if out["code"] != "INVALID_INPUT" || len(out["fieldErrors"].(map[string]any)) == 0 {
+				t.Fatal(out)
+			}
+			raw, _ := json.Marshal(cfg)
+			var typed rpc.KSMConfiguration
+			json.Unmarshal(raw, &typed)
+			_, e := cli.CreateInstance(context.Background(), ctx, &rpc.CreateInstanceRequest{ClusterId: cluster, Component: "kube-state-metrics", Ksm: &typed})
+			var api *rpc.APIError
+			if !errors.As(e, &api) || api.Code != "INVALID_INPUT" || len(api.FieldErrors) == 0 {
+				t.Fatalf("direct RPC failed field contract: %v", e)
+			}
+		})
+	}
+	for _, field := range []string{"rawYAML", "image", "unknown"} {
+		cfg := ksmConfig("invalid")
+		cfg[field] = "unsupported"
+		clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": cfg}, c, "unknown-"+field, 400)
+	}
+	cfg := ksmConfig("invalid")
+	cfg["resources"].(map[string]any)["extendedResource"] = "1"
+	clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": cfg}, c, "unknown-resource", 400)
+	clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": ksmConfig("instance")}, c, "duplicate-http", 409)
+	raw, _ := json.Marshal(ksmConfig("instance"))
+	var same rpc.KSMConfiguration
+	json.Unmarshal(raw, &same)
+	_, e = cli.CreateInstance(context.Background(), ctx, &rpc.CreateInstanceRequest{ClusterId: cluster, Component: "kube-state-metrics", Ksm: &same})
+	var api *rpc.APIError
+	if !errors.As(e, &api) || api.Code != "CONFLICT" {
+		t.Fatal("重复身份不冲突", e)
+	}
+	_, e = cli.ListInstances(context.Background(), &rpc.RequestContext{RequestId: "fake-identity"}, &rpc.ClusterID{Id: cluster})
+	if !errors.As(e, &api) || api.Code != "UNAUTHENTICATED" {
+		t.Fatal(e)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.writes != 0 {
+		t.Fatal("非法请求产生mutation")
+	}
+}
+func TestR03KSMEffectiveZeroValuesAndMissingStatus(t *testing.T) {
+	p, c, id, f := ksmPublishedFixture(t)
+	preview := ksmPreview(t, p, c, id, 1)
+	o := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"draftRevision": 1, "previewId": preview["previewId"], "overwriteDrift": false}, c, "publish", 202)
+	awaitClusterOperation(t, p, c, o["operationId"].(string))
+	unknown := clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "refresh", 200)
+	if unknown["summary"] != "Unknown" || unknown["desiredPods"] != nil {
+		t.Fatal(unknown)
+	}
+	for _, tc := range []struct{ name, desired, reason, phase, ready, summary string }{{"ksm-suspended", "Suspended", "Suspended", "Ready", "True", "Suspended"}, {"ksm-disabled", "Disabled", "Disabled", "Disabled", "False", "Disabled"}, {"ksm-no-match", "Running", "NoNamespaceMatched", "Ready", "True", "NoMatch"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f.mu.Lock()
+			spec := f.cr["spec"].(map[string]any)
+			spec["enabled"] = tc.desired != "Disabled"
+			spec["suspended"] = tc.desired == "Suspended"
+			f.cr["status"] = map[string]any{"observedGeneration": float64(1), "phase": tc.phase, "deploymentMode": "Deployment", "conditions": []any{map[string]any{"type": "Ready", "status": tc.ready, "reason": tc.reason, "observedGeneration": float64(1)}}}
+			f.mu.Unlock()
+			got := clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "refresh-"+tc.name, 200)
+			if got["summary"] != tc.summary || got["availablePods"] != float64(0) || got["desiredPods"] != float64(0) {
+				t.Fatal(got)
+			}
+			f.mu.Lock()
+			f.cr["status"].(map[string]any)["observedGeneration"] = float64(0)
+			f.mu.Unlock()
+			old := clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "stale-"+tc.name, 200)
+			if old["summary"] != "Unknown" || old["desiredPods"] != nil {
+				t.Fatal("旧generation误当当前", old)
+			}
+		})
+	}
+}
+
+func TestF02KSMHTTPHasRealRPCAndCannotBypassUnavailableRPC(t *testing.T) {
+	d := new(switchableDialer)
+	var logs bytes.Buffer
+	p, e := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", RPCDialer: d, Logger: slog.New(slog.NewJSONHandler(&logs, nil))})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer p.Close(context.Background())
+	request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
+	c := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
+	req, _ := http.NewRequest("GET", p.URL()+"/api/v1/clusters", nil)
+	req.AddCookie(c)
+	res, e := http.DefaultClient.Do(req)
+	if e != nil {
+		t.Fatal(e)
+	}
+	io.Copy(io.Discard, res.Body)
+	res.Body.Close()
+	id := res.Header.Get("X-Request-Id")
+	if id == "" || strings.Count(logs.String(), `"requestId":"`+id+`"`) != 2 || !strings.Contains(logs.String(), "kitex-server") {
+		t.Fatal("没有同requestId的HTTP/Kitex证据")
+	}
+	d.breakConnections()
+	request(t, p, "GET", "/clusters", "", c, 503)
+	request(t, p, "POST", "/clusters/forged-cluster/instances", `{"component":"kube-state-metrics","ksm":{}}`, c, 503)
 }
