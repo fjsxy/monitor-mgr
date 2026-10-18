@@ -10,6 +10,18 @@ from agent_browser import run_browser
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 QCASES={'R03.agent-paused':'TestR03AgentPausedReadOnly',**{'F01.'+v:'TestF01Agent/'+v for v in ['absent','empty-object','empty-list','unknown-mode']},**{'F03.'+v:'TestF03Agent' for v in ['selector','url','tls-pair']}}
 def stamp():return datetime.datetime.now(datetime.timezone.utc).isoformat()
+def source_bridge(product,runner):
+ """按明确构建输入blob向量证明测试driver更新未改变真实产品/应用fixture。"""
+ def vector(ref):
+  lines=subprocess.check_output(['git','ls-tree','-r',ref],cwd=ROOT,text=True).splitlines();out={}
+  for line in lines:
+   meta,path=line.split('\t',1)
+   selected=(path in ['Dockerfile','.dockerignore','go.mod','go.sum','deploy/platform.yaml','scripts/generate-rpc.sh'] or path.startswith(('cmd/','internal/','kitex_gen/','web/src/','web/public/')) and not path.endswith('_test.go') or path in ['web/index.html','web/package.json','web/package-lock.json'] or path.startswith(('web/tsconfig','web/vite.config','scripts/acceptance/Dockerfile.')) or path.startswith('scripts/acceptance/fixtures/'))
+   if selected:out[path]=meta.split()[2]
+  return out
+ before,after=vector(product),vector(runner);assert before==after,'source bridge产品或应用fixture构建输入变化，必须重新构建'
+ digest=lambda v:hashlib.sha256(json.dumps(v,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+ return {'verified':True,'productCommit':product,'productTree':subprocess.check_output(['git','rev-parse',product+'^{tree}'],cwd=ROOT,text=True).strip(),'runnerCommit':runner,'productInputVector':before,'productInputSHA256':digest(before),'runnerInputSHA256':digest(after),'changedPaths':subprocess.check_output(['git','diff','--name-only',product,runner],cwd=ROOT,text=True).splitlines(),'method':'明确产品/应用fixture输入blob向量逐项相等；真实镜像仍使用productCommit'}
 def owned():
  ids=re.findall(r'^\| ([A-Z]\d+\.[^ |]+) \|', (ROOT/'docs/e2e/issue-18.md').read_text(),re.M)
  assert len(ids)==len(set(ids))==69,'固定owned子例必须保持69且无重复'
@@ -61,7 +73,10 @@ class Suite(ClusterSuite):
    cells=[c.strip() for c in line.strip('|').split('|')]
    if len(cells)==5 and cells[0]=='REG18-SOURCE-007':self.contract[cells[0]]={'variantId':cells[0],'caseId':cells[0],'layer':'B','kind':'supplementary','purpose':cells[1],'steps':cells[2],'expected':cells[3],'profiles':['LOCAL_FULL']}
   assert not self.source['dirty'] or a.allow_dirty_runner,'门禁来源必须干净'
-  assert a.source==self.source['commit'],'运行器与产品必须同源'
+  self.bridge=None
+  if a.source!=self.source['commit']:
+   assert a.allow_source_bridge,'运行器与产品来源不同，需要显式source bridge证明'
+   self.bridge=source_bridge(a.source,self.source['commit'])
   m=json.loads(subprocess.check_output(['docker','image','inspect',a.image],text=True))[0]
   # Docker29 inspect.Id可能是manifest摘要；真正config摘要必须对docker-save中的配置字节实算。
   with tempfile.TemporaryFile() as saved:
@@ -228,7 +243,7 @@ class Suite(ClusterSuite):
   return {'success':not failures,'failures':failures}
  def run(self):
   for index,case in enumerate(self.a.cases or KCASES):
-   self.case=case;self.traces=[];self.targetns=None;record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.source['tree'],'runnerCommit':self.source['commit'],'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
+   self.case=case;self.traces=[];self.targetns=None;record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
    try:
     record['platform']=self.deploy(case,index);assert record['platform']['imageID'].endswith(self.image_metadata.get('manifestDigest') or self.image_metadata['dockerInspectId'])
     self.prepare_target(index,'data' if case in ['C04.agent-crd','A05.primary'] else 'control');record['evidence']=run_browser(self,case) if self.a.layer=='B' else run_case(self,case);record['outcome']='passed'
@@ -261,7 +276,7 @@ class Suite(ClusterSuite):
   return 0 if all(r['outcome']=='passed' for r in self.results) else 1
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('--layer',choices=['Q','K','B','REG'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');p.add_argument('--output');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--fail-fast',action='store_true')
+ p=argparse.ArgumentParser();p.add_argument('--layer',choices=['Q','K','B','REG'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');p.add_argument('--output');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--allow-source-bridge',action='store_true');p.add_argument('--fail-fast',action='store_true')
  for field in ['kubectl','control-config','data-config','control-context','data-context','control-pod-config','data-pod-config','image','source','api-lane']:p.add_argument('--'+field)
  p.add_argument('--prefix',default='mm18-agent');p.add_argument('--port',type=int,default=18700);a=p.parse_args();contract=manifest()
  if a.list:

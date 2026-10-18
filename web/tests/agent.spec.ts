@@ -36,6 +36,40 @@ const headers = (baseURL: string) => ({
   "Idempotency-Key": crypto.randomUUID(),
 });
 
+// 浏览器证据按实际页面收集；HTTP负例保留状态，不把有意4xx伪装成零错误。
+const evidence = new WeakMap<Page, { console: unknown[]; pageErrors: string[]; httpErrors: unknown[] }>();
+const hidden: string[] = [fixture?.adminPassword, process.env.ADMIN_PASSWORD].filter((v): v is string => Boolean(v));
+if (fixture) {
+  try {
+    const config = JSON.parse(readFileSync(fixture.kubeconfigPath, "utf8"));
+    for (const item of config.users ?? [])
+      for (const key of ["token", "client-key-data", "client-certificate-data"])
+        if (typeof item.user?.[key] === "string") hidden.push(item.user[key]);
+  } catch { /* 非JSON诊断配置不输出原文。 */ }
+}
+function safeEvidence(text: string) {
+  for (const value of hidden) text = text.split(value).join("[敏感内容已隐藏]");
+  return text;
+}
+test.beforeEach(async ({ page }) => {
+  const value = { console: [] as unknown[], pageErrors: [] as string[], httpErrors: [] as unknown[] };
+  evidence.set(page, value);
+  page.on("console", message => value.console.push({ type: message.type(), text: safeEvidence(message.text()), location: message.location() }));
+  page.on("pageerror", error => value.pageErrors.push(safeEvidence(error.message)));
+  page.on("response", response => {
+    if (response.status() >= 400) value.httpErrors.push({ status: response.status(), method: response.request().method(), path: new URL(response.url()).pathname });
+  });
+});
+test.afterEach(async ({ page }, info) => {
+  const value = evidence.get(page) ?? { console: [], pageErrors: [], httpErrors: [] };
+  const layout = await page.evaluate(() => ({ viewport: window.innerWidth, scrollWidth: document.documentElement.scrollWidth })).catch(() => null);
+  await info.attach("browser-console.json", { body: Buffer.from(safeEvidence(JSON.stringify({ ...value, note: "HTTP4xx可能来自用例有意负例，按步骤与响应逐项判断；未将其计为零。" }, null, 2))), contentType: "application/json" });
+  await info.attach("browser-layout.json", { body: Buffer.from(JSON.stringify(layout)), contentType: "application/json" });
+  info.annotations.push({ type: "pageErrorCount", description: String(value.pageErrors.length) }, { type: "observedHTTPErrorCount", description: String(value.httpErrors.length) });
+  expect(value.pageErrors, "浏览器无未处理脚本错误").toEqual([]);
+  if (layout) expect(layout.scrollWidth, "页面无全局水平溢出").toBeLessThanOrEqual(layout.viewport);
+});
+
 // 每例独立前置；凭据只从私有 fixture 读取，所有真实浏览器/namespace 准备须由调用方持有全局 fcntl lane。
 async function prepare(page: Page, baseURL: string, info: TestInfo) {
   info.annotations.push({
