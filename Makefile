@@ -29,7 +29,7 @@ web-install: ## 按 lockfile 安装前端依赖
 web-build: ## 构建前端
 	$(NPM) --prefix web run build
 web-e2e: ## 对 BASE_URL 运行真实浏览器测试
-	BASE_URL="$(BASE_URL)" $(NPM) --prefix web run test:e2e
+	BASE_URL="$(BASE_URL)" $(NPM) --prefix web run test:e2e -- $(E2E_ARGS)
 build: ## 构建平台二进制
 	mkdir -p bin
 	$(GO) build -o bin/monitor-mgr ./cmd/monitor-mgr

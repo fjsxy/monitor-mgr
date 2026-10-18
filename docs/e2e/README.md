@@ -8,3 +8,11 @@
 
 | Issue | 本地用例 | 标准化评论 |
 | --- | --- | --- |
+| #14 | [issue-14.md](issue-14.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/14#issuecomment-6249364562) |
+| #15 | [issue-15.md](issue-15.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/15#issuecomment-6249364906) |
+| #16 | [issue-16.md](issue-16.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/16#issuecomment-6249352132) |
+| #17 | [issue-17.md](issue-17.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/17#issuecomment-6249365245) |
+| #18 | [issue-18.md](issue-18.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/18#issuecomment-6249365639) |
+| #19 | [issue-19.md](issue-19.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/19#issuecomment-6249365982) |
+| #20 | [issue-20.md](issue-20.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/20#issuecomment-6249366328) |
+| #21 | [issue-21.md](issue-21.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6249366750) |
