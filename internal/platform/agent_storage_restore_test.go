@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // REG20-STORAGE-005：只经公开入口产生Delete责任，原UID未独立核销前不允许重新挂载。
@@ -123,14 +124,25 @@ func TestAgentStoragePendingDeleteBlocksRestore(t *testing.T) {
 					clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": cfg}, c, "reduce", 200)
 					reduced := publish(2, "reduce")
 					oid := reduced["operationId"].(string)
-					result := clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+					// 同操作flight可能已在后台读取；有界等待独立任务终态，不能将首个Pending当失败。
+					storageResult := func(want string) map[string]any {
+						deadline := time.Now().Add(5 * time.Second)
+						var result map[string]any
+						for time.Now().Before(deadline) {
+							result = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+							if result["storageResult"] == want {
+								return result
+							}
+							time.Sleep(10 * time.Millisecond)
+						}
+						t.Fatal("独立原卷任务未达到预期结果", want, result)
+						return nil
+					}
 					want := "Deleting"
 					if policy == "Retain" {
 						want = "Retained"
 					}
-					if result["storageResult"] != want {
-						t.Fatal("未产生独立原卷责任", result)
-					}
+					storageResult(want)
 					if action == "suspend" {
 						cfg["desiredState"] = "Running"
 					} else {
@@ -145,10 +157,7 @@ func TestAgentStoragePendingDeleteBlocksRestore(t *testing.T) {
 						}
 						gone = true
 						mu.Unlock()
-						result = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
-						if result["storageResult"] != "Deleted" {
-							t.Fatal("原UID404未先持久核销", result)
-						}
+						storageResult("Deleted")
 					}
 					publish(3, "restore")
 					mu.Lock()
@@ -174,7 +183,7 @@ func TestAgentStoragePendingDeleteBlocksRestore(t *testing.T) {
 					if !foundOld || policy == "Delete" && !foundNew || policy == "Retain" && foundNew {
 						t.Fatal("原责任与恢复卷身份混淆", view)
 					}
-					result = clusterCall(t, p, "GET", "/operations/"+oid, nil, c, "", 200)
+					result := clusterCall(t, p, "GET", "/operations/"+oid, nil, c, "", 200)
 					want = "Deleted"
 					if policy == "Retain" {
 						want = "Retained"
