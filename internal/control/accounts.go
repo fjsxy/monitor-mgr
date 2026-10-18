@@ -23,6 +23,7 @@ func digest(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }
+
 // authorize 同时检查当前启用状态、认证版本、绝对期限和临时改密要求。
 func authorize(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
@@ -59,6 +60,7 @@ func token(c *rpc.RequestContext) string {
 	}
 	return c.GetSessionToken()
 }
+
 // Login 验证密码并创建固定到期的会话；后续访问不会滑动续期。
 func (s *Store) Login(ctx context.Context, _ *rpc.RequestContext, r *rpc.LoginRequest) (*rpc.LoginResult_, error) {
 	a := new(rpc.Account)
@@ -99,6 +101,7 @@ func (s *Store) Logout(ctx context.Context, c *rpc.RequestContext) (*rpc.Empty, 
 	}
 	return &rpc.Empty{}, nil
 }
+
 // ChangePassword 在同一事务中核验旧密码、更新密码并失效全部旧会话。
 func (s *Store) ChangePassword(ctx context.Context, c *rpc.RequestContext, r *rpc.ChangePasswordRequest) (*rpc.Empty, error) {
 	if err := validPassword(r.NewPassword_); err != nil {
@@ -141,6 +144,7 @@ func requireAdmin(p *Principal) error {
 	}
 	return nil
 }
+
 // ListAccounts 只向当前管理员返回不含密码材料的账号列表。
 func (s *Store) ListAccounts(ctx context.Context, c *rpc.RequestContext) (*rpc.AccountsResult_, error) {
 	p, err := s.Authorize(ctx, token(c))
@@ -168,6 +172,7 @@ func (s *Store) ListAccounts(ctx context.Context, c *rpc.RequestContext) (*rpc.A
 	}
 	return &rpc.AccountsResult_{Accounts: accounts}, nil
 }
+
 // CreateAccount 以临时密码建立账号，并与审计及幂等结果原子提交。
 func (s *Store) CreateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc.CreateAccountRequest) (*rpc.Account, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
@@ -223,6 +228,7 @@ func (s *Store) CreateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	}
 	return a, nil
 }
+
 // audit 保存操作者与动作关系，不记录密码或会话令牌。
 func audit(ctx context.Context, tx *sql.Tx, actor, action, target string, now time.Time) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO audit VALUES(?,?,?,?,?)`, ID(), actor, action, target, now.UTC().Format(time.RFC3339Nano))
@@ -303,6 +309,7 @@ func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	}
 	return a, nil
 }
+
 // ResetPassword 设置新的临时密码；认证版本递增使既有会话立即失效。
 func (s *Store) ResetPassword(ctx context.Context, c *rpc.RequestContext, r *rpc.ResetPasswordRequest) (*rpc.Empty, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)

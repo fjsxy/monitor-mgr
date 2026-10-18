@@ -50,6 +50,7 @@ func (s *Store) beginCommand(ctx context.Context, tx *sql.Tx, p *Principal, c *r
 	}
 	return cmd, true, nil
 }
+
 // finishCommand 保存可安全回放的结果，由调用者与业务变更共同提交。
 // 关键：保持同一事务，防止业务已执行但去重结果缺失而造成重复副作用。
 func (s *Store) finishCommand(ctx context.Context, tx *sql.Tx, cmd *command, result any) error {
