@@ -571,6 +571,64 @@ var fieldIDToName_ResetPasswordRequest = map[int16]string{
 	2: "password",
 }
 
+type KubeconfigRequest struct {
+	Kubeconfig string `thrift:"kubeconfig,1,required" frugal:"1,required,string" json:"kubeconfig"`
+}
+
+func NewKubeconfigRequest() *KubeconfigRequest {
+	return &KubeconfigRequest{}
+}
+
+func (p *KubeconfigRequest) InitDefault() {
+}
+
+func (p *KubeconfigRequest) GetKubeconfig() (v string) {
+	return p.Kubeconfig
+}
+func (p *KubeconfigRequest) SetKubeconfig(val string) {
+	p.Kubeconfig = val
+}
+
+func (p *KubeconfigRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("KubeconfigRequest(%+v)", *p)
+}
+
+var fieldIDToName_KubeconfigRequest = map[int16]string{
+	1: "kubeconfig",
+}
+
+type ContextsResult_ struct {
+	Contexts []string `thrift:"contexts,1,required" frugal:"1,required,list<string>" json:"contexts"`
+}
+
+func NewContextsResult_() *ContextsResult_ {
+	return &ContextsResult_{}
+}
+
+func (p *ContextsResult_) InitDefault() {
+}
+
+func (p *ContextsResult_) GetContexts() (v []string) {
+	return p.Contexts
+}
+func (p *ContextsResult_) SetContexts(val []string) {
+	p.Contexts = val
+}
+
+func (p *ContextsResult_) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ContextsResult_(%+v)", *p)
+}
+
+var fieldIDToName_ContextsResult_ = map[int16]string{
+	1: "contexts",
+}
+
 type Empty struct {
 }
 
@@ -983,6 +1041,8 @@ type Operation struct {
 	CreatedAt          string `thrift:"createdAt,7,required" frugal:"7,required,string" json:"createdAt"`
 	UpdatedAt          string `thrift:"updatedAt,8,required" frugal:"8,required,string" json:"updatedAt"`
 	CredentialRevision int64  `thrift:"credentialRevision,9,required" frugal:"9,required,i64" json:"credentialRevision"`
+	OwnerId            string `thrift:"ownerId,10,required" frugal:"10,required,string" json:"ownerId"`
+	PreviousOwnerId    string `thrift:"previousOwnerId,11,required" frugal:"11,required,string" json:"previousOwnerId"`
 }
 
 func NewOperation() *Operation {
@@ -1027,6 +1087,14 @@ func (p *Operation) GetUpdatedAt() (v string) {
 func (p *Operation) GetCredentialRevision() (v int64) {
 	return p.CredentialRevision
 }
+
+func (p *Operation) GetOwnerId() (v string) {
+	return p.OwnerId
+}
+
+func (p *Operation) GetPreviousOwnerId() (v string) {
+	return p.PreviousOwnerId
+}
 func (p *Operation) SetOperationId(val string) {
 	p.OperationId = val
 }
@@ -1054,6 +1122,12 @@ func (p *Operation) SetUpdatedAt(val string) {
 func (p *Operation) SetCredentialRevision(val int64) {
 	p.CredentialRevision = val
 }
+func (p *Operation) SetOwnerId(val string) {
+	p.OwnerId = val
+}
+func (p *Operation) SetPreviousOwnerId(val string) {
+	p.PreviousOwnerId = val
+}
 
 func (p *Operation) String() string {
 	if p == nil {
@@ -1063,15 +1137,17 @@ func (p *Operation) String() string {
 }
 
 var fieldIDToName_Operation = map[int16]string{
-	1: "operationId",
-	2: "action",
-	3: "state",
-	4: "clusterId",
-	5: "actorId",
-	6: "message",
-	7: "createdAt",
-	8: "updatedAt",
-	9: "credentialRevision",
+	1:  "operationId",
+	2:  "action",
+	3:  "state",
+	4:  "clusterId",
+	5:  "actorId",
+	6:  "message",
+	7:  "createdAt",
+	8:  "updatedAt",
+	9:  "credentialRevision",
+	10: "ownerId",
+	11: "previousOwnerId",
 }
 
 type OperationID struct {
@@ -1335,6 +1411,8 @@ var fieldIDToName_APIError = map[int16]string{
 }
 
 type ControlService interface {
+	ListKubeconfigContexts(ctx context.Context, ctx_ *RequestContext, request *KubeconfigRequest) (r *ContextsResult_, err error)
+
 	ListClusters(ctx context.Context, ctx_ *RequestContext) (r *ClustersResult_, err error)
 
 	GetCluster(ctx context.Context, ctx_ *RequestContext, request *ClusterID) (r *Cluster, err error)
@@ -1378,6 +1456,118 @@ type ControlService interface {
 	UpdateAccount(ctx context.Context, ctx_ *RequestContext, request *UpdateAccountRequest) (r *Account, err error)
 
 	ResetPassword(ctx context.Context, ctx_ *RequestContext, request *ResetPasswordRequest) (r *Empty, err error)
+}
+
+type ControlServiceListKubeconfigContextsArgs struct {
+	Ctx     *RequestContext    `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request *KubeconfigRequest `thrift:"request,2" frugal:"2,default,KubeconfigRequest" json:"request"`
+}
+
+func NewControlServiceListKubeconfigContextsArgs() *ControlServiceListKubeconfigContextsArgs {
+	return &ControlServiceListKubeconfigContextsArgs{}
+}
+
+func (p *ControlServiceListKubeconfigContextsArgs) InitDefault() {
+}
+
+var ControlServiceListKubeconfigContextsArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceListKubeconfigContextsArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceListKubeconfigContextsArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceListKubeconfigContextsArgs_Request_DEFAULT *KubeconfigRequest
+
+func (p *ControlServiceListKubeconfigContextsArgs) GetRequest() (v *KubeconfigRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceListKubeconfigContextsArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceListKubeconfigContextsArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceListKubeconfigContextsArgs) SetRequest(val *KubeconfigRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceListKubeconfigContextsArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceListKubeconfigContextsArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceListKubeconfigContextsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListKubeconfigContextsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListKubeconfigContextsArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceListKubeconfigContextsResult struct {
+	Success *ContextsResult_ `thrift:"success,0,optional" frugal:"0,optional,ContextsResult_" json:"success,omitempty"`
+	Error   *APIError        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+}
+
+func NewControlServiceListKubeconfigContextsResult() *ControlServiceListKubeconfigContextsResult {
+	return &ControlServiceListKubeconfigContextsResult{}
+}
+
+func (p *ControlServiceListKubeconfigContextsResult) InitDefault() {
+}
+
+var ControlServiceListKubeconfigContextsResult_Success_DEFAULT *ContextsResult_
+
+func (p *ControlServiceListKubeconfigContextsResult) GetSuccess() (v *ContextsResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceListKubeconfigContextsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceListKubeconfigContextsResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceListKubeconfigContextsResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceListKubeconfigContextsResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceListKubeconfigContextsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ContextsResult_)
+}
+func (p *ControlServiceListKubeconfigContextsResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceListKubeconfigContextsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceListKubeconfigContextsResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceListKubeconfigContextsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceListKubeconfigContextsResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceListKubeconfigContextsResult = map[int16]string{
+	0: "success",
+	1: "error",
 }
 
 type ControlServiceListClustersArgs struct {

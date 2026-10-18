@@ -11,7 +11,7 @@ import (
 )
 
 const clusterColumns = `id,name,owner_id,uid,identity,kubernetes_version,state,credential_revision,revision,capabilities,created_at`
-const operationColumns = `id,action,state,cluster_id,actor_id,message,created_at,updated_at,credential_revision`
+const operationColumns = `id,action,state,cluster_id,actor_id,message,created_at,updated_at,credential_revision,owner_id,owner_before`
 
 func scanCluster(row interface{ Scan(...any) error }) (*rpc.Cluster, error) {
 	c := new(rpc.Cluster)
@@ -27,7 +27,7 @@ func scanCluster(row interface{ Scan(...any) error }) (*rpc.Cluster, error) {
 }
 func scanOperation(row interface{ Scan(...any) error }) (*rpc.Operation, error) {
 	o := new(rpc.Operation)
-	e := row.Scan(&o.OperationId, &o.Action, &o.State, &o.ClusterId, &o.ActorId, &o.Message, &o.CreatedAt, &o.UpdatedAt, &o.CredentialRevision)
+	e := row.Scan(&o.OperationId, &o.Action, &o.State, &o.ClusterId, &o.ActorId, &o.Message, &o.CreatedAt, &o.UpdatedAt, &o.CredentialRevision, &o.OwnerId, &o.PreviousOwnerId)
 	return o, e
 }
 
@@ -174,7 +174,7 @@ func (s *Store) acceptCredential(ctx context.Context, c *rpc.RequestContext, act
 		return nil, e
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
-	o := &rpc.Operation{OperationId: ID(), Action: action, State: "QUEUED", ClusterId: id, ActorId: p.Account.Id, Message: "已受理，候选尚未核验生效", CreatedAt: now, UpdatedAt: now}
+	o := &rpc.Operation{OperationId: ID(), Action: action, State: "QUEUED", ClusterId: id, ActorId: p.Account.Id, Message: "已受理，候选尚未核验生效", CreatedAt: now, UpdatedAt: now, OwnerId: owner}
 	cipher, e := s.sealCredential(cred, o.OperationId)
 	if e != nil {
 		return nil, Error("UNAVAILABLE", "候选凭据无法加密")
@@ -247,6 +247,7 @@ func (s *Store) clusterMutation(ctx context.Context, c *rpc.RequestContext, acti
 	if e = s.HasUnfinishedChangesTx(ctx, tx, id); e != nil {
 		return nil, e
 	}
+	previousOwner := cl.OwnerId
 	if action == "TRANSFER" {
 		if e = enabledOwner(ctx, tx, owner); e != nil {
 			return nil, e
@@ -270,7 +271,7 @@ func (s *Store) clusterMutation(ctx context.Context, c *rpc.RequestContext, acti
 		return nil, e
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
-	if _, e = tx.ExecContext(ctx, `INSERT INTO operations(id,action,state,cluster_id,actor_id,owner_id,name,message,created_at,updated_at,credential_revision) VALUES(?,?,'SUCCEEDED',?,?,?,?,?,?,?,?)`, ID(), action, id, p.Account.Id, cl.OwnerId, cl.Name, map[bool]string{true: "集群已注销；目标 CR 和工作负载可能继续运行", false: "归属已转移"}[action == "UNREGISTER"], now, now, cl.CredentialRevision); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO operations(id,action,state,cluster_id,actor_id,owner_id,owner_before,name,message,created_at,updated_at,credential_revision) VALUES(?,?,'SUCCEEDED',?,?,?,?,?,?,?,?,?)`, ID(), action, id, p.Account.Id, cl.OwnerId, previousOwner, cl.Name, map[bool]string{true: "集群已注销；目标 CR 和工作负载可能继续运行", false: "归属已转移"}[action == "UNREGISTER"], now, now, cl.CredentialRevision); e != nil {
 		return nil, Error("UNAVAILABLE", "历史保存失败")
 	}
 	if e = s.finishCommand(ctx, tx, cmd, cl); e != nil {
@@ -386,7 +387,13 @@ func (s *Store) TargetForCluster(ctx context.Context, c *rpc.RequestContext, id 
 	if e != nil {
 		return nil, e
 	}
-	return newTarget(cred)
+	target, e := newTarget(cred)
+	if e != nil {
+		return nil, e
+	}
+	target.limits = s.limits
+	target.clusterID = id
+	return target, nil
 }
 func (s *Store) ListNamespaces(ctx context.Context, c *rpc.RequestContext, r *rpc.ClusterID) (*rpc.NamespacesResult_, error) {
 	t, e := s.TargetForCluster(ctx, c, r.Id)

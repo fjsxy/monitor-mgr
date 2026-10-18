@@ -8,6 +8,16 @@ import (
 )
 
 func (p *Runtime) clusterRoutes(w http.ResponseWriter, r *http.Request, c *rpc.RequestContext, id string) {
+	if r.URL.Path == "/api/v1/clusters/contexts" && r.Method == "POST" {
+		var b rpc.KubeconfigRequest
+		if e := decode(r, &b); e != nil {
+			p.writeError(w, e, id)
+			return
+		}
+		v, e := p.client.ListKubeconfigContexts(r.Context(), c, &b)
+		p.respond(w, 200, v, e, id)
+		return
+	}
 	if r.URL.Path == "/api/v1/clusters" {
 		switch r.Method {
 		case "GET":

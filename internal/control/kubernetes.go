@@ -153,6 +153,8 @@ func parseCredential(raw, contextName string) (*targetCredential, error) {
 type Target struct {
 	credential *targetCredential
 	client     *http.Client
+	limits     *targetLimits
+	clusterID  string
 }
 
 func newTarget(c *targetCredential) (*Target, error) {
@@ -168,10 +170,21 @@ func newTarget(c *targetCredential) (*Target, error) {
 		}
 		cfg.Certificates = []tls.Certificate{cert}
 	}
-	return &Target{c, &http.Client{Transport: &http.Transport{TLSClientConfig: cfg, Proxy: nil}, Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("API 重定向被拒绝") }}}, nil
+	return &Target{credential: c, client: &http.Client{Transport: &http.Transport{TLSClientConfig: cfg, Proxy: nil}, Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("API 重定向被拒绝") }}}, nil
 }
 func (t *Target) Close() { t.client.CloseIdleConnections() }
 func (t *Target) Request(ctx context.Context, method, path string, body any, out any) error {
+	bounded, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	ctx = bounded
+	if t.limits != nil {
+		release, e := t.limits.acquire(ctx, t.clusterID)
+		if e != nil {
+			return e
+		}
+		defer release()
+	}
+
 	var b []byte
 	if body != nil {
 		b, _ = json.Marshal(body)
@@ -323,4 +336,34 @@ func (t *Target) Namespaces(ctx context.Context) ([]string, error) {
 	}
 	sort.Strings(result)
 	return result, nil
+}
+
+func (s *Store) ListKubeconfigContexts(ctx context.Context, c *rpc.RequestContext, r *rpc.KubeconfigRequest) (*rpc.ContextsResult_, error) {
+	p, e := s.Authorize(ctx, token(c))
+	if e != nil {
+		return nil, e
+	}
+	if e = requireAdmin(p); e != nil {
+		return nil, e
+	}
+	if len(r.Kubeconfig) > 131072 {
+		return nil, Error("INVALID_INPUT", "kubeconfig 过大")
+	}
+	var cfg kubeFile
+	if yaml.Unmarshal([]byte(r.Kubeconfig), &cfg) != nil {
+		return nil, Error("INVALID_INPUT", "kubeconfig 格式无效")
+	}
+	names := []string{}
+	seen := map[string]bool{}
+	for _, c := range cfg.Contexts {
+		if c.Name == "" || seen[c.Name] {
+			return nil, Error("INVALID_INPUT", "context 名称无效或重复")
+		}
+		seen[c.Name] = true
+		names = append(names, c.Name)
+	}
+	if len(names) == 0 {
+		return nil, Error("INVALID_INPUT", "kubeconfig 没有 context")
+	}
+	return &rpc.ContextsResult_{Contexts: names}, nil
 }

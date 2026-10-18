@@ -11,6 +11,7 @@ import (
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
+	ListKubeconfigContexts(ctx context.Context, ctx_ *control.RequestContext, request *control.KubeconfigRequest, callOptions ...callopt.Option) (r *control.ContextsResult_, err error)
 	ListClusters(ctx context.Context, ctx_ *control.RequestContext, callOptions ...callopt.Option) (r *control.ClustersResult_, err error)
 	GetCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.Cluster, err error)
 	RegisterCluster(ctx context.Context, ctx_ *control.RequestContext, request *control.RegisterClusterRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
@@ -62,6 +63,11 @@ func MustNewClient(destService string, opts ...client.Option) Client {
 
 type kControlServiceClient struct {
 	*kClient
+}
+
+func (p *kControlServiceClient) ListKubeconfigContexts(ctx context.Context, ctx_ *control.RequestContext, request *control.KubeconfigRequest, callOptions ...callopt.Option) (r *control.ContextsResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListKubeconfigContexts(ctx, ctx_, request)
 }
 
 func (p *kControlServiceClient) ListClusters(ctx context.Context, ctx_ *control.RequestContext, callOptions ...callopt.Option) (r *control.ClustersResult_, err error) {

@@ -132,6 +132,7 @@ func (p *Runtime) Close(ctx context.Context) error {
 	}
 	p.closed = true
 	p.mu.Unlock()
+	p.store.StopWorkers()
 	var err error
 	if p.http != nil {
 		err = p.http.Shutdown(ctx)

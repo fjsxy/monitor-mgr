@@ -13,6 +13,13 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
+	"ListKubeconfigContexts": kitex.NewMethodInfo(
+		listKubeconfigContextsHandler,
+		newControlServiceListKubeconfigContextsArgs,
+		newControlServiceListKubeconfigContextsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"ListClusters": kitex.NewMethodInfo(
 		listClustersHandler,
 		newControlServiceListClustersArgs,
@@ -231,6 +238,30 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 		Extra:           extra,
 	}
 	return svcInfo
+}
+
+func listKubeconfigContextsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceListKubeconfigContextsArgs)
+	realResult := result.(*control.ControlServiceListKubeconfigContextsResult)
+	success, err := handler.(control.ControlService).ListKubeconfigContexts(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceListKubeconfigContextsArgs() interface{} {
+	return control.NewControlServiceListKubeconfigContextsArgs()
+}
+
+func newControlServiceListKubeconfigContextsResult() interface{} {
+	return control.NewControlServiceListKubeconfigContextsResult()
 }
 
 func listClustersHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -769,6 +800,21 @@ func newServiceClient(c client.Client) *kClient {
 	return &kClient{
 		c: c,
 	}
+}
+
+func (p *kClient) ListKubeconfigContexts(ctx context.Context, ctx_ *control.RequestContext, request *control.KubeconfigRequest) (r *control.ContextsResult_, err error) {
+	var _args control.ControlServiceListKubeconfigContextsArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceListKubeconfigContextsResult
+	if err = p.c.Call(ctx, "ListKubeconfigContexts", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
 }
 
 func (p *kClient) ListClusters(ctx context.Context, ctx_ *control.RequestContext) (r *control.ClustersResult_, err error) {

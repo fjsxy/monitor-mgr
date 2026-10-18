@@ -46,7 +46,7 @@ func (s *Store) StartWorkers() error {
 	}()
 	return nil
 }
-func (s *Store) stopWorkers() {
+func (s *Store) StopWorkers() {
 	if s.workerCancel != nil {
 		s.workerCancel()
 		<-s.workerDone
@@ -96,6 +96,8 @@ func (s *Store) verifyOperation(life context.Context, id string) {
 		var target *Target
 		target, e = newTarget(cred)
 		if e == nil {
+			target.limits = s.limits
+			target.clusterID = o.ClusterId
 			bounded, cancel := context.WithTimeout(life, 8*time.Second)
 			verified, e = target.verify(bounded)
 			cancel()
