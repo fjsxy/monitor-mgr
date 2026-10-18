@@ -44,6 +44,20 @@ func ksmCluster(t *testing.T) (*platform.Runtime, *http.Cookie, string) {
 	}
 	return p, c, o["clusterId"].(string)
 }
+
+// 日志由HTTP与Kitex后台goroutine写入，断言读取同样同步，避免测试记录器自身竞态。
+type ksmLogBuffer struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (b *ksmLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.Write(p)
+}
+func (b *ksmLogBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.buffer.String() }
+
 func TestK10DraftNameAndRevision(t *testing.T) {
 	p, c, cluster := ksmCluster(t)
 	for _, name := range []string{"", "中文", "invalid_foo", "-foo"} {
@@ -597,7 +611,7 @@ func TestR03KSMEffectiveZeroValuesAndMissingStatus(t *testing.T) {
 
 func TestF02KSMHTTPHasRealRPCAndCannotBypassUnavailableRPC(t *testing.T) {
 	d := new(switchableDialer)
-	var logs bytes.Buffer
+	var logs ksmLogBuffer
 	p, e := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", RPCDialer: d, Logger: slog.New(slog.NewJSONHandler(&logs, nil))})
 	if e != nil {
 		t.Fatal(e)
