@@ -131,6 +131,8 @@ def run_case(s,case):
   front=ThreadingHTTPServer(('127.0.0.1',0),Front);thread=threading.Thread(target=front.serve_forever,daemon=True);thread.start();conn=http.client.HTTPConnection('127.0.0.1',front.server_port,timeout=.15)
   try:
    conn.request('POST','/instances/'+i['id']+'/publications',body=json.dumps(body),headers={'Content-Type':'application/json'})
+   # 固定故障时序：先有真实平台202，再让客户端读取响应超时，避免把受理前慢请求冒充本例。
+   assert accepted.wait(4),'真实平台未完成受理'
    try:resp=conn.getresponse();assert case.endswith('response-drop') and resp.status==202
    except (TimeoutError,socket.timeout):assert case.endswith('deadline');box['clientDeadlineAt']=time.monotonic()
    assert accepted.wait(4)
