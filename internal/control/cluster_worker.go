@@ -44,13 +44,26 @@ func (s *Store) StartWorkers() error {
 		defer tick.Stop()
 		recoveryTick := time.NewTicker(time.Second)
 		defer recoveryTick.Stop()
+		observationTicks := s.ObservationTicks
+		if observationTicks == nil {
+			ticker := time.NewTicker(s.ObservationInterval)
+			defer ticker.Stop()
+			observationTicks = ticker.C
+		}
+		nextObservation := s.Now().Add(s.ObservationInterval)
+
 		for {
-			recovering := false
+			recovering, observing := false, false
 			select {
 			case <-ctx.Done():
 				return
 			case <-recoveryTick.C:
 				recovering = true
+			case stamp := <-observationTicks:
+				if !stamp.Before(nextObservation) {
+					observing = true
+					nextObservation = stamp.Add(s.ObservationInterval)
+				}
 			case <-tick.C:
 			case <-s.workerWake:
 			}
@@ -63,7 +76,9 @@ func (s *Store) StartWorkers() error {
 				s.workerLaunch.Unlock()
 				continue
 			}
-			if recovering {
+			if observing {
+				s.launchObservations(ctx)
+			} else if recovering {
 				s.launchRecovery(ctx)
 			} else {
 				s.launchPublications(ctx)

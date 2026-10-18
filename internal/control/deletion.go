@@ -213,31 +213,37 @@ func (t *Target) listOwnedCandidates(ctx context.Context, namespace string) ([]s
 
 // observeOwnerGraph 保存见过的所有者UID链；父对象消失后仍能识别残留ReplicaSet/Pod。
 func (s *Store) observeOwnerGraph(ctx context.Context, i *rpc.ObservationInstance, t *Target, namespace string) (int, error) {
+	records, e := s.observeOwnerGraphRecords(ctx, i, t, namespace)
+	return len(records), e
+}
+
+// observeOwnerGraphRecords 同时为清理核验和Pod来源返回完整读取中实际存在的原UID归属节点。
+func (s *Store) observeOwnerGraphRecords(ctx context.Context, i *rpc.ObservationInstance, t *Target, namespace string) ([]seenResource, error) {
 	// 关键：KSM是cluster-scoped，外部漂移可跨namespace；完整集群分页不可缩成最近部署位置。
 	if componentFor(i.Component).scope == "Cluster" {
 		namespace = ""
 	}
 	candidates, e := t.listOwnedCandidates(ctx, namespace)
 	if e != nil {
-		return 0, e
+		return nil, e
 	}
 	rows, e := s.DB.QueryContext(ctx, `SELECT uid FROM seen_resources WHERE instance_id=?`, i.Id)
 	if e != nil {
-		return 0, e
+		return nil, e
 	}
 	seen := map[string]bool{i.Uid: true}
 	for rows.Next() {
 		var id string
 		if e = rows.Scan(&id); e != nil {
 			rows.Close()
-			return 0, e
+			return nil, e
 		}
 		seen[id] = true
 	}
 	e = rows.Err()
 	rows.Close()
 	if e != nil {
-		return 0, e
+		return nil, e
 	}
 	// 关键：递归闭包从原CR UID和持久seen UID出发，不能按同名新资源重新起根。
 	changed := true
@@ -252,21 +258,24 @@ func (s *Store) observeOwnerGraph(ctx context.Context, i *rpc.ObservationInstanc
 	}
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
-		return 0, e
+		return nil, e
 	}
 	defer tx.Rollback()
-	live := 0
+	if !observationScopeCurrent(ctx, tx, ctx) {
+		return nil, Error("CONFLICT", "观察目标修订已变化")
+	}
+	live := []seenResource{}
 	for _, r := range candidates {
 		if !seen[r.uid] {
 			continue
 		}
-		live++
+		live = append(live, r)
 		if _, e = tx.ExecContext(ctx, `INSERT INTO seen_resources VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(instance_id,uid) DO NOTHING`, i.Id, r.apiVersion, r.kind, r.namespace, r.name, r.uid, r.ownerUID, r.path); e != nil {
-			return 0, e
+			return nil, e
 		}
 	}
 	if e = tx.Commit(); e != nil {
-		return 0, e
+		return nil, e
 	}
 	return live, nil
 }

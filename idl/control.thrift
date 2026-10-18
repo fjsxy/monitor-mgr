@@ -99,6 +99,11 @@ struct ObservationInstance {
  13: required string ownership, 14: optional string yaml, 15: optional string crNamespace, 16: optional string scope, 17: optional list<SourceObservation> sources
 }
 struct InstancesResult { 1: required list<ObservationInstance> instances }
+// 工作台查询以完整授权集合统计并在服务端过滤/分页；活动序号保持数据库内部i64。
+struct QueryInstancesRequest { 1: required string clusterId, 2: optional string name, 3: optional string type, 4: optional string component, 5: optional string summary, 6: optional i32 page, 7: optional i32 pageSize }
+struct InstanceStatistics { 1: required i32 managed, 2: required i32 unmanaged, 3: required i32 available, 4: required i32 blocked }
+struct InstancePagination { 1: required i32 number, 2: required i32 size, 3: required i32 total, 4: required i32 pages }
+struct QueryInstancesResult { 1: required list<ObservationInstance> instances, 2: required InstanceStatistics statistics, 3: required InstancePagination page }
 struct PreviewRequest { 1: required string id, 2: required i64 draftRevision }
 struct PublicationPreview { 1: required string previewId, 2: required i64 draftRevision, 3: required string leftYAML, 4: required string rightYAML, 5: required bool drift, 6: required list<string> warnings }
 struct PublishRequest { 1: required string id, 2: required string previewId, 3: required i64 draftRevision, 4: required bool overwriteDrift }
@@ -123,6 +128,7 @@ service ControlService {
  Operation RefreshOperation(1: RequestContext ctx, 2: OperationID request) throws (1: APIError error)
  Operation DeleteInstance(1: RequestContext ctx, 2: DeleteInstanceRequest request) throws (1: APIError error)
  ObservationInstance CreateInstance(1: RequestContext ctx, 2: CreateInstanceRequest request) throws (1: APIError error)
+ QueryInstancesResult QueryInstances(1: RequestContext ctx, 2: QueryInstancesRequest request) throws (1: APIError error)
  InstancesResult ListInstances(1: RequestContext ctx, 2: ClusterID request) throws (1: APIError error)
  ObservationInstance GetInstance(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
  ConfigurationDraft GetDraft(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)

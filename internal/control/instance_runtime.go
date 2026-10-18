@@ -94,8 +94,9 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 	if i.Lifecycle == "DELETED" {
 		return &rpc.InstanceRuntime{Summary: "Deleted", ObservedAt: i.ActivityAt, LastSuccessAt: i.ActivityAt}, nil
 	}
-	now := s.Now().UTC().Format(time.RFC3339Nano)
+	ctx = context.WithValue(ctx, observationScopeKey{}, observationScope{i.Id, i.Uid, i.ClusterId, t.clusterUID, i.Name, i.TargetNamespace, t.credentialRevision})
 	cr, e := t.readComponent(ctx, i)
+	now := s.Now().UTC().Format(time.RFC3339Nano)
 	projected := safeTargetDocument(cr)
 	var out *rpc.InstanceRuntime
 	if e != nil {
@@ -108,15 +109,44 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 		// 关键：Agent/KSM摘要只从同一安全副本派生，status.reason不能越过YAML投影进入运行缓存。
 		out = componentFor(i.Component).interpret(projected, now)
 	}
+	cause := e
+	if cause == nil && cr != nil && (i.Uid == "" || objectString(objectMap(cr, "metadata"), "uid") != i.Uid) {
+		cause = Error("CONFLICT", "资源身份无法确认")
+	}
+	s.saveSourceObservation(ctx, i, "CR", &rpc.SourceObservation{Source: "CR", RuntimeSnapshot: out}, cause)
 	raw, _ := json.Marshal(savedObservation{Epoch: s.observationEpoch, Runtime: out})
 	obj, _ := json.Marshal(projected)
-	if _, saveErr := s.DB.ExecContext(ctx, `INSERT INTO instance_observations VALUES(?,?,?,?) ON CONFLICT(instance_id) DO UPDATE SET runtime=excluded.runtime,cr=excluded.cr,observed_at=excluded.observed_at`, id, raw, obj, now); saveErr != nil {
-		return nil, Error("UNAVAILABLE", "观测保存失败")
+	if cause == nil {
+		tx, err := s.DB.BeginTx(ctx, nil)
+		if err != nil {
+			return nil, Error("UNAVAILABLE", "观测保存失败")
+		}
+		if !observationScopeCurrent(ctx, tx, ctx) {
+			tx.Rollback()
+			return s.GetRuntimeForObserved(ctx, i), nil
+		}
+		if _, saveErr := tx.ExecContext(ctx, `INSERT INTO instance_observations VALUES(?,?,?,?) ON CONFLICT(instance_id) DO UPDATE SET runtime=excluded.runtime,cr=excluded.cr,observed_at=excluded.observed_at`, id, raw, obj, now); saveErr != nil {
+			tx.Rollback()
+			return nil, Error("UNAVAILABLE", "观测保存失败")
+		}
+		if tx.Commit() != nil {
+			return nil, Error("UNAVAILABLE", "观测保存失败")
+		}
+	}
+	if e == nil && cr != nil && i.Uid != "" && objectString(objectMap(cr, "metadata"), "uid") == i.Uid {
+		records, err := s.observeOwnerGraphRecords(ctx, i, t, i.TargetNamespace)
+		matches := []*rpc.MatchedResource{}
+		for _, record := range records {
+			if record.kind == "Pod" {
+				matches = append(matches, &rpc.MatchedResource{Kind: "Pod", Namespace: record.namespace, Name: record.name, Uid: record.uid})
+			}
+		}
+		s.saveSourceObservation(ctx, i, "Pod", &rpc.SourceObservation{Source: "Pod", Matches: matches}, err)
 	}
 	if i.Component == AgentComponent && e == nil && cr != nil && i.Uid != "" && objectString(objectMap(cr, "metadata"), "uid") == i.Uid {
 		s.refreshAgentAuxiliary(ctx, i, t, cr)
 	}
-	return out, nil
+	return runtimeFromSource(s.instanceSources(ctx, i), out), nil
 }
 func (s *Store) GetRuntime(ctx context.Context, c *rpc.RequestContext, r *rpc.InstanceID) (*rpc.InstanceRuntime, error) {
 	i, e := s.authorizedInstance(ctx, c, r.Id)
@@ -124,10 +154,17 @@ func (s *Store) GetRuntime(ctx context.Context, c *rpc.RequestContext, r *rpc.In
 		return nil, e
 	}
 	if i.ReadOnly {
-		return i.Runtime, nil
+		external, err := s.externalByID(ctx, i.Id)
+		if err != nil {
+			return nil, err
+		}
+		return external.Runtime, nil
 	}
 	if i.Lifecycle == "DELETED" {
 		return &rpc.InstanceRuntime{Summary: "Deleted", ObservedAt: i.ActivityAt, LastSuccessAt: i.ActivityAt}, nil
+	}
+	if out := runtimeFromSource(s.instanceSources(ctx, i), nil); out != nil {
+		return out, nil
 	}
 	var raw []byte
 	if s.DB.QueryRowContext(ctx, `SELECT runtime FROM instance_observations WHERE instance_id=?`, i.Id).Scan(&raw) != nil {
@@ -169,4 +206,9 @@ func (s *Store) RefreshInstance(ctx context.Context, c *rpc.RequestContext, r *r
 	}
 	defer t.Close()
 	return s.refreshObserved(ctx, i.Id, t)
+}
+
+// GetRuntimeForObserved 仅投影已经提交的同UID来源，迟到结果不回显为当前状态。
+func (s *Store) GetRuntimeForObserved(ctx context.Context, i *rpc.ObservationInstance) *rpc.InstanceRuntime {
+	return runtimeFromSource(s.instanceSources(ctx, i), &rpc.InstanceRuntime{Summary: "Unknown", Error: "观察目标修订已变化"})
 }

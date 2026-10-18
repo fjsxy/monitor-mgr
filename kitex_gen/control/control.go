@@ -4371,6 +4371,340 @@ var fieldIDToName_InstancesResult_ = map[int16]string{
 	1: "instances",
 }
 
+type QueryInstancesRequest struct {
+	ClusterId      string  `thrift:"clusterId,1,required" frugal:"1,required,string" json:"clusterId"`
+	Name           *string `thrift:"name,2,optional" frugal:"2,optional,string" json:"name,omitempty"`
+	Type           *string `thrift:"type,3,optional" frugal:"3,optional,string" json:"type,omitempty"`
+	Component      *string `thrift:"component,4,optional" frugal:"4,optional,string" json:"component,omitempty"`
+	Summary        *string `thrift:"summary,5,optional" frugal:"5,optional,string" json:"summary,omitempty"`
+	Page           *int32  `thrift:"page,6,optional" frugal:"6,optional,i32" json:"page,omitempty"`
+	PageSize       *int32  `thrift:"pageSize,7,optional" frugal:"7,optional,i32" json:"pageSize,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewQueryInstancesRequest() *QueryInstancesRequest {
+	return &QueryInstancesRequest{}
+}
+
+func (p *QueryInstancesRequest) InitDefault() {
+}
+
+func (p *QueryInstancesRequest) GetClusterId() (v string) {
+	return p.ClusterId
+}
+
+var QueryInstancesRequest_Name_DEFAULT string
+
+func (p *QueryInstancesRequest) GetName() (v string) {
+	if !p.IsSetName() {
+		return QueryInstancesRequest_Name_DEFAULT
+	}
+	return *p.Name
+}
+
+var QueryInstancesRequest_Type_DEFAULT string
+
+func (p *QueryInstancesRequest) GetType() (v string) {
+	if !p.IsSetType() {
+		return QueryInstancesRequest_Type_DEFAULT
+	}
+	return *p.Type
+}
+
+var QueryInstancesRequest_Component_DEFAULT string
+
+func (p *QueryInstancesRequest) GetComponent() (v string) {
+	if !p.IsSetComponent() {
+		return QueryInstancesRequest_Component_DEFAULT
+	}
+	return *p.Component
+}
+
+var QueryInstancesRequest_Summary_DEFAULT string
+
+func (p *QueryInstancesRequest) GetSummary() (v string) {
+	if !p.IsSetSummary() {
+		return QueryInstancesRequest_Summary_DEFAULT
+	}
+	return *p.Summary
+}
+
+var QueryInstancesRequest_Page_DEFAULT int32
+
+func (p *QueryInstancesRequest) GetPage() (v int32) {
+	if !p.IsSetPage() {
+		return QueryInstancesRequest_Page_DEFAULT
+	}
+	return *p.Page
+}
+
+var QueryInstancesRequest_PageSize_DEFAULT int32
+
+func (p *QueryInstancesRequest) GetPageSize() (v int32) {
+	if !p.IsSetPageSize() {
+		return QueryInstancesRequest_PageSize_DEFAULT
+	}
+	return *p.PageSize
+}
+func (p *QueryInstancesRequest) SetClusterId(val string) {
+	p.ClusterId = val
+}
+func (p *QueryInstancesRequest) SetName(val *string) {
+	p.Name = val
+}
+func (p *QueryInstancesRequest) SetType(val *string) {
+	p.Type = val
+}
+func (p *QueryInstancesRequest) SetComponent(val *string) {
+	p.Component = val
+}
+func (p *QueryInstancesRequest) SetSummary(val *string) {
+	p.Summary = val
+}
+func (p *QueryInstancesRequest) SetPage(val *int32) {
+	p.Page = val
+}
+func (p *QueryInstancesRequest) SetPageSize(val *int32) {
+	p.PageSize = val
+}
+
+func (p *QueryInstancesRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *QueryInstancesRequest) IsSetName() bool {
+	return p.Name != nil
+}
+
+func (p *QueryInstancesRequest) IsSetType() bool {
+	return p.Type != nil
+}
+
+func (p *QueryInstancesRequest) IsSetComponent() bool {
+	return p.Component != nil
+}
+
+func (p *QueryInstancesRequest) IsSetSummary() bool {
+	return p.Summary != nil
+}
+
+func (p *QueryInstancesRequest) IsSetPage() bool {
+	return p.Page != nil
+}
+
+func (p *QueryInstancesRequest) IsSetPageSize() bool {
+	return p.PageSize != nil
+}
+
+func (p *QueryInstancesRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("QueryInstancesRequest(%+v)", *p)
+}
+
+var fieldIDToName_QueryInstancesRequest = map[int16]string{
+	1: "clusterId",
+	2: "name",
+	3: "type",
+	4: "component",
+	5: "summary",
+	6: "page",
+	7: "pageSize",
+}
+
+type InstanceStatistics struct {
+	Managed        int32 `thrift:"managed,1,required" frugal:"1,required,i32" json:"managed"`
+	Unmanaged      int32 `thrift:"unmanaged,2,required" frugal:"2,required,i32" json:"unmanaged"`
+	Available      int32 `thrift:"available,3,required" frugal:"3,required,i32" json:"available"`
+	Blocked        int32 `thrift:"blocked,4,required" frugal:"4,required,i32" json:"blocked"`
+	_unknownFields unknown.Fields
+}
+
+func NewInstanceStatistics() *InstanceStatistics {
+	return &InstanceStatistics{}
+}
+
+func (p *InstanceStatistics) InitDefault() {
+}
+
+func (p *InstanceStatistics) GetManaged() (v int32) {
+	return p.Managed
+}
+
+func (p *InstanceStatistics) GetUnmanaged() (v int32) {
+	return p.Unmanaged
+}
+
+func (p *InstanceStatistics) GetAvailable() (v int32) {
+	return p.Available
+}
+
+func (p *InstanceStatistics) GetBlocked() (v int32) {
+	return p.Blocked
+}
+func (p *InstanceStatistics) SetManaged(val int32) {
+	p.Managed = val
+}
+func (p *InstanceStatistics) SetUnmanaged(val int32) {
+	p.Unmanaged = val
+}
+func (p *InstanceStatistics) SetAvailable(val int32) {
+	p.Available = val
+}
+func (p *InstanceStatistics) SetBlocked(val int32) {
+	p.Blocked = val
+}
+
+func (p *InstanceStatistics) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *InstanceStatistics) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("InstanceStatistics(%+v)", *p)
+}
+
+var fieldIDToName_InstanceStatistics = map[int16]string{
+	1: "managed",
+	2: "unmanaged",
+	3: "available",
+	4: "blocked",
+}
+
+type InstancePagination struct {
+	Number         int32 `thrift:"number,1,required" frugal:"1,required,i32" json:"number"`
+	Size           int32 `thrift:"size,2,required" frugal:"2,required,i32" json:"size"`
+	Total          int32 `thrift:"total,3,required" frugal:"3,required,i32" json:"total"`
+	Pages          int32 `thrift:"pages,4,required" frugal:"4,required,i32" json:"pages"`
+	_unknownFields unknown.Fields
+}
+
+func NewInstancePagination() *InstancePagination {
+	return &InstancePagination{}
+}
+
+func (p *InstancePagination) InitDefault() {
+}
+
+func (p *InstancePagination) GetNumber() (v int32) {
+	return p.Number
+}
+
+func (p *InstancePagination) GetSize() (v int32) {
+	return p.Size
+}
+
+func (p *InstancePagination) GetTotal() (v int32) {
+	return p.Total
+}
+
+func (p *InstancePagination) GetPages() (v int32) {
+	return p.Pages
+}
+func (p *InstancePagination) SetNumber(val int32) {
+	p.Number = val
+}
+func (p *InstancePagination) SetSize(val int32) {
+	p.Size = val
+}
+func (p *InstancePagination) SetTotal(val int32) {
+	p.Total = val
+}
+func (p *InstancePagination) SetPages(val int32) {
+	p.Pages = val
+}
+
+func (p *InstancePagination) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *InstancePagination) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("InstancePagination(%+v)", *p)
+}
+
+var fieldIDToName_InstancePagination = map[int16]string{
+	1: "number",
+	2: "size",
+	3: "total",
+	4: "pages",
+}
+
+type QueryInstancesResult_ struct {
+	Instances      []*ObservationInstance `thrift:"instances,1,required" frugal:"1,required,list<ObservationInstance>" json:"instances"`
+	Statistics     *InstanceStatistics    `thrift:"statistics,2,required" frugal:"2,required,InstanceStatistics" json:"statistics"`
+	Page           *InstancePagination    `thrift:"page,3,required" frugal:"3,required,InstancePagination" json:"page"`
+	_unknownFields unknown.Fields
+}
+
+func NewQueryInstancesResult_() *QueryInstancesResult_ {
+	return &QueryInstancesResult_{}
+}
+
+func (p *QueryInstancesResult_) InitDefault() {
+}
+
+func (p *QueryInstancesResult_) GetInstances() (v []*ObservationInstance) {
+	return p.Instances
+}
+
+var QueryInstancesResult__Statistics_DEFAULT *InstanceStatistics
+
+func (p *QueryInstancesResult_) GetStatistics() (v *InstanceStatistics) {
+	if !p.IsSetStatistics() {
+		return QueryInstancesResult__Statistics_DEFAULT
+	}
+	return p.Statistics
+}
+
+var QueryInstancesResult__Page_DEFAULT *InstancePagination
+
+func (p *QueryInstancesResult_) GetPage() (v *InstancePagination) {
+	if !p.IsSetPage() {
+		return QueryInstancesResult__Page_DEFAULT
+	}
+	return p.Page
+}
+func (p *QueryInstancesResult_) SetInstances(val []*ObservationInstance) {
+	p.Instances = val
+}
+func (p *QueryInstancesResult_) SetStatistics(val *InstanceStatistics) {
+	p.Statistics = val
+}
+func (p *QueryInstancesResult_) SetPage(val *InstancePagination) {
+	p.Page = val
+}
+
+func (p *QueryInstancesResult_) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *QueryInstancesResult_) IsSetStatistics() bool {
+	return p.Statistics != nil
+}
+
+func (p *QueryInstancesResult_) IsSetPage() bool {
+	return p.Page != nil
+}
+
+func (p *QueryInstancesResult_) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("QueryInstancesResult_(%+v)", *p)
+}
+
+var fieldIDToName_QueryInstancesResult_ = map[int16]string{
+	1: "instances",
+	2: "statistics",
+	3: "page",
+}
+
 type PreviewRequest struct {
 	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
 	DraftRevision  int64  `thrift:"draftRevision,2,required" frugal:"2,required,i64" json:"draftRevision"`
@@ -5379,6 +5713,8 @@ type ControlService interface {
 	DeleteInstance(ctx context.Context, ctx_ *RequestContext, request *DeleteInstanceRequest) (r *Operation, err error)
 
 	CreateInstance(ctx context.Context, ctx_ *RequestContext, request *CreateInstanceRequest) (r *ObservationInstance, err error)
+
+	QueryInstances(ctx context.Context, ctx_ *RequestContext, request *QueryInstancesRequest) (r *QueryInstancesResult_, err error)
 
 	ListInstances(ctx context.Context, ctx_ *RequestContext, request *ClusterID) (r *InstancesResult_, err error)
 
@@ -6429,6 +6765,128 @@ func (p *ControlServiceCreateInstanceResult) String() string {
 }
 
 var fieldIDToName_ControlServiceCreateInstanceResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceQueryInstancesArgs struct {
+	Ctx            *RequestContext        `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *QueryInstancesRequest `thrift:"request,2" frugal:"2,default,QueryInstancesRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceQueryInstancesArgs() *ControlServiceQueryInstancesArgs {
+	return &ControlServiceQueryInstancesArgs{}
+}
+
+func (p *ControlServiceQueryInstancesArgs) InitDefault() {
+}
+
+var ControlServiceQueryInstancesArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceQueryInstancesArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceQueryInstancesArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceQueryInstancesArgs_Request_DEFAULT *QueryInstancesRequest
+
+func (p *ControlServiceQueryInstancesArgs) GetRequest() (v *QueryInstancesRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceQueryInstancesArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceQueryInstancesArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceQueryInstancesArgs) SetRequest(val *QueryInstancesRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceQueryInstancesArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceQueryInstancesArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceQueryInstancesArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceQueryInstancesArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceQueryInstancesArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceQueryInstancesArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceQueryInstancesResult struct {
+	Success        *QueryInstancesResult_ `thrift:"success,0,optional" frugal:"0,optional,QueryInstancesResult_" json:"success,omitempty"`
+	Error          *APIError              `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceQueryInstancesResult() *ControlServiceQueryInstancesResult {
+	return &ControlServiceQueryInstancesResult{}
+}
+
+func (p *ControlServiceQueryInstancesResult) InitDefault() {
+}
+
+var ControlServiceQueryInstancesResult_Success_DEFAULT *QueryInstancesResult_
+
+func (p *ControlServiceQueryInstancesResult) GetSuccess() (v *QueryInstancesResult_) {
+	if !p.IsSetSuccess() {
+		return ControlServiceQueryInstancesResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceQueryInstancesResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceQueryInstancesResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceQueryInstancesResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceQueryInstancesResult) SetSuccess(x interface{}) {
+	p.Success = x.(*QueryInstancesResult_)
+}
+func (p *ControlServiceQueryInstancesResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceQueryInstancesResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceQueryInstancesResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceQueryInstancesResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceQueryInstancesResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceQueryInstancesResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceQueryInstancesResult = map[int16]string{
 	0: "success",
 	1: "error",
 }

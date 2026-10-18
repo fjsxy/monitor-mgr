@@ -10,69 +10,12 @@ import (
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 )
 
+// saveAgentSource 保留组件接缝，所有来源共用同一历史与新鲜度语义。
 func (s *Store) saveAgentSource(ctx context.Context, i *rpc.ObservationInstance, source string, current *rpc.SourceObservation, cause error) *rpc.SourceObservation {
-	now := s.Now().UTC().Format(time.RFC3339Nano)
-	out := current
-	if out == nil {
-		out = &rpc.SourceObservation{Source: source}
-	}
-	if cause != nil {
-		var raw []byte
-		var uid string
-		if s.DB.QueryRowContext(ctx, `SELECT document,uid FROM instance_source_observations WHERE instance_id=? AND source=?`, i.Id, source).Scan(&raw, &uid) == nil && uid == i.Uid {
-			var previous rpc.SourceObservation
-			if json.Unmarshal(raw, &previous) == nil {
-				out = &previous
-			}
-		}
-		out.Error = safeSourceError(cause)
-		out.Historical = true
-	} else {
-		out.LastSuccessAt = now
-		out.Error = ""
-		out.Historical = false
-	}
-	out.Source = source
-	out.LastAttemptAt = now
-	raw, _ := json.Marshal(out)
-	if _, e := s.DB.ExecContext(ctx, `INSERT INTO instance_source_observations VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(instance_id,source) DO UPDATE SET uid=excluded.uid,document=excluded.document,last_attempt_at=excluded.last_attempt_at,last_success_at=excluded.last_success_at,error=excluded.error,epoch=excluded.epoch`, i.Id, source, i.Uid, raw, out.LastAttemptAt, out.LastSuccessAt, out.Error, s.observationEpoch); e != nil {
-		out.Error = "辅助来源保存失败"
-		out.Historical = true
-	}
-	return out
-}
-func safeSourceError(e error) string {
-	if a, ok := e.(*rpc.APIError); ok {
-		return a.Code + "：" + a.Message
-	}
-	return "辅助来源读取失败"
+	return s.saveSourceObservation(ctx, i, source, current, cause)
 }
 func (s *Store) agentSources(ctx context.Context, i *rpc.ObservationInstance) []*rpc.SourceObservation {
-	out := []*rpc.SourceObservation{}
-	rows, e := s.DB.QueryContext(ctx, `SELECT source,document,epoch FROM instance_source_observations WHERE instance_id=? AND uid=? ORDER BY source`, i.Id, i.Uid)
-	if e != nil {
-		return out
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name, epoch string
-		var raw []byte
-		if rows.Scan(&name, &raw, &epoch) != nil {
-			continue
-		}
-		v := &rpc.SourceObservation{Source: name}
-		if json.Unmarshal(raw, v) != nil {
-			v.Error = "历史来源记录不可读"
-			v.Historical = true
-		} else {
-			stamp, e := time.Parse(time.RFC3339Nano, v.LastSuccessAt)
-			if e != nil || epoch != s.observationEpoch || s.Now().Sub(stamp) > 30*time.Second || v.Error != "" {
-				v.Historical = true
-			}
-		}
-		out = append(out, v)
-	}
-	return out
+	return s.instanceSources(ctx, i)
 }
 
 // associationObservations逐类读取；只有实际CR来源可以保存运行历史。

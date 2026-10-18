@@ -96,3 +96,6 @@ workbench-seed-check: ## 工作台活动序号与旧库安全迁移检查，真�
 
 workbench-i64-check: ## HTTP大i64精确往返与RPC保持协议检查
 	$(GO) test ./internal/platform -count=1 -run '^TestWorkbenchHTTPInt64RoundTrip$$'
+
+e2e-workbench-q: ## 工作台Q层，真实HTTP/Kitex/SQLite与受控时钟/API
+	$(GO) test ./internal/platform -count=1 -run 'Test(R0[1356]Workbench|Workbench)' $(E2E_ARGS)

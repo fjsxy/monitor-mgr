@@ -23,22 +23,25 @@ import (
 
 // Store 持有单 writer 数据库、独立密钥和应用生命周期 worker。
 type Store struct {
-	OperationBoundary func(stage, operationID string) error
-	DB                *sql.DB
-	lock              *os.File
-	Now               func() time.Time
-	SessionTTL        time.Duration
-	Key               []byte
-	limits            *targetLimits
-	workerCancel      context.CancelFunc
-	workerWake        chan struct{}
-	workerDone        chan struct{}
-	dispatch          sync.RWMutex
-	publicationWG     sync.WaitGroup
-	workerLaunch      sync.Mutex
-	stopping          atomic.Bool
-	stopMu            sync.Mutex
-	observationEpoch  string
+	OperationBoundary   func(stage, operationID string) error
+	DB                  *sql.DB
+	lock                *os.File
+	Now                 func() time.Time
+	SessionTTL          time.Duration
+	Key                 []byte
+	limits              *targetLimits
+	workerCancel        context.CancelFunc
+	workerWake          chan struct{}
+	workerDone          chan struct{}
+	dispatch            sync.RWMutex
+	publicationWG       sync.WaitGroup
+	workerLaunch        sync.Mutex
+	stopping            atomic.Bool
+	stopMu              sync.Mutex
+	observationEpoch    string
+	ObservationInterval time.Duration
+	ObservationTicks    <-chan time.Time
+	observationPolls    sync.Map
 }
 
 // Open 在单 writer 锁、密钥校验与数据库迁移均通过后提供存储服务。
@@ -113,7 +116,7 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 	}
 	db.SetMaxOpenConns(1)
 
-	s := &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key, limits: newTargetLimits(), observationEpoch: ID()}
+	s := &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key, limits: newTargetLimits(), observationEpoch: ID(), ObservationInterval: 10 * time.Second}
 	// 关键：有密文旧库必须先验证原密钥，再制作快照或推进schema，错误密钥不能改变恢复基线。
 	if err = s.verifyExistingCredentials(); err != nil {
 		db.Close()

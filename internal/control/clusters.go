@@ -436,7 +436,7 @@ func (s *Store) TargetForCluster(ctx context.Context, c *rpc.RequestContext, id 
 		return nil, Error("CONFLICT", "集群已注销，访问凭据已清除")
 	}
 	var raw []byte
-	if e = s.DB.QueryRowContext(ctx, `SELECT credential FROM clusters WHERE id=? AND state='ACTIVE'`, id).Scan(&raw); e != nil {
+	if e = s.DB.QueryRowContext(ctx, `SELECT credential,credential_revision,uid FROM clusters WHERE id=? AND state='ACTIVE'`, id).Scan(&raw, &cl.CredentialRevision, &cl.Uid); e != nil {
 		return nil, Error("UNAVAILABLE", "凭据不可读")
 	}
 	cred, e := s.openCredential(raw, id)
@@ -449,6 +449,8 @@ func (s *Store) TargetForCluster(ctx context.Context, c *rpc.RequestContext, id 
 	}
 	target.limits = s.limits
 	target.clusterID = id
+	target.credentialRevision = cl.CredentialRevision
+	target.clusterUID = cl.Uid
 	return target, nil
 }
 
