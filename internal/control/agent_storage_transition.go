@@ -13,8 +13,8 @@ import (
 )
 
 type agentAffectedVolume struct {
-	Namespace, Name, UID, Policy, StatefulUID, StatefulName string
-	Shard                                                   int32
+	Namespace, Name, UID, Policy, StatefulUID, StatefulName, Action string
+	Shard                                                           int32
 }
 type agentPolicyImpact struct{ UID, Name, Action, Policy string }
 type agentStorageSnapshot struct {
@@ -121,6 +121,7 @@ func (s *Store) readAgentStorageTransition(ctx context.Context, i *rpc.Observati
 	}
 	stByUID := map[string]map[string]any{}
 	affected := map[string]string{}
+	actions := map[string]string{}
 	shards := map[string]int32{}
 	if dangerous && !deleting {
 		a, b, err := agentRetention(desired)
@@ -167,6 +168,7 @@ func (s *Store) readAgentStorageTransition(ctx context.Context, i *rpc.Observati
 		}
 		if policy != "" {
 			affected[uid] = policy
+			actions[uid] = action
 			out.facts = append(out.facts, agentPolicyImpact{UID: uid, Name: name, Action: action, Policy: policy})
 		}
 	}
@@ -283,7 +285,7 @@ func (s *Store) readAgentStorageTransition(ctx context.Context, i *rpc.Observati
 			if stByUID[rUID] == nil && podOwner[rUID] == "" {
 				return nil, Error("CONFLICT", "PVC存在非原owner UID引用，不能确认存储影响")
 			}
-			if policy == "Retain" && (rUID == owner || podOwner[rUID] == owner) {
+			if policy == "Retain" && (rUID == owner && actions[owner] == "whenDeleted" || podOwner[rUID] == owner) {
 				return nil, Error("CONFLICT", "Retain尚有待删ST/Pod owner引用，请等待Kubernetes完成采用")
 			}
 		}
@@ -300,7 +302,7 @@ func (s *Store) readAgentStorageTransition(ctx context.Context, i *rpc.Observati
 			return nil, Error("CONFLICT", "受影响PVC缺少原UID关系证明")
 		}
 		st := stByUID[owner]
-		out.volumes = append(out.volumes, agentAffectedVolume{Namespace: i.TargetNamespace, Name: name, UID: uid, Policy: policy, StatefulUID: owner, StatefulName: objectString(objectMap(st, "metadata"), "name"), Shard: shards[owner]})
+		out.volumes = append(out.volumes, agentAffectedVolume{Namespace: i.TargetNamespace, Name: name, UID: uid, Policy: policy, Action: actions[owner], StatefulUID: owner, StatefulName: objectString(objectMap(st, "metadata"), "name"), Shard: shards[owner]})
 	}
 	// 关键：恢复/新增shard可复用本实例原UID历史Retain卷，但不能接管同名新UID或孤卷。
 	if !deleting && nextReplicas > 0 {

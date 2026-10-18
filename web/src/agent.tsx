@@ -87,7 +87,7 @@ export type Source = {
     accessModes: string[];
     storageClass: string;
     mountedByPods: string[];
-    expectedPolicy?:string;retentionResult?:string;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;statefulUID?:string;statefulName?:string;shard?:number;agentUID?:string;
+    expectedPolicy?:string;retentionResult?:string;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;statefulUID?:string;statefulName?:string;shard?:number;agentUID?:string;impactAction?:string;
   }[];
 };
 type Instance = {

@@ -3169,6 +3169,7 @@ type VolumeObservation struct {
 	StatefulName     *string  `thrift:"statefulName,15,optional" frugal:"15,optional,string" json:"statefulName,omitempty"`
 	Shard            *int32   `thrift:"shard,16,optional" frugal:"16,optional,i32" json:"shard,omitempty"`
 	AgentUID         *string  `thrift:"agentUID,17,optional" frugal:"17,optional,string" json:"agentUID,omitempty"`
+	ImpactAction     *string  `thrift:"impactAction,18,optional" frugal:"18,optional,string" json:"impactAction,omitempty"`
 	_unknownFields   unknown.Fields
 }
 
@@ -3291,6 +3292,15 @@ func (p *VolumeObservation) GetAgentUID() (v string) {
 	}
 	return *p.AgentUID
 }
+
+var VolumeObservation_ImpactAction_DEFAULT string
+
+func (p *VolumeObservation) GetImpactAction() (v string) {
+	if !p.IsSetImpactAction() {
+		return VolumeObservation_ImpactAction_DEFAULT
+	}
+	return *p.ImpactAction
+}
 func (p *VolumeObservation) SetNamespace(val string) {
 	p.Namespace = val
 }
@@ -3342,6 +3352,9 @@ func (p *VolumeObservation) SetShard(val *int32) {
 func (p *VolumeObservation) SetAgentUID(val *string) {
 	p.AgentUID = val
 }
+func (p *VolumeObservation) SetImpactAction(val *string) {
+	p.ImpactAction = val
+}
 
 func (p *VolumeObservation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -3383,6 +3396,10 @@ func (p *VolumeObservation) IsSetAgentUID() bool {
 	return p.AgentUID != nil
 }
 
+func (p *VolumeObservation) IsSetImpactAction() bool {
+	return p.ImpactAction != nil
+}
+
 func (p *VolumeObservation) String() string {
 	if p == nil {
 		return "<nil>"
@@ -3408,6 +3425,7 @@ var fieldIDToName_VolumeObservation = map[int16]string{
 	15: "statefulName",
 	16: "shard",
 	17: "agentUID",
+	18: "impactAction",
 }
 
 type SourceObservation struct {

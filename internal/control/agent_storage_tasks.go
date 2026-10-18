@@ -24,7 +24,7 @@ func snapshotVolumes(snapshot *agentStorageSnapshot, agentUID string) []*rpc.Vol
 		return out
 	}
 	for _, v := range snapshot.volumes {
-		out = append(out, &rpc.VolumeObservation{Namespace: v.Namespace, Name: v.Name, Uid: v.UID, AccessModes: []string{}, MountedByPods: []string{}, ExpectedPolicy: reference(v.Policy), RetentionResult_: reference("Pending"), StatefulUID: reference(v.StatefulUID), StatefulName: reference(v.StatefulName), Shard: reference(v.Shard), AgentUID: reference(agentUID)})
+		out = append(out, &rpc.VolumeObservation{Namespace: v.Namespace, Name: v.Name, Uid: v.UID, AccessModes: []string{}, MountedByPods: []string{}, ExpectedPolicy: reference(v.Policy), ImpactAction: reference(v.Action), RetentionResult_: reference("Pending"), StatefulUID: reference(v.StatefulUID), StatefulName: reference(v.StatefulName), Shard: reference(v.Shard), AgentUID: reference(agentUID)})
 	}
 	return out
 }
@@ -204,8 +204,8 @@ func (s *Store) verifyAgentStorageTasksLocked(ctx context.Context, operation str
 					result = "Deleting"
 				} else if objectString(objectMap(pvc, "metadata"), "deletionTimestamp") != "" {
 					message = "原Retain PVC删除中，结果无法确认"
-				} else if len(anySlice(objectMap(pvc, "metadata")["ownerReferences"])) > 0 {
-					message = "Retain PVC仍有owner引用，不能确认最终保留"
+				} else if ownerErr := target.verifyRetainedAgentOwner(ctx, volume, pvc); ownerErr != nil {
+					message = safeSourceError(ownerErr)
 				} else if v.state == "SUCCEEDED" {
 					result = "Retained"
 				} else {
@@ -318,6 +318,40 @@ func (s *Store) enrichAgentVolumeResults(ctx context.Context, i *rpc.Observation
 		v.StatefulName = r.StatefulName
 		v.Shard = r.Shard
 		v.AgentUID = r.AgentUID
+		v.ImpactAction = r.ImpactAction
+	}
+	return nil
+}
+
+// verifyRetainedAgentOwner区分本次保留ST的缩零和会删除ST的操作，不能混用两个策略。
+func (t *Target) verifyRetainedAgentOwner(ctx context.Context, v *rpc.VolumeObservation, pvc map[string]any) error {
+	refs := anySlice(objectMap(pvc, "metadata")["ownerReferences"])
+	if len(refs) == 0 {
+		return nil
+	}
+	if v.GetImpactAction() != "whenScaled" {
+		return Error("CONFLICT", "Retain PVC仍有待删除owner引用")
+	}
+	for _, raw := range refs {
+		ref, _ := raw.(map[string]any)
+		if objectString(ref, "kind") != "StatefulSet" || objectString(ref, "uid") != v.GetStatefulUID() {
+			return Error("CONFLICT", "缩零Retain PVC仍有非保留ST的owner引用")
+		}
+	}
+	var st map[string]any
+	if e := t.Request(ctx, "GET", "/apis/apps/v1/namespaces/"+url.PathEscape(v.Namespace)+"/statefulsets/"+url.PathEscape(v.GetStatefulName()), nil, &st); e != nil {
+		return e
+	}
+	meta := objectMap(st, "metadata")
+	if objectString(meta, "uid") != v.GetStatefulUID() || objectString(meta, "deletionTimestamp") != "" {
+		return Error("CONFLICT", "原保留ST身份已变化或正在删除")
+	}
+	scaled, _, e := agentRetention(objectMap(st, "spec"))
+	if e != nil {
+		return e
+	}
+	if scaled != "Retain" {
+		return Error("CONFLICT", "原ST实际whenScaled不再为Retain")
 	}
 	return nil
 }

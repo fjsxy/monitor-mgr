@@ -1,7 +1,7 @@
 import type { AgentConfiguration } from "./agent";
 
 // 存储界面只表达类型化意图和真实核验结果，不提供PVC清理或owner修补入口。
-export type StorageVolume = {namespace:string;name:string;uid:string;phase?:string;requestedStorage?:string;accessModes?:string[];storageClass?:string;mountedByPods?:string[];expectedPolicy?:string;retentionResult?:string;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;statefulUID?:string;statefulName?:string;shard?:number;agentUID?:string};
+export type StorageVolume = {namespace:string;name:string;uid:string;phase?:string;requestedStorage?:string;accessModes?:string[];storageClass?:string;mountedByPods?:string[];expectedPolicy?:string;retentionResult?:string;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;statefulUID?:string;statefulName?:string;shard?:number;agentUID?:string;impactAction?:string};
 export type StatefulPolicy={name:string;uid:string;whenScaled:string;whenDeleted:string};
 export type StorageImpactValue={storageMode?:string;policies?:StatefulPolicy[];storageVolumes?:StorageVolume[]};
 const resultNames:Record<string,string>={Retained:"已保留",Deleted:"已删除",Deleting:"删除中",Pending:"待独立核验",Unknown:"未知",Lost:"原保留卷已缺失",Completed:"分别完成",NOT_APPLICABLE:"不适用PVC保留策略",NOT_AFFECTED:"无受影响PVC",NotApplied:"未执行"};
@@ -25,7 +25,7 @@ export function StorageImpact({value}:{value:StorageImpactValue}){
 }
 export function StorageVolumeResults({volumes,preview=false}:{volumes:StorageVolume[];preview?:boolean}){
  if(!volumes.length)return <p className="help">{preview?"本次完整读取没有受影响的原PVC。":"没有需要独立核验的PVC。"}</p>;
- return <div className="table-wrap"><table><thead><tr><th>PVC / namespace</th><th>原身份 / shard</th><th>策略 / {preview?"预期":"独立结果"}</th></tr></thead><tbody>{volumes.map(v=><tr key={`${v.uid}-${v.statefulUID}`}><td>{v.name}<div className="help">{v.namespace}</div></td><td><div className="help">PVC UID {v.uid}</div><div className="help">{v.statefulName} · shard {v.shard??"未知"}</div></td><td>{v.expectedPolicy??"未知"} · {preview?"执行后独立确认":resultNames[v.retentionResult??""]??v.retentionResult??"未知"}{v.lastAttemptAt&&<div className="help">最后尝试：{new Date(v.lastAttemptAt).toLocaleString()}</div>}{v.lastSuccessAt&&<div className="help">最后成功：{new Date(v.lastSuccessAt).toLocaleString()}</div>}{v.error&&<div className="alert error">{v.error}</div>}</td></tr>)}</tbody></table></div>
+ return <div className="table-wrap"><table><thead><tr><th>PVC / namespace</th><th>原身份 / shard</th><th>策略 / {preview?"预期":"独立结果"}</th></tr></thead><tbody>{volumes.map(v=><tr key={`${v.uid}-${v.statefulUID}`}><td>{v.name}<div className="help">{v.namespace}</div></td><td><div className="help">PVC UID {v.uid}</div><div className="help">{v.statefulName} · shard {v.shard??"未知"}</div></td><td>{v.impactAction}={v.expectedPolicy??"未知"} · {preview?"执行后独立确认":resultNames[v.retentionResult??""]??v.retentionResult??"未知"}{v.lastAttemptAt&&<div className="help">最后尝试：{new Date(v.lastAttemptAt).toLocaleString()}</div>}{v.lastSuccessAt&&<div className="help">最后成功：{new Date(v.lastSuccessAt).toLocaleString()}</div>}{v.error&&<div className="alert error">{v.error}</div>}</td></tr>)}</tbody></table></div>
 }
 export function StorageResult({result,volumes}:{result?:string;volumes?:StorageVolume[]}){
  if(!result)return null;
@@ -35,5 +35,5 @@ export function StorageResult({result,volumes}:{result?:string;volumes?:StorageV
 // StorageVolumeOutcome在当前卷来源旁只展示该UID的独立历史结果，不冒充当前挂载状态。
 export function StorageVolumeOutcome({volume:v}:{volume:StorageVolume}){
  if(!v.retentionResult)return <span className="help">尚无独立变更结果</span>;
- return <>{v.expectedPolicy} · {resultNames[v.retentionResult]??v.retentionResult}{v.lastAttemptAt&&<div className="help">最后尝试：{new Date(v.lastAttemptAt).toLocaleString()}</div>}{v.lastSuccessAt&&<div className="help">最后成功：{new Date(v.lastSuccessAt).toLocaleString()}</div>}{v.error&&<div className="alert error">{v.error}</div>}</>
+ return <>{v.impactAction}={v.expectedPolicy} · {resultNames[v.retentionResult]??v.retentionResult}{v.lastAttemptAt&&<div className="help">最后尝试：{new Date(v.lastAttemptAt).toLocaleString()}</div>}{v.lastSuccessAt&&<div className="help">最后成功：{new Date(v.lastSuccessAt).toLocaleString()}</div>}{v.error&&<div className="alert error">{v.error}</div>}</>
 }

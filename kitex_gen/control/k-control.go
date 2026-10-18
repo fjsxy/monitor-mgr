@@ -11766,6 +11766,20 @@ func (p *VolumeObservation) FastRead(buf []byte) (int, error) {
 					goto SkipFieldError
 				}
 			}
+		case 18:
+			if fieldTypeId == thrift.STRING {
+				l, err = p.FastReadField18(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
 		default:
 			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
 			offset += l
@@ -12087,6 +12101,20 @@ func (p *VolumeObservation) FastReadField17(buf []byte) (int, error) {
 	return offset, nil
 }
 
+func (p *VolumeObservation) FastReadField18(buf []byte) (int, error) {
+	offset := 0
+
+	var _field *string
+	if v, l, err := thrift.Binary.ReadString(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = &v
+	}
+	p.ImpactAction = _field
+	return offset, nil
+}
+
 func (p *VolumeObservation) FastWrite(buf []byte) int {
 	return p.FastWriteNocopy(buf, nil)
 }
@@ -12111,6 +12139,7 @@ func (p *VolumeObservation) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 		offset += p.fastWriteField14(buf[offset:], w)
 		offset += p.fastWriteField15(buf[offset:], w)
 		offset += p.fastWriteField17(buf[offset:], w)
+		offset += p.fastWriteField18(buf[offset:], w)
 		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
@@ -12137,6 +12166,7 @@ func (p *VolumeObservation) BLength() int {
 		l += p.field15Length()
 		l += p.field16Length()
 		l += p.field17Length()
+		l += p.field18Length()
 		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
@@ -12294,6 +12324,15 @@ func (p *VolumeObservation) fastWriteField17(buf []byte, w thrift.NocopyWriter) 
 	return offset
 }
 
+func (p *VolumeObservation) fastWriteField18(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	if p.IsSetImpactAction() {
+		offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 18)
+		offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, *p.ImpactAction)
+	}
+	return offset
+}
+
 func (p *VolumeObservation) field1Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
@@ -12435,6 +12474,15 @@ func (p *VolumeObservation) field17Length() int {
 	if p.IsSetAgentUID() {
 		l += thrift.Binary.FieldBeginLength()
 		l += thrift.Binary.StringLengthNocopy(*p.AgentUID)
+	}
+	return l
+}
+
+func (p *VolumeObservation) field18Length() int {
+	l := 0
+	if p.IsSetImpactAction() {
+		l += thrift.Binary.FieldBeginLength()
+		l += thrift.Binary.StringLengthNocopy(*p.ImpactAction)
 	}
 	return l
 }
