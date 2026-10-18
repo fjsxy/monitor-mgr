@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, APIError, type Account } from "./api";
 import type { Cluster } from "./clusters";
+import {LifecycleActions,type Operation,type DeletionPreview} from "./lifecycle";
 
 // KSM 页面只保存类型化草稿；所有身份、权限与发布保护仍由真实 RPC 执行。
 type Resources = {
@@ -68,20 +69,13 @@ type Preview = {
   drift: boolean;
   warnings: string[];
 };
-type Operation = {
-  operationId: string;
-  state: string;
-  message: string;
-  createdAt: string;
-  versionId?: string;
-  attemptId?: string;
-};
 type Selection = {
   key: string;
   instance?: Instance;
   template?: KSM;
   versionId?: string;
   tab?: Tab;
+  operation?:Operation;
 };
 type Tab = "draft" | "runtime" | "history" | "yaml";
 const collectors = [
@@ -119,6 +113,8 @@ const uncertain = new Set([
   "WAITING_CONFIRMATION",
   "RESULT_UNCERTAIN",
   "IDENTITY_UNCERTAIN",
+  "DELETION_VERIFYING",
+  "DELETION_BLOCKED",
 ]);
 const defaultConfig = (): KSM => ({
   name: "",
@@ -149,6 +145,9 @@ const stateName = (value: string) =>
       Disabled: "停用",
       NoMatch: "无匹配",
       Missing: "原 CR 不存在",
+      Deleted:"已删除",
+      DELETION_VERIFYING:"清理核验中",
+      DELETION_BLOCKED:"清理受阻",
       QUEUED: "已受理",
       CHECKING: "检查中",
       DISPATCHED: "正在写入",
@@ -239,6 +238,8 @@ export function Instances({
     [typeFilter, setTypeFilter] = useState(""),
     [componentFilter, setComponentFilter] = useState(""),
     [deleting, setDeleting] = useState<Instance | null>(null),
+    [deletePreview,setDeletePreview]=useState<DeletionPreview|null>(null),
+    [deletePreviewError,setDeletePreviewError]=useState(""),
     [blockedCount, setBlockedCount] = useState<number | null>(0);
   const current = clusters.find((cluster) => cluster.id === clusterId);
   const currentId = useRef(clusterId);
@@ -343,10 +344,16 @@ export function Instances({
       Number(a.readOnly) - Number(b.readOnly) ||
       b.activityAt.localeCompare(a.activityAt),
   );
+  async function openDeletion(item:Instance){
+    setDeleting(item);setDeletePreview(null);setDeletePreviewError("");
+    if(item.uid)try{setDeletePreview(await api<DeletionPreview>(`/instances/${item.id}/deletion-previews`,"POST",{}))}
+    catch(e){setDeletePreviewError(e instanceof APIError?e.message:"删除影响读取失败，请重新打开预览")}
+  }
   async function removeDraft() {
     if (!deleting) return;
     await onAction(async () => {
-      await api(`/instances/${deleting.id}`, "DELETE");
+      if(deleting.uid){if(!deletePreview)return;const result=await api<Operation>(`/instances/${deleting.id}/deletions`,"POST",{versionId:deletePreview.versionId,previewId:deletePreview.previewId});setSelection({key:crypto.randomUUID(),instance:deleting,tab:"runtime",operation:result})}
+      else await api(`/instances/${deleting.id}`, "DELETE");
       setDeleting(null);
       await load();
     });
@@ -595,9 +602,9 @@ export function Instances({
                     </button>
                     <button
                       className="danger"
-                      disabled={item.readOnly || Boolean(item.uid)}
-                      title={item.uid ? "当前不能删除已部署实例" : ""}
-                      onClick={() => setDeleting(item)}
+                      disabled={item.readOnly || item.lifecycle==="DELETED"}
+                      title={item.readOnly?"平台未纳管实例只读":"删除原 UID 对应的实例"}
+                      onClick={() => void openDeletion(item)}
                     >
                       删除
                     </button>
@@ -688,11 +695,12 @@ export function Instances({
             <p>
               名称：<strong>{deleting.name}</strong>
             </p>
-            <p className="help">命名空间：{deleting.targetNamespace}</p>
-            <p>删除尚未部署的配置草稿，集群资源不会变化。</p>
+            <p className="help">命名空间：{deletePreview?.namespace??deleting.targetNamespace}</p>
+            {deleting.uid&&<p className="help">{deletePreview?`已确认影响范围：${deletePreview.impactNamespaces.join("、")} · 原部署版本 ${deletePreview.versionId}`:deletePreviewError||"正在读取原身份和删除影响…"}</p>}
+            <p>{deleting.uid?"确认按原 UID 删除对应 CR。只有 CR、对应 workload 和 Pod 全部核验消失才完成；平台保留配置与历史，不移除 finalizer 或直接删除 PVC。":"删除尚未部署的配置草稿，集群资源不会变化。"}</p>
             <div className="dialog-footer">
               <button onClick={() => setDeleting(null)}>取消</button>
-              <button className="danger" onClick={() => void removeDraft()}>
+              <button className="danger" disabled={!!deleting.uid&&!deletePreview} onClick={() => void removeDraft()}>
                 确认删除实例
               </button>
             </div>
@@ -741,7 +749,7 @@ function Editor({
     ),
     [preview, setPreview] = useState<Preview | null>(null),
     [overwrite, setOverwrite] = useState(false),
-    [operation, setOperation] = useState<Operation | null>(null),
+    [operation, setOperation] = useState<Operation | null>(selection.operation??null),
     [history, setHistory] = useState<Operation[]>([]),
     [versions, setVersions] = useState<Version[]>([]),
     [viewedVersion, setViewedVersion] = useState<Version | null>(null),
@@ -1037,7 +1045,7 @@ function Editor({
             [
               ["draft", "配置草稿"],
               ["runtime", "运行信息"],
-              ["history", "下发历史"],
+              ["history", "变更历史"],
               ["yaml", "只读 YAML"],
             ] as [Tab, string][]
           ).map(([value, label]) => (
@@ -1160,6 +1168,7 @@ function Editor({
                         {operation.attemptId &&
                           ` · 执行尝试 ${operation.attemptId}`}
                       </p>
+                      <LifecycleActions operation={operation} onOperation={async next=>{setOperation(next);setTab("runtime");await refreshRuntime();if(current)await loadHistory(current.id)}}/>
                     </div>
                   )}
                   <div className="row-actions">
@@ -1178,7 +1187,7 @@ function Editor({
               {tab === "history" && (
                 <section>
                   <div className="page-title">
-                    <h3>下发历史</h3>
+                    <h3>变更历史</h3>
                     <button
                       onClick={() =>
                         current && void run(() => loadHistory(current.id))
@@ -1218,7 +1227,8 @@ function Editor({
                               查看冻结版本 {versionName(item.versionId)}
                             </button>
                           )}
-                          <p className="help">操作 {item.operationId}</p>
+                          <p className="help">{item.action==="DELETE"?"删除":"下发"}操作 {item.operationId}</p>
+                          <LifecycleActions operation={item} onOperation={async next=>{setOperation(next);setTab("runtime");if(current)await loadHistory(current.id);onChange()}}/>
                         </article>
                       ))}
                       <h3>发布版本</h3>

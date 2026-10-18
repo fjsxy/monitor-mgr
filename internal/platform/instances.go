@@ -36,6 +36,38 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 		p.respond(w, 200, v, e, id)
 		return true
 	}
+	if len(parts) == 3 && parts[0] == "operations" && r.Method == "POST" && (parts[2] == "retry" || parts[2] == "cancel" || parts[2] == "continue-unsent") {
+		var b struct {
+			ExpectedOperationRevision int64   `json:"expectedOperationRevision"`
+			ExpectedAttemptId         string  `json:"expectedAttemptId"`
+			ExpectedAttemptRevision   int64   `json:"expectedAttemptRevision"`
+			DeletePreviewId           *string `json:"deletePreviewId"`
+		}
+		if e := decode(r, &b); e != nil {
+			p.writeError(w, e, id)
+			return true
+		}
+		req := &rpc.LifecycleRequest{OperationId: parts[1], ExpectedOperationRevision: b.ExpectedOperationRevision, ExpectedAttemptId: b.ExpectedAttemptId, ExpectedAttemptRevision: b.ExpectedAttemptRevision, DeletePreviewId: b.DeletePreviewId}
+		var v *rpc.Operation
+		var e error
+		status := 202
+		switch parts[2] {
+		case "retry":
+			v, e = p.client.RetryLifecycle(r.Context(), c, req)
+		case "cancel":
+			status = 200
+			v, e = p.client.CancelLifecycle(r.Context(), c, req)
+		case "continue-unsent":
+			v, e = p.client.ContinueLifecycle(r.Context(), c, req)
+		}
+		p.respond(w, status, v, e, id)
+		return true
+	}
+	if len(parts) == 3 && parts[0] == "operations" && parts[2] == "refresh" && r.Method == "POST" {
+		v, e := p.client.RefreshOperation(r.Context(), c, &rpc.OperationID{OperationId: parts[1]})
+		p.respond(w, 200, v, e, id)
+		return true
+	}
 	if len(parts) == 3 && parts[0] == "operations" && parts[2] == "attempts" && r.Method == "GET" {
 		v, e := p.client.GetAttempts(r.Context(), c, &rpc.OperationID{OperationId: parts[1]})
 		p.respond(w, 200, v, e, id)
@@ -59,6 +91,33 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	}
 	if len(parts) == 3 {
 		switch parts[2] {
+		case "deletion-previews":
+			if r.Method == "POST" {
+				var b struct {
+					OperationId *string `json:"operationId"`
+				}
+				if e := decode(r, &b); e != nil {
+					p.writeError(w, e, id)
+					return true
+				}
+				v, e := p.client.PreviewDeletion(r.Context(), c, &rpc.DeletionPreviewRequest{Id: req.Id, OperationId: b.OperationId})
+				p.respond(w, 200, v, e, id)
+				return true
+			}
+		case "deletions":
+			if r.Method == "POST" {
+				var b struct {
+					VersionId string  `json:"versionId"`
+					PreviewId *string `json:"previewId"`
+				}
+				if e := decode(r, &b); e != nil {
+					p.writeError(w, e, id)
+					return true
+				}
+				v, e := p.client.DeleteInstance(r.Context(), c, &rpc.DeleteInstanceRequest{Id: req.Id, VersionId: b.VersionId, PreviewId: b.PreviewId})
+				p.respond(w, 202, v, e, id)
+				return true
+			}
 		case "draft":
 			switch r.Method {
 			case "GET":

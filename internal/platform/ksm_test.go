@@ -106,8 +106,8 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	// 固定 schema3 旧库前置；测试只裁去本票 schema4 新关系，不触碰既有密文。
-	for _, q := range []string{"DROP TABLE discovered_instances", "DROP TABLE instance_observations", "DROP TABLE instance_protections", "DROP TABLE execution_attempts", "DROP TABLE publication_operations", "DROP TABLE publication_previews", "DROP TABLE publication_versions", "DROP TABLE drafts", "DROP TABLE instances", "DELETE FROM schema_migrations WHERE version=4"} {
+	// 固定 schema3 旧库前置；测试裁去 schema4 及之后的新关系，不触碰既有密文。
+	for _, q := range []string{"DROP TABLE IF EXISTS deletion_previews", "DROP TABLE IF EXISTS seen_resources", "DROP TABLE IF EXISTS deletion_operations", "DROP TABLE IF EXISTS operation_lifecycle", "DROP TABLE IF EXISTS instance_source_observations", "DROP TABLE discovered_instances", "DROP TABLE instance_observations", "DROP TABLE instance_protections", "DROP TABLE execution_attempts", "DROP TABLE publication_operations", "DROP TABLE publication_previews", "DROP TABLE publication_versions", "DROP TABLE drafts", "DROP TABLE instances", "DELETE FROM schema_migrations WHERE version>=4"} {
 		if _, e = db.Exec(q); e != nil {
 			t.Fatal(e)
 		}
@@ -140,14 +140,24 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 }
 
 type ksmFixture struct {
-	mu          sync.Mutex
-	cr          map[string]any
-	writes      int
-	block       chan struct{}
-	entered     chan struct{}
-	readGate    chan struct{}
-	readEntered chan struct{}
-	readOnce    sync.Once
+	mu                  sync.Mutex
+	cr                  map[string]any
+	writes              int
+	rejectWrite         int
+	dropResponse        bool
+	owned               map[string][]any
+	deleteCount         int
+	deleteRequests      int
+	lastDelete          map[string]any
+	retainCR            bool
+	retainPod           bool
+	readFailure         bool
+	readFailureOnDelete bool
+	block               chan struct{}
+	entered             chan struct{}
+	readGate            chan struct{}
+	readEntered         chan struct{}
+	readOnce            sync.Once
 }
 
 func ksmTarget(t *testing.T) (*ksmFixture, string) {
@@ -169,6 +179,29 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 				}
 			}
 			io.WriteString(w, `{"metadata":{"name":"monitoring","uid":"namespace-uid"}}`)
+			return
+		}
+		if (strings.HasPrefix(r.URL.Path, "/apis/apps/v1/") || strings.HasSuffix(r.URL.Path, "/pods")) && r.Method == "GET" {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.readFailure {
+				w.WriteHeader(403)
+				io.WriteString(w, `{}`)
+				return
+			}
+			items := f.owned[r.URL.Path]
+			if !strings.Contains(r.URL.Path, "/namespaces/") {
+				items = nil
+				for path, objects := range f.owned {
+					if strings.HasSuffix(path, "/"+r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]) {
+						items = append(items, objects...)
+					}
+				}
+			}
+			if items == nil {
+				items = []any{}
+			}
+			json.NewEncoder(w).Encode(map[string]any{"items": items})
 			return
 		}
 		if !strings.HasPrefix(r.URL.Path, "/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics") {
@@ -194,8 +227,46 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 			json.NewEncoder(w).Encode(f.cr)
 			return
 		}
+		if f.rejectWrite != 0 {
+			w.WriteHeader(f.rejectWrite)
+			io.WriteString(w, `{}`)
+			return
+		}
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
+		if r.Method == "DELETE" {
+			f.deleteRequests++
+			if f.cr == nil {
+				w.WriteHeader(404)
+				return
+			}
+			meta := f.cr["metadata"].(map[string]any)
+			pre := body["preconditions"].(map[string]any)
+			if pre["uid"] != meta["uid"] || pre["resourceVersion"] != meta["resourceVersion"] || body["propagationPolicy"] != "Foreground" {
+				w.WriteHeader(409)
+				return
+			}
+			f.deleteCount++
+			f.lastDelete = body
+			if f.retainCR {
+				meta["deletionTimestamp"] = "2026-10-18T00:00:00Z"
+			} else {
+				f.cr = nil
+			}
+			for path := range f.owned {
+				if !f.retainPod || !strings.HasSuffix(path, "/pods") {
+					f.owned[path] = nil
+				}
+			}
+			if f.readFailureOnDelete {
+				f.readFailure = true
+			}
+			if f.dropResponse {
+				panic(http.ErrAbortHandler)
+			}
+			io.WriteString(w, `{"kind":"Status","status":"Success"}`)
+			return
+		}
 		if r.Method == "POST" && f.cr != nil {
 			w.WriteHeader(409)
 			io.WriteString(w, `{}`)
@@ -225,6 +296,9 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 			f.mu.Unlock()
 			<-b
 			f.mu.Lock()
+		}
+		if f.dropResponse {
+			panic(http.ErrAbortHandler)
 		}
 		json.NewEncoder(w).Encode(body)
 	}))

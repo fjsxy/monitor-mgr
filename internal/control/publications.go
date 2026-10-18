@@ -45,7 +45,24 @@ func checkTarget(i *rpc.ObservationInstance, cr map[string]any) error {
 	}
 	return nil
 }
-func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, cfg *KSMConfig, create bool) error {
+func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, value configuration, create bool, frozenSpec ...map[string]any) error {
+	cfg, ok := value.(*KSMConfig)
+	if !ok {
+		return Error("INVALID_INPUT", "组件依赖暂不支持")
+	}
+	// typed来源保留原输入/引用；实际namespace与workload权限取本次真正待写的冻结spec。
+	desired := cfg.spec()
+	if len(frozenSpec) > 0 {
+		desired = frozenSpec[0]
+	}
+	targetNamespace := objectString(desired, "targetNamespace")
+	mode := objectString(objectMap(desired, "deployment"), "mode")
+	if mode == "" {
+		mode = "Deployment"
+	}
+	if targetNamespace == "" {
+		return Error("INVALID_INPUT", "冻结目标namespace缺失")
+	}
 	var ns map[string]any
 	if e := t.Request(ctx, "GET", "/api/v1/namespaces/kube-system", nil, &ns); e != nil {
 		return e
@@ -66,7 +83,7 @@ func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, c
 	if e := t.Request(ctx, "GET", ksmPath+"?limit=1", nil, &list); e != nil {
 		return Error("CONFLICT", "KubeStateMetrics CRD 或读取权限不可用")
 	}
-	if e := t.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(cfg.TargetNamespace), nil, &ns); e != nil {
+	if e := t.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(targetNamespace), nil, &ns); e != nil {
 		return e
 	}
 	verb := "update"
@@ -74,13 +91,13 @@ func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, c
 		verb = "create"
 	}
 	workload := "deployments"
-	if cfg.DeploymentMode == "StatefulSetSharded" {
+	if mode == "StatefulSetSharded" {
 		workload = "statefulsets"
 	}
-	if cfg.DeploymentMode == "DaemonSetSharded" {
+	if mode == "DaemonSetSharded" {
 		workload = "daemonsets"
 	}
-	for _, a := range []map[string]string{{"group": "monitoring.fjsxy.github.io", "resource": "kubestatemetrics", "verb": verb}, {"group": "apps", "resource": workload, "verb": verb, "namespace": cfg.TargetNamespace}} {
+	for _, a := range []map[string]string{{"group": "monitoring.fjsxy.github.io", "resource": "kubestatemetrics", "verb": verb}, {"group": "apps", "resource": workload, "verb": verb, "namespace": targetNamespace}} {
 		var review struct {
 			Status struct {
 				Allowed bool `json:"allowed"`
@@ -123,7 +140,7 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if e = t.publicationDependencies(ctx, cl, cfg, i.Uid == ""); e != nil {
 		return nil, e
 	}
-	cr, e := t.readKSM(ctx, i.Name)
+	cr, e := t.readComponent(ctx, i)
 	if e != nil {
 		return nil, e
 	}
@@ -134,9 +151,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	uid := ""
 	left := "# 首次创建：当前不存在 CR\n"
 	if cr != nil {
-		current = normalizedSpec(objectMap(cr, "spec"))
+		current = componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))
 		uid = i.Uid
-		left = yamlText(cr)
+		left = yamlText(safeTargetDocument(cr))
 	}
 	drift := false
 	if i.CurrentVersionId != "" {
@@ -146,21 +163,10 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 		}
 		var spec map[string]any
 		json.Unmarshal(baseline, &spec)
-		drift = normalizedSpec(spec) != current
+		drift = componentFor(i.Component).normalizeSpec(spec) != current
 	}
-	preview := &rpc.PublicationPreview{PreviewId: ID(), DraftRevision: rev, LeftYAML: left, RightYAML: yamlText(ksmCR(cfg.Name, cfg.spec())), Drift: drift, Warnings: []string{}}
-	if cfg.DeploymentMode != "Deployment" {
-		preview.Warnings = append(preview.Warnings, "experimental 模式；切换会重建 workload 并出现采集空窗")
-	}
-	if cr != nil {
-		oldMode := objectString(objectMap(objectMap(cr, "spec"), "deployment"), "mode")
-		if oldMode != cfg.DeploymentMode {
-			preview.Warnings = append(preview.Warnings, "模式切换由 Operator 清理旧 workload 后建立新 workload，不承诺无损")
-		}
-	}
-	if cfg.NamespaceFilter.Mode == "Include" && len(cfg.NamespaceFilter.Names) == 0 {
-		preview.Warnings = append(preview.Warnings, "正则可能零匹配，零匹配会停止全部 workload，不会自动改为 All")
-	}
+	preview := &rpc.PublicationPreview{PreviewId: ID(), DraftRevision: rev, LeftYAML: left, RightYAML: yamlText(cfg.document()), Drift: drift, Warnings: []string{}}
+	preview.Warnings = cfg.warnings(cr)
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return nil, e
@@ -176,7 +182,7 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if latest != rev {
 		return nil, Error("CONFLICT", "预览期间草稿已变化")
 	}
-	if _, e = tx.ExecContext(ctx, `INSERT INTO publication_previews VALUES(?,?,?,?,?,?,?)`, preview.PreviewId, i.Id, rev, uid, []byte(current), []byte(normalizedSpec(cfg.spec())), drift); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO publication_previews VALUES(?,?,?,?,?,?,?)`, preview.PreviewId, i.Id, rev, uid, []byte(s.fingerprint(i, current)), []byte(componentFor(i.Component).normalizeSpec(cfg.spec())), drift); e != nil {
 		return nil, Error("UNAVAILABLE", "预览无法保存")
 	}
 	if tx.Commit() != nil {
@@ -201,8 +207,13 @@ func readPreview(ctx context.Context, q clusterQuery, id, instance string) (*pub
 	b.desired = string(desired)
 	return b, nil
 }
-func validatePublication(i *rpc.ObservationInstance, cfg *KSMConfig, rev int64, b *publicationBaseline, r *rpc.PublishRequest, cr map[string]any) error {
-	if rev != r.DraftRevision || b.revision != rev || b.desired != normalizedSpec(cfg.spec()) {
+func (s *Store) validatePublication(i *rpc.ObservationInstance, cfg configuration, rev int64, b *publicationBaseline, r *rpc.PublishRequest, cr map[string]any) error {
+	return s.validatePublicationSpec(i, cfg.spec(), rev, b, r, cr)
+}
+
+// validatePublicationSpec 在执行旧版本时使用冻结映射，不能调用新mapper重写来源。
+func (s *Store) validatePublicationSpec(i *rpc.ObservationInstance, desired map[string]any, rev int64, b *publicationBaseline, r *rpc.PublishRequest, cr map[string]any) error {
+	if rev != r.DraftRevision || b.revision != rev || b.desired != componentFor(i.Component).normalizeSpec(desired) {
 		return Error("CONFLICT", "预览或草稿修订已过期，请重新预览")
 	}
 	if e := checkTarget(i, cr); e != nil {
@@ -210,9 +221,9 @@ func validatePublication(i *rpc.ObservationInstance, cfg *KSMConfig, rev int64, 
 	}
 	target := "null"
 	if cr != nil {
-		target = normalizedSpec(objectMap(cr, "spec"))
+		target = componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))
 	}
-	if b.target != target || b.uid != i.Uid {
+	if b.target != s.fingerprint(i, target) || b.uid != i.Uid {
 		return Error("CONFLICT", "目标配置基线已变化，请重新预览")
 	}
 	if b.drift && !r.OverwriteDrift {
@@ -220,14 +231,17 @@ func validatePublication(i *rpc.ObservationInstance, cfg *KSMConfig, rev int64, 
 	}
 	return nil
 }
+
+// enrichPublicationOperation 读取固定版本关系，再通过显式当前指针补充尝试；不使用随机ID排序。
 func (s *Store) enrichPublicationOperation(ctx context.Context, q clusterQuery, o *rpc.Operation) {
-	var instance, version, attempt string
-	if q.QueryRowContext(ctx, `SELECT p.instance_id,p.version_id,(SELECT id FROM execution_attempts WHERE operation_id=p.operation_id ORDER BY created_at DESC,id DESC LIMIT 1) FROM publication_operations p WHERE p.operation_id=?`, o.OperationId).Scan(&instance, &version, &attempt) == nil {
+	var instance, version string
+	if q.QueryRowContext(ctx, `SELECT instance_id,version_id FROM publication_operations WHERE operation_id=?`, o.OperationId).Scan(&instance, &version) == nil {
 		o.InstanceId = &instance
 		o.VersionId = &version
-		o.AttemptId = &attempt
+		s.enrichLifecycle(ctx, q, o)
 	}
 }
+
 func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext, r *rpc.PublishRequest) (*rpc.Operation, error) {
 	// 关键：授权必须先于幂等命中，否则旧请求键可绕过当前归属或账号失效。
 	tx, e := s.DB.BeginTx(ctx, nil)
@@ -249,6 +263,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		o, e := scanOperation(tx.QueryRowContext(ctx, `SELECT `+operationColumns+` FROM operations WHERE id=?`, replay.OperationId))
 		if e == nil {
 			s.enrichPublicationOperation(ctx, tx, o)
+			s.enrichLifecycle(ctx, tx, o)
 		}
 		tx.Rollback()
 		return o, e
@@ -259,7 +274,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		return nil, e
 	}
 	defer t.Close()
-	cr, e := t.readKSM(ctx, i.Name)
+	cr, e := t.readComponent(ctx, i)
 	if e != nil {
 		return nil, e
 	}
@@ -280,6 +295,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		o, e := scanOperation(tx.QueryRowContext(ctx, `SELECT `+operationColumns+` FROM operations WHERE id=?`, replay.OperationId))
 		if e == nil {
 			s.enrichPublicationOperation(ctx, tx, o)
+			s.enrichLifecycle(ctx, tx, o)
 		}
 		return o, e
 	}
@@ -301,12 +317,12 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	if e != nil {
 		return nil, e
 	}
-	if e = validatePublication(i, cfg, rev, baseline, r, cr); e != nil {
+	if e = s.validatePublication(i, cfg, rev, baseline, r, cr); e != nil {
 		return nil, e
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	version, attempt := ID(), ID()
-	o := &rpc.Operation{OperationId: ID(), Action: "PUBLISH", State: "QUEUED", ClusterId: i.ClusterId, ActorId: p.Account.Id, OwnerId: p.Account.Id, CreatedAt: now, UpdatedAt: now, Message: "已受理，尚未确认 CR 写入", InstanceId: &i.Id, VersionId: &version, AttemptId: &attempt}
+	o := &rpc.Operation{OperationId: ID(), Action: "PUBLISH", State: "QUEUED", ClusterId: i.ClusterId, ActorId: p.Account.Id, OwnerId: p.Account.Id, CreatedAt: now, UpdatedAt: now, Message: "已受理，尚未确认 CR 写入", InstanceId: &i.Id, VersionId: &version, AttemptId: &attempt, Revision: reference(int64(1))}
 	// 关键：版本来源、操作、首次尝试、幂等和保护必须同事务提交，避免返回受理后缺少恢复依据。
 	config, _ := json.Marshal(cfg)
 	spec, _ := json.Marshal(cfg.spec())
@@ -317,7 +333,8 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		{`INSERT INTO publication_versions VALUES(?,?,?,?,?,?)`, []any{version, i.Id, rev, config, spec, now}},
 		{`INSERT INTO operations(id,action,state,cluster_id,actor_id,owner_id,name,message,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, []any{o.OperationId, o.Action, o.State, o.ClusterId, o.ActorId, o.OwnerId, i.Name, o.Message, now, now}},
 		{`INSERT INTO publication_operations VALUES(?,?,?,?,?)`, []any{o.OperationId, i.Id, version, r.PreviewId, r.OverwriteDrift}},
-		{`INSERT INTO execution_attempts VALUES(?,?,?,0,?,?)`, []any{attempt, o.OperationId, "QUEUED", now, now}},
+		{`INSERT INTO execution_attempts(id,operation_id,state,possibly_sent,created_at,updated_at,actor_id) VALUES(?,?,?,0,?,?,?)`, []any{attempt, o.OperationId, "QUEUED", now, now, p.Account.Id}},
+		{`INSERT INTO operation_lifecycle VALUES(?,?,1,2)`, []any{o.OperationId, attempt}},
 		{`INSERT INTO instance_protections VALUES(?,?)`, []any{i.Id, o.OperationId}},
 		{`UPDATE instances SET activity_at=? WHERE id=?`, []any{now, i.Id}},
 	} {
@@ -351,12 +368,22 @@ func versionByID(ctx context.Context, q clusterQuery, id, instance string) (*rpc
 	if q.QueryRowContext(ctx, `SELECT id,instance_id,source_revision,config,effective_spec,created_at FROM publication_versions WHERE id=? AND instance_id=?`, id, instance).Scan(&v.VersionId, &v.InstanceId, &v.SourceDraftRevision, &raw, &spec, &v.CreatedAt) != nil {
 		return nil, Error("NOT_FOUND", "发布版本不存在")
 	}
-	var cfg KSMConfig
-	if json.Unmarshal(raw, &cfg) != nil {
-		return nil, Error("UNAVAILABLE", "来源配置不可读")
+	i, e := instanceByID(ctx, q, instance)
+	if e != nil {
+		return nil, e
 	}
-	v.Ksm = cfg.rpc()
-	v.Yaml = yamlText(ksmCR(cfg.Name, cfg.spec()))
+	cfg, e := decodeStoredConfiguration(i.Component, raw)
+	if e != nil {
+		return nil, e
+	}
+	cfg.version(v)
+	var frozen map[string]any
+	if json.Unmarshal(spec, &frozen) != nil || frozen == nil {
+		return nil, Error("UNAVAILABLE", "冻结有效配置不可读")
+	}
+	doc := cfg.document()
+	doc["spec"] = frozen
+	v.Yaml = yamlText(doc)
 	return v, nil
 }
 func (s *Store) ListVersions(ctx context.Context, c *rpc.RequestContext, r *rpc.InstanceID) (*rpc.VersionsResult_, error) {
@@ -405,7 +432,7 @@ func (s *Store) LookupOperations(ctx context.Context, c *rpc.RequestContext, r *
 	ids := []string{}
 	if r.IdempotencyKey == "" {
 		// 实例历史继承当前集群授权；查看不改变活动排序，也不伪造外部发布关系。
-		rows, e := s.DB.QueryContext(ctx, `SELECT operation_id FROM publication_operations WHERE instance_id=? ORDER BY operation_id`, r.InstanceId)
+		rows, e := s.DB.QueryContext(ctx, `SELECT operation_id FROM publication_operations WHERE instance_id=? UNION SELECT operation_id FROM deletion_operations WHERE instance_id=? ORDER BY operation_id`, r.InstanceId, r.InstanceId)
 		if e != nil {
 			return nil, e
 		}
@@ -461,7 +488,7 @@ func (s *Store) GetAttempts(ctx context.Context, c *rpc.RequestContext, r *rpc.O
 	if _, e := s.GetOperation(ctx, c, r); e != nil {
 		return nil, e
 	}
-	rows, e := s.DB.QueryContext(ctx, `SELECT id,operation_id,state,possibly_sent,created_at,updated_at FROM execution_attempts WHERE operation_id=? ORDER BY created_at,id`, r.OperationId)
+	rows, e := s.DB.QueryContext(ctx, `SELECT id,operation_id,state,possibly_sent,created_at,updated_at,revision,sequence,actor_id,message FROM execution_attempts WHERE operation_id=? ORDER BY sequence`, r.OperationId)
 	if e != nil {
 		return nil, e
 	}
@@ -469,10 +496,23 @@ func (s *Store) GetAttempts(ctx context.Context, c *rpc.RequestContext, r *rpc.O
 	out := []*rpc.ExecutionAttempt{}
 	for rows.Next() {
 		a := new(rpc.ExecutionAttempt)
-		if e = rows.Scan(&a.AttemptId, &a.OperationId, &a.State, &a.PossiblySent, &a.CreatedAt, &a.UpdatedAt); e != nil {
+		if e = rows.Scan(&a.AttemptId, &a.OperationId, &a.State, &a.PossiblySent, &a.CreatedAt, &a.UpdatedAt, &a.Revision, &a.Sequence, &a.ActorId, &a.Message); e != nil {
 			return nil, e
 		}
 		out = append(out, a)
 	}
 	return &rpc.AttemptsResult_{Attempts: out}, rows.Err()
+}
+
+// frozenVersionSpec 独立读取不可变有效映射，提供给实际依赖/策略、mutation和响应核验。
+func frozenVersionSpec(ctx context.Context, q clusterQuery, version, instance string) (map[string]any, error) {
+	var raw []byte
+	if q.QueryRowContext(ctx, `SELECT effective_spec FROM publication_versions WHERE id=? AND instance_id=?`, version, instance).Scan(&raw) != nil {
+		return nil, Error("UNAVAILABLE", "冻结有效配置不可读")
+	}
+	var spec map[string]any
+	if json.Unmarshal(raw, &spec) != nil || spec == nil {
+		return nil, Error("UNAVAILABLE", "冻结有效配置不可读")
+	}
+	return spec, nil
 }

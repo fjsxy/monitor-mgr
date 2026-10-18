@@ -11,6 +11,12 @@ import (
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
+	PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest, callOptions ...callopt.Option) (r *control.DeletionPreview, err error)
+	RetryLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
+	CancelLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
+	ContinueLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
+	RefreshOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID, callOptions ...callopt.Option) (r *control.Operation, err error)
+	DeleteInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.DeleteInstanceRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
 	CreateInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.CreateInstanceRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
 	ListInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.InstancesResult_, err error)
 	GetInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
@@ -79,6 +85,36 @@ func MustNewClient(destService string, opts ...client.Option) Client {
 
 type kControlServiceClient struct {
 	*kClient
+}
+
+func (p *kControlServiceClient) PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest, callOptions ...callopt.Option) (r *control.DeletionPreview, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.PreviewDeletion(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) RetryLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RetryLifecycle(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) CancelLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.CancelLifecycle(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ContinueLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ContinueLifecycle(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) RefreshOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RefreshOperation(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) DeleteInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.DeleteInstanceRequest, callOptions ...callopt.Option) (r *control.Operation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.DeleteInstance(ctx, ctx_, request)
 }
 
 func (p *kControlServiceClient) CreateInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.CreateInstanceRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error) {

@@ -32,3 +32,15 @@
 | R03.deleted | 缺status与合法零值分开 | 参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：原 CR/workload/Pod 全部核验消失。 | 生命周期已删除，不能冒充挂起或可用 | #17 |
 | F04.success | 迁移失败保留原数据库 | 在带历史与密文的库上制作一致性快照，分别执行成功迁移与受控失败。 本子例输入：对带历史与密文的库执行成功迁移。 | 关系、历史和可解密性保留 | #17 |
 | F04.failure | 迁移失败保留原数据库 | 在带历史与密文的库上制作一致性快照，分别执行成功迁移与受控失败。 本子例输入：一致性快照后受控迁移失败。 | 保留原库与恢复快照，不替换为空库 | #17 |
+
+补充回归：保持24个固定责任子例不变，下列输入单独取证，不增加 owned 覆盖计数。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG17-DELETE-001 | KSM跨namespace残留不能漏报 | 将原CR UID控制的workload/ReplicaSet/Pod放到另一namespace；在删除前持久读取其owner UID链，再令父对象先消失并保留Pod。读取全namespace分页候选；最后移除测试残留再核验。 | 原CR消失不能报告完成；跨namespace原UID链残留保持保护，只有完整范围全部核验消失才完成；读取不完整不能当空集。 | #17 |
+| REG17-ACTIVITY-001 | 后台删除完成不改变显式操作排序 | 受理带finalizer的删除，记录实例activityAt；再由测试fixture移除阻塞并等待后台完成。 | 后台完成不更新activityAt，排序只反映显式受理/编辑/重试/取消。 | #17 |
+| REG17-SHUTDOWN-001 | 停机起点立即关闭直接RPC受理 | 在受控launcher边界阻塞派发循环，开始Close并同时通过真实生成Kitex client提交新变更；放行launcher并等待落盘。 | Close起点后新direct RPC返回UNAVAILABLE，不依赖HTTP closed；无新operation/幂等副作用，已有任务按持久发送边界恢复。 | #17 |
+| REG17-DELETE-002 | 发送前原CR消失后DELETE404不能解锁残留 | 原UID存在时完成预检并保存owner UID链，在持久派发屏障后由fixture外部删除原CR并保留Pod；平台DELETE获得404，再读取清理范围。 | 404仅表明原CR不存在，不代表workload/Pod消失；保持只读核验和保护，不普通重试、不重发删除；清理图全部消失后才完成。 | #17 |
+| REG17-VERSION-001 | 升级后重试仍执行原冻结有效映射 | 建立精确旧schema fixture，使同一typed来源配置的历史effective_spec与当前mapper默认映射不同；通过公开HTTP读取冻结版本并继续/重试原操作。 | 版本YAML、条件写入spec与响应核验均采用存储的effective_spec，依赖核验仍读取原typed配置；不因新mapper默认值改变原版本。 | #17 |
+| REG17-IDEMPOTENCY-001 | 生命周期幂等命中返回操作当前状态 | 分别在retry与continue完成后用原key/body重发，并重发已完成的cancel命令；记录受理快照、GET当前operation及重复命中结果。 | 先检查当前权限；返回同一operation的当前state/revision/currentAttempt而非旧QUEUED受理快照，不新增attempt、不重复写入。 | #17 |
+| REG17-DELETE-003 | 删除预览锁定目标配置与影响语义 | 对原UID建立类型化删除预览；分别仅改变status/RV、在受理前将targetNamespace A改B、受理后派发前改变目标spec或实际owner链影响namespace；再确认/放行删除；裁出精确v6明确未发删除库，升级后在同一operation保护下重新预览并继续。 | status/RV自然变化不使预览过期；规范化目标配置或删除影响语义变化必须新预览，旧确认受理/派发均不发DELETE。预览绑定原UID、当前部署版本及完整影响范围，不凭最新RV接受过期删除意图。旧v6任务保留原version/UID与旧attempt，缺preview拒绝且不自动重放；新预览允许同operation重新确认，不造成保护死锁。 | #17 |

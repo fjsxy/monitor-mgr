@@ -342,6 +342,7 @@ func (s *Store) GetOperation(ctx context.Context, c *rpc.RequestContext, r *rpc.
 		}
 	}
 	s.enrichPublicationOperation(ctx, s.DB, o)
+	s.enrichLifecycle(ctx, s.DB, o)
 	return o, nil
 }
 

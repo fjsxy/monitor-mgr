@@ -90,6 +90,8 @@ class FaultState:
         self.lock = threading.Lock()
         self.rule = None
         self.request_number = 0
+        self.block_reads = False
+        self.block_aux_only=False
 
     def snapshot(self):
         with self.lock:
@@ -99,11 +101,11 @@ class FaultState:
         if set(body) != {"action", "method", "path"}:
             raise RuleError("fixture rule fields rejected")
         action, method, path = body["action"], body["method"], body["path"]
-        if action not in {"drop_after_upstream", "pause_before_send"} or method not in METHODS:
+        if action not in {"drop_after_upstream", "drop_and_block_reads", "drop_and_block_aux", "pause_before_send"} or method not in METHODS:
             raise RuleError("fixture rule action or method rejected")
         if not isinstance(path, str) or clean_path(path) != path or "?" in path:
             raise RuleError("fixture rule requires an exact path without query")
-        if action == "drop_after_upstream" and method not in MUTATING:
+        if action in {"drop_after_upstream","drop_and_block_reads","drop_and_block_aux"} and method not in MUTATING:
             raise RuleError("fixture response drop requires a mutating HTTP method")
         with self.lock:
             if self.rule is not None and not self.rule.completed:
@@ -144,6 +146,7 @@ class FaultState:
                 old.cancelled = True
                 old.event.set()
             self.rule = None
+            self.block_reads = False
 
     def wait(self, rule, timeout):
         awakened = rule.event.wait(timeout)
@@ -161,10 +164,13 @@ class FaultState:
         with self.lock:
             rule.upstream_status = status
             rule.completed = True
-            drop = (rule.action == "drop_after_upstream" and not rule.cancelled and status is not None
+            drop = (rule.action in {"drop_after_upstream","drop_and_block_reads","drop_and_block_aux"} and not rule.cancelled and status is not None
                     and 200 <= status < 300)
-            if rule.action == "drop_after_upstream":
+            if rule.action in {"drop_after_upstream","drop_and_block_reads","drop_and_block_aux"}:
                 rule.fault_applied = drop
+            if drop and rule.action in {"drop_and_block_reads","drop_and_block_aux"}:
+                self.block_reads=True
+                self.block_aux_only=rule.action=="drop_and_block_aux"
             rule.stage = "response_dropped" if drop else "completed_without_drop"
             return drop
 
@@ -302,6 +308,12 @@ class APIHandler(QuietHandler):
             self.json_response(400, {"code": "FIXTURE_REQUEST_REJECTED"})
             return
         app.log.emit(number, self.command, path, "frontend_received", rule)
+        with app.state.lock:
+            blocked=app.state.block_reads and self.command=="GET" and (not app.state.block_aux_only or path.startswith("/apis/apps/v1/") or path.endswith("/pods"))
+        if blocked:
+            app.log.emit(number,self.command,path,"controlled_read_rejected",status=403)
+            self.json_response(403,{"code":"FIXTURE_READ_BLOCKED"})
+            return
         if rule and rule.action == "pause_before_send":
             app.log.emit(number, self.command, path, "paused_before_send", rule)
             proceed, stage = app.state.wait(rule, app.limits["pause_timeout_seconds"])

@@ -77,3 +77,13 @@
 | F03.selector | 后端字段校验及稳定错误 | 直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。 本子例输入：分别经 HTTP/直接 RPC 提交 非法 LabelSelector 或不相容模式。 | 稳定字段级错误与 HTTP 类别，CR 无写入，敏感值不泄漏 | #18 |
 | F03.url | 后端字段校验及稳定错误 | 直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。 本子例输入：分别经 HTTP/直接 RPC 提交 非法 URL、零 remoteWrite endpoint 或重复 name。 | 稳定字段级错误与 HTTP 类别，CR 无写入，敏感值不泄漏 | #18 |
 | F03.tls-pair | 后端字段校验及稳定错误 | 直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。 本子例输入：分别经 HTTP/直接 RPC 提交 未配对客户端证书/私钥或非法认证组合。 | 稳定字段级错误与 HTTP 类别，CR 无写入，敏感值不泄漏 | #18 |
+
+## 共享安全接缝补充回归
+
+以下是共享引擎迁移与敏感读链回归，不增加或替代固定69个责任子例；最终#21联合回归继续包含这些边界。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG18-SHARED-001 | 旧KSM预览升级保留安全判定 | 固定v4带账号/凭据/草稿/版本/预览/保护库；启动新版本升级，使用原会话和原previewId确认；另分别修改spec及仅RV/status后确认。 | ID/关系及原预览保留；相同spec或仅RV/status变化可继续，spec变更拒绝；target_spec以带域隔离的HMAC保存，不存原目标敏感值。 | #18 |
+| REG18-SHARED-002 | 身份迁移区分CR scope | 从带历史v4库升级，创建KSM跨部署namespace同名及Agent跨CR namespace同名；对同namespace同名重试；注入迁移失败后检查原库和快照。 | KSM同集群同名冲突；Agent跨namespace成功、同namespace冲突；历史FK不变；失败回滚并保留原库/恢复依据。 | #18 |
+| REG18-SHARED-003 | 目标敏感字段不反向进入平台 | 在外部和已纳管漂移CR加入inline认证、URL userinfo、敏感last-applied，读取发现/预览/运行及历史，检查DB/HTTP/直接RPC/YAML/日志；敏感值变化后再确认，最后明确覆盖。 | 产品持久化和输出无秘密；敏感值变化使旧预览失效，仅RV/status变化不失效；更新保留原metadata/status/finalizers，不以脱敏改写真实资源。 | #18 |

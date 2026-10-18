@@ -13,6 +13,48 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
+	"PreviewDeletion": kitex.NewMethodInfo(
+		previewDeletionHandler,
+		newControlServicePreviewDeletionArgs,
+		newControlServicePreviewDeletionResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"RetryLifecycle": kitex.NewMethodInfo(
+		retryLifecycleHandler,
+		newControlServiceRetryLifecycleArgs,
+		newControlServiceRetryLifecycleResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"CancelLifecycle": kitex.NewMethodInfo(
+		cancelLifecycleHandler,
+		newControlServiceCancelLifecycleArgs,
+		newControlServiceCancelLifecycleResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ContinueLifecycle": kitex.NewMethodInfo(
+		continueLifecycleHandler,
+		newControlServiceContinueLifecycleArgs,
+		newControlServiceContinueLifecycleResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"RefreshOperation": kitex.NewMethodInfo(
+		refreshOperationHandler,
+		newControlServiceRefreshOperationArgs,
+		newControlServiceRefreshOperationResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"DeleteInstance": kitex.NewMethodInfo(
+		deleteInstanceHandler,
+		newControlServiceDeleteInstanceArgs,
+		newControlServiceDeleteInstanceResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"CreateInstance": kitex.NewMethodInfo(
 		createInstanceHandler,
 		newControlServiceCreateInstanceArgs,
@@ -350,6 +392,150 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 		Extra:           extra,
 	}
 	return svcInfo
+}
+
+func previewDeletionHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServicePreviewDeletionArgs)
+	realResult := result.(*control.ControlServicePreviewDeletionResult)
+	success, err := handler.(control.ControlService).PreviewDeletion(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServicePreviewDeletionArgs() interface{} {
+	return control.NewControlServicePreviewDeletionArgs()
+}
+
+func newControlServicePreviewDeletionResult() interface{} {
+	return control.NewControlServicePreviewDeletionResult()
+}
+
+func retryLifecycleHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceRetryLifecycleArgs)
+	realResult := result.(*control.ControlServiceRetryLifecycleResult)
+	success, err := handler.(control.ControlService).RetryLifecycle(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceRetryLifecycleArgs() interface{} {
+	return control.NewControlServiceRetryLifecycleArgs()
+}
+
+func newControlServiceRetryLifecycleResult() interface{} {
+	return control.NewControlServiceRetryLifecycleResult()
+}
+
+func cancelLifecycleHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceCancelLifecycleArgs)
+	realResult := result.(*control.ControlServiceCancelLifecycleResult)
+	success, err := handler.(control.ControlService).CancelLifecycle(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceCancelLifecycleArgs() interface{} {
+	return control.NewControlServiceCancelLifecycleArgs()
+}
+
+func newControlServiceCancelLifecycleResult() interface{} {
+	return control.NewControlServiceCancelLifecycleResult()
+}
+
+func continueLifecycleHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceContinueLifecycleArgs)
+	realResult := result.(*control.ControlServiceContinueLifecycleResult)
+	success, err := handler.(control.ControlService).ContinueLifecycle(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceContinueLifecycleArgs() interface{} {
+	return control.NewControlServiceContinueLifecycleArgs()
+}
+
+func newControlServiceContinueLifecycleResult() interface{} {
+	return control.NewControlServiceContinueLifecycleResult()
+}
+
+func refreshOperationHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceRefreshOperationArgs)
+	realResult := result.(*control.ControlServiceRefreshOperationResult)
+	success, err := handler.(control.ControlService).RefreshOperation(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceRefreshOperationArgs() interface{} {
+	return control.NewControlServiceRefreshOperationArgs()
+}
+
+func newControlServiceRefreshOperationResult() interface{} {
+	return control.NewControlServiceRefreshOperationResult()
+}
+
+func deleteInstanceHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceDeleteInstanceArgs)
+	realResult := result.(*control.ControlServiceDeleteInstanceResult)
+	success, err := handler.(control.ControlService).DeleteInstance(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceDeleteInstanceArgs() interface{} {
+	return control.NewControlServiceDeleteInstanceArgs()
+}
+
+func newControlServiceDeleteInstanceResult() interface{} {
+	return control.NewControlServiceDeleteInstanceResult()
 }
 
 func createInstanceHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -1296,6 +1482,96 @@ func newServiceClient(c client.Client) *kClient {
 	return &kClient{
 		c: c,
 	}
+}
+
+func (p *kClient) PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest) (r *control.DeletionPreview, err error) {
+	var _args control.ControlServicePreviewDeletionArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServicePreviewDeletionResult
+	if err = p.c.Call(ctx, "PreviewDeletion", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) RetryLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest) (r *control.Operation, err error) {
+	var _args control.ControlServiceRetryLifecycleArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceRetryLifecycleResult
+	if err = p.c.Call(ctx, "RetryLifecycle", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) CancelLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest) (r *control.Operation, err error) {
+	var _args control.ControlServiceCancelLifecycleArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceCancelLifecycleResult
+	if err = p.c.Call(ctx, "CancelLifecycle", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ContinueLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest) (r *control.Operation, err error) {
+	var _args control.ControlServiceContinueLifecycleArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceContinueLifecycleResult
+	if err = p.c.Call(ctx, "ContinueLifecycle", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) RefreshOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID) (r *control.Operation, err error) {
+	var _args control.ControlServiceRefreshOperationArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceRefreshOperationResult
+	if err = p.c.Call(ctx, "RefreshOperation", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) DeleteInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.DeleteInstanceRequest) (r *control.Operation, err error) {
+	var _args control.ControlServiceDeleteInstanceArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceDeleteInstanceResult
+	if err = p.c.Call(ctx, "DeleteInstance", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
 }
 
 func (p *kClient) CreateInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.CreateInstanceRequest) (r *control.ObservationInstance, err error) {
