@@ -108,7 +108,7 @@ class Suite(KSMSuite):
   if case in ['P13.unsent','P13.possibly-sent']:
    stage='beforeDispatch' if case.endswith('unsent') else 'afterSendMarker';i=self.create();self.gate('arm',{'stage':stage});o=self.publish(i,wait=False);barrier=self.barrier(stage);before=self.call('GET','/operations/'+o['operationId']+'/attempts')['attempts'];rebuild=self.rebuild(force=True);pending=self.state(o,'WAITING_CONFIRMATION' if case.endswith('unsent') else 'IDENTITY_UNCERTAIN');assert self.cr_absent();time.sleep(1.2);assert self.cr_absent()
    if case.endswith('unsent'):
-    cfg=self.cfg();cfg['resources']['requestCPU']='900m';self.save(i,cfg);next=self.action(o,'continue-unsent');assert next['operationId']==o['operationId'] and next['versionId']==o['versionId'] and next['attemptId']!=o['attemptId'];self.state(o,'SUCCEEDED');assert self.cr()['spec']['podResources']['requests']['cpu']=='100m'
+    cfg=self.cfg();cfg['resources']['requestCPU']='900m';self.save(i,cfg);continued=self.action(o,'continue-unsent');assert continued['operationId']==o['operationId'] and continued['versionId']==o['versionId'] and continued['attemptId']!=o['attemptId'];self.state(o,'SUCCEEDED');assert self.cr()['spec']['podResources']['requests']['cpu']=='100m'
    else:
     self.action(o,'retry',409);self.action(o,'continue-unsent',409);self.action(o,'cancel',409);assert self.call('GET','/instances/'+i['id'])['uid']==''
    return {'barrier':barrier,'beforeAttempts':before,'rebuild':rebuild,'pending':pending,'afterAttempts':self.call('GET','/operations/'+o['operationId']+'/attempts')['attempts'],'noAutomaticReplay':True}
@@ -145,12 +145,11 @@ class Suite(KSMSuite):
    if case.endswith('pod-remains'):
     moved=self.targetns+'-moved';self.k('create','namespace',moved,target=self.target);self.extra_namespaces.append(moved)
     self.k('patch','kubestatemetrics',self.crname,'--type=merge','-p',json.dumps({'spec':{'targetNamespace':moved}}),target=self.target)
-    until=time.monotonic()+100
-    while time.monotonic()<until:
-     pods=json.loads(self.k('-n',moved,'get','pods','-o','json',target=self.target).stdout)['items']
-     if any(any(c['type']=='Ready' and c['status']=='True' for c in p.get('status',{}).get('conditions',[])) for p in pods):break
-     time.sleep(.5)
-    else:raise AssertionError('外部漂移后的跨namespace工作负载未建立')
+    # 固定Operator拒绝已应用targetNamespace迁移；外部fixture显式构造合法原CR UID→DP→RS→Pod跨namespace链。
+    fixture={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':self.crname+'-cross-owner','namespace':moved,'ownerReferences':[{'apiVersion':original['apiVersion'],'kind':original['kind'],'name':self.crname,'uid':uid,'controller':True,'blockOwnerDeletion':True}]},'spec':{'replicas':1,'selector':{'matchLabels':{'phase1.fixture/cross-owner':self.a.prefix}},'template':{'metadata':{'labels':{'phase1.fixture/cross-owner':self.a.prefix}},'spec':{'automountServiceAccountToken':False,'securityContext':{'runAsUser':10001,'runAsGroup':10001,'runAsNonRoot':True},'containers':[{'name':'residual','image':'python:3.13.2-alpine','imagePullPolicy':'IfNotPresent','command':['python','-c','import time; time.sleep(3600)'],'resources':{'requests':{'cpu':'1m','memory':'16Mi'},'limits':{'memory':'32Mi'}}}]}}}}
+    self.k('apply','-f','-',data=fixture,target=self.target);self.k('-n',moved,'rollout','status','deployment/'+fixture['metadata']['name'],'--timeout=100s',target=self.target)
+    pods=json.loads(self.k('-n',moved,'get','pods','-o','json',target=self.target).stdout)['items'];assert len(pods)==1 and pods[0]['status']['containerStatuses'][0]['imageID'].endswith('sha256:91f983b2a023903433f6227b6c6056cedda4a335f1348d4ffbede021ab11602b')
+    self.cross_namespace_fixture={'manifest':fixture,'podUID':pods[0]['metadata']['uid'],'runtimeImageID':pods[0]['status']['containerStatuses'][0]['imageID'],'boundary':'显式外部故障fixture，非Operator支持迁移声明'}
    if case.endswith('finalizer'):
     self.k('patch','kubestatemetrics',self.crname,'--type=merge','-p',json.dumps({'metadata':{'finalizers':['phase1.fixture/hold']}}),target=self.target)
    if case.endswith('pod-remains') or case.endswith('read-failure') or case.endswith('delete-response-drop'):
@@ -169,7 +168,7 @@ class Suite(KSMSuite):
    events=self.capture_proxy() if proxy else []
    if case.endswith('read-failure'):
     assert self.cr_absent();assert any(x['stage']=='controlled_read_rejected' for x in events);proxy.control('reset',{})
-   self.call('POST','/operations/'+op['operationId']+'/refresh',{});done=self.state(op,'SUCCEEDED',timeout=100);deleted=self.call('GET','/instances/'+i['id']);assert deleted['lifecycle']=='DELETED' and self.call('GET','/instances/'+i['id']+'/runtime')['summary']=='Deleted';assert deleted['activityAt']==activity,'异步完成改变显式活动排序';return {'blocked':blocked,'done':done,'originalUID':uid,'retainedResources':retained,'orphanUID':orphan['metadata']['uid'] if orphan else None,'events':events,'activityAtBeforeComplete':activity,'activityAtAfterComplete':deleted['activityAt']}
+   self.call('POST','/operations/'+op['operationId']+'/refresh',{});done=self.state(op,'SUCCEEDED',timeout=100);deleted=self.call('GET','/instances/'+i['id']);assert deleted['lifecycle']=='DELETED' and self.call('GET','/instances/'+i['id']+'/runtime')['summary']=='Deleted';assert deleted['activityAt']==activity,'异步完成改变显式活动排序';return {'blocked':blocked,'done':done,'originalUID':uid,'retainedResources':retained,'orphanUID':orphan['metadata']['uid'] if orphan else None,'events':events,'activityAtBeforeComplete':activity,'activityAtAfterComplete':deleted['activityAt'],'crossNamespaceFixture':getattr(self,'cross_namespace_fixture',None)}
   if case=='I04.primary':
    i,o=self.first();a,clienta=self.user('owner-a');b,clientb=self.user('owner-b');self.call('POST','/clusters/'+self.cluster['id']+'/transfer',{'ownerId':a['id']})
    with self.using(clienta):self.call('GET','/instances/'+i['id']+'/draft')
@@ -203,7 +202,7 @@ class Suite(KSMSuite):
  def run(self):
   product=self.a.image;product_meta=copy.deepcopy(self.image_metadata)
   for index,case in enumerate(self.a.cases or KCASES):
-   self.case=case;self.extra_namespaces=[];self.traces=[];self.cookies=http.cookiejar.CookieJar();record={**self.contract[case],'testedCommit':self.a.source,'testedTree':subprocess.check_output(['git','rev-parse',self.a.source+'^{tree}'],cwd=ROOT,text=True).strip(),'runnerCommit':self.source['commit'],'source':self.source,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':product_meta,'outcome':'failed','startedAt':stamp()};error=None
+   self.case=case;self.extra_namespaces=[];self.cross_namespace_fixture=None;self.traces=[];self.cookies=http.cookiejar.CookieJar();record={**self.contract[case],'testedCommit':self.a.source,'testedTree':subprocess.check_output(['git','rev-parse',self.a.source+'^{tree}'],cwd=ROOT,text=True).strip(),'runnerCommit':self.source['commit'],'source':self.source,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':product_meta,'outcome':'failed','startedAt':stamp()};error=None
    try:
     actual_image=self.a.fixture_image if case in FIXTURE_CASES else product;assert actual_image,'此子例需要独占应用持久屏障fixture镜像'
     meta=json.loads(subprocess.check_output(['docker','image','inspect',actual_image],text=True))[0];assert meta['Config']['Labels']['org.opencontainers.image.revision']==self.a.source
@@ -216,6 +215,8 @@ class Suite(KSMSuite):
     if hasattr(self,'targetns'):
      try:record['failureObjects']={'crs':json.loads(self.k('get','kubestatemetrics','-o','json',target=self.target).stdout),'workloads':self.workloads(),'events':json.loads(self.k('-n',self.targetns,'get','events','-o','json',target=self.target).stdout)}
      except Exception:record['failureObjectsError']='对象读取失败不能当作空集'
+     try:record['extraNamespaceObjects']={ns:json.loads(self.k('-n',ns,'get','deployments,replicasets,pods','-o','json',target=self.target).stdout) for ns in self.extra_namespaces}
+     except Exception:record['extraNamespaceObjectsError']='跨namespace辅助对象读取失败'
    finally:
     record['traces']=self.traces
     try:record['cleanup']=self.cleanup()
