@@ -17,7 +17,8 @@ class BusinessFailureBoundary(unittest.TestCase):
             try:
                 exec(compile("raise RuntimeError('SYNTHETIC-PRIVATE-FAILURE')",'/private-source/credential.py','exec'))
             except RuntimeError as failure:
-                safe=business.capture_failure(session,failure)
+                result=business.capture_failure(session,failure)
+                safe=result['errorDiagnostics']
             original=session.private/'business-exception.json'
             self.assertEqual(stat.S_IMODE(original.stat().st_mode),0o600)
             value=json.loads(original.read_text())
@@ -29,6 +30,23 @@ class BusinessFailureBoundary(unittest.TestCase):
             self.assertNotIn('/private-source',json.dumps(safe))
             self.assertTrue(all(not pathlib.Path(v['file']).is_absolute() and '..' not in pathlib.Path(v['file']).parts
                                 for v in safe['repositoryFrames']))
+
+    def test_private_capture_oserror_keeps_primary_failure_code_type_and_frames(self):
+        with tempfile.TemporaryDirectory() as directory:
+            private=pathlib.Path(directory)/'not-a-directory';private.write_text('original-file')
+            session=types.SimpleNamespace(private=private)
+            class OriginalFailure(RuntimeError):code='ORIGINAL_BUSINESS_CODE'
+            try:raise OriginalFailure('SYNTHETIC-PRIVATE-FAILURE')
+            except OriginalFailure as failure:result=business.capture_failure(session,failure)
+            self.assertEqual(result['errorCode'],'ORIGINAL_BUSINESS_CODE')
+            safe=result['errorDiagnostics']
+            self.assertIs(safe['privateCaptureSucceeded'],False)
+            self.assertEqual(safe['diagnosticErrorCode'],'private-exception-capture-failed')
+            self.assertEqual(safe['exceptionType'],'OriginalFailure')
+            self.assertTrue(safe['repositoryFrames'])
+            self.assertNotIn('SYNTHETIC-PRIVATE-FAILURE',json.dumps(result))
+            self.assertNotIn(str(private),json.dumps(result))
+            self.assertEqual(private.read_text(),'original-file')
 
 
 if __name__=='__main__':unittest.main()

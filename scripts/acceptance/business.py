@@ -38,9 +38,6 @@ def plan(entry):
 
 def capture_failure(session, failure):
     """异常原值只落私有0600；公开诊断只保留安全类型和仓库相对frame。"""
-    atomic_json(session.private / "business-exception.json", {
-        "exceptionType": type(failure).__name__,
-        "traceback": "".join(traceback.format_exception(failure))})
     root = Path(__file__).resolve().parents[2]
     frames = []
     for frame in traceback.extract_tb(failure.__traceback__):
@@ -49,8 +46,16 @@ def capture_failure(session, failure):
             frames.append(dict(file=str(path.relative_to(root)), line=frame.lineno,
                                function=frame.name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,100}", frame.name) else "<module>"))
     name = type(failure).__name__
-    return dict(exceptionType=name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,100}", name) else "Exception",
-                repositoryFrames=frames, privateCaptureSucceeded=True)
+    safe = dict(exceptionType=name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,100}", name) else "Exception",
+                repositoryFrames=frames, privateCaptureSucceeded=False)
+    try:
+        atomic_json(session.private / "business-exception.json", {
+            "exceptionType": name, "traceback": "".join(traceback.format_exception(failure))})
+        safe["privateCaptureSucceeded"] = True
+    except Exception:
+        # 关键：二次诊断失败与原业务失败并列，不能覆盖原errorCode或丢掉已有安全frame。
+        safe["diagnosticErrorCode"] = "private-exception-capture-failed"
+    return dict(errorCode=getattr(failure, "code", "business-assertion-or-setup-failed"), errorDiagnostics=safe)
 
 
 def arguments(session, entry):
@@ -198,11 +203,7 @@ def run_case(session, entry):
     except BaseException as failure:
         error = failure
         original["errorCode"] = getattr(failure, "code", "business-assertion-or-setup-failed")
-        try:
-            original["errorDiagnostics"] = capture_failure(session, failure)
-        except Exception:
-            original["errorCode"] = "private-exception-capture-failed"
-            original["errorDiagnostics"] = dict(privateCaptureSucceeded=False)
+        original.update(capture_failure(session, failure))
     finally:
         with session.cleanup_phase():
             if suite is not None:
