@@ -14,5 +14,5 @@
 | #17 | [issue-17.md](issue-17.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/17#issuecomment-6250672039) |
 | #18 | [issue-18.md](issue-18.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/18#issuecomment-6252666518) |
 | #19 | [issue-19.md](issue-19.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/19#issuecomment-6253212008) |
-| #20 | [issue-20.md](issue-20.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/20#issuecomment-6253432048) |
+| #20 | [issue-20.md](issue-20.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/20#issuecomment-6253732817) |
 | #21 | [issue-21.md](issue-21.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6249366750) |

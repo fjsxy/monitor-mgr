@@ -74,3 +74,10 @@
 | --- | --- | --- | --- | --- |
 | REG20-STORAGE-004.scaled-retain-deleted-delete | 挂起不能把合法保留ST的ownerRef误判为危险 | Q：真实HTTP→生成Kitex→SQLite/TLS运行原Agent，whenScaled=Retain、whenDeleted=Delete且实际ST已采用；原WAL PVC有原ST ownerRef、无Pod ownerRef。保存并明确下发挂起，回读CR replicas=0/paused=false、ST仍为原UID、原Pod消失及独立原PVC结果。 | 挂起允许，原PVC当前同UID保留并核实Retained，但不承诺未来删除ST仍保留；ST ownerRef因本次保留ST而合法，不能误拒绝或错误阻塞transfer/unregister。未发WAL风险与删除策略分别说明。 | #20 |
 | REG20-STORAGE-004.delete-with-st-owner | 同一策略组合删除时仍使用whenDeleted而非whenScaled | Q：独立公开API/TLS fixture运行whenScaled=Retain、whenDeleted=Delete且已采用的原Agent/ST/Pod/PVC，保留真实原ST ownerRef。预览并按原UID/RV Foreground删除Agent，先核实实例清空完成，再独立核实原PVC存在/删除。 | 删除允许且原PVC结果按whenDeleted=Delete为Deleting→Deleted；不能因whenScaled=Retain保留该卷或把ST引用当Retain已确认，也不能直接删除PVC。 | #20 |
+
+## Delete未决原卷的恢复准入
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG20-STORAGE-005.pending-suspend | 挂起后的原卷仍承担Delete责任时不提前恢复挂载 | Q：真实HTTP→生成Kitex→SQLite/TLS运行原UID PVC Agent，实际whenScaled=Delete已采用。公开发布挂起，实例变更完成而独立原PVC任务为Deleting，原PVC尚无deletionTimestamp且UID历史可信；保存运行草稿并预览恢复。随后让原PVC返回404，先通过原任务refresh实际核实并持久Deleted，再预览/下发恢复，模拟原Agent owner链产生同名新PVC UID并读取来源。独立whenScaled=Retain正控挂起后原卷Retained，恢复复用原UID。 | 未终结Delete任务的同Agent/原PVC UID不得因历史可信被视为Retain，恢复预览409且无新mutation；仅一次GET404不能跳过旧任务。原任务先独立Deleted后恢复允许，新卷UID与旧卷责任分别保存；Retain正控通过，不阻塞其他卷或已经终态的责任。accept与dispatch复用同一guard，不另造状态旁路。 | #20 |
+| REG20-STORAGE-005.pending-shard | 减分片后原卷Delete未决时不提前加回原shard | Q：独立公开HTTP/Kitex/TLS fixture运行2shard原UID PVC Agent，实际whenDeleted=Delete已采用，明确减至1shard；旧shard ST/Pod消失但原PVC仍同UID存在且任务Deleting。保存加回2shard草稿并预览。之后原PVC404先由原任务refresh核实持久Deleted，再明确加回并回读新owner链同名新PVC UID及旧任务结果。独立whenDeleted=Retain正控减分片后Retained，再加回复用原PVC。 | 原shard所用PVC的未结束Delete责任使加回预览409、原CR/卷不被新写；完成原UID404只读核验并落盘Deleted后允许加回，新旧PVC身份独立。Retain正控恢复允许；不能因其他卷未决一律阻塞。共用准入/派发重验，不通过直接业务表写或虚构不可达竞态测试。 | #20 |
