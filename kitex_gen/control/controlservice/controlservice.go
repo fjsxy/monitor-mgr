@@ -20,6 +20,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"PreviewDeletion": kitex.NewMethodInfo(
+		previewDeletionHandler,
+		newControlServicePreviewDeletionArgs,
+		newControlServicePreviewDeletionResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"RetryLifecycle": kitex.NewMethodInfo(
 		retryLifecycleHandler,
 		newControlServiceRetryLifecycleArgs,
@@ -416,6 +423,30 @@ func newControlServicePreviewAssociationsArgs() interface{} {
 
 func newControlServicePreviewAssociationsResult() interface{} {
 	return control.NewControlServicePreviewAssociationsResult()
+}
+
+func previewDeletionHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServicePreviewDeletionArgs)
+	realResult := result.(*control.ControlServicePreviewDeletionResult)
+	success, err := handler.(control.ControlService).PreviewDeletion(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServicePreviewDeletionArgs() interface{} {
+	return control.NewControlServicePreviewDeletionArgs()
+}
+
+func newControlServicePreviewDeletionResult() interface{} {
+	return control.NewControlServicePreviewDeletionResult()
 }
 
 func retryLifecycleHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -1490,6 +1521,21 @@ func (p *kClient) PreviewAssociations(ctx context.Context, ctx_ *control.Request
 	_args.Request = request
 	var _result control.ControlServicePreviewAssociationsResult
 	if err = p.c.Call(ctx, "PreviewAssociations", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest) (r *control.DeletionPreview, err error) {
+	var _args control.ControlServicePreviewDeletionArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServicePreviewDeletionResult
+	if err = p.c.Call(ctx, "PreviewDeletion", &_args, &_result); err != nil {
 		return
 	}
 	switch {

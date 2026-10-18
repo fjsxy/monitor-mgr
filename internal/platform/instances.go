@@ -39,15 +39,16 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	}
 	if len(parts) == 3 && parts[0] == "operations" && r.Method == "POST" && (parts[2] == "retry" || parts[2] == "cancel" || parts[2] == "continue-unsent") {
 		var b struct {
-			ExpectedOperationRevision int64  `json:"expectedOperationRevision"`
-			ExpectedAttemptId         string `json:"expectedAttemptId"`
-			ExpectedAttemptRevision   int64  `json:"expectedAttemptRevision"`
+			ExpectedOperationRevision int64   `json:"expectedOperationRevision"`
+			ExpectedAttemptId         string  `json:"expectedAttemptId"`
+			ExpectedAttemptRevision   int64   `json:"expectedAttemptRevision"`
+			DeletePreviewId           *string `json:"deletePreviewId"`
 		}
 		if e := decode(r, &b); e != nil {
 			p.writeError(w, e, id)
 			return true
 		}
-		req := &rpc.LifecycleRequest{OperationId: parts[1], ExpectedOperationRevision: b.ExpectedOperationRevision, ExpectedAttemptId: b.ExpectedAttemptId, ExpectedAttemptRevision: b.ExpectedAttemptRevision}
+		req := &rpc.LifecycleRequest{OperationId: parts[1], ExpectedOperationRevision: b.ExpectedOperationRevision, ExpectedAttemptId: b.ExpectedAttemptId, ExpectedAttemptRevision: b.ExpectedAttemptRevision, DeletePreviewId: b.DeletePreviewId}
 		var v *rpc.Operation
 		var e error
 		status := 202
@@ -91,16 +92,30 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	}
 	if len(parts) == 3 {
 		switch parts[2] {
-		case "deletions":
+		case "deletion-previews":
 			if r.Method == "POST" {
 				var b struct {
-					VersionId string `json:"versionId"`
+					OperationId *string `json:"operationId"`
 				}
 				if e := decode(r, &b); e != nil {
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.DeleteInstance(r.Context(), c, &rpc.DeleteInstanceRequest{Id: req.Id, VersionId: b.VersionId})
+				v, e := p.client.PreviewDeletion(r.Context(), c, &rpc.DeletionPreviewRequest{Id: req.Id, OperationId: b.OperationId})
+				p.respond(w, 200, v, e, id)
+				return true
+			}
+		case "deletions":
+			if r.Method == "POST" {
+				var b struct {
+					VersionId string  `json:"versionId"`
+					PreviewId *string `json:"previewId"`
+				}
+				if e := decode(r, &b); e != nil {
+					p.writeError(w, e, id)
+					return true
+				}
+				v, e := p.client.DeleteInstance(r.Context(), c, &rpc.DeleteInstanceRequest{Id: req.Id, VersionId: b.VersionId, PreviewId: b.PreviewId})
 				p.respond(w, 202, v, e, id)
 				return true
 			}

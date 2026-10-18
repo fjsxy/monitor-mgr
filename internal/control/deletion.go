@@ -15,7 +15,7 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	if e != nil {
 		return nil, e
 	}
-	defer tx.Rollback()
+	defer func() { tx.Rollback() }()
 	p, i, e := s.instanceTx(ctx, tx, c, r.Id)
 	if e != nil {
 		return nil, e
@@ -32,19 +32,46 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 		}
 		return o, e
 	}
-	if i.Lifecycle == "DELETED" || i.Uid == "" || i.CurrentVersionId == "" {
-		return nil, Error("CONFLICT", "没有确认的原 CR UID；未部署草稿使用删除草稿，身份不明不能删除")
+	if e = deletionPreviewIdentity(ctx, tx, i, ""); e != nil {
+		return nil, e
+	}
+	if r.GetPreviewId() == "" {
+		return nil, Error("INVALID_INPUT", "缺少删除预览，请重新确认")
+	}
+	tx.Rollback()
+	snapshot, e := s.observeDeletionForUser(ctx, c, i)
+	if e != nil {
+		return nil, e
+	}
+	tx, e = s.DB.BeginTx(ctx, nil)
+	if e != nil {
+		return nil, e
+	}
+	p, i, e = s.instanceTx(ctx, tx, c, r.Id)
+	if e != nil {
+		return nil, e
+	}
+	cmd, hit, e = s.beginCommand(ctx, tx, p, c, "DELETE_INSTANCE", i.Id, r, &replay)
+	if e != nil {
+		return nil, e
+	}
+	if hit {
+		current, readErr := scanOperation(tx.QueryRowContext(ctx, `SELECT `+operationColumns+` FROM operations WHERE id=?`, replay.OperationId))
+		if readErr == nil {
+			s.enrichLifecycle(ctx, tx, current)
+		}
+		return current, readErr
+	}
+	if e = deletionPreviewIdentity(ctx, tx, i, ""); e != nil {
+		return nil, e
 	}
 	if r.VersionId != i.CurrentVersionId {
-		return nil, Error("CONFLICT", "部署版本已变化，请重新确认名称和命名空间")
+		return nil, Error("CONFLICT", "部署版本已变化，请重新确认")
 	}
-	var n int
-	if tx.QueryRowContext(ctx, `SELECT count(*) FROM instance_protections WHERE instance_id=?`, i.Id).Scan(&n) != nil {
-		return nil, Error("UNAVAILABLE", "实例保护不可读")
+	if e = s.validateDeletionPreview(ctx, tx, i, r.GetPreviewId(), r.VersionId, "", snapshot); e != nil {
+		return nil, e
 	}
-	if n > 0 {
-		return nil, Error("CONFLICT", "实例仍有未结束变更")
-	}
+
 	v, e := versionByID(ctx, tx, i.CurrentVersionId, i.Id)
 	if e != nil {
 		return nil, e
@@ -80,7 +107,7 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 		{`INSERT INTO operations(id,action,state,cluster_id,actor_id,owner_id,name,message,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, []any{o.OperationId, o.Action, o.State, o.ClusterId, o.ActorId, o.OwnerId, i.Name, o.Message, now, now}},
 		{`INSERT INTO execution_attempts(id,operation_id,state,possibly_sent,created_at,updated_at,actor_id) VALUES(?,?,'QUEUED',0,?,?,?)`, []any{attempt, o.OperationId, now, now, p.Account.Id}},
 		{`INSERT INTO operation_lifecycle VALUES(?,?,1,2)`, []any{o.OperationId, attempt}},
-		{`INSERT INTO deletion_operations VALUES(?,?,?,?,?,?)`, []any{o.OperationId, i.Id, v.VersionId, i.Uid, componentFor(i.Component).objectPath(i), deploymentNamespace}},
+		{`INSERT INTO deletion_operations(operation_id,instance_id,version_id,original_uid,cr_path,target_namespace,preview_id) VALUES(?,?,?,?,?,?,?)`, []any{o.OperationId, i.Id, v.VersionId, i.Uid, componentFor(i.Component).objectPath(i), deploymentNamespace, r.GetPreviewId()}},
 		{`INSERT INTO instance_protections VALUES(?,?)`, []any{i.Id, o.OperationId}},
 		{`UPDATE instances SET activity_at=? WHERE id=?`, []any{now, i.Id}},
 	} {
@@ -295,8 +322,31 @@ func (s *Store) executeDeletion(life context.Context, id string) {
 		s.finishExecution(life, o, "FAILED", Error("CONFLICT", "原 UID/RV 不足，拒绝删除"), nil)
 		return
 	}
-	if _, e = s.observeOwnerGraph(life, i, t, ns); e != nil {
+	snapshot, e := s.readDeletionSnapshot(life, i, t)
+	var preview, previewOperation string
+	if e == nil {
+		e = s.DB.QueryRowContext(life, `SELECT d.preview_id,p.operation_id FROM deletion_operations d LEFT JOIN deletion_previews p ON p.id=d.preview_id WHERE d.operation_id=?`, id).Scan(&preview, &previewOperation)
+	}
+	if e == nil {
+		e = s.validateDeletionPreview(life, s.DB, i, preview, o.GetVersionId(), previewOperation, snapshot)
+	}
+	// 关键：读取辅助图后重读CR，配置变化需新预览；status/RV自然推进只刷新条件RV。
+	if e == nil {
+		cr, e = t.readComponent(life, i)
+	}
+	if e == nil {
+		e = checkTarget(i, cr)
+	}
+	if e == nil && snapshot.target != s.fingerprint(i, "delete-target/v1:"+componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))) {
+		e = Error("CONFLICT", "删除目标已变化，请重新预览")
+	}
+	if e != nil {
 		s.finishExecution(life, o, "FAILED", e, nil)
+		return
+	}
+	rv = objectString(objectMap(cr, "metadata"), "resourceVersion")
+	if rv == "" {
+		s.finishExecution(life, o, "FAILED", Error("CONFLICT", "原RV不可读"), nil)
 		return
 	}
 	release, e := s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision)

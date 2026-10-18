@@ -3,7 +3,7 @@ import { api, APIError, type Account } from "./api";
 import type { Cluster } from "./clusters";
 import { YAML, YAMLDiff } from "./instance-yaml";
 import { AgentEditor, type AgentConfiguration } from "./agent";
-import {LifecycleActions,type Operation} from "./lifecycle";
+import {LifecycleActions,type Operation,type DeletionPreview} from "./lifecycle";
 
 // KSM 页面只保存类型化草稿；所有身份、权限与发布保护仍由真实 RPC 执行。
 type Resources = {
@@ -243,6 +243,8 @@ export function Instances({
     [typeFilter, setTypeFilter] = useState(""),
     [componentFilter, setComponentFilter] = useState(""),
     [deleting, setDeleting] = useState<Instance | null>(null),
+    [deletePreview,setDeletePreview]=useState<DeletionPreview|null>(null),
+    [deletePreviewError,setDeletePreviewError]=useState(""),
     [blockedCount, setBlockedCount] = useState<number | null>(0);
   const current = clusters.find((cluster) => cluster.id === clusterId);
   const currentId = useRef(clusterId);
@@ -347,10 +349,15 @@ export function Instances({
       Number(a.readOnly) - Number(b.readOnly) ||
       b.activityAt.localeCompare(a.activityAt),
   );
+  async function openDeletion(item:Instance){
+    setDeleting(item);setDeletePreview(null);setDeletePreviewError("");
+    if(item.uid)try{setDeletePreview(await api<DeletionPreview>(`/instances/${item.id}/deletion-previews`,"POST",{}))}
+    catch(e){setDeletePreviewError(e instanceof APIError?e.message:"删除影响读取失败，请重新打开预览")}
+  }
   async function removeDraft() {
     if (!deleting) return;
     await onAction(async () => {
-      if(deleting.uid){const result=await api<Operation>(`/instances/${deleting.id}/deletions`,"POST",{versionId:deleting.currentVersionId});setSelection({key:crypto.randomUUID(),instance:deleting,tab:"runtime",operation:result})}
+      if(deleting.uid){if(!deletePreview)return;const result=await api<Operation>(`/instances/${deleting.id}/deletions`,"POST",{versionId:deletePreview.versionId,previewId:deletePreview.previewId});setSelection({key:crypto.randomUUID(),instance:deleting,tab:"runtime",operation:result})}
       else await api(`/instances/${deleting.id}`, "DELETE");
       setDeleting(null);
       await load();
@@ -604,7 +611,7 @@ export function Instances({
                       className="danger"
                       disabled={item.readOnly || item.lifecycle==="DELETED"}
                       title={item.readOnly?"平台未纳管实例只读":"删除原 UID 对应的实例"}
-                      onClick={() => setDeleting(item)}
+                      onClick={() => void openDeletion(item)}
                     >
                       删除
                     </button>
@@ -743,11 +750,12 @@ export function Instances({
             <p>
               名称：<strong>{deleting.name}</strong>
             </p>
-            <p className="help">命名空间：{deleting.targetNamespace}</p>
+            <p className="help">命名空间：{deletePreview?.namespace??deleting.targetNamespace}</p>
+            {deleting.uid&&<p className="help">{deletePreview?`已确认影响范围：${deletePreview.impactNamespaces.join("、")} · 原部署版本 ${deletePreview.versionId}`:deletePreviewError||"正在读取原身份和删除影响…"}</p>}
             <p>{deleting.uid?"确认按原 UID 删除对应 CR。只有 CR、对应 workload 和 Pod 全部核验消失才完成；平台保留配置与历史，不移除 finalizer 或直接删除 PVC。":"删除尚未部署的配置草稿，集群资源不会变化。"}</p>
             <div className="dialog-footer">
               <button onClick={() => setDeleting(null)}>取消</button>
-              <button className="danger" onClick={() => void removeDraft()}>
+              <button className="danger" disabled={!!deleting.uid&&!deletePreview} onClick={() => void removeDraft()}>
                 确认删除实例
               </button>
             </div>

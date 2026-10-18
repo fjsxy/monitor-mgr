@@ -11,7 +11,7 @@ import (
 )
 
 // schemaVersion 定义本程序能够读取和升级到的数据库版本。
-const schemaVersion = 6
+const schemaVersion = 7
 
 // migrationSQL 按版本依次保存结构变更，不修改已经发布的旧版本语句。
 var migrationSQL = [][]string{
@@ -38,6 +38,7 @@ var migrationSQL = [][]string{
 		`DROP TABLE instances`, `ALTER TABLE instances_new RENAME TO instances`,
 		`CREATE TABLE instance_source_observations(instance_id TEXT NOT NULL REFERENCES instances(id),source TEXT NOT NULL,uid TEXT NOT NULL,document BLOB NOT NULL,last_attempt_at TEXT NOT NULL,last_success_at TEXT NOT NULL,error TEXT NOT NULL,epoch TEXT NOT NULL,PRIMARY KEY(instance_id,source))`},
 	lifecycleSchema,
+	deletionPreviewSchema,
 }
 
 // migrate 配置 SQLite WAL，并在保留恢复依据的前提下原子升级数据库。

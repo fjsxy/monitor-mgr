@@ -58,6 +58,11 @@ func (s *Store) enrichLifecycle(ctx context.Context, q clusterQuery, o *rpc.Oper
 
 // lifecycleCommand 在当前授权和幂等命中之后核对两个修订，旧页面不能操作较新的尝试。
 func (s *Store) lifecycleCommand(ctx context.Context, c *rpc.RequestContext, r *rpc.LifecycleRequest, action string) (*rpc.Operation, error) {
+	return s.lifecycleCommandObserved(ctx, c, r, action, nil)
+}
+
+// lifecycleCommandObserved 在锁外读取删除影响，回到事务再次核对当前授权、修订和幂等。
+func (s *Store) lifecycleCommandObserved(ctx context.Context, c *rpc.RequestContext, r *rpc.LifecycleRequest, action string, snapshot *deletionSnapshot) (*rpc.Operation, error) {
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return nil, e
@@ -82,7 +87,13 @@ func (s *Store) lifecycleCommand(ctx context.Context, c *rpc.RequestContext, r *
 		return nil, e
 	}
 	if hit {
-		return &replay, nil
+		// 关键：幂等记录只找回操作身份；状态和当前尝试必须在本事务回读，不能重放受理快照。
+		current, readErr := scanOperation(tx.QueryRowContext(ctx, `SELECT `+operationColumns+` FROM operations WHERE id=?`, replay.OperationId))
+		if readErr == nil {
+			s.enrichPublicationOperation(ctx, tx, current)
+			s.enrichLifecycle(ctx, tx, current)
+		}
+		return current, readErr
 	}
 	a, rev, e := lifecycleAttempt(ctx, tx, o.OperationId)
 	if e != nil {
@@ -114,6 +125,25 @@ func (s *Store) lifecycleCommand(ctx context.Context, c *rpc.RequestContext, r *
 		}
 		if i.Lifecycle == "DELETED" {
 			return nil, Error("CONFLICT", "实例已删除")
+		}
+		if o.Action == "DELETE" {
+			if r.GetDeletePreviewId() == "" {
+				return nil, Error("INVALID_INPUT", "继续或重试删除前必须重新预览确认")
+			}
+			if snapshot == nil {
+				tx.Rollback()
+				observation, readErr := s.observeDeletionForUser(ctx, c, i)
+				if readErr != nil {
+					return nil, readErr
+				}
+				return s.lifecycleCommandObserved(ctx, c, r, action, observation)
+			}
+			if e = s.validateDeletionPreview(ctx, tx, i, r.GetDeletePreviewId(), o.GetVersionId(), o.OperationId, snapshot); e != nil {
+				return nil, e
+			}
+			if _, e = tx.ExecContext(ctx, `UPDATE deletion_operations SET preview_id=? WHERE operation_id=?`, r.GetDeletePreviewId(), o.OperationId); e != nil {
+				return nil, e
+			}
 		}
 		var protection string
 		e = tx.QueryRowContext(ctx, `SELECT operation_id FROM instance_protections WHERE instance_id=?`, i.Id).Scan(&protection)

@@ -94,7 +94,8 @@ func TestP08CancellationCompetesWithPersistentDispatch(t *testing.T) {
 					t.Fatal(cancelled)
 				}
 				replayed := clusterCall(t, p, "POST", "/operations/"+op+"/cancel", body, c, "cancel", 200)
-				if replayed["state"] != "CANCELLED" {
+				current := clusterCall(t, p, "GET", "/operations/"+op, nil, c, "", 200)
+				if replayed["state"] != current["state"] || replayed["revision"] != current["revision"] || replayed["attemptId"] != current["attemptId"] {
 					t.Fatal(replayed)
 				}
 				time.Sleep(50 * time.Millisecond)
@@ -146,6 +147,10 @@ func TestP07RetryUsesFrozenVersionAndCurrentRevisions(t *testing.T) {
 	}
 	if done = awaitClusterOperation(t, p, c, oid); done["state"] != "SUCCEEDED" {
 		t.Fatal(done)
+	}
+	replay = clusterCall(t, p, "POST", "/operations/"+oid+"/retry", body, c, "retry", 202)
+	if replay["state"] != done["state"] || replay["revision"] != done["revision"] || replay["attemptId"] != done["attemptId"] {
+		t.Fatal("同键重试必须回读当前操作", replay, done)
 	}
 	attempts := clusterCall(t, p, "GET", "/operations/"+oid+"/attempts", nil, c, "", 200)["attempts"].([]any)
 	if len(attempts) != 2 || attempts[0].(map[string]any)["state"] != "FAILED" || attempts[1].(map[string]any)["sequence"] != float64(2) {
@@ -297,7 +302,7 @@ func TestP14ForegroundDeletionKeepsUIDGraphProtection(t *testing.T) {
 				f.cr["metadata"].(map[string]any)["finalizers"] = []any{"fixture/finalizer"}
 			}
 			f.mu.Unlock()
-			o := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": pub["versionId"]}, c, "delete", 202)
+			o := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", deletionConfirmation(t, p, c, id), c, "delete", 202)
 			oid := o["operationId"].(string)
 			if variant == "complete" || variant == "delete-response-drop" {
 				awaitLifecycleState(t, p, c, oid, "SUCCEEDED")
@@ -436,12 +441,18 @@ func TestP13RestartUsesPersistentSentBoundary(t *testing.T) {
 				cfgNew := ksmConfig("restart")
 				cfgNew["resources"].(map[string]any)["requestCPU"] = "999m"
 				clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "ksm": cfgNew}, c, "new-draft", 200)
-				next := clusterCall(t, p, "POST", "/operations/"+oid+"/continue-unsent", lifecycleRevision(t, p, c, oid), c, "continue", 202)
+				body := lifecycleRevision(t, p, c, oid)
+				next := clusterCall(t, p, "POST", "/operations/"+oid+"/continue-unsent", body, c, "continue", 202)
 				if next["attemptId"] == op["attemptId"] || next["versionId"] != op["versionId"] {
 					t.Fatal(next)
 				}
-				if done := awaitClusterOperation(t, p, c, oid); done["state"] != "SUCCEEDED" {
+				done := awaitClusterOperation(t, p, c, oid)
+				if done["state"] != "SUCCEEDED" {
 					t.Fatal(done)
+				}
+				replay := clusterCall(t, p, "POST", "/operations/"+oid+"/continue-unsent", body, c, "continue", 202)
+				if replay["state"] != done["state"] || replay["revision"] != done["revision"] || replay["attemptId"] != done["attemptId"] {
+					t.Fatal("同键继续必须回读当前操作", replay, done)
 				}
 			} else {
 				if op["state"] != "IDENTITY_UNCERTAIN" {
@@ -473,7 +484,7 @@ func TestDeletionCrossNamespaceOwnerUIDRemainsProtected(t *testing.T) {
 	f.owned = moved
 	f.retainPod = true
 	f.mu.Unlock()
-	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": pub["versionId"]}, c, "delete", 202)
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", deletionConfirmation(t, p, c, id), c, "delete", 202)
 	done := awaitLifecycleState(t, p, c, op["operationId"].(string), "SUCCEEDED", "DELETION_BLOCKED")
 	if done["state"] != "DELETION_BLOCKED" {
 		t.Fatal("漏读另一namespace的原UID链Pod", done)
@@ -493,7 +504,7 @@ func TestDeletionCompletionDoesNotChangeActivity(t *testing.T) {
 	f.mu.Lock()
 	f.retainCR = true
 	f.mu.Unlock()
-	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": pub["versionId"]}, c, "delete", 202)
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", deletionConfirmation(t, p, c, id), c, "delete", 202)
 	awaitLifecycleState(t, p, c, op["operationId"].(string), "DELETION_BLOCKED")
 	activity := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["activityAt"]
 	f.mu.Lock()
@@ -570,7 +581,7 @@ func TestDeletion404AfterPreflightKeepsSeenPodProtected(t *testing.T) {
 	f.owned = deletionGraph()
 	f.mu.Unlock()
 	armed.Store(true)
-	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": pub["versionId"]}, c, "delete", 202)
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", deletionConfirmation(t, p, c, id), c, "delete", 202)
 	select {
 	case <-entered:
 	case <-time.After(3 * time.Second):
