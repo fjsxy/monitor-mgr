@@ -15,6 +15,7 @@ BASE_URL ?= http://127.0.0.1:18080
 E2E_ARGS ?=
 
 .PHONY: help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check
+.PHONY: workbench-seed-check workbench-i64-check e2e-workbench-q e2e-workbench workbench-q-receipt fault-proxy-check
 help: ## 查看重复操作入口
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 generate: ## 按锁定版本生成 Thrift/Kitex
@@ -101,3 +102,6 @@ e2e-workbench: ## 工作台逐例Q/K/B入口；真实目标须E2E_ARGS显式指�
 	$(PYTHON) scripts/acceptance/workbench.py $(E2E_ARGS)
 workbench-q-receipt: ## 工作台Q8逐variant收据；显式profile/output，不能冒充Pod验收
 	$(PYTHON) scripts/acceptance/workbench.py --layer Q $(E2E_ARGS)
+
+fault-proxy-check: ## 仅自测独占故障fixture的认证、读拒绝、精确写拒绝和恢复机制
+	$(PYTHON) -m unittest discover -s scripts/acceptance -p fault_proxy_test.py
