@@ -53,14 +53,14 @@ def projection_artifact_scan(s,record):
 
 def database_probe(s,markers,expected=None):
  """复用既有只读卷probe；数据库/ WAL原字节不离开Pod，只回传布尔值与内存比较指纹。"""
- script="""import glob,hashlib,json,sqlite3
+ script="""import glob,hashlib,json,pathlib,sqlite3
 markers=MARKERS
 c=sqlite3.connect('file:/data/platform.db?mode=ro',uri=True)
 # 保留SQLite原始storage class与bytes编码；BLOB不能直接交给JSON，也不能丢失TEXT/BLOB差异。
 rows=c.execute('select id,typeof(effective_spec),hex(effective_spec) from publication_versions order by id').fetchall()
 c.close()
 fingerprint=hashlib.sha256(json.dumps(rows,separators=(',',':')).encode()).hexdigest()
-leak=any(m.encode() in open(p,'rb').read() for p in glob.glob('/data/platform.db*') for m in markers)
+leak=any(m.encode() in pathlib.Path(p).read_bytes() for p in glob.glob('/data/platform.db*') for m in markers)
 print(json.dumps({'noMarker':not leak,'frozenFingerprint':fingerprint}))""".replace('MARKERS',repr(markers))
  result=s.job('projection-db-'+secrets.token_hex(4),script,True)
  assert result['noMarker'],'平台数据库或WAL存在认证marker（原值不输出）'
