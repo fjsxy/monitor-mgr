@@ -1,7 +1,8 @@
+import type { Int64 } from "./api";
 import{useEffect,useState,type FormEvent}from'react';
 import{api,type Account}from'./api';
-export type Cluster={id:string;name:string;ownerId:string;uid:string;identity:string;kubernetesVersion:string;state:string;credentialRevision:number;revision:number;capabilities:{component:string;allowed:boolean;reason:string}[];createdAt:string};
-type Operation={operationId:string;clusterId:string;actorId:string;action:string;state:string;message:string;createdAt:string;updatedAt:string;credentialRevision:number;ownerId:string;previousOwnerId:string};
+export type Cluster={id:string;name:string;ownerId:string;uid:string;identity:string;kubernetesVersion:string;state:string;credentialRevision: Int64;revision: Int64;capabilities:{component:string;allowed:boolean;reason:string}[];createdAt:string};
+type Operation={operationId:string;clusterId:string;actorId:string;action:string;state:string;message:string;createdAt:string;updatedAt:string;credentialRevision: Int64;ownerId:string;previousOwnerId:string};
 type Mode='register'|'credentials'|'transfer'|'unregister'|'reactivate'|'details';
 export function Clusters({account,onAction,pending}:{account:Account;onAction:(f:()=>Promise<void>)=>Promise<void>;pending:boolean}){
  const[clusters,setClusters]=useState<Cluster[]>([]),[accounts,setAccounts]=useState<Account[]>([]),[mode,setMode]=useState<Mode|null>(null),[selected,setSelected]=useState<Cluster|null>(null),[config,setConfig]=useState(''),[contexts,setContexts]=useState<string[]>([]),[context,setContext]=useState(''),[owner,setOwner]=useState(''),[operation,setOperation]=useState<Operation|null>(null),[history,setHistory]=useState<Operation[]>([]),[namespaces,setNamespaces]=useState<string[]>([]),[nsError,setNsError]=useState('');

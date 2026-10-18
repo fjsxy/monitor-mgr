@@ -260,7 +260,7 @@ func (s *Store) SaveDraft(ctx context.Context, c *rpc.RequestContext, r *rpc.Sav
 	if rev != r.ExpectedDraftRevision {
 		return nil, Error("CONFLICT", "草稿修订已变化，请保留本地编辑并重新读取")
 	}
-	if rev >= 9007199254740991 {
+	if rev == 9223372036854775807 {
 		return nil, Error("CONFLICT", "草稿修订已达上限")
 	}
 	var protected int

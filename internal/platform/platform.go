@@ -350,9 +350,15 @@ func (p *Runtime) respond(w http.ResponseWriter, status int, v any, err error, i
 		p.writeError(w, err, id)
 		return
 	}
+	raw, e := safeHTTPJSON(v)
+	if e != nil {
+		p.writeError(w, control.Error("UNAVAILABLE", "响应无法编码"), id)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	w.Write(raw)
+
 }
 
 // writeError 仅向页面返回安全业务错误与 requestId，不暴露底层异常或凭据。
