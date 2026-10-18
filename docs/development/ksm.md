@@ -23,7 +23,7 @@ KSM typed 配置包含 Deployment、StatefulSetSharded、DaemonSetSharded、运�
 | 派发 | `launchPublications`、`executePublication`；组件扩展应在此抽取 CR path、mapper、依赖/观察接口，保留统一派发资格事务和单次写 |
 | 运输结果 | `Target.Mutate` → `MutationOutcome`；可靠HTTP拒绝与可能已发送必须保持结构化，不能只按通用APIError.Code解锁 |
 | 生命周期 | `finishPublication`、`execution_attempts`、`instance_protections`；#17恢复/重试/删除须沿用原operation/版本身份与保护，不凭同名认领 |
-| 观察 | `refreshObserved`、`runtimeFromCR`、`instance_observations`；重启前缓存不冒充新观察，后台调度由后续任务扩展 |
+| 观察 | `refreshObserved`、`interpretKSM`、`instance_observations`；重启前缓存不冒充新观察，后台调度由后续任务扩展 |
 | schema | 当前schema4；已有schema3密文先用原密钥核验再迁移/快照。错误密钥不得推进schema或替换库，已知schema1/2显式按旧结构处理 |
 
 ## 重复执行

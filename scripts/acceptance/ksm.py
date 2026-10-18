@@ -126,7 +126,9 @@ class Suite(ClusterSuite):
     product_image=self.a.image
     if case=='I03.primary':
      assert self.a.rpc_image,'I03需要只追加RPC探针的测试镜像';self.a.image=self.a.rpc_image
+     probe=json.loads(subprocess.check_output(['docker','image','inspect',self.a.rpc_image],text=True))[0];assert probe['Config'].get('Labels',{}).get('org.opencontainers.image.revision')==self.a.source and probe['Os']=='linux' and probe['Architecture']=='arm64','RPC测试镜像来源或架构不符';record['rpcFixtureImage']={'configID':probe['Id'],'manifest':probe.get('Descriptor',{}).get('digest'),'source':self.a.source}
     record['platform']=self.deploy(case,index);self.a.image=product_image;record['platform']['baseProductImage']=product_image
+    expected_image=record.get('rpcFixtureImage',self.image_metadata);assert record['platform']['imageID'].endswith(expected_image.get('manifest') or expected_image['configID']),'Pod实际镜像与锁定镜像不符'
     if case in BCASES:record['evidence']=run_browser(self)
     else:
      self.prepare_target(index,'data' if case in ['C04.ksm-crd','C05.primary'] else 'control');record['evidence']=self.run_case(case)
@@ -142,7 +144,7 @@ class Suite(ClusterSuite):
     record['traces']=self.traces
     try:record['cleanup']=self.cleanup()
     except Exception as cleanup_error:record['cleanup']={'success':False,'failures':[str(cleanup_error)]}
-    record['evidenceRefs']=[{'path':str(p.relative_to(self.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(self.out.rglob('*')) if p.is_file() and p.name not in [case+'.json','results.json'] and (p.name.startswith(case+'.') or 'browser' in p.parts)]
+    record['evidenceRefs']=[{'path':str(p.relative_to(self.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(self.out.rglob('*')) if p.is_file() and p not in [self.out/(case+'.json'),self.out/'results.json'] and (p.name.startswith(case+'.') or 'browser' in p.parts)]
     record['finishedAt']=stamp()
     if not record['cleanup']['success']:record['outcome']='failed'
     (self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
