@@ -64,7 +64,7 @@ HTTP/真实 RPC 集成测试覆盖 I01、I02 默认/配置寿命/安全 Cookie�
 
 账号创建、角色/启用变更与管理员重置密码必须携带 `Idempotency-Key`，HTTP 通过 optional Thrift `RequestContext.idempotencyKey` 传递。服务在同一事务内先验证当前 Session 与管理员权限，再按 actor/action/target/key 查询；同键同规范化请求返回原安全结果，异内容返回 409，结果与账号变更、审计一起提交。含密码的规范化请求只保存独立 master key 计算的 HMAC-SHA256，不存密码或裸摘要。初始化、登录、退出、本人改密属于认证命令，不缓存会话凭据；改密或自行重置使旧 Session 失效后，旧凭据重复请求仍须 401。
 
-当前 schema 版本为 7；v5 收口独立 CR namespace 与敏感读模型指纹，v6 保存当前执行尝试、修订和原 UID 清理图；v7 将删除预览绑定原 UID、部署版本、目标配置 HMAC 与稳定 namespace 影响范围。删除受理和派发前均重新核验；旧 v6 明确未发删除必须在同一 operation 下重新预览并明确继续，不能自动重放。已有库升级前通过 SQLite `VACUUM INTO` 保存一致快照至数据目录 `backups/`（0600）；所有待应用 DDL 和版本记录一次事务提交。快照失败不迁移，迁移失败保留原库及恢复依据；不初始化替代数据库。新版本启动拒绝不兼容版本，schema1 账号和有效 Session 升级后保持可用。`control.Store.Authorize` / `AuthorizeTx` 从持久会话与当前账号读取角色及失效依据，后续业务必须复用当前授权，不接受浏览器角色断言。
+当前 schema 版本为 10；v5 收口独立 CR namespace 与敏感读模型指纹，v6 保存当前执行尝试、修订和原 UID 清理图；v7 将删除预览绑定原 UID、部署版本、目标配置 HMAC 与稳定 namespace 影响范围；v8 修复敏感读投影，v9 在同事务维护持久活动顺序，v10 保存原 Agent/PVC UID 与 ST/Pod 关系、按 attempt 的独立存储核验任务，并为危险 Agent 发布预览绑定实际存储影响 HMAC。删除受理和派发前均重新核验；旧 v6 明确未发删除必须在同一 operation 下重新预览并明确继续，不能自动重放。已有库升级前通过 SQLite `VACUUM INTO` 保存一致快照至数据目录 `backups/`（0600）；所有待应用 DDL 和版本记录一次事务提交。快照失败不迁移，迁移失败保留原库及恢复依据；不初始化替代数据库。新版本启动拒绝不兼容版本，schema1 账号和有效 Session 升级后保持可用。`control.Store.Authorize` / `AuthorizeTx` 从持久会话与当前账号读取角色及失效依据，后续业务必须复用当前授权，不接受浏览器角色断言。
 
 生命周期入口：POST `/operations/{id}/retry`、`/cancel`、`/continue-unsent` 绑定 `expectedOperationRevision`、`expectedAttemptId`、`expectedAttemptRevision`，仍需当前授权及幂等键。普通重试只接受确定失败，同 operationId 和固定发布版本产生新 attempt；旧 attempt 与原发起者保留。POST `/operations/{id}/refresh` 只读核验结果，身份不明不能补认。POST `/instances/{id}/deletion-previews` 只读目标并保存删除确认范围；POST `/instances/{id}/deletions` 使用该 `previewId` 和原 `versionId`，按原 UID/新读 RV 发送唯一 Foreground DELETE；只有原 CR 及持久 owner UID 图中的 workload、ReplicaSet、Pod 全部核验消失才解除保护。平台不直接清理 Pod、PVC 或 finalizer。删除的 retry/continue 需先对同一 operation 重新预览，再显式传 `deletePreviewId`；目标规范化配置或 namespace 影响范围变化须重新确认，status/RV 与同范围 Pod 滚动不产生误冲突。
 
@@ -77,3 +77,10 @@ HTTP/真实 RPC 集成测试覆盖 I01、I02 默认/配置寿命/安全 Cookie�
 remoteWrite 仅开放 URL、name、remoteTimeout、BasicAuth/Bearer 与 TLS 的 Secret name/key 引用，不回显或持久化 Secret 值。平台身份需能核验目标身份、相关 CR/依赖、SAR，以及读取固定 Operator Deployment/ReplicaSet/Pod 和 `pods/proxy` metrics；Operator 的实际 Pod 身份、范围及 Agent controller 启动证据单独核对。非 None ScrapeConfig 还需同一 Pod 的 informer 请求证据。Operator 参数只解释明确字面形式及已知 scope 字符串，位置参数、重复 scope、未知参数 arity 和未展开的 `$(VAR)` 会明确受阻。采集 SA 的实际发现权限独立检查；平台不自动创建或修补 SA、Secret、RBAC、StorageClass。
 
 重复验收入口为 `make agent-q-receipt`、`make e2e-agent`、`make e2e-agent-b` 和 `make agent-regressions`。后者独立记录补充安全回归，不增加69个 owned 子例；真实 K/B 要求 `E2E_ARGS` 显式提供 kubectl、两份目标 kubeconfig、两个 context、Pod 可达配置、镜像、源码、输出和跨票 API 锁。每例创建独立平台 Pod/数据库及目标 fixture，整批持锁至 finally 完成；CI profile 不能由宿主 LOCAL_FULL 冒充。
+
+
+Agent 存储与生命周期：`desiredState=Running/Suspended` 映射 `replicas=1/0`，始终 `paused=false`；`shards` 为正整数，每 shard 单副本并使用同一资源声明。挂起使用实际 ST 的 `whenScaled`，减少 shard、删除 Agent 或 Operator 替换 ST 使用 `whenDeleted`。先单独发布策略并等实际 ST 采用，危险操作不同时改变策略；Retain 还要核对本次会消失的 ST/Pod owner UID。缩零保留 ST 时，`whenScaled=Retain/whenDeleted=Delete` 的原 ST ownerRef 合法，但不能承诺以后删 ST 仍保留卷。
+
+首次创建可选 PVC 或 emptyDir；PVC 使用默认 StorageClass/RWO，自定义容量在成功创建或可能已发版本后固定。新实例确定 WAL claim 名称若已有卷，或者读取 Forbidden/超时，均拒绝创建；恢复只允许同原实例可信历史与同 PVC UID，不按同名认领。emptyDir 不创建 PVC，Pod 删除/替换或挂起缩零可能丢失未发 WAL，容器重启本身不删除 emptyDir。
+
+存储任务在持久 `possibly_sent` 同一事务激活，后台沿应用 worker 生命周期只读原 PVC UID，使用当前 ACTIVE 凭据并核对原集群 UID/凭据修订。原 CR/workload/Pod 清空后实例和操作可完成，PVC Retained/Deleting/Deleted/Unknown 分别表达；任务不重建实例 protection。未决 Delete/PVC Unknown 仍保留 transfer/unregister 责任，凭据更新可用于恢复读取；已确认 Retain 是终态，不阻塞集群生命周期。平台不直接删除 PVC、workload 或 finalizer。Agent 存储重复入口为 `make e2e-agent-storage[-q|-reg]`，实际 K 必须传明双集群、镜像来源和 API lane。

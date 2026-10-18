@@ -43,6 +43,17 @@ func interpretAgent(cr map[string]any, now string) *rpc.InstanceRuntime {
 	}
 	actual, aok := number(status, "replicas")
 	available, vok := number(status, "availableReplicas")
+	// 关键：仅在当前generation的Available条件已确认且期望零副本时，将合法omitempty计数解释为0。
+	if replicas == 0 {
+		if _, present := status["replicas"]; !present {
+			actual = 0
+			aok = true
+		}
+		if _, present := status["availableReplicas"]; !present {
+			available = 0
+			vok = true
+		}
+	}
 	if !aok || !vok || available > actual || replicas > 0 && shards > 2147483647/replicas {
 		out.Error = "运行数量不完整或超出范围"
 		return out

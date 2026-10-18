@@ -105,6 +105,9 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 			io.WriteString(w, `{"metadata":{"name":"monitoring","uid":"ns-uid"}}`)
 		case r.URL.Path == "/api/v1/namespaces/monitoring/serviceaccounts/prometheus-agent":
 			io.WriteString(w, `{"metadata":{"name":"prometheus-agent","uid":"sa-uid"}}`)
+		case strings.HasPrefix(r.URL.Path, "/api/v1/namespaces/") && strings.Contains(r.URL.Path, "/persistentvolumeclaims/"):
+			w.WriteHeader(404)
+			io.WriteString(w, `{}`)
 		case r.URL.Path == "/apis/storage.k8s.io/v1/storageclasses":
 			io.WriteString(w, `{"items":[{"metadata":{"name":"standard","annotations":{"storageclass.kubernetes.io/is-default-class":"true"}},"provisioner":"fixture.io/dynamic"}]}`)
 		case r.URL.Path == "/apis/apps/v1/deployments":

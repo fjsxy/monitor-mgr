@@ -22,7 +22,7 @@ func (s *Store) targetForRecovery(ctx context.Context, cluster string) (*Target,
 		return nil, nil, Error("CONFLICT", "集群已注销，停止同步")
 	}
 	var cipher []byte
-	if s.DB.QueryRowContext(ctx, `SELECT credential FROM clusters WHERE id=? AND state='ACTIVE'`, cluster).Scan(&cipher) != nil {
+	if s.DB.QueryRowContext(ctx, `SELECT credential,credential_revision,uid FROM clusters WHERE id=? AND state='ACTIVE'`, cluster).Scan(&cipher, &cl.CredentialRevision, &cl.Uid) != nil {
 		return nil, nil, Error("UNAVAILABLE", "当前凭据不可读")
 	}
 	cred, e := s.openCredential(cipher, cluster)
@@ -35,6 +35,8 @@ func (s *Store) targetForRecovery(ctx context.Context, cluster string) (*Target,
 	}
 	t.limits = s.limits
 	t.clusterID = cluster
+	t.credentialRevision = cl.CredentialRevision
+	t.clusterUID = cl.Uid
 	var ns map[string]any
 	if e = t.Request(ctx, "GET", "/api/v1/namespaces/kube-system", nil, &ns); e != nil {
 		t.Close()
@@ -73,6 +75,7 @@ func (s *Store) launchRecovery(ctx context.Context) {
 			s.verifyLifecycle(ctx, id)
 		}(id)
 	}
+	s.launchStorageRecovery(ctx)
 }
 
 // RefreshOperation 验证当前查看授权后主动只读核验，身份不明不会通过此入口补认。
@@ -88,6 +91,7 @@ func (s *Store) RefreshOperation(ctx context.Context, c *rpc.RequestContext, r *
 		defer recoveryFlights.Delete(s.observationEpoch + o.OperationId)
 		s.verifyLifecycle(ctx, o.OperationId)
 	}
+	s.verifyAgentStorageTasks(ctx, o.OperationId)
 	return s.GetOperation(ctx, c, r)
 }
 

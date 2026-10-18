@@ -1,3 +1,5 @@
+// i64保留HTTP返回的十进制字符串；仅传递和展示，不能转为Number。
+export type Int64 = number | string;
 export type Account={id:string;username:string;role:'ADMIN'|'USER';enabled:boolean;mustChangePassword:boolean;createdAt:string};
 export type Session={account:Account;expiresAt:string};
 export class APIError extends Error{constructor(public code:string,message:string){super(message)}}

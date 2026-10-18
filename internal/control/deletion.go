@@ -85,7 +85,7 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	if e != nil {
 		return nil, e
 	}
-	if e = componentFor(i.Component).deletionGuard(cfg, frozen); e != nil {
+	if e = componentFor(i.Component).deletionGuard(cfg, frozen, snapshot.storage); e != nil {
 		return nil, e
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
@@ -109,11 +109,13 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 		{`INSERT INTO operation_lifecycle VALUES(?,?,1,2)`, []any{o.OperationId, attempt}},
 		{`INSERT INTO deletion_operations(operation_id,instance_id,version_id,original_uid,cr_path,target_namespace,preview_id) VALUES(?,?,?,?,?,?,?)`, []any{o.OperationId, i.Id, v.VersionId, i.Uid, componentFor(i.Component).objectPath(i), deploymentNamespace, r.GetPreviewId()}},
 		{`INSERT INTO instance_protections VALUES(?,?)`, []any{i.Id, o.OperationId}},
-		{`UPDATE instances SET activity_at=? WHERE id=?`, []any{now, i.Id}},
 	} {
 		if _, e = tx.ExecContext(ctx, q.sql, q.args...); e != nil {
 			return nil, Error("UNAVAILABLE", "删除受理事务失败")
 		}
+	}
+	if e = s.recordInstanceActivity(ctx, tx, i.Id); e != nil {
+		return nil, e
 	}
 	if e = s.finishCommand(ctx, tx, cmd, o); e != nil {
 		return nil, e
@@ -128,10 +130,10 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	return o, nil
 }
 
-// deletionGuard 供存储契约增加类型化验证；当前不允许Agent持久存储被通用入口直接删除。
-func (a componentAdapter) deletionGuard(cfg configuration, frozen map[string]any) error {
+// deletionGuard要求锁外实际存储核验；没有可信快照不能通过通用删除入口。
+func (a componentAdapter) deletionGuard(cfg configuration, frozen map[string]any, snapshot *agentStorageSnapshot) error {
 	if a.component == AgentComponent {
-		if _, has := frozen["storage"]; has {
+		if snapshot == nil {
 			return Error("CONFLICT", "Agent 持久存储删除需要核验保留策略")
 		}
 	}
@@ -211,31 +213,37 @@ func (t *Target) listOwnedCandidates(ctx context.Context, namespace string) ([]s
 
 // observeOwnerGraph 保存见过的所有者UID链；父对象消失后仍能识别残留ReplicaSet/Pod。
 func (s *Store) observeOwnerGraph(ctx context.Context, i *rpc.ObservationInstance, t *Target, namespace string) (int, error) {
+	records, e := s.observeOwnerGraphRecords(ctx, i, t, namespace)
+	return len(records), e
+}
+
+// observeOwnerGraphRecords 同时为清理核验和Pod来源返回完整读取中实际存在的原UID归属节点。
+func (s *Store) observeOwnerGraphRecords(ctx context.Context, i *rpc.ObservationInstance, t *Target, namespace string) ([]seenResource, error) {
 	// 关键：KSM是cluster-scoped，外部漂移可跨namespace；完整集群分页不可缩成最近部署位置。
 	if componentFor(i.Component).scope == "Cluster" {
 		namespace = ""
 	}
 	candidates, e := t.listOwnedCandidates(ctx, namespace)
 	if e != nil {
-		return 0, e
+		return nil, e
 	}
 	rows, e := s.DB.QueryContext(ctx, `SELECT uid FROM seen_resources WHERE instance_id=?`, i.Id)
 	if e != nil {
-		return 0, e
+		return nil, e
 	}
 	seen := map[string]bool{i.Uid: true}
 	for rows.Next() {
 		var id string
 		if e = rows.Scan(&id); e != nil {
 			rows.Close()
-			return 0, e
+			return nil, e
 		}
 		seen[id] = true
 	}
 	e = rows.Err()
 	rows.Close()
 	if e != nil {
-		return 0, e
+		return nil, e
 	}
 	// 关键：递归闭包从原CR UID和持久seen UID出发，不能按同名新资源重新起根。
 	changed := true
@@ -250,21 +258,24 @@ func (s *Store) observeOwnerGraph(ctx context.Context, i *rpc.ObservationInstanc
 	}
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
-		return 0, e
+		return nil, e
 	}
 	defer tx.Rollback()
-	live := 0
+	if !observationScopeCurrent(ctx, tx, ctx) {
+		return nil, Error("CONFLICT", "观察目标修订已变化")
+	}
+	live := []seenResource{}
 	for _, r := range candidates {
 		if !seen[r.uid] {
 			continue
 		}
-		live++
+		live = append(live, r)
 		if _, e = tx.ExecContext(ctx, `INSERT INTO seen_resources VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(instance_id,uid) DO NOTHING`, i.Id, r.apiVersion, r.kind, r.namespace, r.name, r.uid, r.ownerUID, r.path); e != nil {
-			return 0, e
+			return nil, e
 		}
 	}
 	if e = tx.Commit(); e != nil {
-		return 0, e
+		return nil, e
 	}
 	return live, nil
 }
@@ -349,7 +360,7 @@ func (s *Store) executeDeletion(life context.Context, id string) {
 		s.finishExecution(life, o, "FAILED", Error("CONFLICT", "原RV不可读"), nil)
 		return
 	}
-	release, e := s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision)
+	release, e := s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision, snapshot.storage)
 	if e != nil {
 		if apiCode(e) != "ALREADY_FINISHED" {
 			s.finishExecution(life, o, "FAILED", e, nil)
@@ -374,6 +385,7 @@ func (s *Store) executeDeletion(life context.Context, id string) {
 	}
 	s.finishDeletion(o, "DELETION_VERIFYING", "已发送原 UID Foreground 删除；等待 CR、workload 和 Pod 全部消失")
 	s.verifyDeletion(life, o, i, t)
+	s.verifyAgentStorageTasks(life, id)
 }
 
 // verifyDeletion 只读证明原资源图已清空；未知、finalizer和同名新UID都保留保护。

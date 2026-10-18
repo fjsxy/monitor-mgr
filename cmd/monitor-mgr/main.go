@@ -24,7 +24,9 @@ func main() {
 	flag.StringVar(&cfg.PublicOrigin, "origin", "", "浏览器公开 Origin，省略时按 HTTP Host 校验")
 	flag.StringVar(&cfg.StaticDir, "static", "web/dist", "React 构建目录")
 	flag.DurationVar(&cfg.SessionTTL, "session-ttl", 8*time.Hour, "Session 绝对寿命")
+	interval := flag.Duration("cr-poll-interval", 10*time.Second, "后台CR读取间隔（1–20整秒）")
 	flag.Parse()
+	cfg.ObservationInterval = interval
 	cfg.Logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	p, err := platform.Start(context.Background(), cfg)
 	if err != nil {

@@ -170,7 +170,13 @@ func (c *AgentConfig) document() map[string]any {
 	return map[string]any{"apiVersion": "monitoring.coreos.com/v1alpha1", "kind": "PrometheusAgent", "metadata": map[string]any{"name": c.Name, "namespace": c.Namespace}, "spec": c.spec()}
 }
 func (c *AgentConfig) warnings(cr map[string]any) []string {
-	return []string{"关联匹配和CR就绪不证明实际采集或remote_write样本交付"}
+	out := []string{"关联匹配和CR就绪不证明实际采集或remote_write样本交付"}
+	if c.Storage.Mode == "emptyDir" {
+		out = append(out, "emptyDir不适用PVC保留策略；Pod删除/替换或挂起缩零可丢失未发WAL，容器重启本身不删除emptyDir")
+	} else {
+		out = append(out, "挂起缩零使用whenScaled="+c.Storage.WhenScaled+"；移除shard、删除Agent或Operator替换ST使用whenDeleted="+c.Storage.WhenDeleted+"。先单独发布策略并核实实际ST采用；PVC结果独立确认，平台不清理PVC")
+	}
+	return out
 }
 
 var prometheusDurationRE = regexp.MustCompile(`^(0|([0-9]+y)?([0-9]+w)?([0-9]+d)?([0-9]+h)?([0-9]+m)?([0-9]+s)?([0-9]+ms)?)$`)
@@ -185,25 +191,30 @@ func (c *AgentConfig) validate() error {
 	if c.Shards < 1 {
 		return fieldError("agent.shards", "必须为正整数")
 	}
-	if c.Shards > 1 {
-		return fieldError("agent.shards", "多shard生命周期尚未开放")
+	if len(agentStatefulName(c.Name, c.Shards-1)+"-0") > 63 {
+		return fieldError("agent.name", "名称过长，无法生成所选shards的Pod DNS label")
 	}
-	if c.DesiredState != "Running" {
-		return fieldError("agent.desiredState", "当前只支持运行；挂起需先实现实际存储策略保护")
+	if c.DesiredState != "Running" && c.DesiredState != "Suspended" {
+		return fieldError("agent.desiredState", "只支持运行或挂起")
 	}
 	if e := c.Resources.validate("agent.resources"); e != nil {
 		return e
 	}
-	if c.Storage.Mode != "PVC" {
-		return fieldError("agent.storage.mode", "当前只支持PVC；emptyDir生命周期尚未开放")
+	if c.Storage.Mode != "PVC" && c.Storage.Mode != "emptyDir" {
+		return fieldError("agent.storage.mode", "只支持PVC或emptyDir")
 	}
-	if c.Storage.Capacity == nil {
-		return fieldError("agent.storage.capacity", "PVC容量必填")
+	if c.Storage.Mode == "PVC" {
+		if c.Storage.Capacity == nil {
+			return fieldError("agent.storage.capacity", "PVC容量必填")
+		}
+		q, e := resource.ParseQuantity(*c.Storage.Capacity)
+		if e != nil || q.Sign() <= 0 {
+			return fieldError("agent.storage.capacity", "PVC容量必须为正quantity")
+		}
+	} else if c.Storage.Capacity != nil {
+		return fieldError("agent.storage.capacity", "emptyDir不设置PVC容量")
 	}
-	q, e := resource.ParseQuantity(*c.Storage.Capacity)
-	if e != nil || q.Sign() <= 0 {
-		return fieldError("agent.storage.capacity", "PVC容量必须为正quantity")
-	}
+
 	for _, p := range []string{c.Storage.WhenScaled, c.Storage.WhenDeleted} {
 		if p != "Retain" && p != "Delete" {
 			return fieldError("agent.storage", "保留策略必须为Retain或Delete")
@@ -359,7 +370,15 @@ func (r RemoteEndpoint) references() []*SecretReference {
 }
 func (r *SecretReference) cr() map[string]any { return map[string]any{"name": r.Name, "key": r.Key} }
 func (c *AgentConfig) spec() map[string]any {
-	spec := map[string]any{"mode": "StatefulSet", "version": "v2.55.1", "image": "quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3", "shards": c.Shards, "replicas": 1, "paused": false, "serviceAccountName": c.ServiceAccountName, "resources": c.Resources.cr(), "storage": map[string]any{"volumeClaimTemplate": map[string]any{"spec": map[string]any{"accessModes": []string{"ReadWriteOnce"}, "resources": map[string]any{"requests": map[string]any{"storage": *c.Storage.Capacity}}}}}, "persistentVolumeClaimRetentionPolicy": map[string]any{"whenScaled": c.Storage.WhenScaled, "whenDeleted": c.Storage.WhenDeleted}}
+	replicas := int32(1)
+	if c.DesiredState == "Suspended" {
+		replicas = 0
+	}
+	spec := map[string]any{"mode": "StatefulSet", "version": "v2.55.1", "image": "quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3", "shards": c.Shards, "replicas": replicas, "paused": false, "serviceAccountName": c.ServiceAccountName, "resources": c.Resources.cr(), "storage": map[string]any{"emptyDir": map[string]any{}}}
+	if c.Storage.Mode == "PVC" {
+		spec["storage"] = map[string]any{"volumeClaimTemplate": map[string]any{"spec": map[string]any{"accessModes": []string{"ReadWriteOnce"}, "resources": map[string]any{"requests": map[string]any{"storage": *c.Storage.Capacity}}}}}
+		spec["persistentVolumeClaimRetentionPolicy"] = map[string]any{"whenScaled": c.Storage.WhenScaled, "whenDeleted": c.Storage.WhenDeleted}
+	}
 	for kind, rule := range c.associationRules() {
 		prefix := strings.ToLower(kind[:1]) + kind[1:]
 		if x := rule.Object.cr(); x != nil {

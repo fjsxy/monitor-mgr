@@ -14,7 +14,7 @@ PLATFORM ?= linux/arm64
 BASE_URL ?= http://127.0.0.1:18080
 E2E_ARGS ?=
 
-.PHONY: help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check
+.PHONY: e2e-agent-storage e2e-agent-storage-q e2e-agent-storage-reg e2e-agent-lifecycle-q help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check
 help: ## 查看重复操作入口
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 generate: ## 按锁定版本生成 Thrift/Kitex
@@ -87,3 +87,22 @@ lifecycle-q-receipt: ## 生命周期Q层逐稳定子例收据，保留真实宿�
 	$(PYTHON) scripts/acceptance/lifecycle.py --layer Q $(E2E_ARGS)
 lifecycle-fixture-image: ## 仅验收应用派发屏障镜像，产品源码和基础镜像必须同源
 	docker build --platform "$(PLATFORM)" --provenance=false --sbom=false --build-arg PLATFORM_IMAGE="$(IMAGE)" --build-arg SOURCE_SHA="$(SOURCE_SHA)" -f scripts/acceptance/Dockerfile.lifecycle -t "$(LIFECYCLE_FIXTURE_IMAGE)" .
+
+e2e-agent-lifecycle-q: ## Agent存储生命周期Q层，公开HTTP/真实Kitex与受控目标边界
+	$(GO) test ./internal/platform -count=1 -run 'Test(AgentStorage|R03AgentZero)' $(E2E_ARGS)
+
+workbench-seed-check: ## 工作台活动序号与旧库安全迁移检查，真实HTTP/Kitex/SQLite
+	$(GO) test ./internal/platform -count=1 -run 'Test(WorkbenchActivity|SharedSchema4|F04Encrypted)'
+
+workbench-i64-check: ## HTTP大i64精确往返与RPC保持协议检查
+	$(GO) test ./internal/platform -count=1 -run '^TestWorkbenchHTTPInt64RoundTrip$$'
+
+e2e-workbench-q: ## 工作台Q层，真实HTTP/Kitex/SQLite与受控时钟/API
+	$(GO) test ./internal/platform -count=1 -run 'Test(R0[1356]Workbench|Workbench)' $(E2E_ARGS)
+
+e2e-agent-storage: ## Agent存储逐例真实Pod门禁；E2E_ARGS显式提供来源、双集群与lane
+	$(PYTHON) scripts/acceptance/agent_storage.py --layer K $(E2E_ARGS)
+e2e-agent-storage-q: ## Agent合法零副本owned Q收据
+	$(PYTHON) scripts/acceptance/agent_storage.py --layer Q $(E2E_ARGS)
+e2e-agent-storage-reg: ## Agent存储12项补充Q独立收据
+	$(PYTHON) scripts/acceptance/agent_storage.py --layer REG $(E2E_ARGS)

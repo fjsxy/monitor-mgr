@@ -4,76 +4,18 @@ package control
 import (
 	"context"
 	"encoding/json"
-	"net/url"
 	"sort"
 	"time"
 
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 )
 
+// saveAgentSource 保留组件接缝，所有来源共用同一历史与新鲜度语义。
 func (s *Store) saveAgentSource(ctx context.Context, i *rpc.ObservationInstance, source string, current *rpc.SourceObservation, cause error) *rpc.SourceObservation {
-	now := s.Now().UTC().Format(time.RFC3339Nano)
-	out := current
-	if out == nil {
-		out = &rpc.SourceObservation{Source: source}
-	}
-	if cause != nil {
-		var raw []byte
-		var uid string
-		if s.DB.QueryRowContext(ctx, `SELECT document,uid FROM instance_source_observations WHERE instance_id=? AND source=?`, i.Id, source).Scan(&raw, &uid) == nil && uid == i.Uid {
-			var previous rpc.SourceObservation
-			if json.Unmarshal(raw, &previous) == nil {
-				out = &previous
-			}
-		}
-		out.Error = safeSourceError(cause)
-		out.Historical = true
-	} else {
-		out.LastSuccessAt = now
-		out.Error = ""
-		out.Historical = false
-	}
-	out.Source = source
-	out.LastAttemptAt = now
-	raw, _ := json.Marshal(out)
-	if _, e := s.DB.ExecContext(ctx, `INSERT INTO instance_source_observations VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(instance_id,source) DO UPDATE SET uid=excluded.uid,document=excluded.document,last_attempt_at=excluded.last_attempt_at,last_success_at=excluded.last_success_at,error=excluded.error,epoch=excluded.epoch`, i.Id, source, i.Uid, raw, out.LastAttemptAt, out.LastSuccessAt, out.Error, s.observationEpoch); e != nil {
-		out.Error = "辅助来源保存失败"
-		out.Historical = true
-	}
-	return out
-}
-func safeSourceError(e error) string {
-	if a, ok := e.(*rpc.APIError); ok {
-		return a.Code + "：" + a.Message
-	}
-	return "辅助来源读取失败"
+	return s.saveSourceObservation(ctx, i, source, current, cause)
 }
 func (s *Store) agentSources(ctx context.Context, i *rpc.ObservationInstance) []*rpc.SourceObservation {
-	out := []*rpc.SourceObservation{}
-	rows, e := s.DB.QueryContext(ctx, `SELECT source,document,epoch FROM instance_source_observations WHERE instance_id=? AND uid=? ORDER BY source`, i.Id, i.Uid)
-	if e != nil {
-		return out
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name, epoch string
-		var raw []byte
-		if rows.Scan(&name, &raw, &epoch) != nil {
-			continue
-		}
-		v := &rpc.SourceObservation{Source: name}
-		if json.Unmarshal(raw, v) != nil {
-			v.Error = "历史来源记录不可读"
-			v.Historical = true
-		} else {
-			stamp, e := time.Parse(time.RFC3339Nano, v.LastSuccessAt)
-			if e != nil || epoch != s.observationEpoch || s.Now().Sub(stamp) > 30*time.Second || v.Error != "" {
-				v.Historical = true
-			}
-		}
-		out = append(out, v)
-	}
-	return out
+	return s.instanceSources(ctx, i)
 }
 
 // associationObservations逐类读取；只有实际CR来源可以保存运行历史。
@@ -208,98 +150,22 @@ func associationConfigFromCR(cr map[string]any) *AgentConfig {
 }
 func (s *Store) refreshAgentAuxiliary(ctx context.Context, i *rpc.ObservationInstance, t *Target, cr map[string]any) {
 	s.associationObservations(ctx, i, t, associationConfigFromCR(cr), true)
+	policies, policyErr := t.readAgentStatefulPolicies(ctx, i)
+	snapshot := &agentStorageSnapshot{policies: policies}
+	mode, _ := agentStorageIdentity(objectMap(cr, "spec"))
+	s.saveAgentSource(ctx, i, "storagePolicy", &rpc.SourceObservation{Source: "storagePolicy", StorageMode: reference(mode), Policies: snapshotPolicies(snapshot)}, policyErr)
 	volumes, e := s.readAgentVolumes(ctx, i, t)
 	s.saveAgentSource(ctx, i, "PVC", &rpc.SourceObservation{Source: "PVC", Volumes: volumes}, e)
 }
+
+// readAgentVolumes经完整真实资源图核对并保存原UID卷历史，父资源消失不等于卷消失。
 func (s *Store) readAgentVolumes(ctx context.Context, i *rpc.ObservationInstance, t *Target) ([]*rpc.VolumeObservation, error) {
-	prefix := "/api/v1/namespaces/" + url.PathEscape(i.TargetNamespace)
-	sts, e := t.listObjects(ctx, "/apis/apps/v1/namespaces/"+url.PathEscape(i.TargetNamespace)+"/statefulsets")
+	volumes, e := s.observeAgentVolumes(ctx, i, t)
 	if e != nil {
 		return nil, e
 	}
-	owners := map[string]bool{}
-	for _, st := range sts {
-		if agentOwnedBy(st, "PrometheusAgent", i.Uid) {
-			uid := objectString(objectMap(st, "metadata"), "uid")
-			if uid == "" {
-				return nil, Error("TARGET_ERROR", "StatefulSet身份不完整")
-			}
-			owners[uid] = true
-		}
-	}
-	pods, e := t.listObjects(ctx, prefix+"/pods")
-	if e != nil {
+	if e = s.enrichAgentVolumeResults(ctx, i, volumes); e != nil {
 		return nil, e
 	}
-	claims := map[string][]string{}
-	for _, pod := range pods {
-		owned := false
-		for uid := range owners {
-			if agentOwnedBy(pod, "StatefulSet", uid) {
-				owned = true
-			}
-		}
-		if !owned {
-			continue
-		}
-		name := objectString(objectMap(pod, "metadata"), "name")
-		ready := false
-		for _, raw := range anySlice(objectMap(pod, "status")["conditions"]) {
-			condition, _ := raw.(map[string]any)
-			if condition["type"] == "Ready" && condition["status"] == "True" {
-				ready = true
-			}
-		}
-		mountedVolumes := map[string]bool{}
-		for _, raw := range anySlice(objectMap(pod, "spec")["containers"]) {
-			container, _ := raw.(map[string]any)
-			for _, rawMount := range anySlice(container["volumeMounts"]) {
-				mount, _ := rawMount.(map[string]any)
-				mountedVolumes[objectString(mount, "name")] = true
-			}
-		}
-		for _, raw := range anySlice(objectMap(pod, "spec")["volumes"]) {
-			v, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			claim := objectString(objectMap(v, "persistentVolumeClaim"), "claimName")
-			if claim != "" {
-				if _, known := claims[claim]; !known {
-					claims[claim] = []string{}
-				}
-				// Ready及真实volumeMount共同证明Pod采用该卷；仅spec声明不冒充挂载成功。
-				if ready && mountedVolumes[objectString(v, "name")] {
-					claims[claim] = append(claims[claim], name)
-				}
-			}
-		}
-	}
-	pvcs, e := t.listObjects(ctx, prefix+"/persistentvolumeclaims")
-	if e != nil {
-		return nil, e
-	}
-	out := []*rpc.VolumeObservation{}
-	for _, pvc := range pvcs {
-		meta := objectMap(pvc, "metadata")
-		name := objectString(meta, "name")
-		mounted, ok := claims[name]
-		if !ok {
-			continue
-		}
-		spec := objectMap(pvc, "spec")
-		access := []string{}
-		for _, raw := range anySlice(spec["accessModes"]) {
-			if v, ok := raw.(string); ok {
-				access = append(access, v)
-			}
-		}
-		uid := objectString(meta, "uid")
-		if uid == "" {
-			return nil, Error("TARGET_ERROR", "PVC身份不完整")
-		}
-		out = append(out, &rpc.VolumeObservation{Namespace: i.TargetNamespace, Name: name, Uid: uid, Phase: objectString(objectMap(pvc, "status"), "phase"), RequestedStorage: objectString(objectMap(objectMap(spec, "resources"), "requests"), "storage"), AccessModes: access, StorageClass: objectString(spec, "storageClassName"), MountedByPods: mounted})
-	}
-	sort.Slice(out, func(a, b int) bool { return out[a].Name < out[b].Name })
-	return out, nil
+	return volumes, nil
 }

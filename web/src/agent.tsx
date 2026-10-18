@@ -1,3 +1,5 @@
+import {AgentLifecycleFields,AgentStorageFields,StorageImpact,StoragePolicies,type StorageImpactValue,type StatefulPolicy,StorageVolumeOutcome} from "./agent-storage";
+import type { Int64 } from "./api";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, APIError } from "./api";
 import type { Cluster } from "./clusters";
@@ -69,6 +71,7 @@ type Runtime = {
   paused?: boolean;
 };
 export type Source = {
+ policies?:StatefulPolicy[];storageMode?:string;
   source: string;
   lastAttemptAt: string;
   lastSuccessAt: string;
@@ -84,6 +87,7 @@ export type Source = {
     accessModes: string[];
     storageClass: string;
     mountedByPods: string[];
+    expectedPolicy?:string;retentionResult?:string;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;statefulUID?:string;statefulName?:string;shard?:number;agentUID?:string;impactAction?:string;
   }[];
 };
 type Instance = {
@@ -98,17 +102,17 @@ type Instance = {
   crNamespace?: string;
   sources?: Source[];
 };
-type Draft = { revision: number; agent: AgentConfiguration; yaml: string };
+type Draft = { revision: Int64; agent: AgentConfiguration; yaml: string };
 type Version = {
   versionId: string;
-  sourceDraftRevision: number;
+  sourceDraftRevision: Int64;
   agent: AgentConfiguration;
   yaml: string;
   createdAt: string;
 };
-type Preview = {
+type Preview = StorageImpactValue & {
   previewId: string;
-  draftRevision: number;
+  draftRevision: Int64;
   leftYAML: string;
   rightYAML: string;
   drift: boolean;
@@ -253,7 +257,7 @@ export function AgentEditor({
     [runtimeSources, setRuntimeSources] = useState<Source[]>(
       selection.instance?.sources ?? [],
     ),
-    [previewSources, setPreviewSources] = useState<{ draftRevision: number; sources: Source[] } | null>(null),
+    [previewSources, setPreviewSources] = useState<{ draftRevision: Int64; sources: Source[] } | null>(null),
     [preview, setPreview] = useState<Preview | null>(null),
     [overwrite, setOverwrite] = useState(false),
     [operation, setOperation] = useState<Operation | null>(null),
@@ -577,7 +581,7 @@ export function AgentEditor({
   async function associationPreview() {
     if (!current || !draft || dirty) return;
     await run(async () => {
-      const result = await api<{ draftRevision: number; sources: Source[] }>(
+      const result = await api<{ draftRevision: Int64; sources: Source[] }>(
         `/instances/${current.id}/association-previews`,
         "POST",
         { draftRevision: draft.revision },
@@ -966,7 +970,7 @@ export function AgentEditor({
                   明确覆盖当前配置漂移并清除右侧未包含的额外 spec
                 </label>
               )}
-              <YAMLDiff left={preview.leftYAML} right={preview.rightYAML} />
+              <StorageImpact value={preview}/><YAMLDiff left={preview.leftYAML} right={preview.rightYAML} />
               <div className="dialog-footer">
                 {command.current && (
                   <button disabled={busy} onClick={() => void recover()}>
@@ -1035,14 +1039,14 @@ function AgentForm({
             aria-label="名称"
             required
             disabled={fixed}
-            maxLength={49}
+            maxLength={Math.min(49,63-11-(value.shards>1?`-shard-${value.shards-1}`.length:0)-2)}
             pattern="[a-z0-9](([a-z0-9]|-)*[a-z0-9])?"
             placeholder="例如 metrics-agent"
             value={value.name}
             onChange={(event) => patch({ name: event.target.value })}
           />
           <span className="help">
-            直接作为 CR name；小写英文、数字和连字符，最长49字符。
+            直接作为 CR name；小写英文、数字和连字符。名称长度须容纳所选 shards 的派生资源，单 shard 最长49字符。
           </span>
         </label>
         <label>
@@ -1065,10 +1069,7 @@ function AgentForm({
           </select>
         </label>
       </div>
-      <p className="help">
-        运行 · shards=1 · 每 shard 1副本 ·
-        paused=false。扩缩容及危险存储操作在后续生命周期功能开放。
-      </p>
+      <AgentLifecycleFields value={value} patch={patch}/>
       <section className="config-section">
         <h3>每个 prometheus 容器的资源声明</h3>
         <div className="resources-grid">
@@ -1103,34 +1104,7 @@ function AgentForm({
           200m / 512Mi / limit 1Gi 为可修改资源声明，不代表实际利用率。
         </p>
       </section>
-      <section className="config-section">
-        <h3>Agent WAL 存储</h3>
-        <div className="field-grid">
-          <label>
-            存储模式
-            <input aria-label="存储模式" value={value.storage.mode} disabled />
-          </label>
-          <label>
-            PVC 容量
-            <input
-              aria-label="PVC 容量"
-              value={value.storage.capacity ?? ""}
-              required
-              disabled={fixed}
-              onChange={(event) =>
-                patch({
-                  storage: { ...value.storage, capacity: event.target.value },
-                })
-              }
-            />
-          </label>
-        </div>
-        <p className="help">
-          RWO · 集群默认 StorageClass · whenScaled=Retain /
-          whenDeleted=Retain。创建成功后模式、容量及身份固定；PVC Bound
-          与实际挂载分别读取。
-        </p>
-      </section>
+      <AgentStorageFields value={value} patch={patch} fixed={fixed}/>
       <section className="config-section">
         <div className="page-title">
           <h3>既有依赖</h3>
@@ -1719,7 +1693,7 @@ function SourceViews({ sources }: { sources: Source[] }) {
           aria-label={`来源 ${source.source}`}
         >
           <h4>
-            {source.source === "PVC"
+            {source.source === "storagePolicy" ? "实际存储策略" : source.source === "PVC"
               ? "PVC"
               : source.source.replace("association:", "")}{" "}
             <span
@@ -1753,6 +1727,7 @@ function SourceViews({ sources }: { sources: Source[] }) {
               ))}
             </>
           )}
+          <StoragePolicies policies={source.policies} mode={source.storageMode}/>
           {source.volumes !== undefined && (
             <div className="table-wrap">
               <table>
@@ -1761,7 +1736,7 @@ function SourceViews({ sources }: { sources: Source[] }) {
                     <th>PVC / namespace</th>
                     <th>状态 / 请求容量</th>
                     <th>StorageClass</th>
-                    <th>挂载 Pod</th>
+                    <th>挂载 Pod</th><th>策略 / 独立结果</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1780,14 +1755,14 @@ function SourceViews({ sources }: { sources: Source[] }) {
                       <td>{volume.storageClass || "—"}</td>
                       <td>
                         {volume.mountedByPods.join(", ") || "未观察到挂载"}
-                      </td>
+                      </td><td><StorageVolumeOutcome volume={volume}/></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-          {source.matches === undefined && source.volumes === undefined && (
+          {source.matches === undefined && source.volumes === undefined && !source.policies && !source.storageMode && (
             <p className="help">当前读取结果未知</p>
           )}
         </section>

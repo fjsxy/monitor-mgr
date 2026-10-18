@@ -19,6 +19,7 @@ type Client interface {
 	RefreshOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.OperationID, callOptions ...callopt.Option) (r *control.Operation, err error)
 	DeleteInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.DeleteInstanceRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
 	CreateInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.CreateInstanceRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
+	QueryInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.QueryInstancesRequest, callOptions ...callopt.Option) (r *control.QueryInstancesResult_, err error)
 	ListInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.InstancesResult_, err error)
 	GetInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
 	GetDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
@@ -126,6 +127,11 @@ func (p *kControlServiceClient) DeleteInstance(ctx context.Context, ctx_ *contro
 func (p *kControlServiceClient) CreateInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.CreateInstanceRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.CreateInstance(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) QueryInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.QueryInstancesRequest, callOptions ...callopt.Option) (r *control.QueryInstancesResult_, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.QueryInstances(ctx, ctx_, request)
 }
 
 func (p *kControlServiceClient) ListInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.InstancesResult_, err error) {

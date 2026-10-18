@@ -3,11 +3,13 @@ package control
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -155,10 +157,12 @@ func parseCredential(raw, contextName string) (*targetCredential, error) {
 
 // Target 提供有预算与 TLS 校验的目标 API 访问，错误不回显上传材料。
 type Target struct {
-	credential *targetCredential
-	client     *http.Client
-	limits     *targetLimits
-	clusterID  string
+	credential         *targetCredential
+	client             *http.Client
+	limits             *targetLimits
+	clusterID          string
+	credentialRevision int64
+	clusterUID         string
 }
 
 // newTarget 仅使用上传的 CA 与身份材料建立客户端，保持 TLS 校验并拒绝重定向。
@@ -183,6 +187,30 @@ func (t *Target) Close() { t.client.CloseIdleConnections() }
 
 // Request 在目标预算内执行一次 API 请求，将失败转换为不含上传材料的业务错误。
 func (t *Target) Request(ctx context.Context, method, path string, body any, out any) error {
+	if method == "GET" && body == nil && t.limits != nil {
+		credential, _ := json.Marshal(t.credential)
+		digest := sha256.Sum256(credential)
+		key := fmt.Sprintf("%s/%s/%d/%x/%s", t.clusterID, t.clusterUID, t.credentialRevision, digest, path)
+		raw, e := t.limits.read(ctx, key, func() ([]byte, error) {
+			var text targetText
+			e := t.request(ctx, method, path, nil, &text, nil)
+			return []byte(text), e
+		})
+		if e != nil {
+			return e
+		}
+		if out == nil {
+			return nil
+		}
+		if text, ok := out.(*targetText); ok {
+			*text = targetText(raw)
+			return nil
+		}
+		if json.Unmarshal(raw, out) != nil {
+			return Error("TARGET_ERROR", "目标 API 响应无效")
+		}
+		return nil
+	}
 	return t.request(ctx, method, path, body, out, nil)
 }
 

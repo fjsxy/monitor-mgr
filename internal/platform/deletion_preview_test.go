@@ -125,7 +125,7 @@ func TestDeletionPreviewSchema6UnsentCanContinue(t *testing.T) {
 		t.Fatal(e)
 	}
 	// 关键：移除v7表、列和版本记录，保持原操作/尝试/保护与加密凭据，构造精确旧shape。
-	if _, e = db.Exec(`PRAGMA foreign_keys=OFF;DROP TABLE deletion_previews;ALTER TABLE deletion_operations DROP COLUMN preview_id;DELETE FROM schema_migrations WHERE version>6;`); e != nil {
+	if _, e = db.Exec(dropAgentStorageSchema + `PRAGMA foreign_keys=OFF;DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DROP TABLE deletion_previews;ALTER TABLE deletion_operations DROP COLUMN preview_id;DELETE FROM schema_migrations WHERE version>6;`); e != nil {
 		t.Fatal(e)
 	}
 	db.Close()
@@ -164,7 +164,22 @@ func TestDeletionPreviewSchema6UnsentCanContinue(t *testing.T) {
 		t.Fatal("旧尝试未保留", attempts)
 	}
 	retained := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
-	if retained["uid"] != original["uid"] || retained["currentVersionId"] != publication["versionId"] {
+	if retained["uid"] != original["uid"] || retained["currentVersionId"] != "" {
 		t.Fatal("删除改写历史身份", retained)
+	}
+	// 已删除实例隐藏当前版本入口，原版本仍作为不可变历史保留。
+	versions := clusterCall(t, p, "GET", "/instances/"+id+"/versions", nil, c, "", 200)["versions"].([]any)
+	if len(versions) != 1 || versions[0].(map[string]any)["versionId"] != publication["versionId"] {
+		t.Fatal("删除丢失原版本历史", versions)
+	}
+	// 受限旧库fixture同时证明只读投影没有清除持久的原版本身份。
+	db, e = sql.Open("sqlite", filepath.Join(dir, "platform.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	var persistedVersion string
+	if e = db.QueryRow("SELECT current_version_id FROM instances WHERE id=?", id).Scan(&persistedVersion); e != nil || persistedVersion != publication["versionId"] {
+		t.Fatal("删除清除了持久版本身份", persistedVersion, e)
 	}
 }

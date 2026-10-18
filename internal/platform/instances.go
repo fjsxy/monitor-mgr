@@ -5,6 +5,7 @@ import (
 	"github.com/fjsxy/monitor-mgr/internal/control"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -14,6 +15,16 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	if len(parts) == 3 && parts[0] == "clusters" && parts[2] == "instances" {
 		switch r.Method {
 		case "GET":
+			if r.URL.RawQuery != "" {
+				query, e := instanceQuery(r, parts[1])
+				if e != nil {
+					p.writeError(w, e, id)
+					return true
+				}
+				v, e := p.client.QueryInstances(r.Context(), c, query)
+				p.respond(w, 200, v, e, id)
+				return true
+			}
 			v, e := p.client.ListInstances(r.Context(), c, &rpc.ClusterID{Id: parts[1]})
 			p.respond(w, 200, v, e, id)
 			return true
@@ -39,16 +50,16 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	}
 	if len(parts) == 3 && parts[0] == "operations" && r.Method == "POST" && (parts[2] == "retry" || parts[2] == "cancel" || parts[2] == "continue-unsent") {
 		var b struct {
-			ExpectedOperationRevision int64   `json:"expectedOperationRevision"`
+			ExpectedOperationRevision httpI64 `json:"expectedOperationRevision"`
 			ExpectedAttemptId         string  `json:"expectedAttemptId"`
-			ExpectedAttemptRevision   int64   `json:"expectedAttemptRevision"`
+			ExpectedAttemptRevision   httpI64 `json:"expectedAttemptRevision"`
 			DeletePreviewId           *string `json:"deletePreviewId"`
 		}
 		if e := decode(r, &b); e != nil {
 			p.writeError(w, e, id)
 			return true
 		}
-		req := &rpc.LifecycleRequest{OperationId: parts[1], ExpectedOperationRevision: b.ExpectedOperationRevision, ExpectedAttemptId: b.ExpectedAttemptId, ExpectedAttemptRevision: b.ExpectedAttemptRevision, DeletePreviewId: b.DeletePreviewId}
+		req := &rpc.LifecycleRequest{OperationId: parts[1], ExpectedOperationRevision: int64(b.ExpectedOperationRevision), ExpectedAttemptId: b.ExpectedAttemptId, ExpectedAttemptRevision: int64(b.ExpectedAttemptRevision), DeletePreviewId: b.DeletePreviewId}
 		var v *rpc.Operation
 		var e error
 		status := 202
@@ -127,7 +138,7 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 				return true
 			case "PUT":
 				var b struct {
-					ExpectedDraftRevision int64                   `json:"expectedDraftRevision"`
+					ExpectedDraftRevision httpI64                 `json:"expectedDraftRevision"`
 					Ksm                   *rpc.KSMConfiguration   `json:"ksm"`
 					Agent                 *rpc.AgentConfiguration `json:"agent"`
 				}
@@ -135,7 +146,7 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.SaveDraft(r.Context(), c, &rpc.SaveDraftRequest{Id: req.Id, ExpectedDraftRevision: b.ExpectedDraftRevision, Ksm: b.Ksm, Agent: b.Agent})
+				v, e := p.client.SaveDraft(r.Context(), c, &rpc.SaveDraftRequest{Id: req.Id, ExpectedDraftRevision: int64(b.ExpectedDraftRevision), Ksm: b.Ksm, Agent: b.Agent})
 				p.respond(w, 200, v, e, id)
 				return true
 			}
@@ -154,41 +165,41 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 		case "association-previews":
 			if r.Method == "POST" {
 				var body struct {
-					DraftRevision int64 `json:"draftRevision"`
+					DraftRevision httpI64 `json:"draftRevision"`
 				}
 				if e := decode(r, &body); e != nil {
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.PreviewAssociations(r.Context(), c, &rpc.AssociationPreviewRequest{Id: req.Id, DraftRevision: body.DraftRevision})
+				v, e := p.client.PreviewAssociations(r.Context(), c, &rpc.AssociationPreviewRequest{Id: req.Id, DraftRevision: int64(body.DraftRevision)})
 				p.respond(w, 200, v, e, id)
 				return true
 			}
 		case "previews":
 			if r.Method == "POST" {
 				var b struct {
-					DraftRevision int64 `json:"draftRevision"`
+					DraftRevision httpI64 `json:"draftRevision"`
 				}
 				if e := decode(r, &b); e != nil {
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.PreviewPublication(r.Context(), c, &rpc.PreviewRequest{Id: req.Id, DraftRevision: b.DraftRevision})
+				v, e := p.client.PreviewPublication(r.Context(), c, &rpc.PreviewRequest{Id: req.Id, DraftRevision: int64(b.DraftRevision)})
 				p.respond(w, 200, v, e, id)
 				return true
 			}
 		case "publications":
 			if r.Method == "POST" {
 				var b struct {
-					PreviewId      string `json:"previewId"`
-					DraftRevision  int64  `json:"draftRevision"`
-					OverwriteDrift bool   `json:"overwriteDrift"`
+					PreviewId      string  `json:"previewId"`
+					DraftRevision  httpI64 `json:"draftRevision"`
+					OverwriteDrift bool    `json:"overwriteDrift"`
 				}
 				if e := decode(r, &b); e != nil {
 					p.writeError(w, e, id)
 					return true
 				}
-				v, e := p.client.PublishConfiguration(r.Context(), c, &rpc.PublishRequest{Id: req.Id, PreviewId: b.PreviewId, DraftRevision: b.DraftRevision, OverwriteDrift: b.OverwriteDrift})
+				v, e := p.client.PublishConfiguration(r.Context(), c, &rpc.PublishRequest{Id: req.Id, PreviewId: b.PreviewId, DraftRevision: int64(b.DraftRevision), OverwriteDrift: b.OverwriteDrift})
 				p.respond(w, 202, v, e, id)
 				return true
 			}
@@ -219,4 +230,40 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	}
 	p.writeError(w, control.Error("NOT_FOUND", "入口不存在"), id)
 	return true
+}
+
+// instanceQuery 仅转换HTTP查询参数；授权、筛选与统计始终在真实RPC应用层执行。
+func instanceQuery(r *http.Request, cluster string) (*rpc.QueryInstancesRequest, error) {
+	q := r.URL.Query()
+	request := &rpc.QueryInstancesRequest{ClusterId: cluster}
+	for key, values := range q {
+		if len(values) != 1 {
+			return nil, control.Error("BAD_REQUEST", "查询参数重复")
+		}
+		value := values[0]
+		switch key {
+		case "name":
+			request.Name = &value
+		case "type":
+			request.Type = &value
+		case "component":
+			request.Component = &value
+		case "summary":
+			request.Summary = &value
+		case "page", "pageSize":
+			n, e := strconv.ParseInt(value, 10, 32)
+			if e != nil {
+				return nil, control.Error("BAD_REQUEST", "分页参数无效")
+			}
+			number := int32(n)
+			if key == "page" {
+				request.Page = &number
+			} else {
+				request.PageSize = &number
+			}
+		default:
+			return nil, control.Error("BAD_REQUEST", "查询参数不支持")
+		}
+	}
+	return request, nil
 }

@@ -11,7 +11,7 @@ import (
 )
 
 // schemaVersion 定义本程序能够读取和升级到的数据库版本。
-const schemaVersion = 8
+const schemaVersion = 10
 
 // migrationSQL 按版本依次保存结构变更，不修改已经发布的旧版本语句。
 var migrationSQL = [][]string{
@@ -41,6 +41,8 @@ var migrationSQL = [][]string{
 	deletionPreviewSchema,
 	// v8仅修复已有敏感读cache，没有结构变更；与版本标记在同一事务执行。
 	nil,
+	activitySchema,
+	append(append([]string{}, agentStorageSchema...), storageTasksSchema...),
 }
 
 // migrate 配置 SQLite WAL，并在保留恢复依据的前提下原子升级数据库。
@@ -123,6 +125,11 @@ func migrate(db *sql.DB, dataDir string, key []byte) error {
 			for _, q := range migrationSQL[v-1] {
 				if _, err = tx.Exec(q); err != nil {
 					return fmt.Errorf("数据库迁移失败，原库与快照保留: %w", err)
+				}
+			}
+			if v == 9 {
+				if err = migrateActivityOrder(tx); err != nil {
+					return fmt.Errorf("活动顺序迁移失败: %w", err)
 				}
 			}
 			if v == 5 || v == 8 {
