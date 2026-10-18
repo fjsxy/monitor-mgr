@@ -60,3 +60,6 @@ e2e-ksm-b: ## KSM真实平台Pod浏览器验收；凭据和trace不进入收据
 
 agent-seed-check: ## 共享组件/旧预览迁移与脱敏回归，不替代Agent真实验收
 	$(GO) test ./internal/platform -count=1 -run 'Test(Shared|P04|F04Encrypted|F03KSM)'
+
+e2e-agent-q: ## Agent快速层，仍经过真实HTTP/Kitex/SQLite
+	$(GO) test ./internal/platform -count=1 -run 'Test(Agent|F01Agent|F03Agent|R03Agent|Shared)'

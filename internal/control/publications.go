@@ -46,6 +46,9 @@ func checkTarget(i *rpc.ObservationInstance, cr map[string]any) error {
 	return nil
 }
 func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, value configuration, create bool) error {
+	if cfg, ok := value.(*AgentConfig); ok {
+		return t.agentDependencies(ctx, cl, cfg, create)
+	}
 	cfg, ok := value.(*KSMConfig)
 	if !ok {
 		return Error("INVALID_INPUT", "组件依赖暂不支持")

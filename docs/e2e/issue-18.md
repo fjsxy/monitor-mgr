@@ -87,3 +87,12 @@
 | REG18-SHARED-001 | 旧KSM预览升级保留安全判定 | 固定v4带账号/凭据/草稿/版本/预览/保护库；启动新版本升级，使用原会话和原previewId确认；另分别修改spec及仅RV/status后确认。 | ID/关系及原预览保留；相同spec或仅RV/status变化可继续，spec变更拒绝；target_spec以带域隔离的HMAC保存，不存原目标敏感值。 | #18 |
 | REG18-SHARED-002 | 身份迁移区分CR scope | 从带历史v4库升级，创建KSM跨部署namespace同名及Agent跨CR namespace同名；对同namespace同名重试；注入迁移失败后检查原库和快照。 | KSM同集群同名冲突；Agent跨namespace成功、同namespace冲突；历史FK不变；失败回滚并保留原库/恢复依据。 | #18 |
 | REG18-SHARED-003 | 目标敏感字段不反向进入平台 | 在外部和已纳管漂移CR加入inline认证、URL userinfo、敏感last-applied，读取发现/预览/运行及历史，检查DB/HTTP/直接RPC/YAML/日志；敏感值变化后再确认，最后明确覆盖。 | 产品持久化和输出无秘密；敏感值变化使旧预览失效，仅RV/status变化不失效；更新保留原metadata/status/finalizers，不以脱敏改写真实资源。 | #18 |
+
+## Operator 启动能力补充回归
+
+以下两条同样不增加固定69个owned责任子例。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG18-CAP-004 | 后补Agent CRD/RBAC不能冒充controller已启动 | Operator启动时缺Agent支持；随后恢复CRD/权限而不重启，配置SC None的Agent并预览/发布；再重启原固定Operator。 | 仅当前CRD/SAR成功不能放行；原Pod缺Agent ready=1时阻止，重启后按原Pod身份与真实Agent ready证据重新核验。 | #18 |
+| REG18-CAP-005 | 后补ScrapeConfig支持不能冒充informer已启动 | Operator启动时缺ScrapeConfig API/权限；随后恢复但不重启，配置非None ScrapeConfig并预览；再重启固定Operator。 | Agent ready本身不足；同一原Pod缺SC资源endpoint请求证据时阻止，重启后Agent ready及SC informer证据同时满足才放行。 | #18 |

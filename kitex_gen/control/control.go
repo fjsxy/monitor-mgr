@@ -2106,6 +2106,1225 @@ var fieldIDToName_KSMConfiguration = map[int16]string{
 	13: "unscheduledResources",
 }
 
+type LabelExpression struct {
+	Key            string   `thrift:"key,1,required" frugal:"1,required,string" json:"key"`
+	Operator       string   `thrift:"operator,2,required" frugal:"2,required,string" json:"operator"`
+	Values         []string `thrift:"values,3,optional" frugal:"3,optional,list<string>" json:"values,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewLabelExpression() *LabelExpression {
+	return &LabelExpression{}
+}
+
+func (p *LabelExpression) InitDefault() {
+}
+
+func (p *LabelExpression) GetKey() (v string) {
+	return p.Key
+}
+
+func (p *LabelExpression) GetOperator() (v string) {
+	return p.Operator
+}
+
+var LabelExpression_Values_DEFAULT []string
+
+func (p *LabelExpression) GetValues() (v []string) {
+	if !p.IsSetValues() {
+		return LabelExpression_Values_DEFAULT
+	}
+	return p.Values
+}
+func (p *LabelExpression) SetKey(val string) {
+	p.Key = val
+}
+func (p *LabelExpression) SetOperator(val string) {
+	p.Operator = val
+}
+func (p *LabelExpression) SetValues(val []string) {
+	p.Values = val
+}
+
+func (p *LabelExpression) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *LabelExpression) IsSetValues() bool {
+	return p.Values != nil
+}
+
+func (p *LabelExpression) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("LabelExpression(%+v)", *p)
+}
+
+var fieldIDToName_LabelExpression = map[int16]string{
+	1: "key",
+	2: "operator",
+	3: "values",
+}
+
+type LabelSelector struct {
+	MatchLabels      map[string]string  `thrift:"matchLabels,1,optional" frugal:"1,optional,map<string:string>" json:"matchLabels,omitempty"`
+	MatchExpressions []*LabelExpression `thrift:"matchExpressions,2,optional" frugal:"2,optional,list<LabelExpression>" json:"matchExpressions,omitempty"`
+	_unknownFields   unknown.Fields
+}
+
+func NewLabelSelector() *LabelSelector {
+	return &LabelSelector{}
+}
+
+func (p *LabelSelector) InitDefault() {
+}
+
+var LabelSelector_MatchLabels_DEFAULT map[string]string
+
+func (p *LabelSelector) GetMatchLabels() (v map[string]string) {
+	if !p.IsSetMatchLabels() {
+		return LabelSelector_MatchLabels_DEFAULT
+	}
+	return p.MatchLabels
+}
+
+var LabelSelector_MatchExpressions_DEFAULT []*LabelExpression
+
+func (p *LabelSelector) GetMatchExpressions() (v []*LabelExpression) {
+	if !p.IsSetMatchExpressions() {
+		return LabelSelector_MatchExpressions_DEFAULT
+	}
+	return p.MatchExpressions
+}
+func (p *LabelSelector) SetMatchLabels(val map[string]string) {
+	p.MatchLabels = val
+}
+func (p *LabelSelector) SetMatchExpressions(val []*LabelExpression) {
+	p.MatchExpressions = val
+}
+
+func (p *LabelSelector) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *LabelSelector) IsSetMatchLabels() bool {
+	return p.MatchLabels != nil
+}
+
+func (p *LabelSelector) IsSetMatchExpressions() bool {
+	return p.MatchExpressions != nil
+}
+
+func (p *LabelSelector) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("LabelSelector(%+v)", *p)
+}
+
+var fieldIDToName_LabelSelector = map[int16]string{
+	1: "matchLabels",
+	2: "matchExpressions",
+}
+
+type SelectorRule struct {
+	Mode           string         `thrift:"mode,1,required" frugal:"1,required,string" json:"mode"`
+	Selector       *LabelSelector `thrift:"selector,2,optional" frugal:"2,optional,LabelSelector" json:"selector,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewSelectorRule() *SelectorRule {
+	return &SelectorRule{}
+}
+
+func (p *SelectorRule) InitDefault() {
+}
+
+func (p *SelectorRule) GetMode() (v string) {
+	return p.Mode
+}
+
+var SelectorRule_Selector_DEFAULT *LabelSelector
+
+func (p *SelectorRule) GetSelector() (v *LabelSelector) {
+	if !p.IsSetSelector() {
+		return SelectorRule_Selector_DEFAULT
+	}
+	return p.Selector
+}
+func (p *SelectorRule) SetMode(val string) {
+	p.Mode = val
+}
+func (p *SelectorRule) SetSelector(val *LabelSelector) {
+	p.Selector = val
+}
+
+func (p *SelectorRule) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *SelectorRule) IsSetSelector() bool {
+	return p.Selector != nil
+}
+
+func (p *SelectorRule) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SelectorRule(%+v)", *p)
+}
+
+var fieldIDToName_SelectorRule = map[int16]string{
+	1: "mode",
+	2: "selector",
+}
+
+type AssociationRule struct {
+	Object         *SelectorRule `thrift:"object,1,required" frugal:"1,required,SelectorRule" json:"object"`
+	Namespace      *SelectorRule `thrift:"namespace,2,required" frugal:"2,required,SelectorRule" json:"namespace"`
+	_unknownFields unknown.Fields
+}
+
+func NewAssociationRule() *AssociationRule {
+	return &AssociationRule{}
+}
+
+func (p *AssociationRule) InitDefault() {
+}
+
+var AssociationRule_Object_DEFAULT *SelectorRule
+
+func (p *AssociationRule) GetObject() (v *SelectorRule) {
+	if !p.IsSetObject() {
+		return AssociationRule_Object_DEFAULT
+	}
+	return p.Object
+}
+
+var AssociationRule_Namespace_DEFAULT *SelectorRule
+
+func (p *AssociationRule) GetNamespace() (v *SelectorRule) {
+	if !p.IsSetNamespace() {
+		return AssociationRule_Namespace_DEFAULT
+	}
+	return p.Namespace
+}
+func (p *AssociationRule) SetObject(val *SelectorRule) {
+	p.Object = val
+}
+func (p *AssociationRule) SetNamespace(val *SelectorRule) {
+	p.Namespace = val
+}
+
+func (p *AssociationRule) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *AssociationRule) IsSetObject() bool {
+	return p.Object != nil
+}
+
+func (p *AssociationRule) IsSetNamespace() bool {
+	return p.Namespace != nil
+}
+
+func (p *AssociationRule) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AssociationRule(%+v)", *p)
+}
+
+var fieldIDToName_AssociationRule = map[int16]string{
+	1: "object",
+	2: "namespace",
+}
+
+type AgentAssociations struct {
+	ServiceMonitor *AssociationRule `thrift:"serviceMonitor,1,required" frugal:"1,required,AssociationRule" json:"serviceMonitor"`
+	PodMonitor     *AssociationRule `thrift:"podMonitor,2,required" frugal:"2,required,AssociationRule" json:"podMonitor"`
+	Probe          *AssociationRule `thrift:"probe,3,required" frugal:"3,required,AssociationRule" json:"probe"`
+	ScrapeConfig   *AssociationRule `thrift:"scrapeConfig,4,required" frugal:"4,required,AssociationRule" json:"scrapeConfig"`
+	_unknownFields unknown.Fields
+}
+
+func NewAgentAssociations() *AgentAssociations {
+	return &AgentAssociations{}
+}
+
+func (p *AgentAssociations) InitDefault() {
+}
+
+var AgentAssociations_ServiceMonitor_DEFAULT *AssociationRule
+
+func (p *AgentAssociations) GetServiceMonitor() (v *AssociationRule) {
+	if !p.IsSetServiceMonitor() {
+		return AgentAssociations_ServiceMonitor_DEFAULT
+	}
+	return p.ServiceMonitor
+}
+
+var AgentAssociations_PodMonitor_DEFAULT *AssociationRule
+
+func (p *AgentAssociations) GetPodMonitor() (v *AssociationRule) {
+	if !p.IsSetPodMonitor() {
+		return AgentAssociations_PodMonitor_DEFAULT
+	}
+	return p.PodMonitor
+}
+
+var AgentAssociations_Probe_DEFAULT *AssociationRule
+
+func (p *AgentAssociations) GetProbe() (v *AssociationRule) {
+	if !p.IsSetProbe() {
+		return AgentAssociations_Probe_DEFAULT
+	}
+	return p.Probe
+}
+
+var AgentAssociations_ScrapeConfig_DEFAULT *AssociationRule
+
+func (p *AgentAssociations) GetScrapeConfig() (v *AssociationRule) {
+	if !p.IsSetScrapeConfig() {
+		return AgentAssociations_ScrapeConfig_DEFAULT
+	}
+	return p.ScrapeConfig
+}
+func (p *AgentAssociations) SetServiceMonitor(val *AssociationRule) {
+	p.ServiceMonitor = val
+}
+func (p *AgentAssociations) SetPodMonitor(val *AssociationRule) {
+	p.PodMonitor = val
+}
+func (p *AgentAssociations) SetProbe(val *AssociationRule) {
+	p.Probe = val
+}
+func (p *AgentAssociations) SetScrapeConfig(val *AssociationRule) {
+	p.ScrapeConfig = val
+}
+
+func (p *AgentAssociations) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *AgentAssociations) IsSetServiceMonitor() bool {
+	return p.ServiceMonitor != nil
+}
+
+func (p *AgentAssociations) IsSetPodMonitor() bool {
+	return p.PodMonitor != nil
+}
+
+func (p *AgentAssociations) IsSetProbe() bool {
+	return p.Probe != nil
+}
+
+func (p *AgentAssociations) IsSetScrapeConfig() bool {
+	return p.ScrapeConfig != nil
+}
+
+func (p *AgentAssociations) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AgentAssociations(%+v)", *p)
+}
+
+var fieldIDToName_AgentAssociations = map[int16]string{
+	1: "serviceMonitor",
+	2: "podMonitor",
+	3: "probe",
+	4: "scrapeConfig",
+}
+
+type SecretKeyReference struct {
+	Name           string `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	Key            string `thrift:"key,2,required" frugal:"2,required,string" json:"key"`
+	_unknownFields unknown.Fields
+}
+
+func NewSecretKeyReference() *SecretKeyReference {
+	return &SecretKeyReference{}
+}
+
+func (p *SecretKeyReference) InitDefault() {
+}
+
+func (p *SecretKeyReference) GetName() (v string) {
+	return p.Name
+}
+
+func (p *SecretKeyReference) GetKey() (v string) {
+	return p.Key
+}
+func (p *SecretKeyReference) SetName(val string) {
+	p.Name = val
+}
+func (p *SecretKeyReference) SetKey(val string) {
+	p.Key = val
+}
+
+func (p *SecretKeyReference) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *SecretKeyReference) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SecretKeyReference(%+v)", *p)
+}
+
+var fieldIDToName_SecretKeyReference = map[int16]string{
+	1: "name",
+	2: "key",
+}
+
+type RemoteWriteAuth struct {
+	Mode           string              `thrift:"mode,1,required" frugal:"1,required,string" json:"mode"`
+	Username       *SecretKeyReference `thrift:"username,2,optional" frugal:"2,optional,SecretKeyReference" json:"username,omitempty"`
+	Password       *SecretKeyReference `thrift:"password,3,optional" frugal:"3,optional,SecretKeyReference" json:"password,omitempty"`
+	Credentials    *SecretKeyReference `thrift:"credentials,4,optional" frugal:"4,optional,SecretKeyReference" json:"credentials,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewRemoteWriteAuth() *RemoteWriteAuth {
+	return &RemoteWriteAuth{}
+}
+
+func (p *RemoteWriteAuth) InitDefault() {
+}
+
+func (p *RemoteWriteAuth) GetMode() (v string) {
+	return p.Mode
+}
+
+var RemoteWriteAuth_Username_DEFAULT *SecretKeyReference
+
+func (p *RemoteWriteAuth) GetUsername() (v *SecretKeyReference) {
+	if !p.IsSetUsername() {
+		return RemoteWriteAuth_Username_DEFAULT
+	}
+	return p.Username
+}
+
+var RemoteWriteAuth_Password_DEFAULT *SecretKeyReference
+
+func (p *RemoteWriteAuth) GetPassword() (v *SecretKeyReference) {
+	if !p.IsSetPassword() {
+		return RemoteWriteAuth_Password_DEFAULT
+	}
+	return p.Password
+}
+
+var RemoteWriteAuth_Credentials_DEFAULT *SecretKeyReference
+
+func (p *RemoteWriteAuth) GetCredentials() (v *SecretKeyReference) {
+	if !p.IsSetCredentials() {
+		return RemoteWriteAuth_Credentials_DEFAULT
+	}
+	return p.Credentials
+}
+func (p *RemoteWriteAuth) SetMode(val string) {
+	p.Mode = val
+}
+func (p *RemoteWriteAuth) SetUsername(val *SecretKeyReference) {
+	p.Username = val
+}
+func (p *RemoteWriteAuth) SetPassword(val *SecretKeyReference) {
+	p.Password = val
+}
+func (p *RemoteWriteAuth) SetCredentials(val *SecretKeyReference) {
+	p.Credentials = val
+}
+
+func (p *RemoteWriteAuth) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *RemoteWriteAuth) IsSetUsername() bool {
+	return p.Username != nil
+}
+
+func (p *RemoteWriteAuth) IsSetPassword() bool {
+	return p.Password != nil
+}
+
+func (p *RemoteWriteAuth) IsSetCredentials() bool {
+	return p.Credentials != nil
+}
+
+func (p *RemoteWriteAuth) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RemoteWriteAuth(%+v)", *p)
+}
+
+var fieldIDToName_RemoteWriteAuth = map[int16]string{
+	1: "mode",
+	2: "username",
+	3: "password",
+	4: "credentials",
+}
+
+type AgentTLS struct {
+	Ca             *SecretKeyReference `thrift:"ca,1,optional" frugal:"1,optional,SecretKeyReference" json:"ca,omitempty"`
+	Cert           *SecretKeyReference `thrift:"cert,2,optional" frugal:"2,optional,SecretKeyReference" json:"cert,omitempty"`
+	Key            *SecretKeyReference `thrift:"key,3,optional" frugal:"3,optional,SecretKeyReference" json:"key,omitempty"`
+	ServerName     *string             `thrift:"serverName,4,optional" frugal:"4,optional,string" json:"serverName,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewAgentTLS() *AgentTLS {
+	return &AgentTLS{}
+}
+
+func (p *AgentTLS) InitDefault() {
+}
+
+var AgentTLS_Ca_DEFAULT *SecretKeyReference
+
+func (p *AgentTLS) GetCa() (v *SecretKeyReference) {
+	if !p.IsSetCa() {
+		return AgentTLS_Ca_DEFAULT
+	}
+	return p.Ca
+}
+
+var AgentTLS_Cert_DEFAULT *SecretKeyReference
+
+func (p *AgentTLS) GetCert() (v *SecretKeyReference) {
+	if !p.IsSetCert() {
+		return AgentTLS_Cert_DEFAULT
+	}
+	return p.Cert
+}
+
+var AgentTLS_Key_DEFAULT *SecretKeyReference
+
+func (p *AgentTLS) GetKey() (v *SecretKeyReference) {
+	if !p.IsSetKey() {
+		return AgentTLS_Key_DEFAULT
+	}
+	return p.Key
+}
+
+var AgentTLS_ServerName_DEFAULT string
+
+func (p *AgentTLS) GetServerName() (v string) {
+	if !p.IsSetServerName() {
+		return AgentTLS_ServerName_DEFAULT
+	}
+	return *p.ServerName
+}
+func (p *AgentTLS) SetCa(val *SecretKeyReference) {
+	p.Ca = val
+}
+func (p *AgentTLS) SetCert(val *SecretKeyReference) {
+	p.Cert = val
+}
+func (p *AgentTLS) SetKey(val *SecretKeyReference) {
+	p.Key = val
+}
+func (p *AgentTLS) SetServerName(val *string) {
+	p.ServerName = val
+}
+
+func (p *AgentTLS) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *AgentTLS) IsSetCa() bool {
+	return p.Ca != nil
+}
+
+func (p *AgentTLS) IsSetCert() bool {
+	return p.Cert != nil
+}
+
+func (p *AgentTLS) IsSetKey() bool {
+	return p.Key != nil
+}
+
+func (p *AgentTLS) IsSetServerName() bool {
+	return p.ServerName != nil
+}
+
+func (p *AgentTLS) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AgentTLS(%+v)", *p)
+}
+
+var fieldIDToName_AgentTLS = map[int16]string{
+	1: "ca",
+	2: "cert",
+	3: "key",
+	4: "serverName",
+}
+
+type RemoteWriteEndpoint struct {
+	Url            string           `thrift:"url,1,required" frugal:"1,required,string" json:"url"`
+	Name           *string          `thrift:"name,2,optional" frugal:"2,optional,string" json:"name,omitempty"`
+	RemoteTimeout  *string          `thrift:"remoteTimeout,3,optional" frugal:"3,optional,string" json:"remoteTimeout,omitempty"`
+	Auth           *RemoteWriteAuth `thrift:"auth,4,required" frugal:"4,required,RemoteWriteAuth" json:"auth"`
+	Tls            *AgentTLS        `thrift:"tls,5,optional" frugal:"5,optional,AgentTLS" json:"tls,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewRemoteWriteEndpoint() *RemoteWriteEndpoint {
+	return &RemoteWriteEndpoint{}
+}
+
+func (p *RemoteWriteEndpoint) InitDefault() {
+}
+
+func (p *RemoteWriteEndpoint) GetUrl() (v string) {
+	return p.Url
+}
+
+var RemoteWriteEndpoint_Name_DEFAULT string
+
+func (p *RemoteWriteEndpoint) GetName() (v string) {
+	if !p.IsSetName() {
+		return RemoteWriteEndpoint_Name_DEFAULT
+	}
+	return *p.Name
+}
+
+var RemoteWriteEndpoint_RemoteTimeout_DEFAULT string
+
+func (p *RemoteWriteEndpoint) GetRemoteTimeout() (v string) {
+	if !p.IsSetRemoteTimeout() {
+		return RemoteWriteEndpoint_RemoteTimeout_DEFAULT
+	}
+	return *p.RemoteTimeout
+}
+
+var RemoteWriteEndpoint_Auth_DEFAULT *RemoteWriteAuth
+
+func (p *RemoteWriteEndpoint) GetAuth() (v *RemoteWriteAuth) {
+	if !p.IsSetAuth() {
+		return RemoteWriteEndpoint_Auth_DEFAULT
+	}
+	return p.Auth
+}
+
+var RemoteWriteEndpoint_Tls_DEFAULT *AgentTLS
+
+func (p *RemoteWriteEndpoint) GetTls() (v *AgentTLS) {
+	if !p.IsSetTls() {
+		return RemoteWriteEndpoint_Tls_DEFAULT
+	}
+	return p.Tls
+}
+func (p *RemoteWriteEndpoint) SetUrl(val string) {
+	p.Url = val
+}
+func (p *RemoteWriteEndpoint) SetName(val *string) {
+	p.Name = val
+}
+func (p *RemoteWriteEndpoint) SetRemoteTimeout(val *string) {
+	p.RemoteTimeout = val
+}
+func (p *RemoteWriteEndpoint) SetAuth(val *RemoteWriteAuth) {
+	p.Auth = val
+}
+func (p *RemoteWriteEndpoint) SetTls(val *AgentTLS) {
+	p.Tls = val
+}
+
+func (p *RemoteWriteEndpoint) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *RemoteWriteEndpoint) IsSetName() bool {
+	return p.Name != nil
+}
+
+func (p *RemoteWriteEndpoint) IsSetRemoteTimeout() bool {
+	return p.RemoteTimeout != nil
+}
+
+func (p *RemoteWriteEndpoint) IsSetAuth() bool {
+	return p.Auth != nil
+}
+
+func (p *RemoteWriteEndpoint) IsSetTls() bool {
+	return p.Tls != nil
+}
+
+func (p *RemoteWriteEndpoint) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RemoteWriteEndpoint(%+v)", *p)
+}
+
+var fieldIDToName_RemoteWriteEndpoint = map[int16]string{
+	1: "url",
+	2: "name",
+	3: "remoteTimeout",
+	4: "auth",
+	5: "tls",
+}
+
+type AgentStorage struct {
+	Mode           string  `thrift:"mode,1,required" frugal:"1,required,string" json:"mode"`
+	Capacity       *string `thrift:"capacity,2,optional" frugal:"2,optional,string" json:"capacity,omitempty"`
+	WhenScaled     string  `thrift:"whenScaled,3,required" frugal:"3,required,string" json:"whenScaled"`
+	WhenDeleted    string  `thrift:"whenDeleted,4,required" frugal:"4,required,string" json:"whenDeleted"`
+	_unknownFields unknown.Fields
+}
+
+func NewAgentStorage() *AgentStorage {
+	return &AgentStorage{}
+}
+
+func (p *AgentStorage) InitDefault() {
+}
+
+func (p *AgentStorage) GetMode() (v string) {
+	return p.Mode
+}
+
+var AgentStorage_Capacity_DEFAULT string
+
+func (p *AgentStorage) GetCapacity() (v string) {
+	if !p.IsSetCapacity() {
+		return AgentStorage_Capacity_DEFAULT
+	}
+	return *p.Capacity
+}
+
+func (p *AgentStorage) GetWhenScaled() (v string) {
+	return p.WhenScaled
+}
+
+func (p *AgentStorage) GetWhenDeleted() (v string) {
+	return p.WhenDeleted
+}
+func (p *AgentStorage) SetMode(val string) {
+	p.Mode = val
+}
+func (p *AgentStorage) SetCapacity(val *string) {
+	p.Capacity = val
+}
+func (p *AgentStorage) SetWhenScaled(val string) {
+	p.WhenScaled = val
+}
+func (p *AgentStorage) SetWhenDeleted(val string) {
+	p.WhenDeleted = val
+}
+
+func (p *AgentStorage) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *AgentStorage) IsSetCapacity() bool {
+	return p.Capacity != nil
+}
+
+func (p *AgentStorage) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AgentStorage(%+v)", *p)
+}
+
+var fieldIDToName_AgentStorage = map[int16]string{
+	1: "mode",
+	2: "capacity",
+	3: "whenScaled",
+	4: "whenDeleted",
+}
+
+type AgentConfiguration struct {
+	Name               string                 `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	Namespace          string                 `thrift:"namespace,2,required" frugal:"2,required,string" json:"namespace"`
+	DesiredState       string                 `thrift:"desiredState,3,required" frugal:"3,required,string" json:"desiredState"`
+	Shards             int32                  `thrift:"shards,4,required" frugal:"4,required,i32" json:"shards"`
+	Resources          *ContainerResources    `thrift:"resources,5,required" frugal:"5,required,ContainerResources" json:"resources"`
+	Storage            *AgentStorage          `thrift:"storage,6,required" frugal:"6,required,AgentStorage" json:"storage"`
+	ServiceAccountName string                 `thrift:"serviceAccountName,7,required" frugal:"7,required,string" json:"serviceAccountName"`
+	Associations       *AgentAssociations     `thrift:"associations,8,required" frugal:"8,required,AgentAssociations" json:"associations"`
+	RemoteWrite        []*RemoteWriteEndpoint `thrift:"remoteWrite,9,required" frugal:"9,required,list<RemoteWriteEndpoint>" json:"remoteWrite"`
+	_unknownFields     unknown.Fields
+}
+
+func NewAgentConfiguration() *AgentConfiguration {
+	return &AgentConfiguration{}
+}
+
+func (p *AgentConfiguration) InitDefault() {
+}
+
+func (p *AgentConfiguration) GetName() (v string) {
+	return p.Name
+}
+
+func (p *AgentConfiguration) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *AgentConfiguration) GetDesiredState() (v string) {
+	return p.DesiredState
+}
+
+func (p *AgentConfiguration) GetShards() (v int32) {
+	return p.Shards
+}
+
+var AgentConfiguration_Resources_DEFAULT *ContainerResources
+
+func (p *AgentConfiguration) GetResources() (v *ContainerResources) {
+	if !p.IsSetResources() {
+		return AgentConfiguration_Resources_DEFAULT
+	}
+	return p.Resources
+}
+
+var AgentConfiguration_Storage_DEFAULT *AgentStorage
+
+func (p *AgentConfiguration) GetStorage() (v *AgentStorage) {
+	if !p.IsSetStorage() {
+		return AgentConfiguration_Storage_DEFAULT
+	}
+	return p.Storage
+}
+
+func (p *AgentConfiguration) GetServiceAccountName() (v string) {
+	return p.ServiceAccountName
+}
+
+var AgentConfiguration_Associations_DEFAULT *AgentAssociations
+
+func (p *AgentConfiguration) GetAssociations() (v *AgentAssociations) {
+	if !p.IsSetAssociations() {
+		return AgentConfiguration_Associations_DEFAULT
+	}
+	return p.Associations
+}
+
+func (p *AgentConfiguration) GetRemoteWrite() (v []*RemoteWriteEndpoint) {
+	return p.RemoteWrite
+}
+func (p *AgentConfiguration) SetName(val string) {
+	p.Name = val
+}
+func (p *AgentConfiguration) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *AgentConfiguration) SetDesiredState(val string) {
+	p.DesiredState = val
+}
+func (p *AgentConfiguration) SetShards(val int32) {
+	p.Shards = val
+}
+func (p *AgentConfiguration) SetResources(val *ContainerResources) {
+	p.Resources = val
+}
+func (p *AgentConfiguration) SetStorage(val *AgentStorage) {
+	p.Storage = val
+}
+func (p *AgentConfiguration) SetServiceAccountName(val string) {
+	p.ServiceAccountName = val
+}
+func (p *AgentConfiguration) SetAssociations(val *AgentAssociations) {
+	p.Associations = val
+}
+func (p *AgentConfiguration) SetRemoteWrite(val []*RemoteWriteEndpoint) {
+	p.RemoteWrite = val
+}
+
+func (p *AgentConfiguration) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *AgentConfiguration) IsSetResources() bool {
+	return p.Resources != nil
+}
+
+func (p *AgentConfiguration) IsSetStorage() bool {
+	return p.Storage != nil
+}
+
+func (p *AgentConfiguration) IsSetAssociations() bool {
+	return p.Associations != nil
+}
+
+func (p *AgentConfiguration) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AgentConfiguration(%+v)", *p)
+}
+
+var fieldIDToName_AgentConfiguration = map[int16]string{
+	1: "name",
+	2: "namespace",
+	3: "desiredState",
+	4: "shards",
+	5: "resources",
+	6: "storage",
+	7: "serviceAccountName",
+	8: "associations",
+	9: "remoteWrite",
+}
+
+type MatchedResource struct {
+	Kind           string `thrift:"kind,1,required" frugal:"1,required,string" json:"kind"`
+	Namespace      string `thrift:"namespace,2,required" frugal:"2,required,string" json:"namespace"`
+	Name           string `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
+	Uid            string `thrift:"uid,4,required" frugal:"4,required,string" json:"uid"`
+	_unknownFields unknown.Fields
+}
+
+func NewMatchedResource() *MatchedResource {
+	return &MatchedResource{}
+}
+
+func (p *MatchedResource) InitDefault() {
+}
+
+func (p *MatchedResource) GetKind() (v string) {
+	return p.Kind
+}
+
+func (p *MatchedResource) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *MatchedResource) GetName() (v string) {
+	return p.Name
+}
+
+func (p *MatchedResource) GetUid() (v string) {
+	return p.Uid
+}
+func (p *MatchedResource) SetKind(val string) {
+	p.Kind = val
+}
+func (p *MatchedResource) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *MatchedResource) SetName(val string) {
+	p.Name = val
+}
+func (p *MatchedResource) SetUid(val string) {
+	p.Uid = val
+}
+
+func (p *MatchedResource) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *MatchedResource) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MatchedResource(%+v)", *p)
+}
+
+var fieldIDToName_MatchedResource = map[int16]string{
+	1: "kind",
+	2: "namespace",
+	3: "name",
+	4: "uid",
+}
+
+type VolumeObservation struct {
+	Namespace        string   `thrift:"namespace,1,required" frugal:"1,required,string" json:"namespace"`
+	Name             string   `thrift:"name,2,required" frugal:"2,required,string" json:"name"`
+	Uid              string   `thrift:"uid,3,required" frugal:"3,required,string" json:"uid"`
+	Phase            string   `thrift:"phase,4,required" frugal:"4,required,string" json:"phase"`
+	RequestedStorage string   `thrift:"requestedStorage,5,required" frugal:"5,required,string" json:"requestedStorage"`
+	AccessModes      []string `thrift:"accessModes,6,required" frugal:"6,required,list<string>" json:"accessModes"`
+	StorageClass     string   `thrift:"storageClass,7,required" frugal:"7,required,string" json:"storageClass"`
+	MountedByPods    []string `thrift:"mountedByPods,8,required" frugal:"8,required,list<string>" json:"mountedByPods"`
+	_unknownFields   unknown.Fields
+}
+
+func NewVolumeObservation() *VolumeObservation {
+	return &VolumeObservation{}
+}
+
+func (p *VolumeObservation) InitDefault() {
+}
+
+func (p *VolumeObservation) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *VolumeObservation) GetName() (v string) {
+	return p.Name
+}
+
+func (p *VolumeObservation) GetUid() (v string) {
+	return p.Uid
+}
+
+func (p *VolumeObservation) GetPhase() (v string) {
+	return p.Phase
+}
+
+func (p *VolumeObservation) GetRequestedStorage() (v string) {
+	return p.RequestedStorage
+}
+
+func (p *VolumeObservation) GetAccessModes() (v []string) {
+	return p.AccessModes
+}
+
+func (p *VolumeObservation) GetStorageClass() (v string) {
+	return p.StorageClass
+}
+
+func (p *VolumeObservation) GetMountedByPods() (v []string) {
+	return p.MountedByPods
+}
+func (p *VolumeObservation) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *VolumeObservation) SetName(val string) {
+	p.Name = val
+}
+func (p *VolumeObservation) SetUid(val string) {
+	p.Uid = val
+}
+func (p *VolumeObservation) SetPhase(val string) {
+	p.Phase = val
+}
+func (p *VolumeObservation) SetRequestedStorage(val string) {
+	p.RequestedStorage = val
+}
+func (p *VolumeObservation) SetAccessModes(val []string) {
+	p.AccessModes = val
+}
+func (p *VolumeObservation) SetStorageClass(val string) {
+	p.StorageClass = val
+}
+func (p *VolumeObservation) SetMountedByPods(val []string) {
+	p.MountedByPods = val
+}
+
+func (p *VolumeObservation) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *VolumeObservation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VolumeObservation(%+v)", *p)
+}
+
+var fieldIDToName_VolumeObservation = map[int16]string{
+	1: "namespace",
+	2: "name",
+	3: "uid",
+	4: "phase",
+	5: "requestedStorage",
+	6: "accessModes",
+	7: "storageClass",
+	8: "mountedByPods",
+}
+
+type SourceObservation struct {
+	Source         string               `thrift:"source,1,required" frugal:"1,required,string" json:"source"`
+	LastAttemptAt  string               `thrift:"lastAttemptAt,2,required" frugal:"2,required,string" json:"lastAttemptAt"`
+	LastSuccessAt  string               `thrift:"lastSuccessAt,3,required" frugal:"3,required,string" json:"lastSuccessAt"`
+	Error          string               `thrift:"error,4,required" frugal:"4,required,string" json:"error"`
+	Historical     bool                 `thrift:"historical,5,required" frugal:"5,required,bool" json:"historical"`
+	Matches        []*MatchedResource   `thrift:"matches,6,optional" frugal:"6,optional,list<MatchedResource>" json:"matches,omitempty"`
+	Volumes        []*VolumeObservation `thrift:"volumes,7,optional" frugal:"7,optional,list<VolumeObservation>" json:"volumes,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewSourceObservation() *SourceObservation {
+	return &SourceObservation{}
+}
+
+func (p *SourceObservation) InitDefault() {
+}
+
+func (p *SourceObservation) GetSource() (v string) {
+	return p.Source
+}
+
+func (p *SourceObservation) GetLastAttemptAt() (v string) {
+	return p.LastAttemptAt
+}
+
+func (p *SourceObservation) GetLastSuccessAt() (v string) {
+	return p.LastSuccessAt
+}
+
+func (p *SourceObservation) GetError() (v string) {
+	return p.Error
+}
+
+func (p *SourceObservation) GetHistorical() (v bool) {
+	return p.Historical
+}
+
+var SourceObservation_Matches_DEFAULT []*MatchedResource
+
+func (p *SourceObservation) GetMatches() (v []*MatchedResource) {
+	if !p.IsSetMatches() {
+		return SourceObservation_Matches_DEFAULT
+	}
+	return p.Matches
+}
+
+var SourceObservation_Volumes_DEFAULT []*VolumeObservation
+
+func (p *SourceObservation) GetVolumes() (v []*VolumeObservation) {
+	if !p.IsSetVolumes() {
+		return SourceObservation_Volumes_DEFAULT
+	}
+	return p.Volumes
+}
+func (p *SourceObservation) SetSource(val string) {
+	p.Source = val
+}
+func (p *SourceObservation) SetLastAttemptAt(val string) {
+	p.LastAttemptAt = val
+}
+func (p *SourceObservation) SetLastSuccessAt(val string) {
+	p.LastSuccessAt = val
+}
+func (p *SourceObservation) SetError(val string) {
+	p.Error = val
+}
+func (p *SourceObservation) SetHistorical(val bool) {
+	p.Historical = val
+}
+func (p *SourceObservation) SetMatches(val []*MatchedResource) {
+	p.Matches = val
+}
+func (p *SourceObservation) SetVolumes(val []*VolumeObservation) {
+	p.Volumes = val
+}
+
+func (p *SourceObservation) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *SourceObservation) IsSetMatches() bool {
+	return p.Matches != nil
+}
+
+func (p *SourceObservation) IsSetVolumes() bool {
+	return p.Volumes != nil
+}
+
+func (p *SourceObservation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SourceObservation(%+v)", *p)
+}
+
+var fieldIDToName_SourceObservation = map[int16]string{
+	1: "source",
+	2: "lastAttemptAt",
+	3: "lastSuccessAt",
+	4: "error",
+	5: "historical",
+	6: "matches",
+	7: "volumes",
+}
+
+type AssociationPreviewRequest struct {
+	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	DraftRevision  int64  `thrift:"draftRevision,2,required" frugal:"2,required,i64" json:"draftRevision"`
+	_unknownFields unknown.Fields
+}
+
+func NewAssociationPreviewRequest() *AssociationPreviewRequest {
+	return &AssociationPreviewRequest{}
+}
+
+func (p *AssociationPreviewRequest) InitDefault() {
+}
+
+func (p *AssociationPreviewRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *AssociationPreviewRequest) GetDraftRevision() (v int64) {
+	return p.DraftRevision
+}
+func (p *AssociationPreviewRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *AssociationPreviewRequest) SetDraftRevision(val int64) {
+	p.DraftRevision = val
+}
+
+func (p *AssociationPreviewRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *AssociationPreviewRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AssociationPreviewRequest(%+v)", *p)
+}
+
+var fieldIDToName_AssociationPreviewRequest = map[int16]string{
+	1: "id",
+	2: "draftRevision",
+}
+
+type AssociationPreview struct {
+	DraftRevision  int64                `thrift:"draftRevision,1,required" frugal:"1,required,i64" json:"draftRevision"`
+	Sources        []*SourceObservation `thrift:"sources,2,required" frugal:"2,required,list<SourceObservation>" json:"sources"`
+	_unknownFields unknown.Fields
+}
+
+func NewAssociationPreview() *AssociationPreview {
+	return &AssociationPreview{}
+}
+
+func (p *AssociationPreview) InitDefault() {
+}
+
+func (p *AssociationPreview) GetDraftRevision() (v int64) {
+	return p.DraftRevision
+}
+
+func (p *AssociationPreview) GetSources() (v []*SourceObservation) {
+	return p.Sources
+}
+func (p *AssociationPreview) SetDraftRevision(val int64) {
+	p.DraftRevision = val
+}
+func (p *AssociationPreview) SetSources(val []*SourceObservation) {
+	p.Sources = val
+}
+
+func (p *AssociationPreview) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *AssociationPreview) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AssociationPreview(%+v)", *p)
+}
+
+var fieldIDToName_AssociationPreview = map[int16]string{
+	1: "draftRevision",
+	2: "sources",
+}
+
 type InstanceID struct {
 	Id             string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
 	_unknownFields unknown.Fields
@@ -2141,9 +3360,10 @@ var fieldIDToName_InstanceID = map[int16]string{
 }
 
 type CreateInstanceRequest struct {
-	ClusterId      string            `thrift:"clusterId,1,required" frugal:"1,required,string" json:"clusterId"`
-	Component      string            `thrift:"component,2,required" frugal:"2,required,string" json:"component"`
-	Ksm            *KSMConfiguration `thrift:"ksm,3,optional" frugal:"3,optional,KSMConfiguration" json:"ksm,omitempty"`
+	ClusterId      string              `thrift:"clusterId,1,required" frugal:"1,required,string" json:"clusterId"`
+	Component      string              `thrift:"component,2,required" frugal:"2,required,string" json:"component"`
+	Ksm            *KSMConfiguration   `thrift:"ksm,3,optional" frugal:"3,optional,KSMConfiguration" json:"ksm,omitempty"`
+	Agent          *AgentConfiguration `thrift:"agent,4,optional" frugal:"4,optional,AgentConfiguration" json:"agent,omitempty"`
 	_unknownFields unknown.Fields
 }
 
@@ -2170,6 +3390,15 @@ func (p *CreateInstanceRequest) GetKsm() (v *KSMConfiguration) {
 	}
 	return p.Ksm
 }
+
+var CreateInstanceRequest_Agent_DEFAULT *AgentConfiguration
+
+func (p *CreateInstanceRequest) GetAgent() (v *AgentConfiguration) {
+	if !p.IsSetAgent() {
+		return CreateInstanceRequest_Agent_DEFAULT
+	}
+	return p.Agent
+}
 func (p *CreateInstanceRequest) SetClusterId(val string) {
 	p.ClusterId = val
 }
@@ -2179,6 +3408,9 @@ func (p *CreateInstanceRequest) SetComponent(val string) {
 func (p *CreateInstanceRequest) SetKsm(val *KSMConfiguration) {
 	p.Ksm = val
 }
+func (p *CreateInstanceRequest) SetAgent(val *AgentConfiguration) {
+	p.Agent = val
+}
 
 func (p *CreateInstanceRequest) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -2186,6 +3418,10 @@ func (p *CreateInstanceRequest) CarryingUnknownFields() bool {
 
 func (p *CreateInstanceRequest) IsSetKsm() bool {
 	return p.Ksm != nil
+}
+
+func (p *CreateInstanceRequest) IsSetAgent() bool {
+	return p.Agent != nil
 }
 
 func (p *CreateInstanceRequest) String() string {
@@ -2199,12 +3435,14 @@ var fieldIDToName_CreateInstanceRequest = map[int16]string{
 	1: "clusterId",
 	2: "component",
 	3: "ksm",
+	4: "agent",
 }
 
 type SaveDraftRequest struct {
-	Id                    string            `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	ExpectedDraftRevision int64             `thrift:"expectedDraftRevision,2,required" frugal:"2,required,i64" json:"expectedDraftRevision"`
-	Ksm                   *KSMConfiguration `thrift:"ksm,3,optional" frugal:"3,optional,KSMConfiguration" json:"ksm,omitempty"`
+	Id                    string              `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	ExpectedDraftRevision int64               `thrift:"expectedDraftRevision,2,required" frugal:"2,required,i64" json:"expectedDraftRevision"`
+	Ksm                   *KSMConfiguration   `thrift:"ksm,3,optional" frugal:"3,optional,KSMConfiguration" json:"ksm,omitempty"`
+	Agent                 *AgentConfiguration `thrift:"agent,4,optional" frugal:"4,optional,AgentConfiguration" json:"agent,omitempty"`
 	_unknownFields        unknown.Fields
 }
 
@@ -2231,6 +3469,15 @@ func (p *SaveDraftRequest) GetKsm() (v *KSMConfiguration) {
 	}
 	return p.Ksm
 }
+
+var SaveDraftRequest_Agent_DEFAULT *AgentConfiguration
+
+func (p *SaveDraftRequest) GetAgent() (v *AgentConfiguration) {
+	if !p.IsSetAgent() {
+		return SaveDraftRequest_Agent_DEFAULT
+	}
+	return p.Agent
+}
 func (p *SaveDraftRequest) SetId(val string) {
 	p.Id = val
 }
@@ -2240,6 +3487,9 @@ func (p *SaveDraftRequest) SetExpectedDraftRevision(val int64) {
 func (p *SaveDraftRequest) SetKsm(val *KSMConfiguration) {
 	p.Ksm = val
 }
+func (p *SaveDraftRequest) SetAgent(val *AgentConfiguration) {
+	p.Agent = val
+}
 
 func (p *SaveDraftRequest) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -2247,6 +3497,10 @@ func (p *SaveDraftRequest) CarryingUnknownFields() bool {
 
 func (p *SaveDraftRequest) IsSetKsm() bool {
 	return p.Ksm != nil
+}
+
+func (p *SaveDraftRequest) IsSetAgent() bool {
+	return p.Agent != nil
 }
 
 func (p *SaveDraftRequest) String() string {
@@ -2260,12 +3514,14 @@ var fieldIDToName_SaveDraftRequest = map[int16]string{
 	1: "id",
 	2: "expectedDraftRevision",
 	3: "ksm",
+	4: "agent",
 }
 
 type ConfigurationDraft struct {
-	Revision       int64             `thrift:"revision,1,required" frugal:"1,required,i64" json:"revision"`
-	Ksm            *KSMConfiguration `thrift:"ksm,2,optional" frugal:"2,optional,KSMConfiguration" json:"ksm,omitempty"`
-	Yaml           string            `thrift:"yaml,3,required" frugal:"3,required,string" json:"yaml"`
+	Revision       int64               `thrift:"revision,1,required" frugal:"1,required,i64" json:"revision"`
+	Ksm            *KSMConfiguration   `thrift:"ksm,2,optional" frugal:"2,optional,KSMConfiguration" json:"ksm,omitempty"`
+	Yaml           string              `thrift:"yaml,3,required" frugal:"3,required,string" json:"yaml"`
+	Agent          *AgentConfiguration `thrift:"agent,4,optional" frugal:"4,optional,AgentConfiguration" json:"agent,omitempty"`
 	_unknownFields unknown.Fields
 }
 
@@ -2292,6 +3548,15 @@ func (p *ConfigurationDraft) GetKsm() (v *KSMConfiguration) {
 func (p *ConfigurationDraft) GetYaml() (v string) {
 	return p.Yaml
 }
+
+var ConfigurationDraft_Agent_DEFAULT *AgentConfiguration
+
+func (p *ConfigurationDraft) GetAgent() (v *AgentConfiguration) {
+	if !p.IsSetAgent() {
+		return ConfigurationDraft_Agent_DEFAULT
+	}
+	return p.Agent
+}
 func (p *ConfigurationDraft) SetRevision(val int64) {
 	p.Revision = val
 }
@@ -2301,6 +3566,9 @@ func (p *ConfigurationDraft) SetKsm(val *KSMConfiguration) {
 func (p *ConfigurationDraft) SetYaml(val string) {
 	p.Yaml = val
 }
+func (p *ConfigurationDraft) SetAgent(val *AgentConfiguration) {
+	p.Agent = val
+}
 
 func (p *ConfigurationDraft) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -2308,6 +3576,10 @@ func (p *ConfigurationDraft) CarryingUnknownFields() bool {
 
 func (p *ConfigurationDraft) IsSetKsm() bool {
 	return p.Ksm != nil
+}
+
+func (p *ConfigurationDraft) IsSetAgent() bool {
+	return p.Agent != nil
 }
 
 func (p *ConfigurationDraft) String() string {
@@ -2321,6 +3593,7 @@ var fieldIDToName_ConfigurationDraft = map[int16]string{
 	1: "revision",
 	2: "ksm",
 	3: "yaml",
+	4: "agent",
 }
 
 type InstanceRuntime struct {
@@ -2332,6 +3605,8 @@ type InstanceRuntime struct {
 	LastSuccessAt  string `thrift:"lastSuccessAt,6,required" frugal:"6,required,string" json:"lastSuccessAt"`
 	Error          string `thrift:"error,7,required" frugal:"7,required,string" json:"error"`
 	ObservedAt     string `thrift:"observedAt,8,required" frugal:"8,required,string" json:"observedAt"`
+	Shards         *int32 `thrift:"shards,9,optional" frugal:"9,optional,i32" json:"shards,omitempty"`
+	Paused         *bool  `thrift:"paused,10,optional" frugal:"10,optional,bool" json:"paused,omitempty"`
 	_unknownFields unknown.Fields
 }
 
@@ -2383,6 +3658,24 @@ func (p *InstanceRuntime) GetError() (v string) {
 func (p *InstanceRuntime) GetObservedAt() (v string) {
 	return p.ObservedAt
 }
+
+var InstanceRuntime_Shards_DEFAULT int32
+
+func (p *InstanceRuntime) GetShards() (v int32) {
+	if !p.IsSetShards() {
+		return InstanceRuntime_Shards_DEFAULT
+	}
+	return *p.Shards
+}
+
+var InstanceRuntime_Paused_DEFAULT bool
+
+func (p *InstanceRuntime) GetPaused() (v bool) {
+	if !p.IsSetPaused() {
+		return InstanceRuntime_Paused_DEFAULT
+	}
+	return *p.Paused
+}
 func (p *InstanceRuntime) SetSummary(val string) {
 	p.Summary = val
 }
@@ -2407,6 +3700,12 @@ func (p *InstanceRuntime) SetError(val string) {
 func (p *InstanceRuntime) SetObservedAt(val string) {
 	p.ObservedAt = val
 }
+func (p *InstanceRuntime) SetShards(val *int32) {
+	p.Shards = val
+}
+func (p *InstanceRuntime) SetPaused(val *bool) {
+	p.Paused = val
+}
 
 func (p *InstanceRuntime) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -2420,6 +3719,14 @@ func (p *InstanceRuntime) IsSetDesiredPods() bool {
 	return p.DesiredPods != nil
 }
 
+func (p *InstanceRuntime) IsSetShards() bool {
+	return p.Shards != nil
+}
+
+func (p *InstanceRuntime) IsSetPaused() bool {
+	return p.Paused != nil
+}
+
 func (p *InstanceRuntime) String() string {
 	if p == nil {
 		return "<nil>"
@@ -2428,31 +3735,36 @@ func (p *InstanceRuntime) String() string {
 }
 
 var fieldIDToName_InstanceRuntime = map[int16]string{
-	1: "summary",
-	2: "desiredState",
-	3: "deploymentMode",
-	4: "availablePods",
-	5: "desiredPods",
-	6: "lastSuccessAt",
-	7: "error",
-	8: "observedAt",
+	1:  "summary",
+	2:  "desiredState",
+	3:  "deploymentMode",
+	4:  "availablePods",
+	5:  "desiredPods",
+	6:  "lastSuccessAt",
+	7:  "error",
+	8:  "observedAt",
+	9:  "shards",
+	10: "paused",
 }
 
 type ObservationInstance struct {
-	Id               string           `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	ClusterId        string           `thrift:"clusterId,2,required" frugal:"2,required,string" json:"clusterId"`
-	Name             string           `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
-	TargetNamespace  string           `thrift:"targetNamespace,4,required" frugal:"4,required,string" json:"targetNamespace"`
-	Component        string           `thrift:"component,5,required" frugal:"5,required,string" json:"component"`
-	Type             string           `thrift:"type,6,required" frugal:"6,required,string" json:"type"`
-	ReadOnly         bool             `thrift:"readOnly,7,required" frugal:"7,required,bool" json:"readOnly"`
-	Uid              string           `thrift:"uid,8,required" frugal:"8,required,string" json:"uid"`
-	Lifecycle        string           `thrift:"lifecycle,9,required" frugal:"9,required,string" json:"lifecycle"`
-	CurrentVersionId string           `thrift:"currentVersionId,10,required" frugal:"10,required,string" json:"currentVersionId"`
-	ActivityAt       string           `thrift:"activityAt,11,required" frugal:"11,required,string" json:"activityAt"`
-	Runtime          *InstanceRuntime `thrift:"runtime,12,optional" frugal:"12,optional,InstanceRuntime" json:"runtime,omitempty"`
-	Ownership        string           `thrift:"ownership,13,required" frugal:"13,required,string" json:"ownership"`
-	Yaml             *string          `thrift:"yaml,14,optional" frugal:"14,optional,string" json:"yaml,omitempty"`
+	Id               string               `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	ClusterId        string               `thrift:"clusterId,2,required" frugal:"2,required,string" json:"clusterId"`
+	Name             string               `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
+	TargetNamespace  string               `thrift:"targetNamespace,4,required" frugal:"4,required,string" json:"targetNamespace"`
+	Component        string               `thrift:"component,5,required" frugal:"5,required,string" json:"component"`
+	Type             string               `thrift:"type,6,required" frugal:"6,required,string" json:"type"`
+	ReadOnly         bool                 `thrift:"readOnly,7,required" frugal:"7,required,bool" json:"readOnly"`
+	Uid              string               `thrift:"uid,8,required" frugal:"8,required,string" json:"uid"`
+	Lifecycle        string               `thrift:"lifecycle,9,required" frugal:"9,required,string" json:"lifecycle"`
+	CurrentVersionId string               `thrift:"currentVersionId,10,required" frugal:"10,required,string" json:"currentVersionId"`
+	ActivityAt       string               `thrift:"activityAt,11,required" frugal:"11,required,string" json:"activityAt"`
+	Runtime          *InstanceRuntime     `thrift:"runtime,12,optional" frugal:"12,optional,InstanceRuntime" json:"runtime,omitempty"`
+	Ownership        string               `thrift:"ownership,13,required" frugal:"13,required,string" json:"ownership"`
+	Yaml             *string              `thrift:"yaml,14,optional" frugal:"14,optional,string" json:"yaml,omitempty"`
+	CrNamespace      *string              `thrift:"crNamespace,15,optional" frugal:"15,optional,string" json:"crNamespace,omitempty"`
+	Scope            *string              `thrift:"scope,16,optional" frugal:"16,optional,string" json:"scope,omitempty"`
+	Sources          []*SourceObservation `thrift:"sources,17,optional" frugal:"17,optional,list<SourceObservation>" json:"sources,omitempty"`
 	_unknownFields   unknown.Fields
 }
 
@@ -2528,6 +3840,33 @@ func (p *ObservationInstance) GetYaml() (v string) {
 	}
 	return *p.Yaml
 }
+
+var ObservationInstance_CrNamespace_DEFAULT string
+
+func (p *ObservationInstance) GetCrNamespace() (v string) {
+	if !p.IsSetCrNamespace() {
+		return ObservationInstance_CrNamespace_DEFAULT
+	}
+	return *p.CrNamespace
+}
+
+var ObservationInstance_Scope_DEFAULT string
+
+func (p *ObservationInstance) GetScope() (v string) {
+	if !p.IsSetScope() {
+		return ObservationInstance_Scope_DEFAULT
+	}
+	return *p.Scope
+}
+
+var ObservationInstance_Sources_DEFAULT []*SourceObservation
+
+func (p *ObservationInstance) GetSources() (v []*SourceObservation) {
+	if !p.IsSetSources() {
+		return ObservationInstance_Sources_DEFAULT
+	}
+	return p.Sources
+}
 func (p *ObservationInstance) SetId(val string) {
 	p.Id = val
 }
@@ -2570,6 +3909,15 @@ func (p *ObservationInstance) SetOwnership(val string) {
 func (p *ObservationInstance) SetYaml(val *string) {
 	p.Yaml = val
 }
+func (p *ObservationInstance) SetCrNamespace(val *string) {
+	p.CrNamespace = val
+}
+func (p *ObservationInstance) SetScope(val *string) {
+	p.Scope = val
+}
+func (p *ObservationInstance) SetSources(val []*SourceObservation) {
+	p.Sources = val
+}
 
 func (p *ObservationInstance) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -2581,6 +3929,18 @@ func (p *ObservationInstance) IsSetRuntime() bool {
 
 func (p *ObservationInstance) IsSetYaml() bool {
 	return p.Yaml != nil
+}
+
+func (p *ObservationInstance) IsSetCrNamespace() bool {
+	return p.CrNamespace != nil
+}
+
+func (p *ObservationInstance) IsSetScope() bool {
+	return p.Scope != nil
+}
+
+func (p *ObservationInstance) IsSetSources() bool {
+	return p.Sources != nil
 }
 
 func (p *ObservationInstance) String() string {
@@ -2605,6 +3965,9 @@ var fieldIDToName_ObservationInstance = map[int16]string{
 	12: "runtime",
 	13: "ownership",
 	14: "yaml",
+	15: "crNamespace",
+	16: "scope",
+	17: "sources",
 }
 
 type InstancesResult_ struct {
@@ -2825,12 +4188,13 @@ var fieldIDToName_PublishRequest = map[int16]string{
 }
 
 type PublicationVersion struct {
-	VersionId           string            `thrift:"versionId,1,required" frugal:"1,required,string" json:"versionId"`
-	InstanceId          string            `thrift:"instanceId,2,required" frugal:"2,required,string" json:"instanceId"`
-	SourceDraftRevision int64             `thrift:"sourceDraftRevision,3,required" frugal:"3,required,i64" json:"sourceDraftRevision"`
-	Ksm                 *KSMConfiguration `thrift:"ksm,4,optional" frugal:"4,optional,KSMConfiguration" json:"ksm,omitempty"`
-	Yaml                string            `thrift:"yaml,5,required" frugal:"5,required,string" json:"yaml"`
-	CreatedAt           string            `thrift:"createdAt,6,required" frugal:"6,required,string" json:"createdAt"`
+	VersionId           string              `thrift:"versionId,1,required" frugal:"1,required,string" json:"versionId"`
+	InstanceId          string              `thrift:"instanceId,2,required" frugal:"2,required,string" json:"instanceId"`
+	SourceDraftRevision int64               `thrift:"sourceDraftRevision,3,required" frugal:"3,required,i64" json:"sourceDraftRevision"`
+	Ksm                 *KSMConfiguration   `thrift:"ksm,4,optional" frugal:"4,optional,KSMConfiguration" json:"ksm,omitempty"`
+	Yaml                string              `thrift:"yaml,5,required" frugal:"5,required,string" json:"yaml"`
+	CreatedAt           string              `thrift:"createdAt,6,required" frugal:"6,required,string" json:"createdAt"`
+	Agent               *AgentConfiguration `thrift:"agent,7,optional" frugal:"7,optional,AgentConfiguration" json:"agent,omitempty"`
 	_unknownFields      unknown.Fields
 }
 
@@ -2869,6 +4233,15 @@ func (p *PublicationVersion) GetYaml() (v string) {
 func (p *PublicationVersion) GetCreatedAt() (v string) {
 	return p.CreatedAt
 }
+
+var PublicationVersion_Agent_DEFAULT *AgentConfiguration
+
+func (p *PublicationVersion) GetAgent() (v *AgentConfiguration) {
+	if !p.IsSetAgent() {
+		return PublicationVersion_Agent_DEFAULT
+	}
+	return p.Agent
+}
 func (p *PublicationVersion) SetVersionId(val string) {
 	p.VersionId = val
 }
@@ -2887,6 +4260,9 @@ func (p *PublicationVersion) SetYaml(val string) {
 func (p *PublicationVersion) SetCreatedAt(val string) {
 	p.CreatedAt = val
 }
+func (p *PublicationVersion) SetAgent(val *AgentConfiguration) {
+	p.Agent = val
+}
 
 func (p *PublicationVersion) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -2894,6 +4270,10 @@ func (p *PublicationVersion) CarryingUnknownFields() bool {
 
 func (p *PublicationVersion) IsSetKsm() bool {
 	return p.Ksm != nil
+}
+
+func (p *PublicationVersion) IsSetAgent() bool {
+	return p.Agent != nil
 }
 
 func (p *PublicationVersion) String() string {
@@ -2910,6 +4290,7 @@ var fieldIDToName_PublicationVersion = map[int16]string{
 	4: "ksm",
 	5: "yaml",
 	6: "createdAt",
+	7: "agent",
 }
 
 type VersionsResult_ struct {
@@ -3210,6 +4591,8 @@ var fieldIDToName_APIError = map[int16]string{
 }
 
 type ControlService interface {
+	PreviewAssociations(ctx context.Context, ctx_ *RequestContext, request *AssociationPreviewRequest) (r *AssociationPreview, err error)
+
 	CreateInstance(ctx context.Context, ctx_ *RequestContext, request *CreateInstanceRequest) (r *ObservationInstance, err error)
 
 	ListInstances(ctx context.Context, ctx_ *RequestContext, request *ClusterID) (r *InstancesResult_, err error)
@@ -3287,6 +4670,128 @@ type ControlService interface {
 	UpdateAccount(ctx context.Context, ctx_ *RequestContext, request *UpdateAccountRequest) (r *Account, err error)
 
 	ResetPassword(ctx context.Context, ctx_ *RequestContext, request *ResetPasswordRequest) (r *Empty, err error)
+}
+
+type ControlServicePreviewAssociationsArgs struct {
+	Ctx            *RequestContext            `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *AssociationPreviewRequest `thrift:"request,2" frugal:"2,default,AssociationPreviewRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServicePreviewAssociationsArgs() *ControlServicePreviewAssociationsArgs {
+	return &ControlServicePreviewAssociationsArgs{}
+}
+
+func (p *ControlServicePreviewAssociationsArgs) InitDefault() {
+}
+
+var ControlServicePreviewAssociationsArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServicePreviewAssociationsArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServicePreviewAssociationsArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServicePreviewAssociationsArgs_Request_DEFAULT *AssociationPreviewRequest
+
+func (p *ControlServicePreviewAssociationsArgs) GetRequest() (v *AssociationPreviewRequest) {
+	if !p.IsSetRequest() {
+		return ControlServicePreviewAssociationsArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServicePreviewAssociationsArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServicePreviewAssociationsArgs) SetRequest(val *AssociationPreviewRequest) {
+	p.Request = val
+}
+
+func (p *ControlServicePreviewAssociationsArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServicePreviewAssociationsArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServicePreviewAssociationsArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServicePreviewAssociationsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServicePreviewAssociationsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServicePreviewAssociationsArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServicePreviewAssociationsResult struct {
+	Success        *AssociationPreview `thrift:"success,0,optional" frugal:"0,optional,AssociationPreview" json:"success,omitempty"`
+	Error          *APIError           `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServicePreviewAssociationsResult() *ControlServicePreviewAssociationsResult {
+	return &ControlServicePreviewAssociationsResult{}
+}
+
+func (p *ControlServicePreviewAssociationsResult) InitDefault() {
+}
+
+var ControlServicePreviewAssociationsResult_Success_DEFAULT *AssociationPreview
+
+func (p *ControlServicePreviewAssociationsResult) GetSuccess() (v *AssociationPreview) {
+	if !p.IsSetSuccess() {
+		return ControlServicePreviewAssociationsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServicePreviewAssociationsResult_Error_DEFAULT *APIError
+
+func (p *ControlServicePreviewAssociationsResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServicePreviewAssociationsResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServicePreviewAssociationsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*AssociationPreview)
+}
+func (p *ControlServicePreviewAssociationsResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServicePreviewAssociationsResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServicePreviewAssociationsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServicePreviewAssociationsResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServicePreviewAssociationsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServicePreviewAssociationsResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServicePreviewAssociationsResult = map[int16]string{
+	0: "success",
+	1: "error",
 }
 
 type ControlServiceCreateInstanceArgs struct {
