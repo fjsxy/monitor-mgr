@@ -5,12 +5,36 @@ import io
 import json
 from pathlib import Path
 import stat
+import os
 import sys
 import tempfile
+import time
 import unittest
 
 
 class ProcessBoundary(unittest.TestCase):
+    def test_auxiliary_group_stops_ignoring_grandchild_after_parent_exits(self):
+        """父进程收到TERM即退出时，也必须结束同一原进程组中忽略TERM的孙进程。"""
+        from transport import ProcessRunner, process_identity
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); pidfile=root/'grandchild.pid'
+            child_code="import os,signal,time,pathlib;signal.signal(signal.SIGTERM,signal.SIG_IGN);pathlib.Path("+repr(str(pidfile))+").write_text(str(os.getpid()));time.sleep(60)"
+            script="import subprocess,sys,time;subprocess.Popen([sys.executable,'-c',"+repr(child_code)+"]);time.sleep(60)"
+            runner=ProcessRunner(root/'private')
+            parent=runner.popen([sys.executable,'-c',script])
+            end=time.monotonic()+5
+            while not pidfile.exists() and time.monotonic()<end:time.sleep(.02)
+            self.assertTrue(pidfile.exists())
+            pid=int(pidfile.read_text());birth=process_identity(pid)
+            try:
+                self.assertEqual(runner.close_auxiliary(),[])
+                end=time.monotonic()+2
+                while process_identity(pid)==birth and time.monotonic()<end:time.sleep(.02)
+                self.assertNotEqual(process_identity(pid),birth)
+            finally:
+                if process_identity(pid)==birth:os.kill(pid,9)
+                if parent.poll() is None:parent.kill();parent.wait()
+
     def test_private_file_sink_keeps_actual_bytes_without_console_passthrough(self):
         """Docker save 一类调用保留私有二进制文件，不能恢复任意stdout透传。"""
         from transport import ProcessRunner
@@ -39,6 +63,117 @@ class ProcessBoundary(unittest.TestCase):
 
 
 class IdentityLedger(unittest.TestCase):
+    def test_cr_cleanup_failure_preserves_namespace_and_rbac(self):
+        """原Agent未结束时不能撤namespace/RBAC，否则GC失去原运行身份。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport, identity
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); marker=root/'namespace-delete'
+            objects=[{'apiVersion':'v1','kind':'Namespace','metadata':{'name':'owned','uid':'ns-original','resourceVersion':'1'}},
+                     {'apiVersion':'monitoring.coreos.com/v1alpha1','kind':'PrometheusAgent','metadata':{'name':'agent','namespace':'owned','uid':'agent-original','resourceVersion':'1'}}]
+            ledger=Ledger(root/'ledger.json',run_id='fixture',candidate='fixture',targets={'control':'cluster'});ledger.case='fixture.case'
+            for obj in objects:
+                token=ledger.intent('control','create',identity(obj));ledger.confirm(token,obj)
+            script=root/'client.py'
+            script.write_text("import json,sys,pathlib\nobjects="+repr(objects)+"\nif 'delete' in sys.argv:\n raw=sys.argv[sys.argv.index('--raw')+1]\n if '/namespaces/owned'==raw:pathlib.Path("+repr(str(marker))+").touch()\n print('Error from server (Forbidden)',file=sys.stderr);sys.exit(1)\nprint(json.dumps(objects[1] if 'prometheusagents' in sys.argv else objects[0]))\n")
+            kube=KubeTransport(ledger=ledger,execute=ProcessRunner(root/'private').run,targets={'control':{'clusterUID':'cluster','kubeconfig':'fixture','context':'explicit'}},kubectl=[sys.executable,str(script)])
+            result=kube.recover_case('fixture.case')
+            self.assertFalse(result['success'])
+            self.assertFalse(marker.exists())
+            self.assertIn('dependent_cleanup_blocked',[f['errorCode'] for f in result['failures']])
+
+    def test_recovery_read_forbidden_is_not_absent(self):
+        """真实外部client的403必须保留失败，不能按无资源报告清理成功。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport, identity
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            obj={'apiVersion':'v1','kind':'Namespace','metadata':{'name':'owned','uid':'original','resourceVersion':'1'}}
+            ledger=Ledger(root/'ledger.json',run_id='fixture',candidate='fixture',targets={'control':'cluster'});ledger.case='fixture.case'
+            token=ledger.intent('control','create',identity(obj));ledger.confirm(token,obj)
+            script=root/'client.py';script.write_text("import sys\nprint('Error from server (Forbidden)',file=sys.stderr);sys.exit(1)\n")
+            kube=KubeTransport(ledger=ledger,execute=ProcessRunner(root/'private').run,targets={'control':{'clusterUID':'cluster','kubeconfig':'fixture','context':'explicit'}},kubectl=[sys.executable,str(script)])
+            result=kube.recover_case('fixture.case')
+            self.assertFalse(result['success'])
+            self.assertEqual(result['failures'][0]['errorCode'],'Forbidden')
+            self.assertEqual(ledger.entries[token]['stage'],'confirmed')
+
+    def test_restore_only_our_finalizer_and_preserve_later_foreign_token(self):
+        """P14恢复只撤本fixture新增token，不清除后来出现的外来finalizer。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport, identity
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            before={"apiVersion":"v1","kind":"Namespace","metadata":{"name":"owned","uid":"original","resourceVersion":"9","finalizers":["original/keep"]}}
+            after=json.loads(json.dumps(before));after['metadata']['finalizers'].append('phase1.fixture/hold')
+            current=json.loads(json.dumps(after));current['metadata']['finalizers'].append('external/retain');current['metadata']['resourceVersion']='10'
+            ledger=Ledger(root/'ledger.json',run_id='fixture',candidate='fixture',targets={'control':'cluster'});ledger.case='fixture.case'
+            token=ledger.intent('control','fault-mutate',identity(before),uid='original',resource_version='9',baseline={'before':before,'after':after,'subresource':None});ledger.confirm(token,after)
+            script=root/'client.py'
+            script.write_text("import json,sys\nobj="+repr(current)+"\nif 'patch' in sys.argv:\n p=json.loads(sys.argv[sys.argv.index('-p')+1]);assert p[2:]==[{'op':'replace','path':'/metadata/finalizers','value':['original/keep','external/retain']}];obj['metadata']['finalizers']=['original/keep','external/retain'];obj['metadata']['resourceVersion']='11'\nprint(json.dumps(obj))\n")
+            kube=KubeTransport(ledger=ledger,execute=ProcessRunner(root/'private').run,targets={'control':{'clusterUID':'cluster','kubeconfig':'fixture','context':'explicit'}},kubectl=[sys.executable,str(script)])
+            kube.restore_fault(ledger.entries[token])
+            self.assertEqual(ledger.entries[token]['stage'],'restored')
+
+    def test_recovery_rejects_same_name_replacement_without_delete(self):
+        """恢复读到替代UID必须失败，真实child不能收到任何delete命令。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport, identity
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            obj={"apiVersion":"v1","kind":"Namespace","metadata":{"name":"owned","uid":"original","resourceVersion":"9"}}
+            ledger=Ledger(root/'ledger.json',run_id='fixture',candidate='fixture',targets={'control':'cluster'});ledger.case='fixture.case'
+            token=ledger.intent('control','create',identity(obj));ledger.confirm(token,obj)
+            script=root/'client.py';marker=root/'deleted'
+            replacement=json.loads(json.dumps(obj));replacement['metadata']['uid']='replacement'
+            script.write_text("import json,sys,pathlib\nif 'delete' in sys.argv:pathlib.Path("+repr(str(marker))+").touch()\nprint(json.dumps("+repr(replacement)+"))\n")
+            kube=KubeTransport(ledger=ledger,execute=ProcessRunner(root/'private').run,targets={'control':{'clusterUID':'cluster','kubeconfig':'fixture','context':'explicit'}},kubectl=[sys.executable,str(script)])
+            result=kube.recover_case('fixture.case')
+            self.assertFalse(result['success'])
+            self.assertFalse(marker.exists())
+            self.assertIn('replacement_uid', [f['errorCode'] for f in result['failures']])
+
+    def test_mutation_uses_original_uid_and_current_revision_conditions(self):
+        """受控外部 client 验证实际发送JSON Patch含UID/RV测试，而非先GET后按名覆盖。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport, identity
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            obj={"apiVersion":"v1","kind":"Namespace","metadata":{"name":"owned","uid":"original","resourceVersion":"9","labels":{"other":"keep"}}}
+            ledger=Ledger(root/'ledger.json',run_id='fixture',candidate='fixture',targets={'control':'cluster'})
+            token=ledger.intent('control','create',identity(obj));ledger.confirm(token,obj)
+            script=root/'client.py'
+            script.write_text("import json,sys\nobj="+repr(obj)+"\nif 'patch' in sys.argv:\n p=json.loads(sys.argv[sys.argv.index('-p')+1]);assert p[0]=={'op':'test','path':'/metadata/uid','value':'original'};assert p[1]=={'op':'test','path':'/metadata/resourceVersion','value':'9'};obj['metadata']['labels']['ours']='set';obj['metadata']['resourceVersion']='10'\nprint(json.dumps(obj))\n")
+            kube=KubeTransport(ledger=ledger,execute=ProcessRunner(root/'private').run,targets={'control':{'clusterUID':'cluster','kubeconfig':'fixture','context':'explicit'}},kubectl=[sys.executable,str(script)])
+            desired=json.loads(json.dumps(obj));desired['metadata']['labels']['ours']='set'
+            actual=kube.mutate_obj('control',desired)
+            self.assertEqual(actual['metadata']['labels'],{'other':'keep','ours':'set'})
+
+    def test_apply_list_confirms_each_original_response(self):
+        """List部分成功仍有逐对象原UID，不能只记一个批次名字。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger = Ledger(root / "ledger.json", run_id="fixture", candidate="fixture", targets={"control":"cluster"})
+            script = root / "client.py"
+            script.write_text("import json,sys\nobj=json.load(sys.stdin);obj['metadata'].update(uid='original-'+obj['metadata']['name'],resourceVersion='1');print(json.dumps(obj))\n")
+            kube = KubeTransport(ledger=ledger, execute=ProcessRunner(root / "private").run,
+                                 targets={"control":{"clusterUID":"cluster","kubeconfig":"fixture","context":"explicit"}},
+                                 kubectl=[sys.executable,str(script)])
+            objects=[{"apiVersion":"v1","kind":"Namespace","metadata":{"name":n}} for n in ["one","two"]]
+            result=kube.command("control", ["apply","-f","-"], data={"apiVersion":"v1","kind":"List","items":objects})
+            self.assertEqual(result.returncode, 0)
+            entries=list(Ledger.open(ledger.path).entries.values())
+            self.assertEqual([e["uid"] for e in entries], ["original-one","original-two"])
+            self.assertEqual([e["stage"] for e in entries], ["confirmed","confirmed"])
+
     def test_baseline_under_canonical_run_root_allows_system_tmp_alias(self):
         """系统入口的 /tmp 别名可用，run 内真正符号链接仍不能读取基线。"""
         from ledger import Ledger

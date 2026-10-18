@@ -19,8 +19,22 @@ ACTIVE = ContextVar("acceptance_session", default=None)
 
 def process_identity(pid):
     """记录实际 child 的出生时间，恢复时拒绝只凭可能复用的 PID 终止进程。"""
-    result = native.run(["ps", "-p", str(pid), "-o", "lstart="], capture_output=True, text=True)
-    return result.stdout.strip() if result.returncode == 0 else None
+    result = native.run(["ps", "-p", str(pid), "-o", "lstart=", "-o", "stat="], capture_output=True, text=True)
+    fields = result.stdout.strip().rsplit(None, 1)
+    return fields[0].strip() if result.returncode == 0 and len(fields) == 2 and not fields[1].startswith("Z") else None
+
+
+def group_members(pgid):
+    """只读取 PID/进程组/出生身份，不采集可能含凭据的命令行。"""
+    result = native.run(["ps", "-axo", "pid=,pgid="], capture_output=True, text=True, check=True)
+    members = {}
+    for line in result.stdout.splitlines():
+        pid, group = map(int, line.split())
+        if group == pgid:
+            birth = process_identity(pid)
+            if birth:
+                members[pid] = birth
+    return members
 
 
 class ProcessFailure(RuntimeError):
@@ -141,14 +155,24 @@ class ProcessRunner:
                         raise ProcessFailure("辅助进程出生身份不能确认")
                     if os.getpgid(child.pid) != child.pid:
                         raise ProcessFailure("辅助进程组不是本次独立 child")
+                    members = group_members(child.pid)
                     os.killpg(child.pid, signal.SIGTERM)
                     try:
-                        child.wait(timeout=5)
+                        child.wait(timeout=1)
                     except native.TimeoutExpired:
-                        if process_identity(child.pid) != item["birth"]:
-                            raise ProcessFailure("辅助进程出生身份已变化")
+                        pass
+                    remaining = group_members(child.pid)
+                    if remaining:
+                        # 关键：leader退出不等于整组结束；先核至少一个原成员仍占同组，才可结束忽略TERM的孙进程。
+                        if not any(remaining.get(pid) == birth for pid, birth in members.items()):
+                            raise ProcessFailure("辅助进程组原成员身份不能确认")
                         os.killpg(child.pid, signal.SIGKILL)
-                        child.wait(timeout=5)
+                    child.wait(timeout=5)
+                    end = time.monotonic() + 5
+                    while group_members(child.pid) and time.monotonic() < end:
+                        time.sleep(.02)
+                    if group_members(child.pid):
+                        raise ProcessFailure("辅助进程组仍有存活成员")
                 self.event({**item, "stage": "exited", "returncode": child.returncode})
             except Exception:
                 failures.append({"id": item["id"], "error": "辅助进程正常退出未确认"})

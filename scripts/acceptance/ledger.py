@@ -6,8 +6,19 @@ import json
 import os
 from pathlib import Path
 import uuid
+import threading
+from functools import wraps
 
 from session import atomic_json, stamp
+
+
+def synchronized(method):
+    """IPC与主执行线程共享同一账本；每次变更和fsync不可交错。"""
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return wrapped
 
 
 class Ledger:
@@ -18,6 +29,7 @@ class Ledger:
         self.data = {"schemaVersion": 1, "runId": run_id, "candidateCommit": candidate,
                      "targets": targets, "entries": {}, "processes": {}, "events": []}
         self.case = None
+        self.lock = threading.RLock()
         self.flush()
 
     @classmethod
@@ -30,6 +42,7 @@ class Ledger:
         obj.path = path.resolve()
         obj.data = json.loads(path.read_text())
         obj.case = None
+        obj.lock = threading.RLock()
         if obj.data.get("schemaVersion") != 1 or not isinstance(obj.data.get("entries"), dict):
             raise ValueError("未知 ledger 协议")
         return obj
@@ -38,10 +51,12 @@ class Ledger:
     def entries(self):
         return self.data["entries"]
 
+    @synchronized
     def flush(self):
         """原子写入与目录 fsync 由共享持久通道保证。"""
         atomic_json(self.path, self.data)
 
+    @synchronized
     def intent(self, target, action, identity, *, origin="fixture-response", case=None,
                uid=None, resource_version=None, baseline=None):
         """公开只存动作和身份；敏感基线另存 0600 私有文件，绝不存请求 body。"""
@@ -66,6 +81,7 @@ class Ledger:
         self.flush()
         return token
 
+    @synchronized
     def confirm(self, token, response):
         """只接受本次实际响应的完整身份；不同名字/namespace/UID不能确认同一 intent。"""
         entry = self.entries[token]
@@ -81,11 +97,13 @@ class Ledger:
         self.flush()
         return entry
 
+    @synchronized
     def uncertain(self, token):
         """响应丢失保持可能已发送；不能在事后 GET 同名对象后换成 confirmed。"""
         self.entries[token].update(stage="identity_unconfirmed", failedAt=stamp())
         self.flush()
 
+    @synchronized
     def mark(self, token, stage, **safe_fields):
         """记录确定的恢复/删除阶段，不向公开 ledger 添加原始异常或对象字段。"""
         allowed = {"notFoundAt", "deleteAcceptedAt", "restoredAt", "replacementUID", "errorCode", "originRef"}
@@ -94,6 +112,7 @@ class Ledger:
         self.entries[token].update(stage=stage, **safe_fields)
         self.flush()
 
+    @synchronized
     def find(self, target, kind, name, namespace=""):
         """只查已持久确认的身份，不从名字推断当前对象属于本次运行。"""
         matches = [e for e in self.entries.values() if e["target"] == target
@@ -121,6 +140,7 @@ class Ledger:
             raise ValueError("baseline 字节变化")
         return json.loads(path.read_text())
 
+    @synchronized
     def process_event(self, event):
         """辅助 PID 的出生身份和阶段独立于 Suite 成员赋值持久化。"""
         self.data["processes"][event["id"]] = dict(event)
