@@ -140,6 +140,7 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 }
 
 type ksmFixture struct {
+	readDelay           time.Duration
 	clusterUID          string
 	targetConfiguration string
 	inventoryPages      map[string]map[string]any
@@ -159,6 +160,7 @@ type ksmFixture struct {
 	crReads             int
 	observationGate     chan struct{}
 	observationEntered  chan struct{}
+	observationCanceled chan struct{}
 	observationOnce     sync.Once
 	readFailure         bool
 	readFailureOnDelete bool
@@ -175,6 +177,18 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 	f := &ksmFixture{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		f.mu.Lock()
+		delay := f.readDelay
+		f.mu.Unlock()
+		if r.Method == "GET" && delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-r.Context().Done():
+				return
+			}
+		}
 		if r.URL.Path == "/api/v1/namespaces/kube-system" {
 			f.mu.Lock()
 			uid := f.clusterUID
@@ -256,6 +270,9 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 				select {
 				case <-gate:
 				case <-r.Context().Done():
+					if f.observationCanceled != nil {
+						close(f.observationCanceled)
+					}
 				}
 				f.mu.Lock()
 			}
