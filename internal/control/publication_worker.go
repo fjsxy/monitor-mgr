@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Store) launchPublications(ctx context.Context) {
-	for ctx.Err() == nil {
+	for ctx.Err() == nil && !s.stopping.Load() {
 		var id string
 		if s.DB.QueryRowContext(ctx, `SELECT id FROM operations WHERE action IN ('PUBLISH','DELETE') AND state='QUEUED' ORDER BY created_at,id LIMIT 1`).Scan(&id) != nil {
 			return
@@ -108,6 +108,11 @@ func (s *Store) executePublication(life context.Context, id string) {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
+	frozen, e := frozenVersionSpec(life, s.DB, o.GetVersionId(), i.Id)
+	if e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
+		return
+	}
 	var previewID string
 	var overwrite bool
 	if s.DB.QueryRowContext(life, `SELECT preview_id,overwrite_drift FROM publication_operations WHERE operation_id=?`, id).Scan(&previewID, &overwrite) != nil {
@@ -128,7 +133,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 		return
 	}
 	defer t.Close()
-	if e = t.publicationDependencies(life, cl, cfg, i.Uid == ""); e != nil {
+	if e = t.publicationDependencies(life, cl, cfg, i.Uid == "", frozen); e != nil {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
@@ -138,16 +143,17 @@ func (s *Store) executePublication(life context.Context, id string) {
 		return
 	}
 	r := &rpc.PublishRequest{Id: i.Id, PreviewId: previewID, DraftRevision: v.SourceDraftRevision, OverwriteDrift: overwrite}
-	if e = s.validatePublication(i, cfg, v.SourceDraftRevision, b, r, cr); e != nil {
+	if e = s.validatePublicationSpec(i, frozen, v.SourceDraftRevision, b, r, cr); e != nil {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
 	// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
 	body := cfg.document()
+	body["spec"] = frozen
 	method, path := "POST", componentFor(i.Component).collectionPath(instanceCRNamespace(i))
 	if i.Uid != "" {
 		body = cr
-		body["spec"] = cfg.spec()
+		body["spec"] = frozen
 		method = "PUT"
 		path = componentFor(i.Component).objectPath(i)
 		if objectString(objectMap(body, "metadata"), "resourceVersion") == "" {
@@ -186,7 +192,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 		return
 	}
 	uid := objectString(objectMap(written, "metadata"), "uid")
-	if uid == "" || (i.Uid != "" && uid != i.Uid) || componentFor(i.Component).normalizeSpec(objectMap(written, "spec")) != componentFor(i.Component).normalizeSpec(cfg.spec()) {
+	if uid == "" || (i.Uid != "" && uid != i.Uid) || componentFor(i.Component).normalizeSpec(objectMap(written, "spec")) != componentFor(i.Component).normalizeSpec(frozen) {
 		state := "RESULT_UNCERTAIN"
 		if i.Uid == "" {
 			state = "IDENTITY_UNCERTAIN"

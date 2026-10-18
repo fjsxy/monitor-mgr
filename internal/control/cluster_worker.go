@@ -56,6 +56,9 @@ func (s *Store) StartWorkers() error {
 			}
 			// 关键：退出与新增goroutine共用锁，Wait开始后不再增加任务，数据库必须最后关闭。
 			s.workerLaunch.Lock()
+			if s.OperationBoundary != nil {
+				s.OperationBoundary("beforeLaunch", "")
+			}
 			if s.stopping.Load() {
 				s.workerLaunch.Unlock()
 				continue
@@ -85,13 +88,14 @@ func (s *Store) StopWorkers() {
 
 // StopWorkersContext 先停止受理/派发，再排空已运行任务，超时后保存不确定状态并等待落盘。
 func (s *Store) StopWorkersContext(ctx context.Context) {
+	// 关键：受理资格先原子关闭，不能等launcher/数据库锁，否则直接RPC可在退出起点后插入新任务。
+	s.stopping.Store(true)
 	s.stopMu.Lock()
 	defer s.stopMu.Unlock()
 	if s.workerCancel == nil {
 		return
 	}
 	s.workerLaunch.Lock()
-	s.stopping.Store(true)
 	s.workerLaunch.Unlock()
 	drained := make(chan struct{})
 	go func() { s.publicationWG.Wait(); close(drained) }()
@@ -179,7 +183,7 @@ func (s *Store) finishVerification(life context.Context, o *rpc.Operation, cred 
 		return
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
-	if life.Err() != nil {
+	if life.Err() != nil || s.stopping.Load() {
 		tx.ExecContext(ctx, `UPDATE operations SET state='WAITING_CONFIRMATION',message='平台退出中，等待管理员明确继续核验',updated_at=? WHERE id=?`, now, o.OperationId)
 		tx.Commit()
 		return

@@ -4695,6 +4695,20 @@ func (p *Operation) FastRead(buf []byte) (int, error) {
 					goto SkipFieldError
 				}
 			}
+		case 16:
+			if fieldTypeId == thrift.STRING {
+				l, err = p.FastReadField16(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
 		default:
 			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
 			offset += l
@@ -4983,6 +4997,20 @@ func (p *Operation) FastReadField15(buf []byte) (int, error) {
 	return offset, nil
 }
 
+func (p *Operation) FastReadField16(buf []byte) (int, error) {
+	offset := 0
+
+	var _field *string
+	if v, l, err := thrift.Binary.ReadString(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = &v
+	}
+	p.StorageResult_ = _field
+	return offset, nil
+}
+
 func (p *Operation) FastWrite(buf []byte) int {
 	return p.FastWriteNocopy(buf, nil)
 }
@@ -5005,6 +5033,7 @@ func (p *Operation) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 		offset += p.fastWriteField12(buf[offset:], w)
 		offset += p.fastWriteField13(buf[offset:], w)
 		offset += p.fastWriteField14(buf[offset:], w)
+		offset += p.fastWriteField16(buf[offset:], w)
 		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
@@ -5029,6 +5058,7 @@ func (p *Operation) BLength() int {
 		l += p.field13Length()
 		l += p.field14Length()
 		l += p.field15Length()
+		l += p.field16Length()
 		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
@@ -5148,6 +5178,15 @@ func (p *Operation) fastWriteField15(buf []byte, w thrift.NocopyWriter) int {
 	return offset
 }
 
+func (p *Operation) fastWriteField16(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	if p.IsSetStorageResult_() {
+		offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 16)
+		offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, *p.StorageResult_)
+	}
+	return offset
+}
+
 func (p *Operation) field1Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
@@ -5257,6 +5296,15 @@ func (p *Operation) field15Length() int {
 	if p.IsSetRevision() {
 		l += thrift.Binary.FieldBeginLength()
 		l += thrift.Binary.I64Length()
+	}
+	return l
+}
+
+func (p *Operation) field16Length() int {
+	l := 0
+	if p.IsSetStorageResult_() {
+		l += thrift.Binary.FieldBeginLength()
+		l += thrift.Binary.StringLengthNocopy(*p.StorageResult_)
 	}
 	return l
 }

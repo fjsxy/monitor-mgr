@@ -3,9 +3,13 @@ package platform_test
 import (
 	"context"
 	"errors"
+	"github.com/cloudwego/kitex/client"
+	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
+	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -270,7 +274,7 @@ func TestT08ShutdownRejectsNewAcceptanceBeforeDrain(t *testing.T) {
 // deletionGraph 用原UID建立DP→RS→Pod控制器链，Pod残留时不再依赖已消失父对象的名称。
 func deletionGraph() map[string][]any {
 	obj := func(name, uid, parent string) any {
-		return map[string]any{"metadata": map[string]any{"name": name, "uid": uid, "ownerReferences": []any{map[string]any{"uid": parent, "controller": true}}}}
+		return map[string]any{"metadata": map[string]any{"name": name, "uid": uid, "namespace": "monitoring", "ownerReferences": []any{map[string]any{"uid": parent, "controller": true}}}}
 	}
 	return map[string][]any{"/apis/apps/v1/namespaces/monitoring/deployments": {obj("work", "work-uid", "created-uid")}, "/apis/apps/v1/namespaces/monitoring/replicasets": {obj("rs", "rs-uid", "work-uid")}, "/api/v1/namespaces/monitoring/pods": {obj("pod", "pod-uid", "rs-uid")}}
 }
@@ -449,5 +453,152 @@ func TestP13RestartUsesPersistentSentBoundary(t *testing.T) {
 				clusterCall(t, p, "POST", "/operations/"+oid+"/cancel", body, c, "cancel", 409)
 			}
 		})
+	}
+}
+
+// REG17-DELETE-001：外部漂移到另一namespace后，父对象先消失的Pod仍属于原UID清理图。
+func TestDeletionCrossNamespaceOwnerUIDRemainsProtected(t *testing.T) {
+	p, c, id, f := lifecycleFixture(t, nil)
+	pub := lifecyclePublish(t, p, c, id)
+	awaitLifecycleState(t, p, c, pub["operationId"].(string), "SUCCEEDED")
+	f.mu.Lock()
+	f.owned = deletionGraph()
+	moved := map[string][]any{}
+	for path, objects := range f.owned {
+		for _, raw := range objects {
+			raw.(map[string]any)["metadata"].(map[string]any)["namespace"] = "elsewhere"
+		}
+		moved[strings.ReplaceAll(path, "monitoring", "elsewhere")] = objects
+	}
+	f.owned = moved
+	f.retainPod = true
+	f.mu.Unlock()
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": pub["versionId"]}, c, "delete", 202)
+	done := awaitLifecycleState(t, p, c, op["operationId"].(string), "SUCCEEDED", "DELETION_BLOCKED")
+	if done["state"] != "DELETION_BLOCKED" {
+		t.Fatal("漏读另一namespace的原UID链Pod", done)
+	}
+	f.mu.Lock()
+	f.owned = nil
+	f.mu.Unlock()
+	clusterCall(t, p, "POST", "/operations/"+op["operationId"].(string)+"/refresh", nil, c, "refresh", 200)
+	awaitLifecycleState(t, p, c, op["operationId"].(string), "SUCCEEDED")
+}
+
+// REG17-ACTIVITY-001：后台完成不是一次显式操作，不应重新置顶实例。
+func TestDeletionCompletionDoesNotChangeActivity(t *testing.T) {
+	p, c, id, f := lifecycleFixture(t, nil)
+	pub := lifecyclePublish(t, p, c, id)
+	awaitLifecycleState(t, p, c, pub["operationId"].(string), "SUCCEEDED")
+	f.mu.Lock()
+	f.retainCR = true
+	f.mu.Unlock()
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": pub["versionId"]}, c, "delete", 202)
+	awaitLifecycleState(t, p, c, op["operationId"].(string), "DELETION_BLOCKED")
+	activity := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["activityAt"]
+	f.mu.Lock()
+	f.cr = nil
+	f.mu.Unlock()
+	clusterCall(t, p, "POST", "/operations/"+op["operationId"].(string)+"/refresh", nil, c, "refresh", 200)
+	awaitLifecycleState(t, p, c, op["operationId"].(string), "SUCCEEDED")
+	if after := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["activityAt"]; activity != after {
+		t.Fatal("后台完成改变活动排序", activity, after)
+	}
+}
+
+// REG17-SHUTDOWN-001：即使launcher仍占锁，停机起点也必须拒绝真正的直接RPC变更。
+func TestShutdownClosesRPCAdmissionBeforeLauncherDrain(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var enabled atomic.Bool
+	var once, released sync.Once
+	defer released.Do(func() { close(release) })
+	p, c, id, _ := lifecycleFixture(t, func(stage, id string) error {
+		if enabled.Load() && stage == "beforeLaunch" {
+			once.Do(func() { close(entered) })
+			<-release
+		}
+		return nil
+	})
+	cli, e := controlservice.NewClient("shutdown-direct", client.WithHostPorts(p.RPCAddress()))
+	if e != nil {
+		t.Fatal(e)
+	}
+	enabled.Store(true)
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("未进入launcher屏障")
+	}
+	closed := make(chan struct{})
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		p.Close(ctx)
+		close(closed)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	token, key := c.Value, "shutdown-direct"
+	_, e = cli.RecordEditingActivity(context.Background(), &rpc.RequestContext{RequestId: key, SessionToken: &token, IdempotencyKey: &key}, &rpc.InstanceID{Id: id})
+	var api *rpc.APIError
+	if !errors.As(e, &api) || api.Code != "UNAVAILABLE" {
+		t.Fatalf("launcher阻塞期间direct RPC仍受理：%v", e)
+	}
+	released.Do(func() { close(release) })
+	select {
+	case <-closed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("退出未落盘")
+	}
+}
+
+// REG17-DELETE-002：预检后外部删除原CR而DELETE返回404时，旧Pod仍须保留保护。
+func TestDeletion404AfterPreflightKeepsSeenPodProtected(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var armed atomic.Bool
+	var once, released sync.Once
+	defer released.Do(func() { close(release) })
+	p, c, id, f := lifecycleFixture(t, func(stage, id string) error {
+		if armed.Load() && stage == "afterSendMarker" {
+			once.Do(func() { close(entered) })
+			<-release
+		}
+		return nil
+	})
+	pub := lifecyclePublish(t, p, c, id)
+	awaitLifecycleState(t, p, c, pub["operationId"].(string), "SUCCEEDED")
+	f.mu.Lock()
+	f.owned = deletionGraph()
+	f.mu.Unlock()
+	armed.Store(true)
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": pub["versionId"]}, c, "delete", 202)
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("删除未到达持久发送屏障")
+	}
+	f.mu.Lock()
+	f.cr = nil
+	for path := range f.owned {
+		if !strings.HasSuffix(path, "/pods") {
+			f.owned[path] = nil
+		}
+	}
+	f.mu.Unlock()
+	released.Do(func() { close(release) })
+	result := awaitLifecycleState(t, p, c, op["operationId"].(string), "FAILED", "DELETION_BLOCKED")
+	if result["state"] != "DELETION_BLOCKED" {
+		t.Fatal("DELETE404误当清理结束并解锁", result)
+	}
+	self := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	clusterCall(t, p, "POST", "/clusters/"+self["clusterId"].(string)+"/unregister", nil, c, "unregister", 409)
+	f.mu.Lock()
+	f.owned = nil
+	f.mu.Unlock()
+	clusterCall(t, p, "POST", "/operations/"+op["operationId"].(string)+"/refresh", nil, c, "refresh", 200)
+	awaitLifecycleState(t, p, c, op["operationId"].(string), "SUCCEEDED")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deleteRequests != 1 {
+		t.Fatal("404后重发删除", f.deleteRequests)
 	}
 }

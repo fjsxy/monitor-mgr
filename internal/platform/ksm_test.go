@@ -147,6 +147,7 @@ type ksmFixture struct {
 	dropResponse        bool
 	owned               map[string][]any
 	deleteCount         int
+	deleteRequests      int
 	lastDelete          map[string]any
 	retainCR            bool
 	retainPod           bool
@@ -180,7 +181,7 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 			io.WriteString(w, `{"metadata":{"name":"monitoring","uid":"namespace-uid"}}`)
 			return
 		}
-		if (strings.HasPrefix(r.URL.Path, "/apis/apps/v1/namespaces/") || strings.HasSuffix(r.URL.Path, "/pods")) && r.Method == "GET" {
+		if (strings.HasPrefix(r.URL.Path, "/apis/apps/v1/") || strings.HasSuffix(r.URL.Path, "/pods")) && r.Method == "GET" {
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			if f.readFailure {
@@ -189,6 +190,14 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 				return
 			}
 			items := f.owned[r.URL.Path]
+			if !strings.Contains(r.URL.Path, "/namespaces/") {
+				items = nil
+				for path, objects := range f.owned {
+					if strings.HasSuffix(path, "/"+r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]) {
+						items = append(items, objects...)
+					}
+				}
+			}
 			if items == nil {
 				items = []any{}
 			}
@@ -226,6 +235,7 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
 		if r.Method == "DELETE" {
+			f.deleteRequests++
 			if f.cr == nil {
 				w.WriteHeader(404)
 				return

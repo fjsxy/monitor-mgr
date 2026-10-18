@@ -83,6 +83,11 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	p.rpc = controlservice.NewServer(store, server.WithListener(rpcLn), server.WithExitWaitTime(time.Second), server.WithMiddleware(func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, req, resp any) error {
 			if !store.Accepting() {
+				// 关键：通过生成Result的声明异常返回业务拒绝，不能把退出包装成transport错误。
+				if result, ok := resp.(interface{ SetError(*rpc.APIError) }); ok {
+					result.SetError(&rpc.APIError{Code: "UNAVAILABLE", Message: "平台退出中，停止接收业务请求"})
+					return nil
+				}
 				return control.Error("UNAVAILABLE", "平台退出中，停止接收业务请求")
 			}
 			if args, ok := req.(interface{ GetCtx() *rpc.RequestContext }); ok && args.GetCtx() != nil {
@@ -151,7 +156,9 @@ func (p *Runtime) Close(ctx context.Context) error {
 	p.closed = true
 	p.mu.Unlock()
 	// 关键：先保存 worker 恢复状态再释放数据库，退出不自动重放或把未确认结果取消。
-	p.store.StopWorkersContext(ctx)
+	drainCtx, cancelDrain := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelDrain()
+	p.store.StopWorkersContext(drainCtx)
 	var err error
 	if p.http != nil {
 		err = p.http.Shutdown(ctx)

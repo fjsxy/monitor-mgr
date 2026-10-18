@@ -54,12 +54,25 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 		return nil, e
 	}
 	// Agent有持久存储时必须由专属策略门禁证明安全，不能借通用删除绕过后续存储契约。
-	if e = componentFor(i.Component).deletionGuard(cfg); e != nil {
+	frozen, e := frozenVersionSpec(ctx, tx, v.VersionId, i.Id)
+	if e != nil {
+		return nil, e
+	}
+	if e = componentFor(i.Component).deletionGuard(cfg, frozen); e != nil {
 		return nil, e
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	attempt := ID()
 	o := &rpc.Operation{OperationId: ID(), Action: "DELETE", State: "QUEUED", ClusterId: i.ClusterId, ActorId: p.Account.Id, OwnerId: p.Account.Id, InstanceId: &i.Id, VersionId: &v.VersionId, AttemptId: &attempt, Revision: reference(int64(1)), Message: "已受理原 UID Foreground 删除，等待核验", CreatedAt: now, UpdatedAt: now}
+	result := "UNVERIFIED"
+	if i.Component == KSMComponent {
+		result = "NOT_APPLICABLE"
+	}
+	o.StorageResult_ = &result
+	deploymentNamespace := cfg.identity().DeploymentNamespace
+	if i.Component == KSMComponent {
+		deploymentNamespace = objectString(frozen, "targetNamespace")
+	}
 	for _, q := range []struct {
 		sql  string
 		args []any
@@ -67,7 +80,7 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 		{`INSERT INTO operations(id,action,state,cluster_id,actor_id,owner_id,name,message,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, []any{o.OperationId, o.Action, o.State, o.ClusterId, o.ActorId, o.OwnerId, i.Name, o.Message, now, now}},
 		{`INSERT INTO execution_attempts(id,operation_id,state,possibly_sent,created_at,updated_at,actor_id) VALUES(?,?,'QUEUED',0,?,?,?)`, []any{attempt, o.OperationId, now, now, p.Account.Id}},
 		{`INSERT INTO operation_lifecycle VALUES(?,?,1,2)`, []any{o.OperationId, attempt}},
-		{`INSERT INTO deletion_operations VALUES(?,?,?,?,?,?)`, []any{o.OperationId, i.Id, v.VersionId, i.Uid, componentFor(i.Component).objectPath(i), cfg.identity().DeploymentNamespace}},
+		{`INSERT INTO deletion_operations VALUES(?,?,?,?,?,?)`, []any{o.OperationId, i.Id, v.VersionId, i.Uid, componentFor(i.Component).objectPath(i), deploymentNamespace}},
 		{`INSERT INTO instance_protections VALUES(?,?)`, []any{i.Id, o.OperationId}},
 		{`UPDATE instances SET activity_at=? WHERE id=?`, []any{now, i.Id}},
 	} {
@@ -89,9 +102,9 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 }
 
 // deletionGuard 供存储契约增加类型化验证；当前不允许Agent持久存储被通用入口直接删除。
-func (a componentAdapter) deletionGuard(cfg configuration) error {
+func (a componentAdapter) deletionGuard(cfg configuration, frozen map[string]any) error {
 	if a.component == AgentComponent {
-		if _, has := cfg.spec()["storage"]; has {
+		if _, has := frozen["storage"]; has {
 			return Error("CONFLICT", "Agent 持久存储删除需要核验保留策略")
 		}
 	}
@@ -120,7 +133,11 @@ func (t *Target) listOwnedCandidates(ctx context.Context, namespace string) ([]s
 		if g.api == "v1" {
 			base = "/api/v1"
 		}
-		path := base + "/namespaces/" + url.PathEscape(namespace) + "/" + g.resource
+		path := base
+		if namespace != "" {
+			path += "/namespaces/" + url.PathEscape(namespace)
+		}
+		path += "/" + g.resource
 		next := ""
 		tokens := map[string]bool{}
 		for {
@@ -143,10 +160,14 @@ func (t *Target) listOwnedCandidates(ctx context.Context, namespace string) ([]s
 			for _, obj := range list.Items {
 				m := objectMap(obj, "metadata")
 				uid, name := objectString(m, "uid"), objectString(m, "name")
-				if uid == "" || name == "" {
+				actualNamespace := objectString(m, "namespace")
+				if actualNamespace == "" {
+					actualNamespace = namespace
+				}
+				if uid == "" || name == "" || actualNamespace == "" {
 					return nil, Error("UNAVAILABLE", "辅助资源身份不完整")
 				}
-				out = append(out, seenResource{g.api, g.kind, namespace, name, uid, ownerUID(m), path + "/" + url.PathEscape(name)})
+				out = append(out, seenResource{g.api, g.kind, actualNamespace, name, uid, ownerUID(m), base + "/namespaces/" + url.PathEscape(actualNamespace) + "/" + g.resource + "/" + url.PathEscape(name)})
 			}
 			next = list.Metadata.Continue
 			if next == "" {
@@ -163,6 +184,10 @@ func (t *Target) listOwnedCandidates(ctx context.Context, namespace string) ([]s
 
 // observeOwnerGraph 保存见过的所有者UID链；父对象消失后仍能识别残留ReplicaSet/Pod。
 func (s *Store) observeOwnerGraph(ctx context.Context, i *rpc.ObservationInstance, t *Target, namespace string) (int, error) {
+	// 关键：KSM是cluster-scoped，外部漂移可跨namespace；完整集群分页不可缩成最近部署位置。
+	if componentFor(i.Component).scope == "Cluster" {
+		namespace = ""
+	}
 	candidates, e := t.listOwnedCandidates(ctx, namespace)
 	if e != nil {
 		return 0, e
@@ -292,7 +317,8 @@ func (s *Store) executeDeletion(life context.Context, id string) {
 	sendContext := httptrace.WithClientTrace(life, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { release() }})
 	result := t.Mutate(sendContext, "DELETE", path, body)
 	release()
-	if result.Err != nil && result.Rejected {
+	// 关键：DELETE404只证明CR缺失，预检后消失的原workload/Pod仍须完整核验，不能释放保护。
+	if result.Err != nil && result.Rejected && result.HTTPStatus != 404 {
 		s.finishExecution(life, o, "FAILED", result.Err, nil)
 		return
 	}
@@ -355,7 +381,7 @@ func (s *Store) finishDeletion(expected *rpc.Operation, state, message string) {
 		return
 	}
 	if state == "SUCCEEDED" {
-		if _, e = tx.ExecContext(ctx, `UPDATE instances SET lifecycle='DELETED',activity_at=? WHERE id=?`, now, expected.GetInstanceId()); e != nil {
+		if _, e = tx.ExecContext(ctx, `UPDATE instances SET lifecycle='DELETED' WHERE id=?`, expected.GetInstanceId()); e != nil {
 			return
 		}
 		if _, e = tx.ExecContext(ctx, `DELETE FROM instance_protections WHERE instance_id=? AND operation_id=?`, expected.GetInstanceId(), expected.OperationId); e != nil {

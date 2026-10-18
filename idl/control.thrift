@@ -49,7 +49,7 @@ struct TransferClusterRequest { 1: required string id, 2: required string ownerI
 struct Operation {
  1: required string operationId, 2: required string action, 3: required string state,
  4: required string clusterId, 5: required string actorId, 6: required string message,
- 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId, 12: optional string instanceId, 13: optional string versionId, 14: optional string attemptId, 15: optional i64 revision
+ 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId, 12: optional string instanceId, 13: optional string versionId, 14: optional string attemptId, 15: optional i64 revision, 16: optional string storageResult
 }
 struct OperationID { 1: required string operationId }
 struct OperationsResult { 1: required list<Operation> operations }

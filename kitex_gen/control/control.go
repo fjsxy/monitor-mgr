@@ -1158,6 +1158,7 @@ type Operation struct {
 	VersionId          *string `thrift:"versionId,13,optional" frugal:"13,optional,string" json:"versionId,omitempty"`
 	AttemptId          *string `thrift:"attemptId,14,optional" frugal:"14,optional,string" json:"attemptId,omitempty"`
 	Revision           *int64  `thrift:"revision,15,optional" frugal:"15,optional,i64" json:"revision,omitempty"`
+	StorageResult_     *string `thrift:"storageResult,16,optional" frugal:"16,optional,string" json:"storageResult,omitempty"`
 	_unknownFields     unknown.Fields
 }
 
@@ -1247,6 +1248,15 @@ func (p *Operation) GetRevision() (v int64) {
 	}
 	return *p.Revision
 }
+
+var Operation_StorageResult__DEFAULT string
+
+func (p *Operation) GetStorageResult_() (v string) {
+	if !p.IsSetStorageResult_() {
+		return Operation_StorageResult__DEFAULT
+	}
+	return *p.StorageResult_
+}
 func (p *Operation) SetOperationId(val string) {
 	p.OperationId = val
 }
@@ -1292,6 +1302,9 @@ func (p *Operation) SetAttemptId(val *string) {
 func (p *Operation) SetRevision(val *int64) {
 	p.Revision = val
 }
+func (p *Operation) SetStorageResult_(val *string) {
+	p.StorageResult_ = val
+}
 
 func (p *Operation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -1311,6 +1324,10 @@ func (p *Operation) IsSetAttemptId() bool {
 
 func (p *Operation) IsSetRevision() bool {
 	return p.Revision != nil
+}
+
+func (p *Operation) IsSetStorageResult_() bool {
+	return p.StorageResult_ != nil
 }
 
 func (p *Operation) String() string {
@@ -1336,6 +1353,7 @@ var fieldIDToName_Operation = map[int16]string{
 	13: "versionId",
 	14: "attemptId",
 	15: "revision",
+	16: "storageResult",
 }
 
 type OperationID struct {

@@ -45,10 +45,23 @@ func checkTarget(i *rpc.ObservationInstance, cr map[string]any) error {
 	}
 	return nil
 }
-func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, value configuration, create bool) error {
+func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, value configuration, create bool, frozenSpec ...map[string]any) error {
 	cfg, ok := value.(*KSMConfig)
 	if !ok {
 		return Error("INVALID_INPUT", "组件依赖暂不支持")
+	}
+	// typed来源保留原输入/引用；实际namespace与workload权限取本次真正待写的冻结spec。
+	desired := cfg.spec()
+	if len(frozenSpec) > 0 {
+		desired = frozenSpec[0]
+	}
+	targetNamespace := objectString(desired, "targetNamespace")
+	mode := objectString(objectMap(desired, "deployment"), "mode")
+	if mode == "" {
+		mode = "Deployment"
+	}
+	if targetNamespace == "" {
+		return Error("INVALID_INPUT", "冻结目标namespace缺失")
 	}
 	var ns map[string]any
 	if e := t.Request(ctx, "GET", "/api/v1/namespaces/kube-system", nil, &ns); e != nil {
@@ -70,7 +83,7 @@ func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, v
 	if e := t.Request(ctx, "GET", ksmPath+"?limit=1", nil, &list); e != nil {
 		return Error("CONFLICT", "KubeStateMetrics CRD 或读取权限不可用")
 	}
-	if e := t.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(cfg.TargetNamespace), nil, &ns); e != nil {
+	if e := t.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(targetNamespace), nil, &ns); e != nil {
 		return e
 	}
 	verb := "update"
@@ -78,13 +91,13 @@ func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, v
 		verb = "create"
 	}
 	workload := "deployments"
-	if cfg.DeploymentMode == "StatefulSetSharded" {
+	if mode == "StatefulSetSharded" {
 		workload = "statefulsets"
 	}
-	if cfg.DeploymentMode == "DaemonSetSharded" {
+	if mode == "DaemonSetSharded" {
 		workload = "daemonsets"
 	}
-	for _, a := range []map[string]string{{"group": "monitoring.fjsxy.github.io", "resource": "kubestatemetrics", "verb": verb}, {"group": "apps", "resource": workload, "verb": verb, "namespace": cfg.TargetNamespace}} {
+	for _, a := range []map[string]string{{"group": "monitoring.fjsxy.github.io", "resource": "kubestatemetrics", "verb": verb}, {"group": "apps", "resource": workload, "verb": verb, "namespace": targetNamespace}} {
 		var review struct {
 			Status struct {
 				Allowed bool `json:"allowed"`
@@ -195,7 +208,12 @@ func readPreview(ctx context.Context, q clusterQuery, id, instance string) (*pub
 	return b, nil
 }
 func (s *Store) validatePublication(i *rpc.ObservationInstance, cfg configuration, rev int64, b *publicationBaseline, r *rpc.PublishRequest, cr map[string]any) error {
-	if rev != r.DraftRevision || b.revision != rev || b.desired != componentFor(i.Component).normalizeSpec(cfg.spec()) {
+	return s.validatePublicationSpec(i, cfg.spec(), rev, b, r, cr)
+}
+
+// validatePublicationSpec 在执行旧版本时使用冻结映射，不能调用新mapper重写来源。
+func (s *Store) validatePublicationSpec(i *rpc.ObservationInstance, desired map[string]any, rev int64, b *publicationBaseline, r *rpc.PublishRequest, cr map[string]any) error {
+	if rev != r.DraftRevision || b.revision != rev || b.desired != componentFor(i.Component).normalizeSpec(desired) {
 		return Error("CONFLICT", "预览或草稿修订已过期，请重新预览")
 	}
 	if e := checkTarget(i, cr); e != nil {
@@ -359,6 +377,13 @@ func versionByID(ctx context.Context, q clusterQuery, id, instance string) (*rpc
 		return nil, e
 	}
 	cfg.version(v)
+	var frozen map[string]any
+	if json.Unmarshal(spec, &frozen) != nil || frozen == nil {
+		return nil, Error("UNAVAILABLE", "冻结有效配置不可读")
+	}
+	doc := cfg.document()
+	doc["spec"] = frozen
+	v.Yaml = yamlText(doc)
 	return v, nil
 }
 func (s *Store) ListVersions(ctx context.Context, c *rpc.RequestContext, r *rpc.InstanceID) (*rpc.VersionsResult_, error) {
@@ -477,4 +502,17 @@ func (s *Store) GetAttempts(ctx context.Context, c *rpc.RequestContext, r *rpc.O
 		out = append(out, a)
 	}
 	return &rpc.AttemptsResult_{Attempts: out}, rows.Err()
+}
+
+// frozenVersionSpec 独立读取不可变有效映射，提供给实际依赖/策略、mutation和响应核验。
+func frozenVersionSpec(ctx context.Context, q clusterQuery, version, instance string) (map[string]any, error) {
+	var raw []byte
+	if q.QueryRowContext(ctx, `SELECT effective_spec FROM publication_versions WHERE id=? AND instance_id=?`, version, instance).Scan(&raw) != nil {
+		return nil, Error("UNAVAILABLE", "冻结有效配置不可读")
+	}
+	var spec map[string]any
+	if json.Unmarshal(raw, &spec) != nil || spec == nil {
+		return nil, Error("UNAVAILABLE", "冻结有效配置不可读")
+	}
+	return spec, nil
 }

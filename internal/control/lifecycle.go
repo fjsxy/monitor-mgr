@@ -45,6 +45,14 @@ func (s *Store) enrichLifecycle(ctx context.Context, q clusterQuery, o *rpc.Oper
 	if q.QueryRowContext(ctx, `SELECT instance_id,version_id FROM deletion_operations WHERE operation_id=?`, o.OperationId).Scan(&instance, &version) == nil {
 		o.InstanceId = &instance
 		o.VersionId = &version
+		var component string
+		if q.QueryRowContext(ctx, `SELECT component FROM instances WHERE id=?`, instance).Scan(&component) == nil {
+			result := "UNVERIFIED"
+			if component == KSMComponent {
+				result = "NOT_APPLICABLE"
+			}
+			o.StorageResult_ = &result
+		}
 	}
 }
 
