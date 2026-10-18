@@ -18,6 +18,7 @@ def projection_failure(s):
  markers=s.projection_markers
  out={'error':'PROJECTION013安全投影验收失败（原始目标与异常值不输出）','failedStage':getattr(s,'projection_stage','fixture')}
  out['operatorStatusBranch']=getattr(s,'projection_status_branch',{'required':False})
+ out['runtimeReasonBranch']=getattr(s,'projection_reason_branch',{'branchObserved':False})
  out['publicReadDiagnostics']=getattr(s,'projection_read_diagnostics',{})
  try:
   result=s.k('logs','pod/'+s.pod,'-n',s.ns,'--tail=200',check=False)
@@ -39,6 +40,35 @@ def wait_operator_status(s,names,markers,timeout=90):
   s.projection_status_branch={'required':True,'managedObserved':observed[names[0]],'externalObserved':observed[names[1]],'branchObserved':all(observed.values())}
   if all(observed.values()):return objects
   if time.monotonic()>=deadline:raise AssertionError('deadline内未观察到真实Operator认证URL错误status分支（原文不输出）')
+  time.sleep(.5)
+
+def reason_runtime_projection(s,instance,outside_name,markers,malformed,timeout=45):
+ """同一来源验证reason→Runtime.Error；普通reason或Operator抢先复写不能代替安全分支。"""
+ deadline=time.monotonic()+timeout;managed_name=instance['name']
+ while True:
+  for name in [managed_name,outside_name]:
+   for attempt in range(8):
+    cr=s.cr(name);status=cr.setdefault('status',{});conditions=status.setdefault('conditions',[])
+    condition=next((c for c in conditions if c.get('type')=='Available'),None)
+    if condition is None:condition={'type':'Available'};conditions.append(condition)
+    condition.update(status='False',observedGeneration=cr['metadata']['generation'],reason=malformed(markers[0]),message='Waiting for workload readiness')
+    status.setdefault('replicas',0);status['availableReplicas']=0
+    path='/apis/monitoring.coreos.com/v1alpha1/namespaces/'+s.targetns+'/prometheusagents/'+name+'/status'
+    result=s.k('replace','--raw',path,'-f','-',data=cr,check=False)
+    if result.returncode==0:break
+    assert b'(Conflict)' in result.stderr and attempt<7,'reason来源fixture写入失败（原文不输出）'
+  observed=[]
+  for name in [managed_name,outside_name]:
+   cr=s.cr(name);conditions=cr.get('status',{}).get('conditions',[])
+   observed.append(any(c.get('type')=='Available' and c.get('reason')==malformed(markers[0]) and c.get('observedGeneration')==cr['metadata']['generation'] for c in conditions))
+  managed=s.call('POST','/instances/'+instance['id']+'/refresh',{})
+  listing=s.call('GET','/clusters/'+s.cluster['id']+'/instances')
+  external=next((i for i in listing['instances'] if i['name']==outside_name and i['readOnly']),{})
+  assert no_marker([managed,listing],markers),'reason派生Runtime.Error泄漏认证marker（原值不输出）'
+  hidden=[managed.get('error')=='[敏感内容已隐藏]',external.get('runtime',{}).get('error')=='[敏感内容已隐藏]']
+  s.projection_reason_branch={'managedReasonObserved':observed[0],'externalReasonObserved':observed[1],'managedRuntimeHidden':hidden[0],'externalRuntimeHidden':hidden[1],'branchObserved':all(observed+hidden)}
+  if all(observed+hidden):return listing
+  if time.monotonic()>=deadline:raise AssertionError('deadline内未观察到两类Runtime.Error明确隐藏的reason分支（原文不输出）')
   time.sleep(.5)
 
 def projection_artifact_scan(s,record):
@@ -133,7 +163,7 @@ def projection_case(s,case):
  originals={managed['metadata']['name']:metadata(managed),outside_name:metadata(outside)}
  logs_before=s.k('logs','pod/'+s.pod,'-n',s.ns).stdout.decode(errors='replace').count('目标API写请求')
  s.projection_stage='public-read-models'
- listing=s.call('GET','/clusters/'+s.cluster['id']+'/instances')
+ listing=reason_runtime_projection(s,instance,outside_name,markers,malformed)
  external=next((i for i in listing['instances'] if i['name']==outside_name and i['readOnly']),None)
  managed_listing=next((i for i in listing['instances'] if i['id']==instance['id']),{})
  s.projection_read_diagnostics={'listingContainsMarker':not no_marker(listing,markers),'externalFound':external is not None,'managedRuntimeErrorContainsMarker':not no_marker(managed_listing.get('runtime',{}).get('error',''),markers),'unmanagedYAMLContainsMarker':not no_marker((external or {}).get('yaml',''),markers)}
@@ -147,7 +177,7 @@ def projection_case(s,case):
   assert no_marker(s.call('GET','/operations?instanceId='+item['id']),markers),'历史读模型含认证marker'
  preview=s.preview(instance);assert no_marker(preview,markers) and '[敏感内容已隐藏]' in preview['leftYAML'],'左右YAML未失败关闭'
  projected=yaml.safe_load(preview['leftYAML'])
- for original in managed.get('status',{}).get('conditions',[]):
+ for original in s.cr().get('status',{}).get('conditions',[]):
   if no_marker(original,markers):
    # 普通Operator诊断必须仍可读；只比较稳定type/reason/message，不比较独立变化的时间戳。
    kept=next((c for c in projected.get('status',{}).get('conditions',[]) if c.get('type')==original.get('type')),None)
@@ -164,4 +194,4 @@ def projection_case(s,case):
  assert logs.count('目标API写请求')==logs_before,'只读投影产生平台目标写请求'
  for name,before in originals.items():assert metadata(s.cr(name))==before,'投影改写目标原UID或metadata'
  assert s.cr()['spec']['remoteWrite'][0][field]==malformed(markers[1]),'投影改写原始认证URL'
- return {'field':field,'fixedCRDAcceptedMalformedURL':True,'operatorStatusBranch':s.projection_status_branch,'publicReadDiagnostics':s.projection_read_diagnostics,'benignOperatorDiagnosticsPreserved':True,'externalReadOnly':True,'noMarkerInHTTPYAMLHistory':True,'directRPC':rpc,'noMarkerInDatabaseWALOrLogs':True,'hiddenValueChangeRejectsOldPreview':True,'originalMetadataUnchanged':True,'historicalEffectiveSpecUnchanged':True,'noPlatformReadSideTargetMutation':True,'sampleDeliveryClaimed':False,'malformedConfigHealthClaimed':False,'fixtureUIDs':{name:before['uid'] for name,before in originals.items()}}
+ return {'field':field,'fixedCRDAcceptedMalformedURL':True,'operatorStatusBranch':s.projection_status_branch,'runtimeReasonBranch':s.projection_reason_branch,'publicReadDiagnostics':s.projection_read_diagnostics,'benignOperatorDiagnosticsPreserved':True,'externalReadOnly':True,'noMarkerInHTTPYAMLHistory':True,'directRPC':rpc,'noMarkerInDatabaseWALOrLogs':True,'hiddenValueChangeRejectsOldPreview':True,'originalMetadataUnchanged':True,'historicalEffectiveSpecUnchanged':True,'noPlatformReadSideTargetMutation':True,'sampleDeliveryClaimed':False,'malformedConfigHealthClaimed':False,'fixtureUIDs':{name:before['uid'] for name,before in originals.items()}}

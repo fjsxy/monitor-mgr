@@ -43,7 +43,8 @@ func (s *Store) discoverKSM(ctx context.Context, c *rpc.RequestContext, cluster 
 		}
 		h := sha256.Sum256([]byte(cluster + ":" + uid))
 		id := "external-" + hex.EncodeToString(h[:])
-		text := yamlText(safeTargetDocument(cr))
+		projected := safeTargetDocument(cr)
+		text := yamlText(projected)
 		component, typ, namespace, scope, crNamespace := KSMComponent, "exporter", objectString(objectMap(cr, "spec"), "targetNamespace"), "Cluster", ""
 		if objectString(cr, "kind") == "PrometheusAgent" {
 			component, typ, namespace, scope, crNamespace = AgentComponent, "collector", objectString(meta, "namespace"), "Namespaced", objectString(meta, "namespace")
@@ -51,7 +52,8 @@ func (s *Store) discoverKSM(ctx context.Context, c *rpc.RequestContext, cluster 
 				return nil, Error("TARGET_ERROR", "Agent namespace身份缺失")
 			}
 		}
-		i := &rpc.ObservationInstance{Id: id, ClusterId: cluster, Component: component, Type: typ, ReadOnly: true, Ownership: "unmanaged", Name: name, TargetNamespace: namespace, CrNamespace: &crNamespace, Scope: &scope, Uid: uid, Lifecycle: "DISCOVERED", Runtime: componentFor(component).interpret(cr, now), Yaml: &text}
+		// 关键：运行错误也来自目标status，必须和YAML共用安全来源，不能从原reason旁路泄漏认证URL。
+		i := &rpc.ObservationInstance{Id: id, ClusterId: cluster, Component: component, Type: typ, ReadOnly: true, Ownership: "unmanaged", Name: name, TargetNamespace: namespace, CrNamespace: &crNamespace, Scope: &scope, Uid: uid, Lifecycle: "DISCOVERED", Runtime: componentFor(component).interpret(projected, now), Yaml: &text}
 		out = append(out, i)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

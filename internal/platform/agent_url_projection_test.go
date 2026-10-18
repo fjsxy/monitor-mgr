@@ -290,6 +290,48 @@ func TestAgentMalformedURLReadProjection(t *testing.T) {
 				}
 				rows.Close()
 			}
+			assertProjectionSafe(t, "安全日志", logs.String(), markers)
+			// 同一status来源还可通过reason派生Runtime.Error，不能只保护YAML。
+			f.mu.Lock()
+			for _, object := range []map[string]any{cr, external} {
+				object["status"].(map[string]any)["conditions"].([]any)[0].(map[string]any)["reason"] = malformed(markers[0])
+			}
+			f.mu.Unlock()
+			for _, instance := range []string{id, outsideID} {
+				runtime := call("POST", "/instances/"+instance+"/refresh", map[string]any{}, "reason-refresh-"+instance, 200)
+				assertProjectionSafe(t, "reason派生HTTP运行", runtime, markers)
+				if runtime["error"] != "[敏感内容已隐藏]" {
+					t.Error("认证reason未明确派生安全隐藏标记")
+				}
+				assertProjectionSafe(t, "reason派生HTTP详情", call("GET", "/instances/"+instance, nil, "", 200), markers)
+				direct, err := cli.RefreshInstance(context.Background(), ctx, &rpc.InstanceID{Id: instance})
+				if err != nil {
+					t.Fatal("reason派生直接RPC刷新失败")
+				}
+				assertProjectionSafe(t, "reason派生直接RPC运行", direct, markers)
+				if direct.Error != "[敏感内容已隐藏]" {
+					t.Error("直接RPC认证reason未明确返回安全隐藏标记")
+				}
+			}
+			assertProjectionSafe(t, "reason派生HTTP发现", call("GET", "/clusters/"+cluster+"/instances", nil, "", 200), markers)
+			directListing, err := cli.ListInstances(context.Background(), ctx, &rpc.ClusterID{Id: cluster})
+			if err != nil {
+				t.Fatal("reason派生直接RPC发现失败")
+			}
+			assertProjectionSafe(t, "reason派生直接RPC发现", directListing, markers)
+			f.mu.Lock()
+			for _, object := range []map[string]any{cr, external} {
+				if object["status"].(map[string]any)["conditions"].([]any)[0].(map[string]any)["reason"] != malformed(markers[0]) || writes.Load() != beforeWrites {
+					t.Error("运行投影修改原reason或写入目标")
+				}
+			}
+			f.mu.Unlock()
+			var oldRuntime []byte
+			if db.QueryRow(`SELECT runtime FROM instance_observations WHERE instance_id=?`, id).Scan(&oldRuntime) != nil {
+				t.Fatal("reason运行缓存不可读")
+			}
+			assertProjectionSafe(t, "reason派生运行缓存", string(oldRuntime), markers)
+			assertProjectionSafe(t, "reason派生安全日志", logs.String(), markers)
 			paths, _ := filepath.Glob(filepath.Join(dir, "platform.db*"))
 			for _, path := range paths {
 				raw, err := os.ReadFile(path)
@@ -302,25 +344,31 @@ func TestAgentMalformedURLReadProjection(t *testing.T) {
 					}
 				}
 			}
-			assertProjectionSafe(t, "安全日志", logs.String(), markers)
 			// 已存在的schema7可能保存原始状态文本；目标离线时首次读取也必须安全。
 			cached := call("GET", "/instances/"+outsideID, nil, "", 200)
 			rawOutside, _ := yaml.Marshal(external)
 			cached["yaml"] = string(rawOutside)
+			cached["runtime"].(map[string]any)["error"] = malformed(markers[0])
 			legacy, _ := json.Marshal(cached)
 			rawManaged, _ := json.Marshal(cr)
+			var saved map[string]any
+			if json.Unmarshal(oldRuntime, &saved) != nil {
+				t.Fatal("旧运行缓存无法解码")
+			}
+			saved["runtime"].(map[string]any)["error"] = malformed(markers[0])
+			legacyRuntime, _ := json.Marshal(saved)
 			db.Close()
 			if p.Close(context.Background()) != nil {
 				t.Fatal("升级前平台关闭失败")
 			}
 			offline.Store(true)
-			projectionSchema7Restart(t, dir, id, outsideID, cookie, legacy, rawManaged, markers, logger)
+			projectionSchema7Restart(t, dir, id, outsideID, cookie, legacy, rawManaged, legacyRuntime, markers, logger)
 		})
 	}
 }
 
 // projectionSchema7Restart 用真实旧cache验证数据迁移、失败原子性和离线首次HTTP/RPC响应。
-func projectionSchema7Restart(t *testing.T, dir, id, outside string, cookie *http.Cookie, legacy, rawManaged []byte, markers []string, logger *slog.Logger) {
+func projectionSchema7Restart(t *testing.T, dir, id, outside string, cookie *http.Cookie, legacy, rawManaged, legacyRuntime []byte, markers []string, logger *slog.Logger) {
 	t.Helper()
 	db, err := sql.Open("sqlite", filepath.Join(dir, "platform.db"))
 	if err != nil {
@@ -330,7 +378,7 @@ func projectionSchema7Restart(t *testing.T, dir, id, outside string, cookie *htt
 	if _, err = db.Exec(`DELETE FROM schema_migrations WHERE version>7`); err != nil {
 		t.Fatal("schema7前置版本无法恢复")
 	}
-	if _, err = db.Exec(`UPDATE instance_observations SET cr=? WHERE instance_id=?`, rawManaged, id); err != nil {
+	if _, err = db.Exec(`UPDATE instance_observations SET cr=?,runtime=? WHERE instance_id=?`, rawManaged, legacyRuntime, id); err != nil {
 		t.Fatal("旧观测缓存不可恢复")
 	}
 	if _, err = db.Exec(`UPDATE discovered_instances SET document='invalid-legacy-cache' WHERE id=?`, outside); err != nil {
@@ -348,8 +396,8 @@ func projectionSchema7Restart(t *testing.T, dir, id, outside string, cookie *htt
 	}
 	assertProjectionSafe(t, "迁移失败错误", err.Error(), markers)
 	var version int
-	var rolledBack []byte
-	if db.QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&version) != nil || db.QueryRow(`SELECT cr FROM instance_observations WHERE instance_id=?`, id).Scan(&rolledBack) != nil || version != 7 || !bytes.Equal(rolledBack, rawManaged) {
+	var rolledBack, rolledRuntime []byte
+	if db.QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&version) != nil || db.QueryRow(`SELECT cr,runtime FROM instance_observations WHERE instance_id=?`, id).Scan(&rolledBack, &rolledRuntime) != nil || version != 7 || !bytes.Equal(rolledBack, rawManaged) || !bytes.Equal(rolledRuntime, legacyRuntime) {
 		t.Fatal("cache修复失败未整体回滚")
 	}
 	backups, _ := filepath.Glob(filepath.Join(dir, "backups", "schema-7-to-8-*.db"))
@@ -365,9 +413,9 @@ func projectionSchema7Restart(t *testing.T, dir, id, outside string, cookie *htt
 		if err != nil {
 			t.Fatal("迁移快照不可读")
 		}
-		var oldCR []byte
+		var oldCR, oldRuntime []byte
 		var oldEffective, oldHMAC string
-		valid := old.QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&version) == nil && version == 7 && old.QueryRow(`SELECT cr FROM instance_observations WHERE instance_id=?`, id).Scan(&oldCR) == nil && bytes.Equal(oldCR, rawManaged) && old.QueryRow(`SELECT effective_spec FROM publication_versions WHERE instance_id=?`, id).Scan(&oldEffective) == nil && old.QueryRow(`SELECT target_spec FROM publication_previews WHERE instance_id=? ORDER BY id LIMIT 1`, id).Scan(&oldHMAC) == nil && oldEffective == effective && oldHMAC == hmac
+		valid := old.QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&version) == nil && version == 7 && old.QueryRow(`SELECT cr,runtime FROM instance_observations WHERE instance_id=?`, id).Scan(&oldCR, &oldRuntime) == nil && bytes.Equal(oldCR, rawManaged) && bytes.Equal(oldRuntime, legacyRuntime) && old.QueryRow(`SELECT effective_spec FROM publication_versions WHERE instance_id=?`, id).Scan(&oldEffective) == nil && old.QueryRow(`SELECT target_spec FROM publication_previews WHERE instance_id=? ORDER BY id LIMIT 1`, id).Scan(&oldHMAC) == nil && oldEffective == effective && oldHMAC == hmac
 		old.Close()
 		if !valid {
 			t.Fatal("迁移快照与原库历史基线不一致")
@@ -388,7 +436,7 @@ func projectionSchema7Restart(t *testing.T, dir, id, outside string, cookie *htt
 		t.Fatal("升级后旧YAML不可读")
 	}
 	condition := document["status"].(map[string]any)["conditions"].([]any)[0].(map[string]any)
-	if condition["reason"] != "WorkloadUnavailable" || condition["message"] != "Waiting for workload readiness" || document["metadata"].(map[string]any)["annotations"].(map[string]any)["preserve"] != "original-metadata" {
+	if condition["reason"] != "[敏感内容已隐藏]" || condition["message"] != "Waiting for workload readiness" || document["metadata"].(map[string]any)["annotations"].(map[string]any)["preserve"] != "original-metadata" {
 		t.Fatal("旧cache修复隐藏普通诊断或用户metadata")
 	}
 	cli, err := controlservice.NewClient("projection-offline", client.WithHostPorts(p.RPCAddress()))
@@ -405,7 +453,7 @@ func projectionSchema7Restart(t *testing.T, dir, id, outside string, cookie *htt
 	if db.QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&version) != nil || version != 8 || db.QueryRow(`SELECT effective_spec FROM publication_versions WHERE instance_id=?`, id).Scan(&afterEffective) != nil || db.QueryRow(`SELECT target_spec FROM publication_previews WHERE instance_id=? ORDER BY id LIMIT 1`, id).Scan(&afterHMAC) != nil || effective != afterEffective || hmac != afterHMAC {
 		t.Fatal("数据迁移改变历史effective_spec、HMAC或版本未提交")
 	}
-	for _, query := range []string{`SELECT cr FROM instance_observations`, `SELECT document FROM discovered_instances`} {
+	for _, query := range []string{`SELECT cr FROM instance_observations`, `SELECT runtime FROM instance_observations`, `SELECT document FROM discovered_instances`} {
 		rows, err := db.Query(query)
 		if err != nil {
 			t.Fatal("旧cache修复结果不可读")

@@ -1,8 +1,25 @@
 """013验收工具的公开证据边界；纯fixture检查不计为产品Q或真实K通过。"""
 import contextlib,hashlib,io,json,pathlib,secrets,sqlite3,tempfile,types,unittest
-from agent_projection import database_probe,projection_artifact_scan,wait_operator_status
+from agent_projection import database_probe,projection_artifact_scan,wait_operator_status,reason_runtime_projection
 
 class ProjectionArtifactSafety(unittest.TestCase):
+ def test_reason_branch_requires_exact_hidden_runtime_in_both_read_models(self):
+  marker=secrets.token_hex(24);malformed=lambda value:'https://reader:'+value+'@example.invalid/%zz'
+  class Suite:
+   targetns='test';cluster={'id':'cluster'};safe=False
+   def cr(self,name=None):return {'metadata':{'name':name,'generation':2},'status':{'conditions':[{'type':'Available','observedGeneration':2,'reason':malformed(marker)}]}}
+   def k(self,*args,**kwargs):return types.SimpleNamespace(returncode=0)
+   def call(self,method,path,body=None):
+    runtime={'error':'[敏感内容已隐藏]' if self.safe else 'OrdinaryReason'}
+    return runtime if method=='POST' else {'instances':[{'name':'outside','readOnly':True,'runtime':runtime}]}
+  suite=Suite()
+  with self.assertRaises(AssertionError) as failure:reason_runtime_projection(suite,{'id':'instance','name':'managed'},'outside',[marker],malformed,timeout=0)
+  self.assertFalse(suite.projection_reason_branch['branchObserved'])
+  self.assertNotIn(marker,str(failure.exception))
+  suite.safe=True;reason_runtime_projection(suite,{'id':'instance','name':'managed'},'outside',[marker],malformed,timeout=0)
+  self.assertTrue(suite.projection_reason_branch['branchObserved'])
+  self.assertNotIn(marker,json.dumps(suite.projection_reason_branch))
+
  def test_operator_branch_requires_actual_status_and_failure_is_safe(self):
   marker=secrets.token_hex(24)
   suite=types.SimpleNamespace(cr=lambda name:{'status':{'message':'waiting'}})
