@@ -181,4 +181,3 @@ if __name__=='__main__':
   # CRD是全局故障；全部普通fixture完成并清理后，独占执行并finally恢复。
   if 'C04.ksm-crd' in cases:results.append(one((len(parallel),'C04.ksm-crd')))
   (rootout/'results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2));failed=[x['variantId'] for x in results if x['outcome']!='passed' or not x.get('cleanup',{}).get('success')];print(json.dumps({'total':len(results),'failed':failed},ensure_ascii=False));raise SystemExit(1 if failed else 0)
-
