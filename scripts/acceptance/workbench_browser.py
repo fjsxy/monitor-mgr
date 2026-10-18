@@ -86,7 +86,9 @@ def execute(s,selector,fixture):
   for attachment in tests[0].get('results',[])[-1].get('attachments',[]):
    name=attachment['name']
    if name.endswith('.json'):
-    content=base64.b64decode(attachment['body']).decode() if attachment.get('body') else pathlib.Path(attachment['path']).read_text();(artifacts/pathlib.Path(name).name).write_text(public(content))
+    content=base64.b64decode(attachment['body']).decode() if attachment.get('body') else pathlib.Path(attachment['path']).read_text();clean=public(content);(artifacts/pathlib.Path(name).name).write_text(clean)
+    if attachment.get('body'):attachment['body']=base64.b64encode(clean.encode()).decode()
+ report.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
  for path in out.rglob('*'):
   if path.is_file() and path.suffix in ['.txt','.md','.json','.log']:
    raw=path.read_text(errors='replace');clean=public(raw)
