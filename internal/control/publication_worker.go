@@ -8,14 +8,13 @@ import (
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"log/slog"
 	"net/http/httptrace"
-	"sync"
 	"time"
 )
 
 func (s *Store) launchPublications(ctx context.Context) {
-	for ctx.Err() == nil {
+	for ctx.Err() == nil && !s.stopping.Load() {
 		var id string
-		if s.DB.QueryRowContext(ctx, `SELECT id FROM operations WHERE action='PUBLISH' AND state='QUEUED' ORDER BY created_at,id LIMIT 1`).Scan(&id) != nil {
+		if s.DB.QueryRowContext(ctx, `SELECT id FROM operations WHERE action IN ('PUBLISH','DELETE') AND state='QUEUED' ORDER BY created_at,id LIMIT 1`).Scan(&id) != nil {
 			return
 		}
 		res, e := s.DB.ExecContext(ctx, `UPDATE operations SET state='CHECKING',message='正在核验当前权限与目标基线' WHERE id=? AND state='QUEUED'`, id)
@@ -27,7 +26,16 @@ func (s *Store) launchPublications(ctx context.Context) {
 			continue
 		}
 		s.publicationWG.Add(1)
-		go func() { defer s.publicationWG.Done(); s.executePublication(ctx, id) }()
+		go func() {
+			defer s.publicationWG.Done()
+			var action string
+			s.DB.QueryRowContext(ctx, `SELECT action FROM operations WHERE id=?`, id).Scan(&action)
+			if action == "DELETE" {
+				s.executeDeletion(ctx, id)
+			} else {
+				s.executePublication(ctx, id)
+			}
+		}()
 	}
 }
 func actorCluster(ctx context.Context, tx *sql.Tx, actor, cluster string) (*rpc.Cluster, error) {
@@ -87,17 +95,22 @@ func (s *Store) executePublication(life context.Context, id string) {
 	s.enrichPublicationOperation(life, s.DB, o)
 	i, e := instanceByID(life, s.DB, o.GetInstanceId())
 	if e != nil {
-		s.finishPublication(id, "FAILED", e, nil)
+		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
 	v, e := versionByID(life, s.DB, o.GetVersionId(), i.Id)
 	if e != nil {
-		s.finishPublication(id, "FAILED", e, nil)
+		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
 	cfg, e := decodeVersionConfiguration(i.Component, v)
 	if e != nil {
-		s.finishPublication(id, "FAILED", e, nil)
+		s.finishExecution(life, o, "FAILED", e, nil)
+		return
+	}
+	frozen, e := frozenVersionSpec(life, s.DB, o.GetVersionId(), i.Id)
+	if e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
 	var previewID string
@@ -107,83 +120,55 @@ func (s *Store) executePublication(life context.Context, id string) {
 	}
 	b, e := readPreview(life, s.DB, previewID, i.Id)
 	if e != nil {
-		s.finishPublication(id, "FAILED", e, nil)
+		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
-	t, cl, e := s.targetForActor(life, o.ActorId, i.ClusterId)
+	a, _, e := lifecycleAttempt(life, s.DB, id)
 	if e != nil {
-		s.finishPublication(id, "FAILED", e, nil)
+		return
+	}
+	t, cl, e := s.targetForActor(life, a.GetActorId(), i.ClusterId)
+	if e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
 	defer t.Close()
-	if e = t.publicationDependencies(life, cl, cfg, i.Uid == ""); e != nil {
-		s.finishPublication(id, "FAILED", e, nil)
+	if e = t.publicationDependencies(life, cl, cfg, i.Uid == "", frozen); e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
 	cr, e := t.readComponent(life, i)
 	if e != nil {
-		s.finishPublication(id, "FAILED", e, nil)
+		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
 	r := &rpc.PublishRequest{Id: i.Id, PreviewId: previewID, DraftRevision: v.SourceDraftRevision, OverwriteDrift: overwrite}
-	if e = s.validatePublication(i, cfg, v.SourceDraftRevision, b, r, cr); e != nil {
-		s.finishPublication(id, "FAILED", e, nil)
+	if e = s.validatePublicationSpec(i, frozen, v.SourceDraftRevision, b, r, cr); e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
 	// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
 	body := cfg.document()
+	body["spec"] = frozen
 	method, path := "POST", componentFor(i.Component).collectionPath(instanceCRNamespace(i))
 	if i.Uid != "" {
 		body = cr
-		body["spec"] = cfg.spec()
+		body["spec"] = frozen
 		method = "PUT"
 		path = componentFor(i.Component).objectPath(i)
 		if objectString(objectMap(body, "metadata"), "resourceVersion") == "" {
-			s.finishPublication(id, "FAILED", Error("CONFLICT", "目标 RV 缺失，拒绝无条件更新"), nil)
+			s.finishExecution(life, o, "FAILED", Error("CONFLICT", "目标 RV 缺失，拒绝无条件更新"), nil)
 			return
 		}
 	}
-	// 关键：与账号/归属/凭据切换共用保护，从最后授权直到请求实际发出，消除失权窗口。
-	s.dispatch.RLock()
-	releaseDispatch := sync.OnceFunc(s.dispatch.RUnlock)
+	releaseDispatch, e := s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision)
+	if e != nil {
+		if apiCode(e) != "ALREADY_FINISHED" {
+			s.finishExecution(life, o, "FAILED", e, nil)
+		}
+		return
+	}
 	defer releaseDispatch()
-	// 关键：网络调用前先持久化可能已发送，崩溃后不能猜测未发送并重放。
-	tx, e := s.DB.BeginTx(life, nil)
-	if e != nil {
-		return
-	}
-	currentCluster, authErr := actorCluster(life, tx, o.ActorId, i.ClusterId)
-	e = authErr
-	if e == nil && currentCluster.CredentialRevision != cl.CredentialRevision {
-		e = Error("CONFLICT", "预检期间凭据已变化，请重新预览")
-	}
-	if e != nil {
-		tx.Rollback()
-		s.finishPublication(id, "FAILED", e, nil)
-		return
-	}
-	if life.Err() != nil {
-		tx.Rollback()
-		return
-	}
-	now := s.Now().UTC().Format(time.RFC3339Nano)
-	res, e := tx.ExecContext(life, `UPDATE operations SET state='DISPATCHED',message='已取得派发资格，写入结果尚未确认',updated_at=? WHERE id=? AND state='CHECKING'`, now, id)
-	if e != nil {
-		tx.Rollback()
-		return
-	}
-	n, _ := res.RowsAffected()
-	if n != 1 {
-		tx.Rollback()
-		return
-	}
-	if _, e = tx.ExecContext(life, `UPDATE execution_attempts SET state='DISPATCHED',possibly_sent=1,updated_at=? WHERE id=?`, now, o.GetAttemptId()); e != nil {
-		tx.Rollback()
-		return
-	}
-	if tx.Commit() != nil {
-		return
-	}
 	if s.OperationBoundary != nil {
 		if s.OperationBoundary("afterSendMarker", id) != nil {
 			return
@@ -203,23 +188,51 @@ func (s *Store) executePublication(life context.Context, id string) {
 		if state == "RESULT_UNCERTAIN" && i.Uid == "" {
 			state = "IDENTITY_UNCERTAIN"
 		}
-		s.finishPublication(id, state, e, nil)
+		s.finishExecution(life, o, state, e, nil)
 		return
 	}
 	uid := objectString(objectMap(written, "metadata"), "uid")
-	if uid == "" || (i.Uid != "" && uid != i.Uid) || componentFor(i.Component).normalizeSpec(objectMap(written, "spec")) != componentFor(i.Component).normalizeSpec(cfg.spec()) {
+	if uid == "" || (i.Uid != "" && uid != i.Uid) || componentFor(i.Component).normalizeSpec(objectMap(written, "spec")) != componentFor(i.Component).normalizeSpec(frozen) {
 		state := "RESULT_UNCERTAIN"
 		if i.Uid == "" {
 			state = "IDENTITY_UNCERTAIN"
 		}
-		s.finishPublication(id, state, Error("CONFLICT", "写入响应不足以确认原身份与配置"), nil)
+		s.finishExecution(life, o, state, Error("CONFLICT", "写入响应不足以确认原身份与配置"), nil)
 		return
 	}
-	s.finishPublication(id, "SUCCEEDED", nil, written)
+	s.finishExecution(life, o, "SUCCEEDED", nil, written)
 	// 写入与运行分别表达；立即读取不将受理或意图当成已就绪。
 	s.refreshObserved(life, i.Id, t)
 }
-func (s *Store) finishPublication(id, state string, cause error, cr map[string]any) {
+
+// finishExecution 以实际 attempt 身份保存结果，退出时不能把未完成网络读取误报为失败。
+func (s *Store) finishExecution(life context.Context, o *rpc.Operation, state string, cause error, cr map[string]any) {
+	if (life.Err() != nil || s.stopping.Load()) && state != "SUCCEEDED" {
+		a, _, e := lifecycleAttempt(context.Background(), s.DB, o.OperationId)
+		if e == nil && a.AttemptId == o.GetAttemptId() {
+			if a.PossiblySent {
+				state = "RESULT_UNCERTAIN"
+				if o.Action == "DELETE" {
+					state = "DELETION_VERIFYING"
+				}
+				if o.Action == "PUBLISH" {
+					var uid string
+					s.DB.QueryRow(`SELECT uid FROM instances WHERE id=?`, o.GetInstanceId()).Scan(&uid)
+					if uid == "" {
+						state = "IDENTITY_UNCERTAIN"
+					}
+				}
+			} else {
+				state = "WAITING_CONFIRMATION"
+			}
+		}
+	}
+	s.finishPublication(o, state, cause, cr)
+}
+
+// finishPublication 只结束调用者持有的当前尝试，旧 worker 不能覆盖新尝试或取消结果。
+func (s *Store) finishPublication(expected *rpc.Operation, state string, cause error, cr map[string]any) {
+	id := expected.OperationId
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	tx, e := s.DB.BeginTx(ctx, nil)
@@ -232,6 +245,10 @@ func (s *Store) finishPublication(id, state string, cause error, cr map[string]a
 		return
 	}
 	s.enrichPublicationOperation(ctx, tx, o)
+	s.enrichLifecycle(ctx, tx, o)
+	if o.GetAttemptId() != expected.GetAttemptId() {
+		return
+	}
 	if o.State == "SUCCEEDED" || o.State == "FAILED" || o.State == "CANCELLED" {
 		return
 	}
@@ -253,8 +270,14 @@ func (s *Store) finishPublication(id, state string, cause error, cr map[string]a
 	if _, e = tx.ExecContext(ctx, `UPDATE operations SET state=?,message=?,updated_at=? WHERE id=?`, state, message, now, id); e != nil {
 		return
 	}
-	if _, e = tx.ExecContext(ctx, `UPDATE execution_attempts SET state=?,updated_at=? WHERE id=?`, state, now, o.GetAttemptId()); e != nil {
+	if _, e = tx.ExecContext(ctx, `UPDATE execution_attempts SET state=?,updated_at=?,revision=revision+1,message=? WHERE id=?`, state, now, message, o.GetAttemptId()); e != nil {
 		return
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE operation_lifecycle SET revision=revision+1 WHERE operation_id=?`, id); e != nil {
+		return
+	}
+	if state == "WAITING_CONFIRMATION" {
+		tx.ExecContext(ctx, `UPDATE operations SET message=? WHERE id=?`, "平台退出或重启；明确未发送，等待继续或取消", id)
 	}
 	if state == "SUCCEEDED" {
 		uid := objectString(objectMap(cr, "metadata"), "uid")

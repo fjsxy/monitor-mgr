@@ -19,6 +19,51 @@ type collectionList struct {
 	Items []map[string]any `json:"items"`
 }
 
+// agentDependenciesFromSpec只读取冻结规格中的依赖，mapper升级不能改变旧版本的SA、关联或Secret引用。
+func agentDependenciesFromSpec(original *AgentConfig, spec map[string]any) (*AgentConfig, error) {
+	copy := *original
+	copy.Associations = associationConfigFromCR(map[string]any{"metadata": map[string]any{"name": original.Name, "namespace": original.Namespace}, "spec": spec}).Associations
+	copy.ServiceAccountName = objectString(spec, "serviceAccountName")
+	if copy.ServiceAccountName == "" {
+		return nil, Error("CONFLICT", "冻结Agent ServiceAccount缺失")
+	}
+	ref := func(raw any) *SecretReference {
+		m, _ := raw.(map[string]any)
+		if m == nil {
+			return nil
+		}
+		return &SecretReference{Name: objectString(m, "name"), Key: objectString(m, "key")}
+	}
+	copy.RemoteWrite = []RemoteEndpoint{}
+	for _, raw := range anySlice(spec["remoteWrite"]) {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			return nil, Error("CONFLICT", "冻结remoteWrite不可读")
+		}
+		r := RemoteEndpoint{URL: objectString(m, "url"), Auth: RemoteAuth{Mode: "None"}}
+		if basic, ok := m["basicAuth"].(map[string]any); ok {
+			r.Auth = RemoteAuth{Mode: "BasicAuth", Username: ref(basic["username"]), Password: ref(basic["password"])}
+			if r.Auth.Username == nil || r.Auth.Password == nil {
+				return nil, Error("CONFLICT", "冻结BasicAuth引用不可读")
+			}
+		}
+		if auth, ok := m["authorization"].(map[string]any); ok {
+			r.Auth = RemoteAuth{Mode: "Bearer", Credentials: ref(auth["credentials"])}
+			if r.Auth.Credentials == nil {
+				return nil, Error("CONFLICT", "冻结Bearer引用不可读")
+			}
+		}
+		if tls, ok := m["tlsConfig"].(map[string]any); ok {
+			r.TLS = &AgentTLS{CA: ref(objectMap(tls, "ca")["secret"]), Cert: ref(objectMap(tls, "cert")["secret"]), Key: ref(tls["keySecret"])}
+		}
+		copy.RemoteWrite = append(copy.RemoteWrite, r)
+	}
+	if len(copy.RemoteWrite) == 0 {
+		return nil, Error("CONFLICT", "冻结remoteWrite为空")
+	}
+	return &copy, nil
+}
+
 // listObjects只有完整分页成功才返回集合，失败不能被当作零匹配或对象不存在。
 func (t *Target) listObjects(ctx context.Context, path string) ([]map[string]any, error) {
 	out := []map[string]any{}

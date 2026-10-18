@@ -1,0 +1,14 @@
+# 生命周期验收镜像追加可控应用派发屏障，所有业务仍复用同来源的平台实现和页面。
+ARG PLATFORM_IMAGE=monitor-mgr:development
+FROM golang:1.27.1-bookworm@sha256:8d48e12ec56735e9358640898b9d9fcca110612ed8a5567438c0a1baa24e66 AS fixture
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY internal/ internal/
+COPY kitex_gen/ kitex_gen/
+COPY scripts/acceptance/lifecyclefixture/ scripts/acceptance/lifecyclefixture/
+ARG SOURCE_SHA=development
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildSource=${SOURCE_SHA}" -o /lifecyclefixture ./scripts/acceptance/lifecyclefixture
+FROM ${PLATFORM_IMAGE}
+COPY --from=fixture /lifecyclefixture /lifecyclefixture
+ENTRYPOINT ["/lifecyclefixture"]

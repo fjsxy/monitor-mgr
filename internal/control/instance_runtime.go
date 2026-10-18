@@ -91,6 +91,9 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 	if e != nil {
 		return nil, e
 	}
+	if i.Lifecycle == "DELETED" {
+		return &rpc.InstanceRuntime{Summary: "Deleted", ObservedAt: i.ActivityAt, LastSuccessAt: i.ActivityAt}, nil
+	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	cr, e := t.readComponent(ctx, i)
 	var out *rpc.InstanceRuntime
@@ -120,6 +123,9 @@ func (s *Store) GetRuntime(ctx context.Context, c *rpc.RequestContext, r *rpc.In
 	}
 	if i.ReadOnly {
 		return i.Runtime, nil
+	}
+	if i.Lifecycle == "DELETED" {
+		return &rpc.InstanceRuntime{Summary: "Deleted", ObservedAt: i.ActivityAt, LastSuccessAt: i.ActivityAt}, nil
 	}
 	var raw []byte
 	if s.DB.QueryRowContext(ctx, `SELECT runtime FROM instance_observations WHERE instance_id=?`, i.Id).Scan(&raw) != nil {

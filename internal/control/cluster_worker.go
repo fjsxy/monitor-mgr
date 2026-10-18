@@ -27,6 +27,12 @@ func (s *Store) StartWorkers() error {
 	if _, e := s.DB.Exec(`UPDATE operations SET state=CASE WHEN EXISTS(SELECT 1 FROM publication_operations p JOIN instances i ON i.id=p.instance_id WHERE p.operation_id=operations.id AND i.uid='') THEN 'IDENTITY_UNCERTAIN' ELSE 'RESULT_UNCERTAIN' END,message='平台已重启，只恢复读取核验，不自动重放' WHERE action='PUBLISH' AND state='DISPATCHED'`); e != nil {
 		return e
 	}
+	if _, e := s.DB.Exec(`UPDATE operations SET state='DELETION_VERIFYING',message='平台已重启，只恢复原UID清理核验，不重发删除' WHERE action='DELETE' AND state='DISPATCHED'`); e != nil {
+		return e
+	}
+	if _, e := s.DB.Exec(`UPDATE execution_attempts SET state=(SELECT state FROM operations WHERE id=operation_id),revision=revision+1 WHERE id IN (SELECT current_attempt_id FROM operation_lifecycle) AND state IN ('QUEUED','CHECKING','DISPATCHED')`); e != nil {
+		return e
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.workerCancel = cancel
 	s.workerWake = make(chan struct{}, 1)
@@ -36,32 +42,69 @@ func (s *Store) StartWorkers() error {
 		defer s.publicationWG.Wait()
 		tick := time.NewTicker(100 * time.Millisecond)
 		defer tick.Stop()
+		recoveryTick := time.NewTicker(time.Second)
+		defer recoveryTick.Stop()
 		for {
+			recovering := false
 			select {
 			case <-ctx.Done():
 				return
+			case <-recoveryTick.C:
+				recovering = true
 			case <-tick.C:
 			case <-s.workerWake:
 			}
-			s.launchPublications(ctx)
-			for ctx.Err() == nil {
-				var id string
-				if s.DB.QueryRowContext(ctx, `SELECT id FROM operations WHERE state='QUEUED' AND action IN ('REGISTER','CREDENTIAL','REACTIVATE') ORDER BY created_at,id LIMIT 1`).Scan(&id) != nil {
-					break
-				}
-				s.verifyOperation(ctx, id)
+			// 关键：退出与新增goroutine共用锁，Wait开始后不再增加任务，数据库必须最后关闭。
+			s.workerLaunch.Lock()
+			if s.OperationBoundary != nil {
+				s.OperationBoundary("beforeLaunch", "")
 			}
+			if s.stopping.Load() {
+				s.workerLaunch.Unlock()
+				continue
+			}
+			if recovering {
+				s.launchRecovery(ctx)
+			} else {
+				s.launchPublications(ctx)
+				var id string
+				if s.DB.QueryRowContext(ctx, `SELECT id FROM operations WHERE state='QUEUED' AND action IN ('REGISTER','CREDENTIAL','REACTIVATE') ORDER BY created_at,id LIMIT 1`).Scan(&id) == nil {
+					s.publicationWG.Add(1)
+					go func() { defer s.publicationWG.Done(); s.verifyOperation(ctx, id) }()
+				}
+			}
+			s.workerLaunch.Unlock()
 		}
 	}()
 	return nil
 }
 
-// StopWorkers 停止新核验并等待当前工作保存恢复状态后退出。
+// StopWorkers 使用默认10秒排空预算；超时只取消本地等待，持久结果仍按可能发送边界保存。
 func (s *Store) StopWorkers() {
-	if s.workerCancel != nil {
-		s.workerCancel()
-		<-s.workerDone
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s.StopWorkersContext(ctx)
+}
+
+// StopWorkersContext 先停止受理/派发，再排空已运行任务，超时后保存不确定状态并等待落盘。
+func (s *Store) StopWorkersContext(ctx context.Context) {
+	// 关键：受理资格先原子关闭，不能等launcher/数据库锁，否则直接RPC可在退出起点后插入新任务。
+	s.stopping.Store(true)
+	s.stopMu.Lock()
+	defer s.stopMu.Unlock()
+	if s.workerCancel == nil {
+		return
 	}
+	s.workerLaunch.Lock()
+	s.workerLaunch.Unlock()
+	drained := make(chan struct{})
+	go func() { s.publicationWG.Wait(); close(drained) }()
+	select {
+	case <-drained:
+	case <-ctx.Done():
+	}
+	s.workerCancel()
+	<-s.workerDone
 }
 
 // actorAdmin 按账号当前启用、改密及角色状态核验发起者，不依赖原 Session。
@@ -140,7 +183,7 @@ func (s *Store) finishVerification(life context.Context, o *rpc.Operation, cred 
 		return
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
-	if life.Err() != nil {
+	if life.Err() != nil || s.stopping.Load() {
 		tx.ExecContext(ctx, `UPDATE operations SET state='WAITING_CONFIRMATION',message='平台退出中，等待管理员明确继续核验',updated_at=? WHERE id=?`, now, o.OperationId)
 		tx.Commit()
 		return

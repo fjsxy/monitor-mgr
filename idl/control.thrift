@@ -49,7 +49,7 @@ struct TransferClusterRequest { 1: required string id, 2: required string ownerI
 struct Operation {
  1: required string operationId, 2: required string action, 3: required string state,
  4: required string clusterId, 5: required string actorId, 6: required string message,
- 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId, 12: optional string instanceId, 13: optional string versionId, 14: optional string attemptId
+ 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId, 12: optional string instanceId, 13: optional string versionId, 14: optional string attemptId, 15: optional i64 revision, 16: optional string storageResult
 }
 struct OperationID { 1: required string operationId }
 struct OperationsResult { 1: required list<Operation> operations }
@@ -105,10 +105,18 @@ struct PublicationVersion { 1: required string versionId, 2: required string ins
 struct VersionsResult { 1: required list<PublicationVersion> versions }
 struct VersionRequest { 1: required string id, 2: required string versionId }
 struct OperationLookup { 1: required string instanceId, 2: required string idempotencyKey }
-struct ExecutionAttempt { 1: required string attemptId, 2: required string operationId, 3: required string state, 4: required bool possiblySent, 5: required string createdAt, 6: required string updatedAt }
+struct ExecutionAttempt { 1: required string attemptId, 2: required string operationId, 3: required string state, 4: required bool possiblySent, 5: required string createdAt, 6: required string updatedAt, 7: optional i64 revision, 8: optional i64 sequence, 9: optional string actorId, 10: optional string message }
+// 生命周期变更绑定当前操作与尝试修订，避免过期页面取消或重试较新的尝试。
+struct LifecycleRequest { 1: required string operationId, 2: required i64 expectedOperationRevision, 3: required string expectedAttemptId, 4: required i64 expectedAttemptRevision }
+struct DeleteInstanceRequest { 1: required string id, 2: required string versionId }
 struct AttemptsResult { 1: required list<ExecutionAttempt> attempts }
 service ControlService {
  AssociationPreview PreviewAssociations(1: RequestContext ctx, 2: AssociationPreviewRequest request) throws (1: APIError error)
+ Operation RetryLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)
+ Operation CancelLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)
+ Operation ContinueLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)
+ Operation RefreshOperation(1: RequestContext ctx, 2: OperationID request) throws (1: APIError error)
+ Operation DeleteInstance(1: RequestContext ctx, 2: DeleteInstanceRequest request) throws (1: APIError error)
  ObservationInstance CreateInstance(1: RequestContext ctx, 2: CreateInstanceRequest request) throws (1: APIError error)
  InstancesResult ListInstances(1: RequestContext ctx, 2: ClusterID request) throws (1: APIError error)
  ObservationInstance GetInstance(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
