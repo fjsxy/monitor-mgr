@@ -8,3 +8,6 @@ web/playwright-report/
 data/
 
 bin/
+
+__pycache__/
+*.pyc

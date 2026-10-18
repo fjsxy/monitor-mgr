@@ -254,6 +254,10 @@ func TestP02PublicationFreezesSourceAndP03Idempotency(t *testing.T) {
 	if v["sourceDraftRevision"] != float64(1) || v["ksm"].(map[string]any)["resources"].(map[string]any)["requestCPU"] != "100m" {
 		t.Fatal(v)
 	}
+	history := clusterCall(t, p, "GET", "/operations?instanceId="+id, nil, c, "", 200)["operations"].([]any)
+	if len(history) != 1 {
+		t.Fatal("实例历史未返回固定操作", history)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.writes != 1 {
@@ -353,10 +357,24 @@ func TestP05DriftOverwritePreservesMetadataAndP06Equivalent(t *testing.T) {
 	if awaitClusterOperation(t, p, c, o["operationId"].(string))["state"] != "SUCCEEDED" {
 		t.Fatal("等价默认值/status/RV错误冲突")
 	}
+	cli, e := controlservice.NewClient("fixed-target-direct", client.WithHostPorts(p.RPCAddress()))
+	if e != nil {
+		t.Fatal(e)
+	}
+	directKey := "fixed-target"
+	token := c.Value
 	for _, field := range []string{"name", "targetNamespace"} {
 		cfg := ksmConfig("instance")
 		cfg[field] = "other"
 		clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "ksm": cfg}, c, "fixed-"+field, 409)
+		raw, _ := json.Marshal(cfg)
+		var typed rpc.KSMConfiguration
+		json.Unmarshal(raw, &typed)
+		_, e := cli.SaveDraft(context.Background(), &rpc.RequestContext{RequestId: "fixed-target", SessionToken: &token, IdempotencyKey: &directKey}, &rpc.SaveDraftRequest{Id: id, ExpectedDraftRevision: 1, Ksm: &typed})
+		var api *rpc.APIError
+		if !errors.As(e, &api) || api.Code != "CONFLICT" {
+			t.Fatal("RPC允许修改固定身份", e)
+		}
 	}
 }
 
@@ -512,6 +530,7 @@ func TestF03KSMValidationThroughHTTPAndDirectRPC(t *testing.T) {
 	cfg := ksmConfig("invalid")
 	cfg["resources"].(map[string]any)["extendedResource"] = "1"
 	clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": cfg}, c, "unknown-resource", 400)
+	clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": ksmConfig("instance")}, c, "duplicate-http", 409)
 	raw, _ := json.Marshal(ksmConfig("instance"))
 	var same rpc.KSMConfiguration
 	json.Unmarshal(raw, &same)

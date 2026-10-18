@@ -288,7 +288,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	}
 	var n int
 	if tx.QueryRowContext(ctx, `SELECT count(*) FROM instance_protections WHERE instance_id=?`, i.Id).Scan(&n) != nil {
-		return nil, e
+		return nil, Error("UNAVAILABLE", "实例保护无法核验")
 	}
 	if n > 0 {
 		return nil, Error("CONFLICT", "实例仍有未结束变更")
@@ -401,20 +401,52 @@ func (s *Store) LookupOperations(ctx context.Context, c *rpc.RequestContext, r *
 	if _, e = s.authorizedInstance(ctx, c, r.InstanceId); e != nil {
 		return nil, e
 	}
-	rows, e := s.DB.QueryContext(ctx, `SELECT result_json FROM command_results WHERE actor_id=? AND action='PUBLISH' AND target_id=? AND command_key=?`, p.Account.Id, r.InstanceId, r.IdempotencyKey)
-	if e != nil {
-		return nil, e
-	}
+
 	ids := []string{}
-	for rows.Next() {
-		var raw []byte
-		rows.Scan(&raw)
-		var o rpc.Operation
-		if json.Unmarshal(raw, &o) == nil {
+	if r.IdempotencyKey == "" {
+		// 实例历史继承当前集群授权；查看不改变活动排序，也不伪造外部发布关系。
+		rows, e := s.DB.QueryContext(ctx, `SELECT operation_id FROM publication_operations WHERE instance_id=? ORDER BY operation_id`, r.InstanceId)
+		if e != nil {
+			return nil, e
+		}
+		for rows.Next() {
+			var id string
+			if e = rows.Scan(&id); e != nil {
+				rows.Close()
+				return nil, e
+			}
+			ids = append(ids, id)
+		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			return nil, e
+		}
+	} else {
+		// 关键：请求键查找仍限定当前发起账号，不能通过猜测旧账号的键读取去重结果。
+		rows, e := s.DB.QueryContext(ctx, `SELECT result_json FROM command_results WHERE actor_id=? AND action='PUBLISH' AND target_id=? AND command_key=?`, p.Account.Id, r.InstanceId, r.IdempotencyKey)
+		if e != nil {
+			return nil, e
+		}
+		for rows.Next() {
+			var raw []byte
+			if e = rows.Scan(&raw); e != nil {
+				rows.Close()
+				return nil, e
+			}
+			var o rpc.Operation
+			if json.Unmarshal(raw, &o) != nil {
+				rows.Close()
+				return nil, Error("UNAVAILABLE", "操作结果不可读")
+			}
 			ids = append(ids, o.OperationId)
 		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			return nil, e
+		}
 	}
-	rows.Close()
 	out := []*rpc.Operation{}
 	for _, id := range ids {
 		o, e := s.GetOperation(ctx, c, &rpc.OperationID{OperationId: id})
