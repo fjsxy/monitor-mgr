@@ -1169,16 +1169,16 @@
   "passingKeysEstablished": 0,
   "publication": {
     "file": "docs/e2e/issue-21.md",
-    "characters": 63381,
-    "utf8Bytes": 119469,
+    "characters": 63558,
+    "utf8Bytes": 119764,
     "limitCharacters": 65536,
-    "remainingCharacters": 2155,
+    "remainingCharacters": 1978,
     "withinGitHubCommentLimit": true,
-    "sha256": "521f8a5925d548020209aad84241c2a3e53030d4217daf3f16711c22cc2963cd",
+    "sha256": "d0fc2cbb4be212d8575f4bad9617c85a4db6d304b07c90d10c66d7605767af71",
     "status": "full_comment_published_exact_readback",
-    "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254725361",
-    "commentId": 6254725361,
-    "readbackAt": "2026-10-18T20:24:47.498316+00:00"
+    "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254819921",
+    "commentId": 6254819921,
+    "readbackAt": "2026-10-18T20:34:02.743542+00:00"
   },
   "layerSources": [
     "#17冻结regressions-fe9bcc2/results.json仅用于核既定层级，不继承passed状态",
@@ -1216,6 +1216,19 @@
       "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254616231",
       "commentId": 6254616231,
       "readbackAt": "2026-10-18T20:14:06.702821+00:00"
+    },
+    {
+      "file": "docs/e2e/issue-21.md",
+      "characters": 63381,
+      "utf8Bytes": 119469,
+      "limitCharacters": 65536,
+      "remainingCharacters": 2155,
+      "withinGitHubCommentLimit": true,
+      "sha256": "521f8a5925d548020209aad84241c2a3e53030d4217daf3f16711c22cc2963cd",
+      "status": "full_comment_published_exact_readback",
+      "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254725361",
+      "commentId": 6254725361,
+      "readbackAt": "2026-10-18T20:24:47.498316+00:00"
     }
   ],
   "originalRowsPreservationScope": {
@@ -1223,7 +1236,12 @@
     "inheritedIssues17Through20": true,
     "REG21ExceptWrongSource": true,
     "amendedVariantId": "REG21-VALIDATOR-011.wrong-source",
-    "reason": "实施前评审要求逐一验证原始收据来源，不将新wrapper视为原件身份；307行并非全部逐字等历史外部草案"
+    "reason": "实施前评审要求逐一验证原始收据来源，不将新wrapper视为原件身份；307行并非全部逐字等历史外部草案",
+    "REG21ExceptAmendedVariants": true,
+    "amendedVariantIds": [
+      "REG21-VALIDATOR-011.wrong-source",
+      "REG21-VALIDATOR-011.wrong-profile"
+    ]
   },
   "approvedPlanAmendments": [
     {
@@ -1233,6 +1251,16 @@
       "changedOnly": "REG21 wrong-source步骤及决定性预期；固定207与继承17–20行不变",
       "planSHA256": "521f8a5925d548020209aad84241c2a3e53030d4217daf3f16711c22cc2963cd",
       "commentURL": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254725361",
+      "fullReadback": true
+    },
+    {
+      "variantIds": [
+        "REG21-VALIDATOR-011.wrong-source",
+        "REG21-VALIDATOR-011.wrong-profile"
+      ],
+      "changedOnly": "候选Git原对象tree绑定及正式/fixture执行域失败闭合输入；固定207与继承17–20均不变",
+      "planSHA256": "d0fc2cbb4be212d8575f4bad9617c85a4db6d304b07c90d10c66d7605767af71",
+      "commentURL": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254819921",
       "fullReadback": true
     }
   ]
