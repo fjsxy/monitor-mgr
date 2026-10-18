@@ -1269,7 +1269,7 @@ function AgentForm({
         <h3>remoteWrite</h3>
         <p className="help">
           至少一个合法 HTTP(S) endpoint，URL 不能含 userinfo。所有认证/TLS
-          只选既有 Secret 引用；平台不读取或保存秘密文本。
+          只选既有 Secret 引用；平台不回显或持久化 Secret 值。
         </p>
         {value.remoteWrite.map((item, index) => {
           const prefix = `remoteWrite ${index + 1}`,
