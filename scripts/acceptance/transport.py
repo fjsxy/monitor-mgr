@@ -61,7 +61,7 @@ class ProcessRunner:
 
     def run(self, argv, *, label="external-process", input=None, cwd=None, env=None,
             timeout=1800, check=False, text=False, encoding=None, stdout=None, stderr=None,
-            capture_output=False, **kwargs):
+            capture_output=False, defer_stop=False, cooperative_signals=None, **kwargs):
         """返回真实结果给内存调用者；不 tee，非零也不能自动打印 stderr。"""
         self.checkpoint()
         sink = stdout if hasattr(stdout, "fileno") else None
@@ -83,13 +83,33 @@ class ProcessRunner:
         options.setdefault("start_new_session", True)
         child = None
         timed_out = False
+        interrupted = None
         try:
             child = native.Popen(argv, cwd=cwd, env=env, stdin=native.PIPE if input is not None else None,
                                  stdout=out, stderr=err, **options)
             identity = process_identity(child.pid)
             self.event({**intent, "stage": "started", "pid": child.pid, "birth": identity})
             try:
-                child.communicate(input=input, timeout=timeout)
+                end = time.monotonic() + timeout
+                first = True
+                forwarded = 0
+                while True:
+                    try:
+                        child.communicate(input=input if first else None, timeout=max(.001, min(.1, end-time.monotonic())))
+                        break
+                    except native.TimeoutExpired:
+                        first = False
+                        if time.monotonic() >= end:
+                            raise
+                        if cooperative_signals is not None:
+                            signals = list(cooperative_signals())
+                            for event in signals[forwarded:]:
+                                if child.poll() is None and process_identity(child.pid) == identity:
+                                    os.kill(child.pid, event["number"])
+                            forwarded = len(signals)
+                        # 关键：API mutation等待原响应期间延后停止，消费方确认UID/fsync后才checkpoint。
+                        if not defer_stop:
+                            self.checkpoint()
             except native.TimeoutExpired:
                 timed_out = True
                 # 关键：新 session 的进程组仅属于这次 child；超时不能留下 Go/Node 孙进程继续写入。
@@ -98,6 +118,23 @@ class ProcessRunner:
                 else:
                     raise ProcessFailure("超时进程出生身份不能确认，保留恢复失败")
                 child.communicate()
+            except BaseException as error:
+                interrupted = error
+                if child.poll() is None:
+                    if not identity or process_identity(child.pid) != identity or os.getpgid(child.pid) != child.pid:
+                        raise ProcessFailure("停止时进程出生身份不能确认") from None
+                    members = group_members(child.pid)
+                    os.killpg(child.pid, signal.SIGTERM)
+                    try:
+                        child.wait(timeout=1)
+                    except native.TimeoutExpired:
+                        pass
+                    remaining = group_members(child.pid)
+                    if remaining:
+                        if not any(remaining.get(pid) == birth for pid, birth in members.items()):
+                            raise ProcessFailure("停止时进程组原身份不能确认") from None
+                        os.killpg(child.pid, signal.SIGKILL)
+                    child.wait(timeout=5)
             finally:
                 out.flush(); err.flush()
                 os.fsync(out.fileno()); os.fsync(err.fileno())
@@ -115,6 +152,8 @@ class ProcessRunner:
         self.event({**intent, "stage": "exited", "pid": child.pid, "returncode": child.returncode,
                     "timedOut": timed_out, "stdoutSHA256": hashlib.sha256(outpath.read_bytes()).hexdigest(),
                     "stderrSHA256": hashlib.sha256(errpath.read_bytes()).hexdigest()})
+        if interrupted:
+            raise interrupted
         if timed_out:
             raise ProcessFailure(label + " 超过预算；原始输出已私有捕获")
         if check and result.returncode:

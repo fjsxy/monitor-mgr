@@ -13,6 +13,37 @@ import unittest
 
 
 class ProcessBoundary(unittest.TestCase):
+    def test_parent_forwards_each_signal_once_and_waits_for_child_finally(self):
+        """父持批次锁等待时转交TERM/INT，child自己的finally自然完成且不被重复触发。"""
+        import signal
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);ready=root/'ready';done=root/'finally.json'
+            script=("import json,signal,time,pathlib\nseen=[]\n"+
+                "def stop(number,frame):seen.append(number)\n"+
+                "signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)\n"+
+                "pathlib.Path("+repr(str(ready))+").write_text('ready')\n"+
+                "try:\n while not seen:time.sleep(.02)\n time.sleep(.2)\nfinally:pathlib.Path("+repr(str(done))+").write_text(json.dumps(seen))\n")
+            values=[{'number':signal.SIGTERM},{'number':signal.SIGINT}]
+            result=ProcessRunner(root/'private').run([sys.executable,'-c',script],timeout=5,
+                cooperative_signals=lambda: values if ready.exists() else [])
+            self.assertEqual(result.returncode,0)
+            self.assertCountEqual(json.loads(done.read_text()),[signal.SIGTERM,signal.SIGINT])
+
+    def test_running_browser_process_observes_cooperative_stop(self):
+        """主线程等待Node/Go时也检查停止；被中断child先退出再将原停止上抛。"""
+        from transport import ProcessRunner
+        from session import StopRequested
+        count=0
+        def checkpoint():
+            nonlocal count
+            count+=1
+            if count>1:raise StopRequested('host-fixture')
+        with tempfile.TemporaryDirectory() as tmp:
+            runner=ProcessRunner(Path(tmp),checkpoint=checkpoint)
+            with self.assertRaises(StopRequested):
+                runner.run([sys.executable,'-c','import time;time.sleep(.4)'])
+
     def test_auxiliary_group_stops_ignoring_grandchild_after_parent_exits(self):
         """父进程收到TERM即退出时，也必须结束同一原进程组中忽略TERM的孙进程。"""
         from transport import ProcessRunner, process_identity
@@ -63,6 +94,81 @@ class ProcessBoundary(unittest.TestCase):
 
 
 class IdentityLedger(unittest.TestCase):
+    def test_unconfirmed_create_blocks_dependent_namespace_cleanup(self):
+        """cluster-scoped创建gap未闭合时，不撤其可能依赖的原namespace/RBAC。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport, identity
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);calls=[]
+            ledger=Ledger(root/'ledger.json',run_id='fixture',candidate='fixture',targets={'control':'cluster'})
+            namespace={'apiVersion':'v1','kind':'Namespace','metadata':{'name':'owned','uid':'original-ns','resourceVersion':'1'}}
+            token=ledger.intent('control','create',identity(namespace));ledger.confirm(token,namespace)
+            ledger.intent('control','create',{'apiVersion':'monitoring.fjsxy.github.io/v1alpha1','kind':'KubeStateMetrics','namespace':'','name':'uncertain'})
+            def execute(*args,**kwargs):
+                calls.append(args)
+                raise AssertionError('identity gap must block dependent cleanup')
+            kube=KubeTransport(ledger=ledger,execute=execute,targets={'control':{'clusterUID':'cluster','kubeconfig':'fixture','context':'explicit'}},kubectl='fixture')
+            report=kube.recover_case()
+            self.assertFalse(report['success'])
+            self.assertEqual(calls,[])
+            self.assertEqual(ledger.entries[token]['stage'],'confirmed')
+
+    def test_client_dry_run_keeps_yaml_bytes_and_never_creates_ledger_identity(self):
+        """U06本地YAML转换保留原参数/stdin，不进入实际create及原UID确认。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            ledger=Ledger(root/'ledger.json',run_id='fixture',candidate='fixture',targets={'control':'cluster'})
+            raw=b'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: yaml-only\n'
+            script=root/'client.py';script.write_text("import sys,json\nassert sys.argv[-7:]==['create','--dry-run=client','--validate=false','-f','-','-o','json'];assert sys.stdin.buffer.read()=="+repr(raw)+"\nprint(json.dumps({'kind':'ConfigMap','metadata':{'name':'yaml-only'}}))\n")
+            kube=KubeTransport(ledger=ledger,execute=ProcessRunner(root/'private').run,targets={'control':{'clusterUID':'cluster','kubeconfig':'fixture','context':'explicit'}},kubectl=[sys.executable,str(script)])
+            result=kube.client_dry_run('control',['create','--dry-run=client','--validate=false','-f','-','-o','json'],raw)
+            self.assertEqual(result.returncode,0)
+            self.assertEqual(ledger.entries,{})
+
+    def test_explicit_nonwaiting_delete_preserves_shutdown_observation_window(self):
+        """T08的--wait=false必须在条件DELETE受理后返回，不能等Pod退出再观察503。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport, identity
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);read=root/'read'
+            pod={'apiVersion':'v1','kind':'Pod','metadata':{'name':'writer','namespace':'owned','uid':'original','resourceVersion':'9'}}
+            ledger=Ledger(root/'ledger.json',run_id='fixture',candidate='fixture',targets={'control':'cluster'})
+            key=ledger.intent('control','create',identity(pod));ledger.confirm(key,pod)
+            script=root/'client.py';script.write_text("import json,sys,pathlib\np=pathlib.Path("+repr(str(read))+ ")\nif 'get' in sys.argv:\n n=int(p.read_text()) if p.exists() else 0\n if n>=2:print('Error from server (Forbidden)',file=sys.stderr);sys.exit(1)\n p.write_text(str(n+1));print(json.dumps("+repr(pod)+"))\nelse:print('{}')\n")
+            kube=KubeTransport(ledger=ledger,execute=ProcessRunner(root/'private').run,targets={'control':{'clusterUID':'cluster','kubeconfig':'fixture','context':'explicit'}},kubectl=[sys.executable,str(script)])
+            result=kube.command('control',['delete','pod','writer','-n','owned','--wait=false'])
+            self.assertEqual(result.returncode,0)
+            self.assertEqual(ledger.entries[key]['stage'],'delete_accepted')
+
+    def test_own_finalizer_added_to_absent_field_preserves_later_foreign_token(self):
+        """原字段缺失也按token差异撤回，不能因缺失与空列表不同而清空外部token。"""
+        from kube_transport import undo_delta
+        before={'metadata':{}}
+        after={'metadata':{'finalizers':['phase1.fixture/hold']}}
+        current={'metadata':{'finalizers':['phase1.fixture/hold','external/retain']}}
+        self.assertEqual(undo_delta(before,after,current),{'metadata':{'finalizers':['external/retain']}})
+
+    def test_namespaced_create_rejects_replaced_parent_uid_before_mutation(self):
+        """本run namespace被替代后，不能按同名将新fixture写进外部namespace。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport, KubeFailure, identity
+        from transport import ProcessRunner
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);marker=root/'created'
+            original={'apiVersion':'v1','kind':'Namespace','metadata':{'name':'owned','uid':'original','resourceVersion':'1'}}
+            replacement=json.loads(json.dumps(original));replacement['metadata']['uid']='replacement'
+            ledger=Ledger(root/'ledger.json',run_id='fixture',candidate='fixture',targets={'control':'cluster'})
+            token=ledger.intent('control','create',identity(original));ledger.confirm(token,original)
+            script=root/'client.py';script.write_text("import json,sys,pathlib\nif 'create' in sys.argv:\n pathlib.Path("+repr(str(marker))+").touch();obj=json.load(sys.stdin);obj['metadata'].update(uid='new-pod',resourceVersion='1');print(json.dumps(obj))\nelse:print(json.dumps("+repr(replacement)+"))\n")
+            kube=KubeTransport(ledger=ledger,execute=ProcessRunner(root/'private').run,targets={'control':{'clusterUID':'cluster','kubeconfig':'fixture','context':'explicit'}},kubectl=[sys.executable,str(script)])
+            with self.assertRaises(KubeFailure):
+                kube.create_obj('control',{'apiVersion':'v1','kind':'Pod','metadata':{'name':'fixture','namespace':'owned'}})
+            self.assertFalse(marker.exists())
+
     def test_cr_cleanup_failure_preserves_namespace_and_rbac(self):
         """原Agent未结束时不能撤namespace/RBAC，否则GC失去原运行身份。"""
         from ledger import Ledger

@@ -1,5 +1,6 @@
 """PROJECTION013验收fixture：原始URL只驻内存，公开证据仅含身份白名单和安全布尔值。"""
-import copy,hashlib,json,pathlib,secrets,socket,subprocess,tempfile,time
+import copy,hashlib,json,pathlib,secrets,socket,tempfile,time
+from transport import process as subprocess
 import yaml
 
 ROOT=pathlib.Path(__file__).resolve().parents[2]

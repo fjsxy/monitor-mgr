@@ -9,6 +9,7 @@ DATA_DIR ?= data/local
 IMAGE ?= monitor-mgr:dev
 RPC_IMAGE ?= monitor-mgr:ksm-rpc-fixture
 LIFECYCLE_FIXTURE_IMAGE ?= monitor-mgr:lifecycle-fixture
+ENVIRONMENT_FIXTURE_IMAGE ?= monitor-mgr:environment-fixture
 SOURCE_SHA ?= $(shell git rev-parse HEAD)
 PLATFORM ?= linux/arm64
 BASE_URL ?= http://127.0.0.1:18080
@@ -46,7 +47,7 @@ acceptance-plan: ## 校验验收目录元数据，不代表运行通过
 	$(PYTHON) scripts/validate-acceptance.py
 e2e-clusters: ## 真实集群验收；通过 E2E_ARGS 显式指定环境与来源
 	$(PYTHON) scripts/acceptance/clusters.py $(E2E_ARGS)
-check: acceptance-plan test-race vet web-build ## 运行本地质量检查，不替代完整集群门禁
+check: acceptance-plan acceptance-host-check test-race vet web-build ## 运行本地质量检查，不替代完整集群门禁
 
 e2e-ksm: ## KSM真实集群验收；E2E_ARGS必须明确环境、来源和输出
 	$(PYTHON) scripts/acceptance/ksm.py $(E2E_ARGS)
@@ -129,3 +130,23 @@ acceptance-protocol-check: ## Host真实子进程的锁等待、停止与完整i
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/acceptance/protocol_test.py
 acceptance-transport-check: ## 私有进程输出与持久UID账本的Host协议检查
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s scripts/acceptance -p transport_test.py
+
+.PHONY: acceptance-host-check acceptance-list acceptance-run acceptance-validate acceptance-export acceptance-recover acceptance-bootstrap acceptance-prepare-check environment-fixture-image
+acceptance-host-check: ## 全部Host执行协议检查；不建立真实K/B或profile passing键
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s scripts/acceptance -p '*test.py'
+acceptance-list: ## 精确列举固定profile或独立supplemental键；E2E_ARGS指定profile
+	$(PYTHON) scripts/acceptance/run.py list $(E2E_ARGS)
+acceptance-run: ## 唯一候选同源验收；E2E_ARGS显式profile/run/环境/外置output
+	$(PYTHON) scripts/acceptance/run.py run $(E2E_ARGS)
+acceptance-validate: ## 独立逐键核验原收据/事件/OCI原字节与candidate.commit
+	$(PYTHON) scripts/acceptance/run.py validate-results $(E2E_ARGS)
+acceptance-export: ## 严格白名单导出；失败用diagnostic出口保留非passing证据
+	$(PYTHON) scripts/acceptance/run.py export $(E2E_ARGS)
+acceptance-recover: ## 独立新进程按原UID恢复；不修改原run或重跑业务
+	$(PYTHON) scripts/acceptance/run.py recover $(E2E_ARGS)
+acceptance-bootstrap: ## Linux固定官方工具/Chromium来源，原输出由capture私有保留
+	$(PYTHON) scripts/acceptance/bootstrap_linux.py $(E2E_ARGS)
+acceptance-prepare-check: ## 固定环境准备的Host边界；不实际创建集群
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s scripts/acceptance -p prepare_test.py
+environment-fixture-image: ## 同C验收卷探针镜像；不向产品加入环境管理接口
+	docker build --platform "$(PLATFORM)" --provenance=false --sbom=false --build-arg PLATFORM_IMAGE="$(IMAGE)" --build-arg SOURCE_SHA="$(SOURCE_SHA)" -f scripts/acceptance/Dockerfile.environment -t "$(ENVIRONMENT_FIXTURE_IMAGE)" .

@@ -104,6 +104,23 @@ class Ledger:
         self.flush()
 
     @synchronized
+    def confirm_instance(self, token, instance):
+        """平台确认响应使用实际version关系，不伪造目标API未返回的resourceVersion。"""
+        entry = self.entries[token]
+        expected = entry["identity"]
+        agent = instance.get("component") == "Prometheus Agent"
+        actual = {"apiVersion": "monitoring.coreos.com/v1alpha1" if agent else "monitoring.fjsxy.github.io/v1alpha1",
+                  "kind": "PrometheusAgent" if agent else "KubeStateMetrics", "name": instance.get("name"),
+                  "namespace": instance.get("crNamespace", "") if agent else ""}
+        if entry["action"] != "product-confirm" or actual != expected or not instance.get("uid") or not instance.get("currentVersionId"):
+            raise ValueError("平台确认响应身份不完整")
+        if entry.get("uid") and entry["uid"] != instance["uid"]:
+            raise ValueError("平台确认响应为替代UID")
+        entry.update(stage="confirmed", uid=instance["uid"], instanceId=instance["id"],
+                     confirmedVersionId=instance["currentVersionId"], confirmedAt=stamp())
+        self.flush()
+
+    @synchronized
     def mark(self, token, stage, **safe_fields):
         """记录确定的恢复/删除阶段，不向公开 ledger 添加原始异常或对象字段。"""
         allowed = {"notFoundAt", "deleteAcceptedAt", "restoredAt", "replacementUID", "errorCode", "originRef"}
