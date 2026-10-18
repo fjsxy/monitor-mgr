@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudwego/kitex/client"
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
+	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
 )
 
 // The controlled TLS API is the external system boundary; every platform call still crosses generated Kitex.
@@ -450,6 +454,10 @@ func TestCredentialContinueRejectsOtherOperationKindsWithoutChangingActor(t *tes
 	c := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
 	user := clusterCall(t, p, "POST", "/accounts", map[string]any{"username": "previous-actor", "password": "temporary-password", "role": "USER"}, c, "create-user", 201)
 	actor := user["id"].(string)
+	cli, e := controlservice.NewClient("credential-kind-guard", client.WithHostPorts(p.RPCAddress()))
+	if e != nil {
+		t.Fatal(e)
+	}
 	db, e := sql.Open("sqlite", filepath.Join(dir, "platform.db"))
 	if e != nil {
 		t.Fatal(e)
@@ -460,7 +468,13 @@ func TestCredentialContinueRejectsOtherOperationKindsWithoutChangingActor(t *tes
 		if _, e = db.Exec(`INSERT INTO operations(id,action,state,cluster_id,actor_id,owner_id,name,message,created_at,updated_at) VALUES(?,?,'WAITING_CONFIRMATION','fixture-cluster',?,?,'fixture','','2026-01-01','2026-01-01')`, id, kind, actor, actor); e != nil {
 			t.Fatal(e)
 		}
-		clusterCall(t, p, "POST", "/operations/"+id+"/continue", map[string]any{}, c, "continue-"+kind, 409)
+		// 关键：此测试只约束凭据RPC的kind白名单；canonical HTTP按action分派，由REG19真实路由正负控覆盖。
+		key, token := "continue-"+kind, c.Value
+		_, e = cli.ContinueOperation(context.Background(), &rpc.RequestContext{RequestId: key, SessionToken: &token, IdempotencyKey: &key}, &rpc.OperationID{OperationId: id})
+		var apiError *rpc.APIError
+		if !errors.As(e, &apiError) || apiError.Code != "CONFLICT" {
+			t.Fatalf("凭据RPC未拒绝%s: %v", kind, e)
+		}
 		op := clusterCall(t, p, "GET", "/operations/"+id, nil, c, "", 200)
 		if op["state"] != "WAITING_CONFIRMATION" || op["actorId"] != actor {
 			t.Fatalf("credential recovery changed another kind: %v", op)

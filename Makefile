@@ -124,3 +124,8 @@ e2e-review: ## 评审REG逐例Q/B；B须显式独占lane与真实来源环境
 	$(PYTHON) scripts/acceptance/review.py $(E2E_ARGS)
 review-q-receipt: ## 提前评审9Q必选leaf逐ID收据
 	$(PYTHON) scripts/acceptance/review.py --layer Q $(E2E_ARGS)
+
+acceptance-protocol-check: ## Host真实子进程的锁等待、停止与完整index协议；不计产品K
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/acceptance/protocol_test.py
+acceptance-transport-check: ## 私有进程输出与持久UID账本的Host协议检查
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s scripts/acceptance -p transport_test.py
