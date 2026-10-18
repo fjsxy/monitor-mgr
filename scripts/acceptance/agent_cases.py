@@ -84,6 +84,7 @@ def blocked(s,case):
   if variant=='missing-key':cfg['remoteWrite'][0]['auth']['credentials']['key']='not-created';expected=422
   if variant=='forbidden-secret':rbac=s.restricted_credentials('secrets');expected=403
  i=s.create(cfg);error=s.preview(i,status=expected);assert error.get('code') in ['TARGET_NOT_FOUND','TARGET_FORBIDDEN','INVALID_INPUT'];assert_none(s)
+ if variant=='forbidden-secret':assert 'Secret' in error['message'] and error.get('fieldErrors'),'必须实际到达Secret读取边界'
  # 恢复fixture后同一草稿需明确重新预览，平台从未自动补建依赖。
  if variant=='forbidden-secret':s.restore_credentials()
  if variant=='missing-secret':s.apply({'apiVersion':'v1','kind':'Secret','metadata':{'name':'not-created','namespace':s.targetns},'stringData':{'credentials':s.secret_values['credentials']}})
