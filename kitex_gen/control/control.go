@@ -8,8 +8,9 @@ import (
 )
 
 type RequestContext struct {
-	RequestId    string  `thrift:"requestId,1,required" frugal:"1,required,string" json:"requestId"`
-	SessionToken *string `thrift:"sessionToken,2,optional" frugal:"2,optional,string" json:"sessionToken,omitempty"`
+	RequestId      string  `thrift:"requestId,1,required" frugal:"1,required,string" json:"requestId"`
+	SessionToken   *string `thrift:"sessionToken,2,optional" frugal:"2,optional,string" json:"sessionToken,omitempty"`
+	IdempotencyKey *string `thrift:"idempotencyKey,3,optional" frugal:"3,optional,string" json:"idempotencyKey,omitempty"`
 }
 
 func NewRequestContext() *RequestContext {
@@ -31,15 +32,31 @@ func (p *RequestContext) GetSessionToken() (v string) {
 	}
 	return *p.SessionToken
 }
+
+var RequestContext_IdempotencyKey_DEFAULT string
+
+func (p *RequestContext) GetIdempotencyKey() (v string) {
+	if !p.IsSetIdempotencyKey() {
+		return RequestContext_IdempotencyKey_DEFAULT
+	}
+	return *p.IdempotencyKey
+}
 func (p *RequestContext) SetRequestId(val string) {
 	p.RequestId = val
 }
 func (p *RequestContext) SetSessionToken(val *string) {
 	p.SessionToken = val
 }
+func (p *RequestContext) SetIdempotencyKey(val *string) {
+	p.IdempotencyKey = val
+}
 
 func (p *RequestContext) IsSetSessionToken() bool {
 	return p.SessionToken != nil
+}
+
+func (p *RequestContext) IsSetIdempotencyKey() bool {
+	return p.IdempotencyKey != nil
 }
 
 func (p *RequestContext) String() string {
@@ -52,6 +69,7 @@ func (p *RequestContext) String() string {
 var fieldIDToName_RequestContext = map[int16]string{
 	1: "requestId",
 	2: "sessionToken",
+	3: "idempotencyKey",
 }
 
 type Account struct {

@@ -60,4 +60,8 @@ BASE_URL=http://127.0.0.1:18080 npm --prefix web run test:e2e
 
 HTTP/真实 RPC 集成测试覆盖 I01、I02 默认/配置寿命/安全 Cookie、I07 全部账号变更和并发最后管理员保护；直接 RPC 验证无 Session 不能访问账号管理。T07 含数据库无法打开、两种 listener 占用、真实网络 Dialer 不可用及取消的 RPC 探测，均不能 ready。可控时钟和 transport 只隔离已确认的系统边界，业务 handler 与 SQLite 不 mock。浏览器 I07 与真实 Pod T02 的通过须另外取证，不能以 Go 测试替代。
 
-当前接口：GET/POST `/api/v1/initialization`；POST `/sessions`；GET/DELETE `/session`；POST `/session/password`；GET/POST `/accounts`；PATCH `/accounts/{id}`；POST `/accounts/{id}/password-reset`。账号不删除，生命周期动作保存审计；至少一名启用管理员由串行事务检查。`control.Store.Authorize` / `AuthorizeTx` 从持久会话与当前账号读取角色及失效依据，后续业务必须复用当前授权，不接受浏览器角色断言。
+当前接口：GET/POST `/api/v1/initialization`；POST `/sessions`；GET/DELETE `/session`；POST `/session/password`；GET/POST `/accounts`；PATCH `/accounts/{id}`；POST `/accounts/{id}/password-reset`。账号不删除，生命周期动作保存审计；至少一名启用管理员由串行事务检查。
+
+账号创建、角色/启用变更与管理员重置密码必须携带 `Idempotency-Key`，HTTP 通过 optional Thrift `RequestContext.idempotencyKey` 传递。服务在同一事务内先验证当前 Session 与管理员权限，再按 actor/action/target/key 查询；同键同规范化请求返回原安全结果，异内容返回 409，结果与账号变更、审计一起提交。含密码的规范化请求只保存独立 master key 计算的 HMAC-SHA256，不存密码或裸摘要。初始化、登录、退出、本人改密属于认证命令，不缓存会话凭据；改密或自行重置使旧 Session 失效后，旧凭据重复请求仍须 401。
+
+当前 schema 版本为 2。已有库升级前通过 SQLite `VACUUM INTO` 保存一致快照至数据目录 `backups/`（0600）；所有待应用 DDL 和版本记录一次事务提交。快照失败不迁移，迁移失败保留原库及恢复依据；不初始化替代数据库。新版本启动拒绝不兼容版本，schema1 账号和有效 Session 升级后保持可用。`control.Store.Authorize` / `AuthorizeTx` 从持久会话与当前账号读取角色及失效依据，后续业务必须复用当前授权，不接受浏览器角色断言。

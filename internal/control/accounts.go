@@ -186,6 +186,15 @@ func (s *Store) CreateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	if err = requireAdmin(p); err != nil {
 		return nil, err
 	}
+	var replay rpc.Account
+	cmd, hit, err := s.beginCommand(ctx, tx, p, c, "CREATE_ACCOUNT", "accounts", r, &replay)
+	if err != nil {
+		return nil, err
+	}
+	if hit {
+		return &replay, nil
+	}
+
 	var n int
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM accounts WHERE username=?`, r.Username).Scan(&n); err != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")
@@ -198,6 +207,9 @@ func (s *Store) CreateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 		return nil, Error("UNAVAILABLE", "创建失败")
 	}
 	if err = audit(ctx, tx, p.Account.Id, "CREATE_ACCOUNT", a.Id, s.Now()); err != nil {
+		return nil, err
+	}
+	if err = s.finishCommand(ctx, tx, cmd, a); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -232,6 +244,15 @@ func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	if err = requireAdmin(p); err != nil {
 		return nil, err
 	}
+	var replay rpc.Account
+	cmd, hit, err := s.beginCommand(ctx, tx, p, c, "UPDATE_ACCOUNT", r.Id, r, &replay)
+	if err != nil {
+		return nil, err
+	}
+	if hit {
+		return &replay, nil
+	}
+
 	a, err := scanAccount(tx.QueryRowContext(ctx, `SELECT `+accountColumns+` FROM accounts WHERE id=?`, r.Id))
 	if err == sql.ErrNoRows {
 		return nil, Error("NOT_FOUND", "账号不存在")
@@ -265,6 +286,9 @@ func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	}
 	a.Role = role
 	a.Enabled = enabled
+	if err = s.finishCommand(ctx, tx, cmd, a); err != nil {
+		return nil, err
+	}
 	if err = tx.Commit(); err != nil {
 		return nil, Error("UNAVAILABLE", "更新失败")
 	}
@@ -290,6 +314,15 @@ func (s *Store) ResetPassword(ctx context.Context, c *rpc.RequestContext, r *rpc
 	if err = requireAdmin(p); err != nil {
 		return nil, err
 	}
+	var replay rpc.Empty
+	cmd, hit, err := s.beginCommand(ctx, tx, p, c, "RESET_PASSWORD", r.Id, r, &replay)
+	if err != nil {
+		return nil, err
+	}
+	if hit {
+		return &replay, nil
+	}
+
 	res, err := tx.ExecContext(ctx, `UPDATE accounts SET password_hash=?,must_change=1,auth_version=auth_version+1 WHERE id=?`, hash, r.Id)
 	if err != nil {
 		return nil, Error("UNAVAILABLE", "重置失败")
@@ -299,6 +332,9 @@ func (s *Store) ResetPassword(ctx context.Context, c *rpc.RequestContext, r *rpc
 		return nil, Error("NOT_FOUND", "账号不存在")
 	}
 	if err = audit(ctx, tx, p.Account.Id, "RESET_PASSWORD", r.Id, s.Now()); err != nil {
+		return nil, err
+	}
+	if err = s.finishCommand(ctx, tx, cmd, &rpc.Empty{}); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {

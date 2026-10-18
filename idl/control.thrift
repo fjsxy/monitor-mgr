@@ -7,6 +7,7 @@ exception APIError {
 struct RequestContext {
  1: required string requestId
  2: optional string sessionToken
+ 3: optional string idempotencyKey
 }
 struct Account {
  1: required string id

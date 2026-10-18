@@ -3,6 +3,9 @@ package platform_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/cloudwego/kitex/client"
@@ -31,6 +34,7 @@ func TestI01InitializeOnlyEmptyDatabase(t *testing.T) {
 	for i, want := range []int{201, 409} {
 		req, _ := http.NewRequest("POST", p.URL()+"/api/v1/initialization", strings.NewReader(`{"username":"admin","password":"first-password-123"}`))
 		req.Header.Set("Origin", p.URL())
+		req.Header.Set("Idempotency-Key", time.Now().UTC().Format(time.RFC3339Nano))
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -63,6 +67,7 @@ func request(t *testing.T, p *platform.Runtime, method, path, body string, cooki
 	t.Helper()
 	req, _ := http.NewRequest(method, p.URL()+"/api/v1"+path, strings.NewReader(body))
 	req.Header.Set("Origin", p.URL())
+	req.Header.Set("Idempotency-Key", time.Now().UTC().Format(time.RFC3339Nano))
 	if cookie != nil {
 		req.AddCookie(cookie)
 	}
@@ -186,6 +191,7 @@ func TestI02OriginAndDirectRPCEnforceAuthorization(t *testing.T) {
 	request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
 	req, _ = http.NewRequest("POST", p.URL()+"/api/v1/sessions", strings.NewReader(`{"username":"admin","password":"first-password-123"}`))
 	req.Header.Set("Origin", p.URL())
+	req.Header.Set("Idempotency-Key", time.Now().UTC().Format(time.RFC3339Nano))
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -228,6 +234,7 @@ func TestI07ConcurrentDemotionsRetainAdministrator(t *testing.T) {
 		go func(i int) {
 			req, _ := http.NewRequest("PATCH", p.URL()+"/api/v1/accounts/"+ids[i], strings.NewReader(`{"role":"USER"}`))
 			req.Header.Set("Origin", p.URL())
+			req.Header.Set("Idempotency-Key", time.Now().UTC().Format(time.RFC3339Nano))
 			req.AddCookie(cookies[i])
 			resp, e := http.DefaultClient.Do(req)
 			if e != nil {
@@ -359,5 +366,162 @@ func TestI02HTTPSOriginSetsSecureCookie(t *testing.T) {
 		if path == "sessions" && (len(resp.Cookies()) != 1 || !resp.Cookies()[0].Secure) {
 			t.Fatal("HTTPS入口未标记Secure Cookie")
 		}
+	}
+}
+
+func TestAccountMutationsAreDurablyIdempotentAndStillAuthorize(t *testing.T) {
+	dir := t.TempDir()
+	cfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
+	p, err := platform.Start(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { p.Close(context.Background()) }()
+	request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
+	cookie := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
+	send := func(body, key string, want int) map[string]any {
+		t.Helper()
+		req, _ := http.NewRequest("POST", p.URL()+"/api/v1/accounts", strings.NewReader(body))
+		req.Header.Set("Origin", p.URL())
+		req.Header.Set("Idempotency-Key", time.Now().UTC().Format(time.RFC3339Nano))
+		req.Header.Set("Idempotency-Key", key)
+		req.AddCookie(cookie)
+		res, e := http.DefaultClient.Do(req)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer res.Body.Close()
+		var value map[string]any
+		json.NewDecoder(res.Body).Decode(&value)
+		if res.StatusCode != want {
+			t.Fatalf("幂等请求得到 %d，期待 %d", res.StatusCode, want)
+		}
+		return value
+	}
+	body := `{"username":"idempotent-user","password":"temporary-password","role":"USER"}`
+	first := send(body, "create-unique-key", 201)
+	second := send(body, "create-unique-key", 201)
+	if first["id"] != second["id"] {
+		t.Fatal("同键产生不同账号")
+	}
+	send(`{"username":"different-user","password":"temporary-password","role":"USER"}`, "create-unique-key", 409)
+	p.Close(context.Background())
+	p, err = platform.Start(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	third := send(body, "create-unique-key", 201)
+	if third["id"] != first["id"] {
+		t.Fatal("重启丢失幂等结果")
+	}
+	request(t, p, "DELETE", "/session", "", cookie, 200)
+	send(body, "create-unique-key", 401)
+}
+
+func TestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL(t *testing.T) {
+	dir := t.TempDir()
+	key := bytes.Repeat([]byte{7}, 32)
+	if err := os.WriteFile(filepath.Join(dir, "master.key"), key, 0600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", filepath.Join(dir, "platform.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{`CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY)`, `INSERT INTO schema_migrations VALUES(1)`, `CREATE TABLE accounts(id TEXT PRIMARY KEY,username TEXT NOT NULL UNIQUE,password_hash BLOB NOT NULL,role TEXT NOT NULL,enabled INTEGER NOT NULL,must_change INTEGER NOT NULL,auth_version INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL)`, `CREATE TABLE sessions(digest TEXT PRIMARY KEY,account_id TEXT NOT NULL,auth_version INTEGER NOT NULL,expires_at TEXT NOT NULL)`, `CREATE TABLE audit(id TEXT PRIMARY KEY,actor_id TEXT,action TEXT NOT NULL,target_id TEXT,created_at TEXT NOT NULL)`} {
+		if _, err = db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = db.Exec(`INSERT INTO accounts VALUES('fixture-admin','admin',?,'ADMIN',1,0,1,'2026-01-01T00:00:00Z')`, []byte("$2a$10$L7sUQdVEfNpnBzKsaRo7oOmyJTLoxzdutn/dufIEbTCd.YQFAvmKO")); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte("schema-one-session-token"))
+	if _, err = db.Exec(`INSERT INTO sessions VALUES(?,'fixture-admin',1,'2099-01-01T00:00:00Z')`, hex.EncodeToString(sum[:])); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	// An unusable backup destination must fail before any schema writes.
+	if err = os.WriteFile(filepath.Join(dir, "backups"), []byte("blocked"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
+	p, err := platform.Start(context.Background(), cfg)
+	if err == nil {
+		p.Close(context.Background())
+		t.Fatal("无法快照仍升级数据库")
+	}
+	os.Remove(filepath.Join(dir, "backups"))
+	p, err = platform.Start(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close(context.Background())
+	request(t, p, "GET", "/session", "", &http.Cookie{Name: "monitor_session", Value: "schema-one-session-token"}, 200)
+	snapshots, err := filepath.Glob(filepath.Join(dir, "backups", "schema-1-to-2-*.db"))
+	if err != nil || len(snapshots) != 1 {
+		t.Fatalf("缺一致快照: %v %v", snapshots, err)
+	}
+}
+
+func TestDirectRPCMutationReplayDoesNotRepeatPasswordOrRoleChange(t *testing.T) {
+	p, err := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close(context.Background())
+	request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
+	admin := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
+	cli, err := controlservice.NewClient("idempotent-direct", client.WithHostPorts(p.RPCAddress()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := "direct-create"
+	ctx := &rpc.RequestContext{RequestId: "direct-create", SessionToken: &admin.Value, IdempotencyKey: &key}
+	r := &rpc.CreateAccountRequest{Username: "rpc-user", Password: "temporary-password", Role: "USER"}
+	account, err := cli.CreateAccount(context.Background(), ctx, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := cli.CreateAccount(context.Background(), ctx, r)
+	if err != nil || again.Id != account.Id {
+		t.Fatal("直接 RPC 未保留原结果", err)
+	}
+	noKey := &rpc.RequestContext{RequestId: "direct-missing-key", SessionToken: &admin.Value}
+	_, err = cli.CreateAccount(context.Background(), noKey, r)
+	var apiErr *rpc.APIError
+	if !errors.As(err, &apiErr) || apiErr.Code != "INVALID_INPUT" {
+		t.Fatalf("直接RPC缺key应拒绝: %v", err)
+	}
+	key = "direct-reset"
+	reset := &rpc.ResetPasswordRequest{Id: account.Id, Password: "reset-password-123"}
+	if _, err = cli.ResetPassword(context.Background(), ctx, reset); err != nil {
+		t.Fatal(err)
+	}
+	user := request(t, p, "POST", "/sessions", `{"username":"rpc-user","password":"reset-password-123"}`, nil, 201).Cookies()[0]
+	if _, err = cli.ResetPassword(context.Background(), ctx, reset); err != nil {
+		t.Fatal(err)
+	}
+	request(t, p, "GET", "/session", "", user, 200)
+	key = "direct-role"
+	role := "ADMIN"
+	update := &rpc.UpdateAccountRequest{Id: account.Id, Role: &role}
+	if _, err = cli.UpdateAccount(context.Background(), ctx, update); err != nil {
+		t.Fatal(err)
+	}
+	user = request(t, p, "POST", "/sessions", `{"username":"rpc-user","password":"reset-password-123"}`, nil, 201).Cookies()[0]
+	if _, err = cli.UpdateAccount(context.Background(), ctx, update); err != nil {
+		t.Fatal(err)
+	}
+	request(t, p, "GET", "/session", "", user, 200)
+	update.Role = &[]string{"USER"}[0]
+	_, err = cli.UpdateAccount(context.Background(), ctx, update)
+	if !errors.As(err, &apiErr) || apiErr.Code != "CONFLICT" {
+		t.Fatalf("直接RPC同键异内容应冲突: %v", err)
+	}
+	request(t, p, "DELETE", "/session", "", admin, 200)
+	_, err = cli.UpdateAccount(context.Background(), ctx, &rpc.UpdateAccountRequest{Id: account.Id, Role: &role})
+	if !errors.As(err, &apiErr) || apiErr.Code != "UNAUTHENTICATED" {
+		t.Fatalf("幂等命中绕过当前授权: %v", err)
 	}
 }

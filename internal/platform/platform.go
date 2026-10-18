@@ -173,6 +173,9 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	ctx := &rpc.RequestContext{RequestId: requestID}
+	if key := r.Header.Get("Idempotency-Key"); key != "" {
+		ctx.IdempotencyKey = &key
+	}
 	if cookie, err := r.Cookie("monitor_session"); err == nil {
 		ctx.SessionToken = &cookie.Value
 	}

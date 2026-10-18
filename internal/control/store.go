@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -94,17 +93,11 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 		return fail(err)
 	}
 	db.SetMaxOpenConns(1)
-	for _, q := range []string{`PRAGMA journal_mode=WAL`, `PRAGMA synchronous=FULL`, `PRAGMA foreign_keys=ON`, `PRAGMA busy_timeout=5000`,
-		`CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY)`,
-		`CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY,username TEXT NOT NULL UNIQUE,password_hash BLOB NOT NULL,role TEXT NOT NULL CHECK(role IN ('ADMIN','USER')),enabled INTEGER NOT NULL,must_change INTEGER NOT NULL,auth_version INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS sessions(digest TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES accounts(id),auth_version INTEGER NOT NULL,expires_at TEXT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,actor_id TEXT,action TEXT NOT NULL,target_id TEXT,created_at TEXT NOT NULL)`,
-		`INSERT OR IGNORE INTO schema_migrations(version) VALUES(1)`} {
-		if _, err = db.Exec(q); err != nil {
-			db.Close()
-			return fail(fmt.Errorf("数据库迁移失败: %w", err))
-		}
+	if err = migrate(db, dataDir); err != nil {
+		db.Close()
+		return fail(err)
 	}
+
 	return &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key}, nil
 }
 func (s *Store) Close() error {
