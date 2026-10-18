@@ -155,7 +155,7 @@ def identity(s):
  first=s.cfg();i,op=published(s,first);a=s.runtime(i);other=s.targetns+'-other';s.fixture(other);b_cfg=s.cfg(namespace=other);j,jop=published(s,b_cfg);b=s.runtime(j,namespace=other)
  data_ns=s.targetns+'-data';s.fixture(data_ns,'data');data,_=s.registered(s.config('data'));k=s.create(s.cfg(namespace=data_ns),data['id']);kop=s.publish(k);c=s.runtime(k,namespace=data_ns,target='data')
  external_name='external-'+uuid.uuid4().hex[:8];external=copy.deepcopy(a['cr']);external={key:external[key] for key in ['apiVersion','kind','spec']};external['metadata']={'name':external_name,'namespace':other};s.apply(external)
- listing=s.call('GET','/clusters/'+s.cluster['id']+'/instances')['instances'];outside=next(v for v in listing if v['name']==external_name and v['readOnly']);assert not s.call('GET','/instances/'+outside['id']+'/operations')['operations']
+ listing=s.call('GET','/clusters/'+s.cluster['id']+'/instances')['instances'];outside=next(v for v in listing if v['name']==external_name and v['readOnly']);assert not s.call('GET','/operations?instanceId='+outside['id'])['operations']
  s.call('PUT','/instances/'+outside['id']+'/draft',{'expectedDraftRevision':1,'agent':s.cfg(external_name,other)},status=403)
  first['remoteWrite'][0]['url']='http://updated.example.invalid/write';s.save(i,first);s.publish(i)
  assert s.cr(namespace=other)['metadata']['uid']==b['cr']['metadata']['uid'] and s.cr(namespace=other)['spec']==b['cr']['spec'];assert s.cr(namespace=data_ns,target='data')['metadata']['uid']==c['cr']['metadata']['uid'] and s.cr(namespace=data_ns,target='data')['spec']==c['cr']['spec']
