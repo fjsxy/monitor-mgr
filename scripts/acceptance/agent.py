@@ -186,12 +186,32 @@ class Suite(ClusterSuite):
    if last['summary']=='Available' and last.get('desiredPods')==last.get('availablePods')==1 and len(sts)==len(pods)==1 and ready(pods[0]):
     pod=pods[0];prom=next(c for c in pod['spec']['containers'] if c['name']=='prometheus');assert prom['resources']=={'requests':{'cpu':'200m','memory':'512Mi'},'limits':{'memory':'1Gi'}}
     assert prom['image'].endswith('@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3')
-    status=next(c for c in pod['status']['containerStatuses'] if c['name']=='prometheus');assert status['imageID'].endswith('sha256:f4def6b3b61109a6eeea59945d578bb7e926c36cb0e036a23e3ceb8b6de024ad')
+    status=next(c for c in pod['status']['containerStatuses'] if c['name']=='prometheus');image_proof=self.prometheus_image(pod,prom,status,target)
     mounts={m['name'] for m in prom['volumeMounts']};claims=[v['persistentVolumeClaim']['claimName'] for v in pod['spec']['volumes'] if 'persistentVolumeClaim' in v and v['name'] in mounts];assert len(claims)==1
     pvc=self.get('pvc',claims[0],'-n',namespace,target=target);assert pvc['status']['phase']=='Bound' and pvc['spec']['resources']['requests']['storage']==capacity and pvc['spec']['accessModes']==['ReadWriteOnce']
-    return {'runtime':last,'cr':cr,'statefulSet':sts[0],'pod':{'name':pod['metadata']['name'],'uid':pod['metadata']['uid'],'node':pod['spec']['nodeName'],'imageID':status['imageID'],'resources':prom['resources'],'mounts':prom['volumeMounts']},'pvc':{'name':pvc['metadata']['name'],'uid':pvc['metadata']['uid'],'spec':pvc['spec'],'phase':pvc['status']['phase']}}
+    return {'runtime':last,'cr':cr,'statefulSet':sts[0],'pod':{'name':pod['metadata']['name'],'uid':pod['metadata']['uid'],'node':pod['spec']['nodeName'],'imageID':status['imageID'],'imageProof':image_proof,'resources':prom['resources'],'mounts':prom['volumeMounts']},'pvc':{'name':pvc['metadata']['name'],'uid':pvc['metadata']['uid'],'spec':pvc['spec'],'phase':pvc['status']['phase']}}
    time.sleep(.5)
   raise AssertionError('Agent真实ST/Pod/PVC未收敛：'+str(last))
+ def prometheus_image(self,pod,container,status,target):
+  """绑定原Pod/运行容器和节点内容链，不把CRI报告官方index误判为镜像变化。"""
+  index='sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3';child='sha256:f4def6b3b61109a6eeea59945d578bb7e926c36cb0e036a23e3ceb8b6de024ad'
+  node=pod['spec']['nodeName'];assert node in {n['name'] for n in self.environment[target]['nodes']}
+  assert container['image']=='quay.io/prometheus/prometheus@'+index
+  def node_json(*args):return json.loads(subprocess.check_output(['docker','exec',node,*args],stderr=subprocess.PIPE))
+  def content(digest):
+   raw=subprocess.check_output(['docker','exec',node,'ctr','-n','k8s.io','content','get',digest],stderr=subprocess.PIPE)
+   assert 'sha256:'+hashlib.sha256(raw).hexdigest()==digest,'节点OCI内容摘要不符'
+   return json.loads(raw)
+  original=content(index);assert any(m['digest']==child and m['platform']['os']=='linux' and m['platform']['architecture']=='arm64' for m in original['manifests'])
+  manifest=content(child);config_digest=manifest['config']['digest'];config=content(config_digest)
+  assert config['os']=='linux' and config['architecture']=='arm64'
+  container_id=status['containerID'].removeprefix('containerd://');assert re.fullmatch('[0-9a-f]{64}',container_id)
+  actual=node_json('crictl','inspect',container_id)['status']
+  # 关键：CRI查询限定原容器ID及原Pod UID，不能用同节点另一绿色容器冒充当前Pod。
+  assert actual['id']==container_id and actual['labels']['io.kubernetes.pod.uid']==pod['metadata']['uid'] and actual['metadata']['name']=='prometheus'
+  actual_ref=actual['imageRef'];image=node_json('crictl','inspecti',actual_ref)['status'];assert image['id']==config_digest
+  reported=re.search(r'sha256:[0-9a-f]{64}$',status['imageID']);assert reported and reported[0] in {index,child,config_digest},'kubelet镜像ID不在已验证的官方内容链'
+  return {'podUID':pod['metadata']['uid'],'containerID':container_id,'node':node,'indexDigest':index,'arm64ManifestDigest':child,'configDigest':config_digest,'criImageId':image['id'],'criImageRef':actual_ref,'kubeletImageID':status['imageID'],'contentBytesSHA256Verified':True,'os':config['os'],'architecture':config['architecture']}
  def collection(self,kind,namespace,name='matched',label='yes'):
   version='v1alpha1' if kind=='ScrapeConfig' else 'v1'
   specs={'ServiceMonitor':{'selector':{},'endpoints':[{'port':'http'}]},'PodMonitor':{'selector':{},'podMetricsEndpoints':[{'port':'http'}]},'Probe':{'prober':{'url':'blackbox.example.invalid:9115'},'targets':{'staticConfig':{'static':['https://example.invalid']}}},'ScrapeConfig':{'staticConfigs':[{'targets':['example.invalid:9090']}]}}
