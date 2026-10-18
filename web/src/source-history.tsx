@@ -17,7 +17,7 @@ const state = (value: string) => ({ Available: "可用", NotReady: "未就绪", 
 export function SourceHistory({ source, children }: { source: SourceStatus; children?: ReactNode }) {
   const history = source.historical || source.stale || Boolean(source.error), snapshot = source.runtimeSnapshot;
   return <section className="publication-item source-history" aria-label={`来源 ${source.source}`}>
-    <h4>{source.source.replace("association:", "")} <span className={`badge ${history ? "warn" : "gray"}`}>{source.error ? "读取失败" : source.stale ? "已过期 · 历史数据" : history ? "历史数据" : "已读取"}</span></h4>
+    <h4>{source.source === "storagePolicy" ? "实际存储策略" : source.source.replace("association:", "")} <span className={`badge ${history ? "warn" : "gray"}`}>{source.error ? "读取失败" : source.stale ? "已过期 · 历史数据" : history ? "历史数据" : "已读取"}</span></h4>
     <p className="help">最后尝试：{timestamp(source.lastAttemptAt)} · 最后成功：{timestamp(source.lastSuccessAt)}</p>
     {source.error && <p className="alert error">{source.error}</p>}
     {history && <p className="help">以下仅为历史记录，当前状态未知。</p>}

@@ -1,5 +1,6 @@
 import { SourceHistory, type SourceStatus } from "./source-history";
 import { useDraftBookmark } from "./draft-bookmark";
+import {StorageImpact} from "./agent-storage";
 import type { Int64 } from "./api";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, APIError, type Account } from "./api";
@@ -705,6 +706,7 @@ export function Instances({
             </p>
             <p className="help">命名空间：{deletePreview?.namespace??deleting.targetNamespace}</p>
             {deleting.uid&&<p className="help">{deletePreview?`已确认影响范围：${deletePreview.impactNamespaces.join("、")} · 原部署版本 ${deletePreview.versionId}`:deletePreviewError||"正在读取原身份和删除影响…"}</p>}
+            {deletePreview&&<StorageImpact value={deletePreview}/> }
             <p>{deleting.uid?"确认按原 UID 删除对应 CR。只有 CR、对应 workload 和 Pod 全部核验消失才完成；平台保留配置与历史，不移除 finalizer 或直接删除 PVC。":"删除尚未部署的配置草稿，集群资源不会变化。"}</p>
             <div className="dialog-footer">
               <button onClick={() => setDeleting(null)}>取消</button>

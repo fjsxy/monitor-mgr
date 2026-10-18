@@ -85,7 +85,7 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	if e != nil {
 		return nil, e
 	}
-	if e = componentFor(i.Component).deletionGuard(cfg, frozen); e != nil {
+	if e = componentFor(i.Component).deletionGuard(cfg, frozen, snapshot.storage); e != nil {
 		return nil, e
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
@@ -130,10 +130,10 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	return o, nil
 }
 
-// deletionGuard 供存储契约增加类型化验证；当前不允许Agent持久存储被通用入口直接删除。
-func (a componentAdapter) deletionGuard(cfg configuration, frozen map[string]any) error {
+// deletionGuard要求锁外实际存储核验；没有可信快照不能通过通用删除入口。
+func (a componentAdapter) deletionGuard(cfg configuration, frozen map[string]any, snapshot *agentStorageSnapshot) error {
 	if a.component == AgentComponent {
-		if _, has := frozen["storage"]; has {
+		if snapshot == nil {
 			return Error("CONFLICT", "Agent 持久存储删除需要核验保留策略")
 		}
 	}
@@ -360,7 +360,7 @@ func (s *Store) executeDeletion(life context.Context, id string) {
 		s.finishExecution(life, o, "FAILED", Error("CONFLICT", "原RV不可读"), nil)
 		return
 	}
-	release, e := s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision)
+	release, e := s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision, snapshot.storage)
 	if e != nil {
 		if apiCode(e) != "ALREADY_FINISHED" {
 			s.finishExecution(life, o, "FAILED", e, nil)
@@ -385,6 +385,7 @@ func (s *Store) executeDeletion(life context.Context, id string) {
 	}
 	s.finishDeletion(o, "DELETION_VERIFYING", "已发送原 UID Foreground 删除；等待 CR、workload 和 Pod 全部消失")
 	s.verifyDeletion(life, o, i, t)
+	s.verifyAgentStorageTasks(life, id)
 }
 
 // verifyDeletion 只读证明原资源图已清空；未知、finalizer和同名新UID都保留保护。

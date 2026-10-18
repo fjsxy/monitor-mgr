@@ -1143,22 +1143,23 @@ var fieldIDToName_TransferClusterRequest = map[int16]string{
 }
 
 type Operation struct {
-	OperationId        string  `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
-	Action             string  `thrift:"action,2,required" frugal:"2,required,string" json:"action"`
-	State              string  `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
-	ClusterId          string  `thrift:"clusterId,4,required" frugal:"4,required,string" json:"clusterId"`
-	ActorId            string  `thrift:"actorId,5,required" frugal:"5,required,string" json:"actorId"`
-	Message            string  `thrift:"message,6,required" frugal:"6,required,string" json:"message"`
-	CreatedAt          string  `thrift:"createdAt,7,required" frugal:"7,required,string" json:"createdAt"`
-	UpdatedAt          string  `thrift:"updatedAt,8,required" frugal:"8,required,string" json:"updatedAt"`
-	CredentialRevision int64   `thrift:"credentialRevision,9,required" frugal:"9,required,i64" json:"credentialRevision"`
-	OwnerId            string  `thrift:"ownerId,10,required" frugal:"10,required,string" json:"ownerId"`
-	PreviousOwnerId    string  `thrift:"previousOwnerId,11,required" frugal:"11,required,string" json:"previousOwnerId"`
-	InstanceId         *string `thrift:"instanceId,12,optional" frugal:"12,optional,string" json:"instanceId,omitempty"`
-	VersionId          *string `thrift:"versionId,13,optional" frugal:"13,optional,string" json:"versionId,omitempty"`
-	AttemptId          *string `thrift:"attemptId,14,optional" frugal:"14,optional,string" json:"attemptId,omitempty"`
-	Revision           *int64  `thrift:"revision,15,optional" frugal:"15,optional,i64" json:"revision,omitempty"`
-	StorageResult_     *string `thrift:"storageResult,16,optional" frugal:"16,optional,string" json:"storageResult,omitempty"`
+	OperationId        string               `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
+	Action             string               `thrift:"action,2,required" frugal:"2,required,string" json:"action"`
+	State              string               `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
+	ClusterId          string               `thrift:"clusterId,4,required" frugal:"4,required,string" json:"clusterId"`
+	ActorId            string               `thrift:"actorId,5,required" frugal:"5,required,string" json:"actorId"`
+	Message            string               `thrift:"message,6,required" frugal:"6,required,string" json:"message"`
+	CreatedAt          string               `thrift:"createdAt,7,required" frugal:"7,required,string" json:"createdAt"`
+	UpdatedAt          string               `thrift:"updatedAt,8,required" frugal:"8,required,string" json:"updatedAt"`
+	CredentialRevision int64                `thrift:"credentialRevision,9,required" frugal:"9,required,i64" json:"credentialRevision"`
+	OwnerId            string               `thrift:"ownerId,10,required" frugal:"10,required,string" json:"ownerId"`
+	PreviousOwnerId    string               `thrift:"previousOwnerId,11,required" frugal:"11,required,string" json:"previousOwnerId"`
+	InstanceId         *string              `thrift:"instanceId,12,optional" frugal:"12,optional,string" json:"instanceId,omitempty"`
+	VersionId          *string              `thrift:"versionId,13,optional" frugal:"13,optional,string" json:"versionId,omitempty"`
+	AttemptId          *string              `thrift:"attemptId,14,optional" frugal:"14,optional,string" json:"attemptId,omitempty"`
+	Revision           *int64               `thrift:"revision,15,optional" frugal:"15,optional,i64" json:"revision,omitempty"`
+	StorageResult_     *string              `thrift:"storageResult,16,optional" frugal:"16,optional,string" json:"storageResult,omitempty"`
+	StorageVolumes     []*VolumeObservation `thrift:"storageVolumes,17,optional" frugal:"17,optional,list<VolumeObservation>" json:"storageVolumes,omitempty"`
 	_unknownFields     unknown.Fields
 }
 
@@ -1257,6 +1258,15 @@ func (p *Operation) GetStorageResult_() (v string) {
 	}
 	return *p.StorageResult_
 }
+
+var Operation_StorageVolumes_DEFAULT []*VolumeObservation
+
+func (p *Operation) GetStorageVolumes() (v []*VolumeObservation) {
+	if !p.IsSetStorageVolumes() {
+		return Operation_StorageVolumes_DEFAULT
+	}
+	return p.StorageVolumes
+}
 func (p *Operation) SetOperationId(val string) {
 	p.OperationId = val
 }
@@ -1305,6 +1315,9 @@ func (p *Operation) SetRevision(val *int64) {
 func (p *Operation) SetStorageResult_(val *string) {
 	p.StorageResult_ = val
 }
+func (p *Operation) SetStorageVolumes(val []*VolumeObservation) {
+	p.StorageVolumes = val
+}
 
 func (p *Operation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -1328,6 +1341,10 @@ func (p *Operation) IsSetRevision() bool {
 
 func (p *Operation) IsSetStorageResult_() bool {
 	return p.StorageResult_ != nil
+}
+
+func (p *Operation) IsSetStorageVolumes() bool {
+	return p.StorageVolumes != nil
 }
 
 func (p *Operation) String() string {
@@ -1354,6 +1371,7 @@ var fieldIDToName_Operation = map[int16]string{
 	14: "attemptId",
 	15: "revision",
 	16: "storageResult",
+	17: "storageVolumes",
 }
 
 type OperationID struct {
@@ -3072,6 +3090,67 @@ var fieldIDToName_MatchedResource = map[int16]string{
 	4: "uid",
 }
 
+type AgentStatefulPolicy struct {
+	Name           string `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	Uid            string `thrift:"uid,2,required" frugal:"2,required,string" json:"uid"`
+	WhenScaled     string `thrift:"whenScaled,3,required" frugal:"3,required,string" json:"whenScaled"`
+	WhenDeleted    string `thrift:"whenDeleted,4,required" frugal:"4,required,string" json:"whenDeleted"`
+	_unknownFields unknown.Fields
+}
+
+func NewAgentStatefulPolicy() *AgentStatefulPolicy {
+	return &AgentStatefulPolicy{}
+}
+
+func (p *AgentStatefulPolicy) InitDefault() {
+}
+
+func (p *AgentStatefulPolicy) GetName() (v string) {
+	return p.Name
+}
+
+func (p *AgentStatefulPolicy) GetUid() (v string) {
+	return p.Uid
+}
+
+func (p *AgentStatefulPolicy) GetWhenScaled() (v string) {
+	return p.WhenScaled
+}
+
+func (p *AgentStatefulPolicy) GetWhenDeleted() (v string) {
+	return p.WhenDeleted
+}
+func (p *AgentStatefulPolicy) SetName(val string) {
+	p.Name = val
+}
+func (p *AgentStatefulPolicy) SetUid(val string) {
+	p.Uid = val
+}
+func (p *AgentStatefulPolicy) SetWhenScaled(val string) {
+	p.WhenScaled = val
+}
+func (p *AgentStatefulPolicy) SetWhenDeleted(val string) {
+	p.WhenDeleted = val
+}
+
+func (p *AgentStatefulPolicy) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *AgentStatefulPolicy) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AgentStatefulPolicy(%+v)", *p)
+}
+
+var fieldIDToName_AgentStatefulPolicy = map[int16]string{
+	1: "name",
+	2: "uid",
+	3: "whenScaled",
+	4: "whenDeleted",
+}
+
 type VolumeObservation struct {
 	Namespace        string   `thrift:"namespace,1,required" frugal:"1,required,string" json:"namespace"`
 	Name             string   `thrift:"name,2,required" frugal:"2,required,string" json:"name"`
@@ -3081,6 +3160,16 @@ type VolumeObservation struct {
 	AccessModes      []string `thrift:"accessModes,6,required" frugal:"6,required,list<string>" json:"accessModes"`
 	StorageClass     string   `thrift:"storageClass,7,required" frugal:"7,required,string" json:"storageClass"`
 	MountedByPods    []string `thrift:"mountedByPods,8,required" frugal:"8,required,list<string>" json:"mountedByPods"`
+	ExpectedPolicy   *string  `thrift:"expectedPolicy,9,optional" frugal:"9,optional,string" json:"expectedPolicy,omitempty"`
+	RetentionResult_ *string  `thrift:"retentionResult,10,optional" frugal:"10,optional,string" json:"retentionResult,omitempty"`
+	LastAttemptAt    *string  `thrift:"lastAttemptAt,11,optional" frugal:"11,optional,string" json:"lastAttemptAt,omitempty"`
+	LastSuccessAt    *string  `thrift:"lastSuccessAt,12,optional" frugal:"12,optional,string" json:"lastSuccessAt,omitempty"`
+	Error            *string  `thrift:"error,13,optional" frugal:"13,optional,string" json:"error,omitempty"`
+	StatefulUID      *string  `thrift:"statefulUID,14,optional" frugal:"14,optional,string" json:"statefulUID,omitempty"`
+	StatefulName     *string  `thrift:"statefulName,15,optional" frugal:"15,optional,string" json:"statefulName,omitempty"`
+	Shard            *int32   `thrift:"shard,16,optional" frugal:"16,optional,i32" json:"shard,omitempty"`
+	AgentUID         *string  `thrift:"agentUID,17,optional" frugal:"17,optional,string" json:"agentUID,omitempty"`
+	ImpactAction     *string  `thrift:"impactAction,18,optional" frugal:"18,optional,string" json:"impactAction,omitempty"`
 	_unknownFields   unknown.Fields
 }
 
@@ -3122,6 +3211,96 @@ func (p *VolumeObservation) GetStorageClass() (v string) {
 func (p *VolumeObservation) GetMountedByPods() (v []string) {
 	return p.MountedByPods
 }
+
+var VolumeObservation_ExpectedPolicy_DEFAULT string
+
+func (p *VolumeObservation) GetExpectedPolicy() (v string) {
+	if !p.IsSetExpectedPolicy() {
+		return VolumeObservation_ExpectedPolicy_DEFAULT
+	}
+	return *p.ExpectedPolicy
+}
+
+var VolumeObservation_RetentionResult__DEFAULT string
+
+func (p *VolumeObservation) GetRetentionResult_() (v string) {
+	if !p.IsSetRetentionResult_() {
+		return VolumeObservation_RetentionResult__DEFAULT
+	}
+	return *p.RetentionResult_
+}
+
+var VolumeObservation_LastAttemptAt_DEFAULT string
+
+func (p *VolumeObservation) GetLastAttemptAt() (v string) {
+	if !p.IsSetLastAttemptAt() {
+		return VolumeObservation_LastAttemptAt_DEFAULT
+	}
+	return *p.LastAttemptAt
+}
+
+var VolumeObservation_LastSuccessAt_DEFAULT string
+
+func (p *VolumeObservation) GetLastSuccessAt() (v string) {
+	if !p.IsSetLastSuccessAt() {
+		return VolumeObservation_LastSuccessAt_DEFAULT
+	}
+	return *p.LastSuccessAt
+}
+
+var VolumeObservation_Error_DEFAULT string
+
+func (p *VolumeObservation) GetError() (v string) {
+	if !p.IsSetError() {
+		return VolumeObservation_Error_DEFAULT
+	}
+	return *p.Error
+}
+
+var VolumeObservation_StatefulUID_DEFAULT string
+
+func (p *VolumeObservation) GetStatefulUID() (v string) {
+	if !p.IsSetStatefulUID() {
+		return VolumeObservation_StatefulUID_DEFAULT
+	}
+	return *p.StatefulUID
+}
+
+var VolumeObservation_StatefulName_DEFAULT string
+
+func (p *VolumeObservation) GetStatefulName() (v string) {
+	if !p.IsSetStatefulName() {
+		return VolumeObservation_StatefulName_DEFAULT
+	}
+	return *p.StatefulName
+}
+
+var VolumeObservation_Shard_DEFAULT int32
+
+func (p *VolumeObservation) GetShard() (v int32) {
+	if !p.IsSetShard() {
+		return VolumeObservation_Shard_DEFAULT
+	}
+	return *p.Shard
+}
+
+var VolumeObservation_AgentUID_DEFAULT string
+
+func (p *VolumeObservation) GetAgentUID() (v string) {
+	if !p.IsSetAgentUID() {
+		return VolumeObservation_AgentUID_DEFAULT
+	}
+	return *p.AgentUID
+}
+
+var VolumeObservation_ImpactAction_DEFAULT string
+
+func (p *VolumeObservation) GetImpactAction() (v string) {
+	if !p.IsSetImpactAction() {
+		return VolumeObservation_ImpactAction_DEFAULT
+	}
+	return *p.ImpactAction
+}
 func (p *VolumeObservation) SetNamespace(val string) {
 	p.Namespace = val
 }
@@ -3146,9 +3325,79 @@ func (p *VolumeObservation) SetStorageClass(val string) {
 func (p *VolumeObservation) SetMountedByPods(val []string) {
 	p.MountedByPods = val
 }
+func (p *VolumeObservation) SetExpectedPolicy(val *string) {
+	p.ExpectedPolicy = val
+}
+func (p *VolumeObservation) SetRetentionResult_(val *string) {
+	p.RetentionResult_ = val
+}
+func (p *VolumeObservation) SetLastAttemptAt(val *string) {
+	p.LastAttemptAt = val
+}
+func (p *VolumeObservation) SetLastSuccessAt(val *string) {
+	p.LastSuccessAt = val
+}
+func (p *VolumeObservation) SetError(val *string) {
+	p.Error = val
+}
+func (p *VolumeObservation) SetStatefulUID(val *string) {
+	p.StatefulUID = val
+}
+func (p *VolumeObservation) SetStatefulName(val *string) {
+	p.StatefulName = val
+}
+func (p *VolumeObservation) SetShard(val *int32) {
+	p.Shard = val
+}
+func (p *VolumeObservation) SetAgentUID(val *string) {
+	p.AgentUID = val
+}
+func (p *VolumeObservation) SetImpactAction(val *string) {
+	p.ImpactAction = val
+}
 
 func (p *VolumeObservation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
+}
+
+func (p *VolumeObservation) IsSetExpectedPolicy() bool {
+	return p.ExpectedPolicy != nil
+}
+
+func (p *VolumeObservation) IsSetRetentionResult_() bool {
+	return p.RetentionResult_ != nil
+}
+
+func (p *VolumeObservation) IsSetLastAttemptAt() bool {
+	return p.LastAttemptAt != nil
+}
+
+func (p *VolumeObservation) IsSetLastSuccessAt() bool {
+	return p.LastSuccessAt != nil
+}
+
+func (p *VolumeObservation) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *VolumeObservation) IsSetStatefulUID() bool {
+	return p.StatefulUID != nil
+}
+
+func (p *VolumeObservation) IsSetStatefulName() bool {
+	return p.StatefulName != nil
+}
+
+func (p *VolumeObservation) IsSetShard() bool {
+	return p.Shard != nil
+}
+
+func (p *VolumeObservation) IsSetAgentUID() bool {
+	return p.AgentUID != nil
+}
+
+func (p *VolumeObservation) IsSetImpactAction() bool {
+	return p.ImpactAction != nil
 }
 
 func (p *VolumeObservation) String() string {
@@ -3159,27 +3408,39 @@ func (p *VolumeObservation) String() string {
 }
 
 var fieldIDToName_VolumeObservation = map[int16]string{
-	1: "namespace",
-	2: "name",
-	3: "uid",
-	4: "phase",
-	5: "requestedStorage",
-	6: "accessModes",
-	7: "storageClass",
-	8: "mountedByPods",
+	1:  "namespace",
+	2:  "name",
+	3:  "uid",
+	4:  "phase",
+	5:  "requestedStorage",
+	6:  "accessModes",
+	7:  "storageClass",
+	8:  "mountedByPods",
+	9:  "expectedPolicy",
+	10: "retentionResult",
+	11: "lastAttemptAt",
+	12: "lastSuccessAt",
+	13: "error",
+	14: "statefulUID",
+	15: "statefulName",
+	16: "shard",
+	17: "agentUID",
+	18: "impactAction",
 }
 
 type SourceObservation struct {
-	Source          string               `thrift:"source,1,required" frugal:"1,required,string" json:"source"`
-	LastAttemptAt   string               `thrift:"lastAttemptAt,2,required" frugal:"2,required,string" json:"lastAttemptAt"`
-	LastSuccessAt   string               `thrift:"lastSuccessAt,3,required" frugal:"3,required,string" json:"lastSuccessAt"`
-	Error           string               `thrift:"error,4,required" frugal:"4,required,string" json:"error"`
-	Historical      bool                 `thrift:"historical,5,required" frugal:"5,required,bool" json:"historical"`
-	Matches         []*MatchedResource   `thrift:"matches,6,optional" frugal:"6,optional,list<MatchedResource>" json:"matches,omitempty"`
-	Volumes         []*VolumeObservation `thrift:"volumes,7,optional" frugal:"7,optional,list<VolumeObservation>" json:"volumes,omitempty"`
-	RuntimeSnapshot *InstanceRuntime     `thrift:"runtimeSnapshot,8,optional" frugal:"8,optional,InstanceRuntime" json:"runtimeSnapshot,omitempty"`
-	Uid             *string              `thrift:"uid,9,optional" frugal:"9,optional,string" json:"uid,omitempty"`
-	Stale           *bool                `thrift:"stale,10,optional" frugal:"10,optional,bool" json:"stale,omitempty"`
+	Source          string                 `thrift:"source,1,required" frugal:"1,required,string" json:"source"`
+	LastAttemptAt   string                 `thrift:"lastAttemptAt,2,required" frugal:"2,required,string" json:"lastAttemptAt"`
+	LastSuccessAt   string                 `thrift:"lastSuccessAt,3,required" frugal:"3,required,string" json:"lastSuccessAt"`
+	Error           string                 `thrift:"error,4,required" frugal:"4,required,string" json:"error"`
+	Historical      bool                   `thrift:"historical,5,required" frugal:"5,required,bool" json:"historical"`
+	Matches         []*MatchedResource     `thrift:"matches,6,optional" frugal:"6,optional,list<MatchedResource>" json:"matches,omitempty"`
+	Volumes         []*VolumeObservation   `thrift:"volumes,7,optional" frugal:"7,optional,list<VolumeObservation>" json:"volumes,omitempty"`
+	RuntimeSnapshot *InstanceRuntime       `thrift:"runtimeSnapshot,8,optional" frugal:"8,optional,InstanceRuntime" json:"runtimeSnapshot,omitempty"`
+	Uid             *string                `thrift:"uid,9,optional" frugal:"9,optional,string" json:"uid,omitempty"`
+	Stale           *bool                  `thrift:"stale,10,optional" frugal:"10,optional,bool" json:"stale,omitempty"`
+	Policies        []*AgentStatefulPolicy `thrift:"policies,11,optional" frugal:"11,optional,list<AgentStatefulPolicy>" json:"policies,omitempty"`
+	StorageMode     *string                `thrift:"storageMode,12,optional" frugal:"12,optional,string" json:"storageMode,omitempty"`
 	_unknownFields  unknown.Fields
 }
 
@@ -3254,6 +3515,24 @@ func (p *SourceObservation) GetStale() (v bool) {
 	}
 	return *p.Stale
 }
+
+var SourceObservation_Policies_DEFAULT []*AgentStatefulPolicy
+
+func (p *SourceObservation) GetPolicies() (v []*AgentStatefulPolicy) {
+	if !p.IsSetPolicies() {
+		return SourceObservation_Policies_DEFAULT
+	}
+	return p.Policies
+}
+
+var SourceObservation_StorageMode_DEFAULT string
+
+func (p *SourceObservation) GetStorageMode() (v string) {
+	if !p.IsSetStorageMode() {
+		return SourceObservation_StorageMode_DEFAULT
+	}
+	return *p.StorageMode
+}
 func (p *SourceObservation) SetSource(val string) {
 	p.Source = val
 }
@@ -3284,6 +3563,12 @@ func (p *SourceObservation) SetUid(val *string) {
 func (p *SourceObservation) SetStale(val *bool) {
 	p.Stale = val
 }
+func (p *SourceObservation) SetPolicies(val []*AgentStatefulPolicy) {
+	p.Policies = val
+}
+func (p *SourceObservation) SetStorageMode(val *string) {
+	p.StorageMode = val
+}
 
 func (p *SourceObservation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -3309,6 +3594,14 @@ func (p *SourceObservation) IsSetStale() bool {
 	return p.Stale != nil
 }
 
+func (p *SourceObservation) IsSetPolicies() bool {
+	return p.Policies != nil
+}
+
+func (p *SourceObservation) IsSetStorageMode() bool {
+	return p.StorageMode != nil
+}
+
 func (p *SourceObservation) String() string {
 	if p == nil {
 		return "<nil>"
@@ -3327,6 +3620,8 @@ var fieldIDToName_SourceObservation = map[int16]string{
 	8:  "runtimeSnapshot",
 	9:  "uid",
 	10: "stale",
+	11: "policies",
+	12: "storageMode",
 }
 
 type AssociationPreviewRequest struct {
@@ -4472,12 +4767,15 @@ var fieldIDToName_PreviewRequest = map[int16]string{
 }
 
 type PublicationPreview struct {
-	PreviewId      string   `thrift:"previewId,1,required" frugal:"1,required,string" json:"previewId"`
-	DraftRevision  int64    `thrift:"draftRevision,2,required" frugal:"2,required,i64" json:"draftRevision"`
-	LeftYAML       string   `thrift:"leftYAML,3,required" frugal:"3,required,string" json:"leftYAML"`
-	RightYAML      string   `thrift:"rightYAML,4,required" frugal:"4,required,string" json:"rightYAML"`
-	Drift          bool     `thrift:"drift,5,required" frugal:"5,required,bool" json:"drift"`
-	Warnings       []string `thrift:"warnings,6,required" frugal:"6,required,list<string>" json:"warnings"`
+	PreviewId      string                 `thrift:"previewId,1,required" frugal:"1,required,string" json:"previewId"`
+	DraftRevision  int64                  `thrift:"draftRevision,2,required" frugal:"2,required,i64" json:"draftRevision"`
+	LeftYAML       string                 `thrift:"leftYAML,3,required" frugal:"3,required,string" json:"leftYAML"`
+	RightYAML      string                 `thrift:"rightYAML,4,required" frugal:"4,required,string" json:"rightYAML"`
+	Drift          bool                   `thrift:"drift,5,required" frugal:"5,required,bool" json:"drift"`
+	Warnings       []string               `thrift:"warnings,6,required" frugal:"6,required,list<string>" json:"warnings"`
+	StorageVolumes []*VolumeObservation   `thrift:"storageVolumes,7,optional" frugal:"7,optional,list<VolumeObservation>" json:"storageVolumes,omitempty"`
+	Policies       []*AgentStatefulPolicy `thrift:"policies,8,optional" frugal:"8,optional,list<AgentStatefulPolicy>" json:"policies,omitempty"`
+	StorageMode    *string                `thrift:"storageMode,9,optional" frugal:"9,optional,string" json:"storageMode,omitempty"`
 	_unknownFields unknown.Fields
 }
 
@@ -4511,6 +4809,33 @@ func (p *PublicationPreview) GetDrift() (v bool) {
 func (p *PublicationPreview) GetWarnings() (v []string) {
 	return p.Warnings
 }
+
+var PublicationPreview_StorageVolumes_DEFAULT []*VolumeObservation
+
+func (p *PublicationPreview) GetStorageVolumes() (v []*VolumeObservation) {
+	if !p.IsSetStorageVolumes() {
+		return PublicationPreview_StorageVolumes_DEFAULT
+	}
+	return p.StorageVolumes
+}
+
+var PublicationPreview_Policies_DEFAULT []*AgentStatefulPolicy
+
+func (p *PublicationPreview) GetPolicies() (v []*AgentStatefulPolicy) {
+	if !p.IsSetPolicies() {
+		return PublicationPreview_Policies_DEFAULT
+	}
+	return p.Policies
+}
+
+var PublicationPreview_StorageMode_DEFAULT string
+
+func (p *PublicationPreview) GetStorageMode() (v string) {
+	if !p.IsSetStorageMode() {
+		return PublicationPreview_StorageMode_DEFAULT
+	}
+	return *p.StorageMode
+}
 func (p *PublicationPreview) SetPreviewId(val string) {
 	p.PreviewId = val
 }
@@ -4529,9 +4854,30 @@ func (p *PublicationPreview) SetDrift(val bool) {
 func (p *PublicationPreview) SetWarnings(val []string) {
 	p.Warnings = val
 }
+func (p *PublicationPreview) SetStorageVolumes(val []*VolumeObservation) {
+	p.StorageVolumes = val
+}
+func (p *PublicationPreview) SetPolicies(val []*AgentStatefulPolicy) {
+	p.Policies = val
+}
+func (p *PublicationPreview) SetStorageMode(val *string) {
+	p.StorageMode = val
+}
 
 func (p *PublicationPreview) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
+}
+
+func (p *PublicationPreview) IsSetStorageVolumes() bool {
+	return p.StorageVolumes != nil
+}
+
+func (p *PublicationPreview) IsSetPolicies() bool {
+	return p.Policies != nil
+}
+
+func (p *PublicationPreview) IsSetStorageMode() bool {
+	return p.StorageMode != nil
 }
 
 func (p *PublicationPreview) String() string {
@@ -4548,6 +4894,9 @@ var fieldIDToName_PublicationPreview = map[int16]string{
 	4: "rightYAML",
 	5: "drift",
 	6: "warnings",
+	7: "storageVolumes",
+	8: "policies",
+	9: "storageMode",
 }
 
 type PublishRequest struct {
@@ -5181,13 +5530,16 @@ var fieldIDToName_DeletionPreviewRequest = map[int16]string{
 }
 
 type DeletionPreview struct {
-	PreviewId        string   `thrift:"previewId,1,required" frugal:"1,required,string" json:"previewId"`
-	InstanceId       string   `thrift:"instanceId,2,required" frugal:"2,required,string" json:"instanceId"`
-	VersionId        string   `thrift:"versionId,3,required" frugal:"3,required,string" json:"versionId"`
-	Uid              string   `thrift:"uid,4,required" frugal:"4,required,string" json:"uid"`
-	Name             string   `thrift:"name,5,required" frugal:"5,required,string" json:"name"`
-	Namespace        string   `thrift:"namespace,6,required" frugal:"6,required,string" json:"namespace"`
-	ImpactNamespaces []string `thrift:"impactNamespaces,7,required" frugal:"7,required,list<string>" json:"impactNamespaces"`
+	PreviewId        string                 `thrift:"previewId,1,required" frugal:"1,required,string" json:"previewId"`
+	InstanceId       string                 `thrift:"instanceId,2,required" frugal:"2,required,string" json:"instanceId"`
+	VersionId        string                 `thrift:"versionId,3,required" frugal:"3,required,string" json:"versionId"`
+	Uid              string                 `thrift:"uid,4,required" frugal:"4,required,string" json:"uid"`
+	Name             string                 `thrift:"name,5,required" frugal:"5,required,string" json:"name"`
+	Namespace        string                 `thrift:"namespace,6,required" frugal:"6,required,string" json:"namespace"`
+	ImpactNamespaces []string               `thrift:"impactNamespaces,7,required" frugal:"7,required,list<string>" json:"impactNamespaces"`
+	StorageVolumes   []*VolumeObservation   `thrift:"storageVolumes,8,optional" frugal:"8,optional,list<VolumeObservation>" json:"storageVolumes,omitempty"`
+	Policies         []*AgentStatefulPolicy `thrift:"policies,9,optional" frugal:"9,optional,list<AgentStatefulPolicy>" json:"policies,omitempty"`
+	StorageMode      *string                `thrift:"storageMode,10,optional" frugal:"10,optional,string" json:"storageMode,omitempty"`
 	_unknownFields   unknown.Fields
 }
 
@@ -5225,6 +5577,33 @@ func (p *DeletionPreview) GetNamespace() (v string) {
 func (p *DeletionPreview) GetImpactNamespaces() (v []string) {
 	return p.ImpactNamespaces
 }
+
+var DeletionPreview_StorageVolumes_DEFAULT []*VolumeObservation
+
+func (p *DeletionPreview) GetStorageVolumes() (v []*VolumeObservation) {
+	if !p.IsSetStorageVolumes() {
+		return DeletionPreview_StorageVolumes_DEFAULT
+	}
+	return p.StorageVolumes
+}
+
+var DeletionPreview_Policies_DEFAULT []*AgentStatefulPolicy
+
+func (p *DeletionPreview) GetPolicies() (v []*AgentStatefulPolicy) {
+	if !p.IsSetPolicies() {
+		return DeletionPreview_Policies_DEFAULT
+	}
+	return p.Policies
+}
+
+var DeletionPreview_StorageMode_DEFAULT string
+
+func (p *DeletionPreview) GetStorageMode() (v string) {
+	if !p.IsSetStorageMode() {
+		return DeletionPreview_StorageMode_DEFAULT
+	}
+	return *p.StorageMode
+}
 func (p *DeletionPreview) SetPreviewId(val string) {
 	p.PreviewId = val
 }
@@ -5246,9 +5625,30 @@ func (p *DeletionPreview) SetNamespace(val string) {
 func (p *DeletionPreview) SetImpactNamespaces(val []string) {
 	p.ImpactNamespaces = val
 }
+func (p *DeletionPreview) SetStorageVolumes(val []*VolumeObservation) {
+	p.StorageVolumes = val
+}
+func (p *DeletionPreview) SetPolicies(val []*AgentStatefulPolicy) {
+	p.Policies = val
+}
+func (p *DeletionPreview) SetStorageMode(val *string) {
+	p.StorageMode = val
+}
 
 func (p *DeletionPreview) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
+}
+
+func (p *DeletionPreview) IsSetStorageVolumes() bool {
+	return p.StorageVolumes != nil
+}
+
+func (p *DeletionPreview) IsSetPolicies() bool {
+	return p.Policies != nil
+}
+
+func (p *DeletionPreview) IsSetStorageMode() bool {
+	return p.StorageMode != nil
 }
 
 func (p *DeletionPreview) String() string {
@@ -5259,13 +5659,16 @@ func (p *DeletionPreview) String() string {
 }
 
 var fieldIDToName_DeletionPreview = map[int16]string{
-	1: "previewId",
-	2: "instanceId",
-	3: "versionId",
-	4: "uid",
-	5: "name",
-	6: "namespace",
-	7: "impactNamespaces",
+	1:  "previewId",
+	2:  "instanceId",
+	3:  "versionId",
+	4:  "uid",
+	5:  "name",
+	6:  "namespace",
+	7:  "impactNamespaces",
+	8:  "storageVolumes",
+	9:  "policies",
+	10: "storageMode",
 }
 
 type AttemptsResult_ struct {

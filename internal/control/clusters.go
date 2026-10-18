@@ -234,6 +234,12 @@ func (s *Store) HasUnfinishedChangesTx(ctx context.Context, tx *sql.Tx, id strin
 	if n > 0 {
 		return Error("CONFLICT", "集群仍有未结束变更，不能转移或注销")
 	}
+	if tx.QueryRowContext(ctx, `SELECT count(*) FROM agent_storage_tasks t JOIN instances i ON i.id=t.instance_id WHERE i.cluster_id=? AND t.state='PENDING'`, id).Scan(&n) != nil {
+		return Error("UNAVAILABLE", "存储核验责任无法读取")
+	}
+	if n > 0 {
+		return Error("CONFLICT", "集群仍有未确认PVC责任，不能转移或注销")
+	}
 	return nil
 }
 

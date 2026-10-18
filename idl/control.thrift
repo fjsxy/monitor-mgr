@@ -49,7 +49,7 @@ struct TransferClusterRequest { 1: required string id, 2: required string ownerI
 struct Operation {
  1: required string operationId, 2: required string action, 3: required string state,
  4: required string clusterId, 5: required string actorId, 6: required string message,
- 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId, 12: optional string instanceId, 13: optional string versionId, 14: optional string attemptId, 15: optional i64 revision, 16: optional string storageResult
+ 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId, 12: optional string instanceId, 13: optional string versionId, 14: optional string attemptId, 15: optional i64 revision, 16: optional string storageResult, 17: optional list<VolumeObservation> storageVolumes
 }
 struct OperationID { 1: required string operationId }
 struct OperationsResult { 1: required list<Operation> operations }
@@ -82,8 +82,9 @@ struct RemoteWriteEndpoint { 1: required string url, 2: optional string name, 3:
 struct AgentStorage { 1: required string mode, 2: optional string capacity, 3: required string whenScaled, 4: required string whenDeleted }
 struct AgentConfiguration { 1: required string name, 2: required string namespace, 3: required string desiredState, 4: required i32 shards, 5: required ContainerResources resources, 6: required AgentStorage storage, 7: required string serviceAccountName, 8: required AgentAssociations associations, 9: required list<RemoteWriteEndpoint> remoteWrite }
 struct MatchedResource { 1: required string kind, 2: required string namespace, 3: required string name, 4: required string uid }
-struct VolumeObservation { 1: required string namespace, 2: required string name, 3: required string uid, 4: required string phase, 5: required string requestedStorage, 6: required list<string> accessModes, 7: required string storageClass, 8: required list<string> mountedByPods }
-struct SourceObservation { 1: required string source, 2: required string lastAttemptAt, 3: required string lastSuccessAt, 4: required string error, 5: required bool historical, 6: optional list<MatchedResource> matches, 7: optional list<VolumeObservation> volumes, 8: optional InstanceRuntime runtimeSnapshot, 9: optional string uid, 10: optional bool stale }
+struct AgentStatefulPolicy { 1: required string name, 2: required string uid, 3: required string whenScaled, 4: required string whenDeleted }
+struct VolumeObservation { 1: required string namespace, 2: required string name, 3: required string uid, 4: required string phase, 5: required string requestedStorage, 6: required list<string> accessModes, 7: required string storageClass, 8: required list<string> mountedByPods, 9: optional string expectedPolicy, 10: optional string retentionResult, 11: optional string lastAttemptAt, 12: optional string lastSuccessAt, 13: optional string error, 14: optional string statefulUID, 15: optional string statefulName, 16: optional i32 shard, 17: optional string agentUID, 18: optional string impactAction }
+struct SourceObservation { 1: required string source, 2: required string lastAttemptAt, 3: required string lastSuccessAt, 4: required string error, 5: required bool historical, 6: optional list<MatchedResource> matches, 7: optional list<VolumeObservation> volumes, 8: optional InstanceRuntime runtimeSnapshot, 9: optional string uid, 10: optional bool stale, 11: optional list<AgentStatefulPolicy> policies, 12: optional string storageMode }
 struct AssociationPreviewRequest { 1: required string id, 2: required i64 draftRevision }
 struct AssociationPreview { 1: required i64 draftRevision, 2: required list<SourceObservation> sources }
 struct InstanceID { 1: required string id }
@@ -104,7 +105,7 @@ struct InstanceStatistics { 1: required i32 managed, 2: required i32 unmanaged, 
 struct InstancePagination { 1: required i32 number, 2: required i32 size, 3: required i32 total, 4: required i32 pages }
 struct QueryInstancesResult { 1: required list<ObservationInstance> instances, 2: required InstanceStatistics statistics, 3: required InstancePagination page }
 struct PreviewRequest { 1: required string id, 2: required i64 draftRevision }
-struct PublicationPreview { 1: required string previewId, 2: required i64 draftRevision, 3: required string leftYAML, 4: required string rightYAML, 5: required bool drift, 6: required list<string> warnings }
+struct PublicationPreview { 1: required string previewId, 2: required i64 draftRevision, 3: required string leftYAML, 4: required string rightYAML, 5: required bool drift, 6: required list<string> warnings, 7: optional list<VolumeObservation> storageVolumes, 8: optional list<AgentStatefulPolicy> policies, 9: optional string storageMode }
 struct PublishRequest { 1: required string id, 2: required string previewId, 3: required i64 draftRevision, 4: required bool overwriteDrift }
 struct PublicationVersion { 1: required string versionId, 2: required string instanceId, 3: required i64 sourceDraftRevision, 4: optional KSMConfiguration ksm, 5: required string yaml, 6: required string createdAt, 7: optional AgentConfiguration agent }
 struct VersionsResult { 1: required list<PublicationVersion> versions }
@@ -116,7 +117,7 @@ struct LifecycleRequest { 1: required string operationId, 2: required i64 expect
 struct DeleteInstanceRequest { 1: required string id, 2: required string versionId, 3: optional string previewId }
 // 删除预览绑定原身份和影响语义；RV/status与同范围Pod滚动不改变用户确认范围。
 struct DeletionPreviewRequest { 1: required string id, 2: optional string operationId }
-struct DeletionPreview { 1: required string previewId, 2: required string instanceId, 3: required string versionId, 4: required string uid, 5: required string name, 6: required string namespace, 7: required list<string> impactNamespaces }
+struct DeletionPreview { 1: required string previewId, 2: required string instanceId, 3: required string versionId, 4: required string uid, 5: required string name, 6: required string namespace, 7: required list<string> impactNamespaces, 8: optional list<VolumeObservation> storageVolumes, 9: optional list<AgentStatefulPolicy> policies, 10: optional string storageMode }
 struct AttemptsResult { 1: required list<ExecutionAttempt> attempts }
 service ControlService {
  AssociationPreview PreviewAssociations(1: RequestContext ctx, 2: AssociationPreviewRequest request) throws (1: APIError error)

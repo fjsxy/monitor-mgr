@@ -160,6 +160,10 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if e = checkTarget(i, cr); e != nil {
 		return nil, e
 	}
+	storageSnapshot, e := s.readAgentStorageTransition(ctx, i, t, cr, cfg.spec(), false)
+	if e != nil {
+		return nil, e
+	}
 	current := "null"
 	uid := ""
 	left := "# 首次创建：当前不存在 CR\n"
@@ -180,6 +184,11 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	}
 	preview := &rpc.PublicationPreview{PreviewId: ID(), DraftRevision: rev, LeftYAML: left, RightYAML: yamlText(cfg.document()), Drift: drift, Warnings: []string{}}
 	preview.Warnings = cfg.warnings(cr)
+	if storageSnapshot != nil {
+		preview.StorageMode = reference(storageSnapshot.mode)
+		preview.StorageVolumes = snapshotVolumes(storageSnapshot, i.Uid)
+		preview.Policies = snapshotPolicies(storageSnapshot)
+	}
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return nil, e
@@ -199,7 +208,7 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if latest != rev {
 		return nil, Error("CONFLICT", "预览期间草稿已变化")
 	}
-	if _, e = tx.ExecContext(ctx, `INSERT INTO publication_previews VALUES(?,?,?,?,?,?,?)`, preview.PreviewId, i.Id, rev, uid, []byte(s.fingerprint(i, current)), []byte(componentFor(i.Component).normalizeSpec(cfg.spec())), drift); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO publication_previews(id,instance_id,draft_revision,uid,target_spec,desired_spec,drift,storage_fingerprint) VALUES(?,?,?,?,?,?,?,?)`, preview.PreviewId, i.Id, rev, uid, []byte(s.fingerprint(i, current)), []byte(componentFor(i.Component).normalizeSpec(cfg.spec())), drift, s.agentStorageImpact(i, storageSnapshot)); e != nil {
 		return nil, Error("UNAVAILABLE", "预览无法保存")
 	}
 	if tx.Commit() != nil {
@@ -209,15 +218,15 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 }
 
 type publicationBaseline struct {
-	uid, target, desired string
-	revision             int64
-	drift                bool
+	uid, target, desired, storage string
+	revision                      int64
+	drift                         bool
 }
 
 func readPreview(ctx context.Context, q clusterQuery, id, instance string) (*publicationBaseline, error) {
 	b := new(publicationBaseline)
 	var target, desired []byte
-	if q.QueryRowContext(ctx, `SELECT uid,target_spec,desired_spec,draft_revision,drift FROM publication_previews WHERE id=? AND instance_id=?`, id, instance).Scan(&b.uid, &target, &desired, &b.revision, &b.drift) != nil {
+	if q.QueryRowContext(ctx, `SELECT uid,target_spec,desired_spec,draft_revision,drift,storage_fingerprint FROM publication_previews WHERE id=? AND instance_id=?`, id, instance).Scan(&b.uid, &target, &desired, &b.revision, &b.drift, &b.storage) != nil {
 		return nil, Error("CONFLICT", "预览不存在，请重新预览")
 	}
 	b.target = string(target)
@@ -291,9 +300,22 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		return nil, e
 	}
 	defer t.Close()
+
 	cr, e := t.readComponent(ctx, i)
 	if e != nil {
 		return nil, e
+	}
+	var storageSnapshot *agentStorageSnapshot
+	var observedDraftRevision int64
+	if i.Component == AgentComponent {
+		original, readRevision, readErr := readDraft(ctx, s.DB, i.Id)
+		if readErr != nil {
+			return nil, readErr
+		}
+		observedDraftRevision = readRevision
+		if storageSnapshot, e = s.readAgentStorageTransition(ctx, i, t, cr, original.spec(), false); e != nil {
+			return nil, e
+		}
 	}
 	tx, e = s.DB.BeginTx(ctx, nil)
 	if e != nil {
@@ -330,11 +352,17 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	if e != nil {
 		return nil, e
 	}
+	if i.Component == AgentComponent && rev != observedDraftRevision {
+		return nil, Error("CONFLICT", "存储预检期间草稿已变化，请重新预览")
+	}
 	baseline, e := readPreview(ctx, tx, r.PreviewId, i.Id)
 	if e != nil {
 		return nil, e
 	}
 	if e = validateFixedSpec(ctx, tx, i, cfg.spec()); e != nil {
+		return nil, e
+	}
+	if e = s.validateAgentStorageImpact(i, baseline.storage, storageSnapshot); e != nil {
 		return nil, e
 	}
 	if e = s.validatePublication(i, cfg, rev, baseline, r, cr); e != nil {
