@@ -78,6 +78,10 @@ func (t *Target) listObjects(ctx context.Context, path string) ([]map[string]any
 		if e := t.Request(ctx, "GET", path+sep+"limit=500&continue="+url.QueryEscape(next), nil, &list); e != nil {
 			return nil, e
 		}
+		// 关键：缺items不是空集合；辅助身份/策略缺页不能作为安全放行或已清理的证据。
+		if list.Items == nil {
+			return nil, Error("TARGET_ERROR", "列表响应不完整，不能确认资源集合")
+		}
 		out = append(out, list.Items...)
 		if list.Metadata.Continue == "" {
 			return out, nil

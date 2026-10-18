@@ -64,8 +64,20 @@ func (s *Store) readDeletionSnapshot(ctx context.Context, i *rpc.ObservationInst
 		namespaces = append(namespaces, value)
 	}
 	sort.Strings(namespaces)
+	impact := s.fingerprint(i, "delete-impact/v1:"+canonical(namespaces))
+	if i.Component == AgentComponent {
+		policies, readErr := t.readAgentDeletionPolicies(ctx, i, cr)
+		if readErr != nil {
+			return nil, readErr
+		}
+		// 关键：仅Agent扩展实际存储影响摘要，不使既有KSM预览因协议扩展而无故失效。
+		impact = s.fingerprint(i, "delete-impact/agent-storage/v1:"+canonical(struct {
+			Namespaces []string
+			Policies   []agentStatefulPolicy
+		}{namespaces, policies}))
+	}
 	// 关键：目标摘要不含status/RV，影响摘要不含易变Pod UID；新增跨namespace原owner链仍使确认过期。
-	return &deletionSnapshot{target: s.fingerprint(i, "delete-target/v1:"+componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))), impact: s.fingerprint(i, "delete-impact/v1:"+canonical(namespaces)), namespace: ns, namespaces: namespaces}, nil
+	return &deletionSnapshot{target: s.fingerprint(i, "delete-target/v1:"+componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))), impact: impact, namespace: ns, namespaces: namespaces}, nil
 }
 
 // observeDeletionForUser 仅用当前授权凭据读取，并在任何预览/受理前核对原集群UID。

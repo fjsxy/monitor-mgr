@@ -14,7 +14,7 @@ PLATFORM ?= linux/arm64
 BASE_URL ?= http://127.0.0.1:18080
 E2E_ARGS ?=
 
-.PHONY: help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check
+.PHONY: e2e-agent-lifecycle-q help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check
 help: ## 查看重复操作入口
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 generate: ## 按锁定版本生成 Thrift/Kitex
@@ -87,3 +87,6 @@ lifecycle-q-receipt: ## 生命周期Q层逐稳定子例收据，保留真实宿�
 	$(PYTHON) scripts/acceptance/lifecycle.py --layer Q $(E2E_ARGS)
 lifecycle-fixture-image: ## 仅验收应用派发屏障镜像，产品源码和基础镜像必须同源
 	docker build --platform "$(PLATFORM)" --provenance=false --sbom=false --build-arg PLATFORM_IMAGE="$(IMAGE)" --build-arg SOURCE_SHA="$(SOURCE_SHA)" -f scripts/acceptance/Dockerfile.lifecycle -t "$(LIFECYCLE_FIXTURE_IMAGE)" .
+
+e2e-agent-lifecycle-q: ## Agent存储生命周期Q层，公开HTTP/真实Kitex与受控目标边界
+	$(GO) test ./internal/platform -count=1 -run 'Test(AgentStorage|R03AgentZero)' $(E2E_ARGS)

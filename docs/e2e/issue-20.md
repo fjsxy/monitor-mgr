@@ -6,6 +6,17 @@
 
 以下为计划，不代表执行通过。完整层级、profile、前置、清理与证据要求继承固定 `docs/acceptance/phase1.json`；稳定子例及原定语义保持不变。每例独立建立前置，只操作本 runId 资源，故障 finally 恢复，凭据不得进入报告。
 
+
+共同执行前置与断言：
+
+- Q 沿用已批准的真实 HTTP→生成 Thrift/Kitex→SQLite、直接 RPC、受控 TLS/clock/transport 接缝；Q 红绿不代替真实卷验收。K 用固定 Kubernetes1.28.15 / Prometheus Operator0.83.0 / Prometheus2.55.1，平台运行于独占真实Pod/PVC，通过显式context、runId、固定source/image执行。真实lane须root另行授予，未授予不排队。
+- 每项策略参数子例各自新建前置，先单独发布策略，再真实读取原CR UID控制的全部相关StatefulSet与两项policy及PVC ownerRefs，确认实际采用后重新预览/明确危险操作；whenScaled只用于缩副本/挂起，减少shards使用whenDeleted。Retain/Delete分别取证，不以字段存在、草稿或CR写入代替实际采用。
+- A02使用多shards并逐组核ST/Pod/resources；A06完整读取WAL PVC集合为空，使用安全marker区分同Pod容器重启与Pod替换/挂起缩零后的emptyDir生命周期，不把WAL寿命等同PVC策略。A07/A08/A09分别保存逐PVC UID/namespace/claim/shard、ST/Pod owner UID及原卷结果，保留shard不得被损坏。
+- A10经HTTP和真实直接RPC核创建后name/namespace、PVC容量、PVC/emptyDir模式固定；复制产生空名称新模板，填写新名后证明新ID/CR UID/PVC UID及实际挂载链，旧历史与Retain卷仍独立。已确认版本与可能发送版本的固定字段都受保护。
+- P14.policy-pending使用仅影响本run相关ST更新的故障fixture保留旧实际策略，分别尝试挂起、减shards和删除；当前策略不一致、读取失败、异步旧ownerRef均不得发送危险mutation。恢复fixture、单独发布策略并核验后重新明确操作。
+- Retain卷不阻止实例完成；CR/workload/Pod清空与PVC保留/删除中/已删/未知独立表达，未决PVC任务在实例operation完成后持续只读恢复。平台不删/认领PVC、不直删workload或移除finalizer；测试工具最后按runId/原UID清卷，单独记录。
+- 每例保存source/tree/runner、实际imageID/架构、requestId/operation/version/attempt、CR/ST/Pod/PVC UID/RV、实际policy与ownerRef、决定性断言、独立存储结果与finally；任何分页/读取不完整不可当空集。只有实际运行且断言通过才写passed，失败/环境失败/未执行分别保留。
+
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
 | A02.primary | Agent shards与挂起恢复 | 设置多个shards，下发挂起再恢复；回读每组StatefulSet及Pod数量。 本子例输入：设置多个shards，下发挂起再恢复；回读每组StatefulSet及Pod数量。。 | 每shard单副本；运行/挂起分别replicas=1/0，paused保持false；实际数量与运行摘要一致。 | #20 |
@@ -20,3 +31,17 @@
 | A10.new-instance | 容量与模式变更必须新实例 | 首次创建前自定义容量；创建后尝试改容量/存储模式/name/namespace，再按新实例重建。 本子例输入：复制旧配置后提供新 name/身份并创建。 | 新 CR UID 和新 PVC，不复用 Retain 残留卷 | #20 |
 | P14.policy-pending | 清理阻塞和策略未生效不能报成功 | 参数化未采用新PVC策略的危险操作、带finalizer的删除、CR已没但Pod残留及辅助读取失败。 本子例输入：策略尚未作用于相关 StatefulSet 就挂起/减少 shards/删除。 | 先阻止，单独发布策略并确认后才能继续 | #20 |
 | R03.agent-zero | 缺status与合法零值分开 | 参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：Agent replicas=0 且有效状态确认。 | 挂起与零副本分开解释，不因 Available=True 显示运行中 | #20 |
+
+## 补充存储安全回归
+
+以下7个独立实际K输入细化原A10与Retain恢复边界，不增加12个owned计数。按原UID与当次完整读取判定；不声称Kubernetes跨对象原子快照。各输入先经过相同公开应用链做Q红绿，再在独占真实目标取证。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG20-STORAGE-001.orphan | 新实例不能挂载同确定WAL名称的孤立Retain卷 | 独占真实fixture，按候选新名和shard计算WAL claim名；预建无ownerRef的PVC并记录原UID/容量。经HTTP和真实生成RPC分别预览/发布候选；回读目标mutation与PVC UID/ownerRefs。finally由测试工具清理。 | 碰撞明确受阻，无候选CR/workload或挂载、无PVC修改/删除/认领；不能以同容量或无ownerRef放行。 | #20 |
+| REG20-STORAGE-001.forbidden | 不能把PVC读取Forbidden当不存在 | 独立真实fixture保留可读CR/ST，撤销仅PVC读取权限；经平台预览/发布候选并保存403证据；恢复本例权限，finally清理。 | 错误明确受阻，无候选创建副作用或PVC认领，恢复后必须重新预览。 | #20 |
+| REG20-STORAGE-001.timeout | 不能把PVC读取超时当不存在 | 独立受控代理连接真实目标，先证明基线可读，仅阻断候选PVC读取直到原预算超时；经HTTP/Kitex尝试预览/发布，恢复代理并finally清理。 | 按原预算受阻，无候选创建或PVC改动；超时不转404/空集合，不内部重试写。 | #20 |
+| REG20-STORAGE-001.dispatch-race | 干净预览不能绕过派发前新增碰撞 | 独立真实fixture先干净预览，利用既有应用派发屏障在最后依赖重验前由测试工具插入候选确定名称PVC；继续原operation，核对真实读取和mutation证据，finally清理。 | 最后读取发现碰撞即明确未发失败/受阻，原卷不变；不声称检查之后的K8s跨对象原子性。 | #20 |
+| REG20-STORAGE-001.new-name | 新的干净名称获得新的CR和卷 | 独立fixture保存孤立旧Retain PVC UID；复制配置填写另一个无碰撞新名，明确预览发布，回读原CR→ST→Pod→PVC UID链和实际挂载，finally清理。 | 新CR与新PVC UID不同于旧卷，原孤卷UID及内容不变；平台未清理旧卷。 | #20 |
+| REG20-STORAGE-001.owned-retain-suspend | 旧实例挂起后恢复自己已确认的Retain卷 | 独立真实运行实例并持久记录原CR/ST/Pod/PVC UID；确认实际whenScaled=Retain后挂起、等待原Pod消失，再明确恢复并回读原PVC UID及挂载，finally清理。 | 可信原实例/原PVC UID的挂起恢复允许；不被新实例碰撞规则误拒绝，不自动迁移/删除旧数据。 | #20 |
+| REG20-STORAGE-001.owned-retain-shard | 旧实例恢复被移除shard的原Retain卷 | 独立真实多shard实例记录原CR/ST/Pod/PVC UID；确认实际whenDeleted=Retain后减少shard、等待移除ST/Pod消失，再明确恢复该shard并核对原PVC UID与挂载，finally清理。 | 可信原实例/原PVC UID的shard恢复允许，确实复用其历史身份；不认领同名不同UID卷，不迁移/删除旧数据。 | #20 |
