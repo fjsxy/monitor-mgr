@@ -222,3 +222,68 @@ func TestAgentIndependentSourceFreshness(t *testing.T) {
 		}
 	}
 }
+
+// 草稿匹配与实际CR运行来源属于不同读模型；冲突预览也不能写入运行缓存。
+func TestAgentDraftSourceIsolation(t *testing.T) {
+	f, target := agentTarget(t)
+	p, c, owner := clusterPlatform(t)
+	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "isolation", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
+	cluster := awaitClusterOperation(t, p, c, op["operationId"].(string))["clusterId"].(string)
+	var revise atomic.Bool
+	var duringPreview func()
+	f.mu.Lock()
+	f.hook = func(w http.ResponseWriter, r *http.Request) bool {
+		if strings.HasSuffix(r.URL.Path, "/servicemonitors") {
+			if revise.CompareAndSwap(true, false) {
+				duringPreview()
+			}
+			io.WriteString(w, `{"items":[{"metadata":{"name":"blue","namespace":"monitoring","uid":"blue-uid","labels":{"team":"blue"}}},{"metadata":{"name":"green","namespace":"monitoring","uid":"green-uid","labels":{"team":"green"}}}]}`)
+			return true
+		}
+		return false
+	}
+	f.mu.Unlock()
+	cfg := agentConfig("isolation", "monitoring")
+	rule := cfg["associations"].(map[string]any)["serviceMonitor"].(map[string]any)
+	rule["object"] = map[string]any{"mode": "Labels", "selector": map[string]any{"matchLabels": map[string]string{"team": "blue"}}}
+	i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
+	id := i["id"].(string)
+	pv := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "preview", 200)
+	pub := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": pv["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
+	if awaitClusterOperation(t, p, c, pub["operationId"].(string))["state"] != "SUCCEEDED" {
+		t.Fatal("前置发布失败")
+	}
+	clusterCall(t, p, "POST", "/instances/"+id+"/refresh", map[string]any{}, c, "refresh", 200)
+	source := func(v map[string]any) map[string]any {
+		for _, raw := range v["sources"].([]any) {
+			s := raw.(map[string]any)
+			if s["source"] == "association:ServiceMonitor" {
+				return s
+			}
+		}
+		t.Fatal("缺运行来源")
+		return nil
+	}
+	before := source(clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200))
+	rule["object"].(map[string]any)["selector"].(map[string]any)["matchLabels"] = map[string]string{"team": "green"}
+	clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": cfg}, c, "save-green", 200)
+	preview := clusterCall(t, p, "POST", "/instances/"+id+"/association-previews", map[string]any{"draftRevision": 2}, c, "preview-green", 200)
+	if source(preview)["matches"].([]any)[0].(map[string]any)["uid"] != "green-uid" {
+		t.Fatal("草稿预览未采用B规则")
+	}
+	assertUnchanged := func() {
+		after := source(clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200))
+		left, _ := json.Marshal(before)
+		right, _ := json.Marshal(after)
+		if string(left) != string(right) {
+			t.Fatal("草稿预览覆盖已部署运行来源或时间")
+		}
+	}
+	assertUnchanged()
+	duringPreview = func() {
+		clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 2, "agent": cfg}, c, "save-during-preview", 200)
+	}
+	revise.Store(true)
+	clusterCall(t, p, "POST", "/instances/"+id+"/association-previews", map[string]any{"draftRevision": 2}, c, "preview-conflict", 409)
+	assertUnchanged()
+}

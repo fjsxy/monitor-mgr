@@ -107,3 +107,9 @@
 | REG18-CAP-004.old-rs | 旧RS的绿色Pod不能代表新template | 同Deployment UID旧RS Pod的实际SA/args与新template不符，而旧Podmetrics绿色，发起预览。 | 阻止，原Pod/template绑定不能被绿色指标绕过。 | #18 |
 | REG18-CAP-004.none-short-circuit | None规则不依赖未关联的采集API | 四类None，撤掉ScrapeConfig API/读取权限，保留已运行Agent controller与Agent CR能力后预览。 | 不因SC依赖被拒绝；None不读取全namespace/SC API，不虚称SC informer已验证。 | #18 |
 | REG18-VALID-006 | Prometheus Duration校验含范围上限 | 经HTTP和直接RPC分别提交合法 `1y2w3d4h5m6s7ms`、重复/逆序单位及超长年份 `999999999999999999999999y`。 | 合法组合保持；重复/逆序/溢出稳定字段拒绝且CR无写，不退化为Go duration。 | #18 |
+
+## 草稿与运行来源隔离补充回归
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG18-SOURCE-007 | 草稿关联预览不得覆盖已部署运行来源 | 发布规则A并刷新实际CR关联；保存未发布规则B并预览，再读取运行来源；预览过程中另保存新修订。浏览器分别查看配置区和运行区并继续编辑。 | B仅返回所请求draftRevision的预览，运行来源及时间仍来自A；修订并发变化返回冲突且不落库；UI草稿预览独立保存并标明过期，轮询不覆盖预览，运行页不展示未发布B。 | #18 |

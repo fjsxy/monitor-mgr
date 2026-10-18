@@ -257,9 +257,10 @@ export function AgentEditor({
       {},
     ),
     [runtime, setRuntime] = useState(selection.instance?.runtime),
-    [sources, setSources] = useState<Source[]>(
+    [runtimeSources, setRuntimeSources] = useState<Source[]>(
       selection.instance?.sources ?? [],
     ),
+    [previewSources, setPreviewSources] = useState<{ draftRevision: number; sources: Source[] } | null>(null),
     [preview, setPreview] = useState<Preview | null>(null),
     [overwrite, setOverwrite] = useState(false),
     [operation, setOperation] = useState<Operation | null>(null),
@@ -398,7 +399,7 @@ export function AgentEditor({
       setRuntime(next);
       const detail = await api<Instance>(`/instances/${item.id}`);
       setCurrent(detail);
-      setSources(detail.sources ?? []);
+      setRuntimeSources(detail.sources ?? []);
       onChange();
     } catch (e) {
       setRuntime((previous) => ({
@@ -583,17 +584,13 @@ export function AgentEditor({
   async function associationPreview() {
     if (!current || !draft || dirty) return;
     await run(async () => {
-      const result = await api<{ sources: Source[] }>(
+      const result = await api<{ draftRevision: number; sources: Source[] }>(
         `/instances/${current.id}/association-previews`,
         "POST",
         { draftRevision: draft.revision },
       );
-      setSources((previous) => [
-        ...previous.filter(
-          (source) => !source.source.startsWith("association:"),
-        ),
-        ...result.sources,
-      ]);
+      // 关键：草稿预览按修订隔离，运行页只使用实际CR来源。
+      setPreviewSources(result);
     });
   }
   async function copy() {
@@ -730,11 +727,8 @@ export function AgentEditor({
                       >
                         刷新采集关联预览
                       </button>
-                      <SourceViews
-                        sources={sources.filter((item) =>
-                          item.source.startsWith("association:"),
-                        )}
-                      />
+                      {previewSources && <p className="help">草稿修订 {previewSources.draftRevision} 的匹配预览{dirty || draft?.revision !== previewSources.draftRevision ? " · 已过期，请保存并重新刷新" : ""}</p>}
+                      <SourceViews sources={previewSources?.sources ?? []} />
                     </section>
                   </form>
                 )}
@@ -796,7 +790,7 @@ export function AgentEditor({
                         </button>
                       )}
                     </div>
-                    <SourceViews sources={sources} />
+                    <SourceViews sources={runtimeSources} />
                   </section>
                 )}
                 {tab === "history" && (

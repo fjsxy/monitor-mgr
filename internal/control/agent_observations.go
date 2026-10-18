@@ -76,8 +76,8 @@ func (s *Store) agentSources(ctx context.Context, i *rpc.ObservationInstance) []
 	return out
 }
 
-// associationObservation逐类返回结果，单来源失败保留其历史，不把失败改成空匹配。
-func (s *Store) associationObservations(ctx context.Context, i *rpc.ObservationInstance, t *Target, cfg *AgentConfig) []*rpc.SourceObservation {
+// associationObservations逐类读取；只有实际CR来源可以保存运行历史。
+func (s *Store) associationObservations(ctx context.Context, i *rpc.ObservationInstance, t *Target, cfg *AgentConfig, persist bool) []*rpc.SourceObservation {
 	out := []*rpc.SourceObservation{}
 	operator, operatorErr := t.agentOperator(ctx, cfg)
 	if operatorErr == nil {
@@ -125,7 +125,18 @@ func (s *Store) associationObservations(ctx context.Context, i *rpc.ObservationI
 				return value.Matches[a].Namespace+"/"+value.Matches[a].Name < value.Matches[b].Namespace+"/"+value.Matches[b].Name
 			})
 		}
-		out = append(out, s.saveAgentSource(ctx, i, source, value, e))
+		if persist {
+			value = s.saveAgentSource(ctx, i, source, value, e)
+		} else {
+			// 关键：草稿预览属于请求修订，不能覆盖已部署CR的来源或最后成功时间。
+			value.LastAttemptAt = s.Now().UTC().Format(time.RFC3339Nano)
+			if e != nil {
+				value.Error = safeSourceError(e)
+			} else {
+				value.LastSuccessAt = value.LastAttemptAt
+			}
+		}
+		out = append(out, value)
 	}
 	return out
 }
@@ -159,7 +170,7 @@ func (s *Store) PreviewAssociations(ctx context.Context, c *rpc.RequestContext, 
 		return nil, e
 	}
 	defer target.Close()
-	sources := s.associationObservations(ctx, i, target, cfg)
+	sources := s.associationObservations(ctx, i, target, cfg, false)
 	_, latest, e := readDraft(ctx, s.DB, i.Id)
 	if e != nil {
 		return nil, e
@@ -196,7 +207,7 @@ func associationConfigFromCR(cr map[string]any) *AgentConfig {
 	return cfg
 }
 func (s *Store) refreshAgentAuxiliary(ctx context.Context, i *rpc.ObservationInstance, t *Target, cr map[string]any) {
-	s.associationObservations(ctx, i, t, associationConfigFromCR(cr))
+	s.associationObservations(ctx, i, t, associationConfigFromCR(cr), true)
 	volumes, e := s.readAgentVolumes(ctx, i, t)
 	s.saveAgentSource(ctx, i, "PVC", &rpc.SourceObservation{Source: "PVC", Volumes: volumes}, e)
 }
