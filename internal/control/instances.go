@@ -268,19 +268,8 @@ func (s *Store) SaveDraft(ctx context.Context, c *rpc.RequestContext, r *rpc.Sav
 	if (i.Uid != "" || protected > 0) && (cfg.identity().Name != i.Name || cfg.identity().DeploymentNamespace != i.TargetNamespace) {
 		return nil, Error("CONFLICT", "下发中或创建后 name/targetNamespace 固定，请新建实例")
 	}
-	if i.Uid != "" && i.Component == AgentComponent {
-		previous, e := versionByID(ctx, tx, i.CurrentVersionId, i.Id)
-		if e != nil {
-			return nil, e
-		}
-		old, e := decodeAgent(previous.Agent)
-		if e != nil {
-			return nil, e
-		}
-		next := cfg.(*AgentConfig)
-		if !sameAgentStorage(old, next) {
-			return nil, Error("CONFLICT", "创建后存储模式与PVC容量固定，请新建实例")
-		}
+	if e = validateFixedSpec(ctx, tx, i, cfg.spec()); e != nil {
+		return nil, e
 	}
 	raw, _ := json.Marshal(cfg)
 	if _, e = tx.ExecContext(ctx, `UPDATE drafts SET config=?,revision=revision+1 WHERE instance_id=? AND revision=?`, raw, r.Id, rev); e != nil {

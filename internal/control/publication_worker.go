@@ -133,6 +133,10 @@ func (s *Store) executePublication(life context.Context, id string) {
 		return
 	}
 	defer t.Close()
+	if e = validateFixedSpec(life, s.DB, i, frozen); e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
+		return
+	}
 	if e = t.publicationDependencies(life, cl, cfg, i.Uid == "", frozen); e != nil {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return

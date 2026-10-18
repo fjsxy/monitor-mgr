@@ -42,6 +42,11 @@ func sanitizeTarget(v any, parent string) {
 	case map[string]any:
 		for k, value := range x {
 			lower := strings.ToLower(k)
+			// headers是任意名称和值的认证通道，不能按几个常见名称枚举秘密。
+			if strings.EqualFold(parent, "headers") {
+				x[k] = "[敏感内容已隐藏]"
+				continue
+			}
 			// 关键：原始last-applied可能内嵌整份旧配置；未知认证分支不回显字面值。
 			if strings.Contains(lower, "last-applied") || isLiteral(value) && (lower == "bearertoken" || lower == "password" || lower == "token" || lower == "clientsecret" || lower == "credentials" || lower == "username" && parent == "basicAuth") {
 				x[k] = "[敏感内容已隐藏]"

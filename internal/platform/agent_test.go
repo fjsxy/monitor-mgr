@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -157,6 +158,20 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 				w.WriteHeader(404)
 				io.WriteString(w, `{}`)
 				return
+			}
+			if r.Method == "PUT" {
+				var body map[string]any
+				json.NewDecoder(r.Body).Decode(&body)
+				meta := body["metadata"].(map[string]any)
+				old := f.objects[key]["metadata"].(map[string]any)
+				if meta["uid"] != old["uid"] || meta["resourceVersion"] != old["resourceVersion"] {
+					w.WriteHeader(409)
+					io.WriteString(w, `{}`)
+					return
+				}
+				rv, _ := strconv.Atoi(old["resourceVersion"].(string))
+				meta["resourceVersion"] = strconv.Itoa(rv + 1)
+				f.objects[key] = body
 			}
 			json.NewEncoder(w).Encode(f.objects[key])
 		default:

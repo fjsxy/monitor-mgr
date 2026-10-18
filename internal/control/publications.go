@@ -138,6 +138,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if rev != r.DraftRevision {
 		return nil, Error("CONFLICT", "草稿修订已变化")
 	}
+	if e = validateFixedSpec(ctx, s.DB, i, cfg.spec()); e != nil {
+		return nil, e
+	}
 	t, e := s.TargetForCluster(ctx, c, i.ClusterId)
 	if e != nil {
 		return nil, e
@@ -182,7 +185,11 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 		return nil, e
 	}
 	defer tx.Rollback()
-	if _, _, e = s.instanceTx(ctx, tx, c, r.Id); e != nil {
+	_, latestInstance, e := s.instanceTx(ctx, tx, c, r.Id)
+	if e != nil {
+		return nil, e
+	}
+	if e = validateFixedSpec(ctx, tx, latestInstance, cfg.spec()); e != nil {
 		return nil, e
 	}
 	_, latest, e := readDraft(ctx, tx, r.Id)
@@ -325,6 +332,9 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	}
 	baseline, e := readPreview(ctx, tx, r.PreviewId, i.Id)
 	if e != nil {
+		return nil, e
+	}
+	if e = validateFixedSpec(ctx, tx, i, cfg.spec()); e != nil {
 		return nil, e
 	}
 	if e = s.validatePublication(i, cfg, rev, baseline, r, cr); e != nil {

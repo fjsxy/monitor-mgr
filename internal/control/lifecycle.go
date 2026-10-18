@@ -203,6 +203,20 @@ func (s *Store) markLifecycleDispatch(ctx context.Context, o *rpc.Operation, act
 	if s.stopping.Load() {
 		return fail(Error("UNAVAILABLE", "平台退出中，停止派发"))
 	}
+	if o.Action == "PUBLISH" {
+		instance, err := instanceByID(ctx, tx, o.GetInstanceId())
+		if err != nil {
+			return fail(err)
+		}
+		frozen, err := frozenVersionSpec(ctx, tx, o.GetVersionId(), instance.Id)
+		if err != nil {
+			return fail(err)
+		}
+		// 关键：真正取得派发资格时再次读取固定基线，旧预览和在途草稿不能绕过容量约束。
+		if err = validateFixedSpec(ctx, tx, instance, frozen); err != nil {
+			return fail(err)
+		}
+	}
 	if e = ctx.Err(); e != nil {
 		return fail(e)
 	}
