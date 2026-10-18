@@ -443,6 +443,18 @@ def contract(entry):
     return {k: entry[k] for k in ['caseId', 'variantId', 'layer', 'purpose', 'steps', 'expected', 'profiles']}
 
 
+KUBERNETES_PROTOCOL_CASES = {
+    'REG21-SIGNAL-002.term-after-setup': 'term',
+    'REG21-SIGNAL-003.keyboard-interrupt': 'int',
+    'REG21-SIGNAL-004.repeat-during-cleanup': 'repeat',
+    'REG21-RESULT-005.setup-failure': 'setup',
+    'REG21-RESULT-006.cleanup-failure': 'cleanup-denied',
+    'REG21-RECOVER-008.kill-then-recover': 'kill',
+    'REG21-LEDGER-009.uid-replaced': 'replaced',
+    'REG21-LEDGER-010.read-failure': 'read-denied',
+}
+
+
 def _all(supplemental):
     raw = (ROOT / 'docs/acceptance/phase1.json').read_bytes()
     if hashlib.sha256(raw).hexdigest() != MANIFEST_HASH:
@@ -514,6 +526,10 @@ def _all(supplemental):
                 raise ValueError('Q缺实际selector: ' + variant)
         e['testSelectors'] = list(selectors)
         e['executionBoundary'] = 'validator-test' if variant.startswith('REG21-') and e['layer'] == 'Q' else ('host-Q' if e['layer'] == 'Q' else 'platform-pod')
+        # 关键：这八例验证真实 API/UID/恢复协议，部分 setup 合法没有产品 Pod；不能推广到业务 K/B。
+        if variant in KUBERNETES_PROTOCOL_CASES and e['layer'] == 'K':
+            e['runner'] = 'protocol_cases'
+            e['executionBoundary'] = 'kubernetes-protocol'
         e['contractFingerprint'] = fingerprint(contract(e))
     return entries
 

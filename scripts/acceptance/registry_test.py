@@ -24,6 +24,16 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(entry['testSelectors'], ['I07.disabled-owner.register',
             'I07.disabled-owner.transfer', 'I07.disabled-owner.reactivate'])
 
+    def test_only_eight_reg21_k_use_kubernetes_protocol_boundary(self):
+        import protocol_cases
+        supplemental = registry.entries('LOCAL_FULL', True)
+        actual = {e['variantId'] for e in supplemental if e['executionBoundary'] == 'kubernetes-protocol'}
+        self.assertEqual(actual, set(protocol_cases.MODES))
+        self.assertTrue(all(e['layer'] == 'K' and e['runner'] == 'protocol_cases' for e in supplemental
+                            if e['variantId'] in actual))
+        self.assertTrue(all(e['executionBoundary'] == 'platform-pod' for e in registry.entries('LOCAL_FULL')
+                            if e['layer'] in ['K', 'B']))
+
 
 if __name__ == '__main__':
     unittest.main()
