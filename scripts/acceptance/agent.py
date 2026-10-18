@@ -18,7 +18,7 @@ BCASES=['U02.primary','U06.primary']
 
 class Suite(ClusterSuite):
  def __init__(self,a):
-  super().__init__(a);self.contract=manifest();self.source=source_state();self.traces=[];self.resources=[];self.ksms=[];self.restorers=[];self.target='control';self.targetns=None
+  super().__init__(a);self.contract=manifest();self.source=source_state();self.traces=[];self.resources=[];self.namespace_uids={};self.ksms=[];self.restorers=[];self.target='control';self.targetns=None
   assert not self.source['dirty'] or a.allow_dirty_runner,'门禁来源必须干净'
   assert a.source==self.source['commit'],'运行器与产品必须同源'
   m=json.loads(subprocess.check_output(['docker','image','inspect',a.image],text=True))[0]
@@ -48,6 +48,21 @@ class Suite(ClusterSuite):
   return r
  def get(self,*args,target=None):return json.loads(self.k('get',*args,'-o','json',target=target or self.target).stdout)
  def apply(self,obj,target=None):self.k('create','-f','-',data=obj,target=target or self.target)
+ def deploy(self,case,index):
+  # 平台namespace也由本例显式创建并登记UID，名称冲突时不能误清理既有资源。
+  self.ns=self.a.prefix+'-'+str(index);self.port=self.a.port+index;self.namespace(self.ns,'control');objects=[]
+  for raw in yaml.safe_load_all(open(ROOT/'deploy/platform.yaml')):
+   if raw is None:continue
+   raw['metadata']['namespace']=self.ns;raw['metadata'].setdefault('labels',{})['monitor-mgr-run']=self.a.prefix
+   if raw['kind']=='Deployment':
+    raw['spec']['template']['metadata'].setdefault('annotations',{})['monitor-mgr-source']=self.a.source
+    container=raw['spec']['template']['spec']['containers'][0];container['image']=self.a.image;container['imagePullPolicy']='Never'
+   objects.append(raw)
+  self.k('apply','-f','-',data={'apiVersion':'v1','kind':'List','items':objects});self.k('-n',self.ns,'rollout','status','deployment/monitor-mgr','--timeout=120s')
+  pods=self.get('pods','-n',self.ns,'-l','app=monitor-mgr',target='control')['items'];assert len(pods)==1
+  pod=pods[0];self.pod=pod['metadata']['name'];self.initial_uid=pod['metadata']['uid'];self.connect()
+  self.call('POST','/initialization',{'username':'admin','password':self.password},status=201);self.call('POST','/sessions',{'username':'admin','password':self.password},status=201);self.owner=self.call('GET','/session')['account']['id']
+  return {'namespaceUID':self.namespace_uids[('control',self.ns)],'podUID':self.initial_uid,'node':pod['spec']['nodeName'],'imageID':pod['status']['containerStatuses'][0]['imageID'],'source':self.a.source}
  def connect(self):
   self.base='http://127.0.0.1:'+str(self.port)
   self.forward=subprocess.Popen([self.a.kubectl,'--kubeconfig',self.a.control_config,'--context',self.a.control_context,'-n',self.ns,'port-forward','pod/'+self.pod,str(self.port)+':8080'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -92,7 +107,8 @@ class Suite(ClusterSuite):
   return {s['source']:s for s in value['sources']}
  def namespace(self,name,target=None):
   target=target or self.target
-  self.apply({'apiVersion':'v1','kind':'Namespace','metadata':{'name':name,'labels':{'monitor-mgr-run':self.a.prefix}}},target)
+  obj={'apiVersion':'v1','kind':'Namespace','metadata':{'name':name,'labels':{'monitor-mgr-run':self.a.prefix}}}
+  created=json.loads(self.k('create','-f','-','-o','json',data=obj,target=target).stdout);self.namespace_uids[(target,name)]=created['metadata']['uid']
   self.resources.append((target,'namespace',name))
  def fixture(self,namespace,target=None,agent_rbac=True):
   target=target or self.target;self.namespace(namespace,target)
@@ -159,12 +175,15 @@ class Suite(ClusterSuite):
   # namespace先删除，保留采集权限直到workload退出；仅删除本例显式登记的资源。
   ordered=[r for r in reversed(self.resources) if r[1]=='namespace']+[r for r in reversed(self.resources) if r[1]!='namespace']
   for target,kind,name in ordered:
+   if kind=='namespace':
+    try:
+     actual=self.get('namespace',name,target=target)
+     assert actual['metadata']['uid']==self.namespace_uids[(target,name)] and actual['metadata']['labels']['monitor-mgr-run']==self.a.prefix
+    except Exception:failures.append('namespace身份无法确认，未删除：'+name);continue
    r=self.k('delete',kind,name,'--wait=true','--timeout=120s',target=target,check=False)
    if r.returncode:failures.append(kind+'/'+name+'清理失败')
   self.resources=[]
-  if hasattr(self,'ns'):
-   if self.k('delete','namespace',self.ns,'--wait=true','--timeout=120s',check=False).returncode:failures.append('平台namespace清理失败')
-   del self.ns
+  if hasattr(self,'ns'):del self.ns
   return {'success':not failures,'failures':failures}
  def run(self):
   for index,case in enumerate(self.a.cases or KCASES):
