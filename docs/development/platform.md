@@ -67,3 +67,13 @@ HTTP/真实 RPC 集成测试覆盖 I01、I02 默认/配置寿命/安全 Cookie�
 当前 schema 版本为 7；v5 收口独立 CR namespace 与敏感读模型指纹，v6 保存当前执行尝试、修订和原 UID 清理图；v7 将删除预览绑定原 UID、部署版本、目标配置 HMAC 与稳定 namespace 影响范围。删除受理和派发前均重新核验；旧 v6 明确未发删除必须在同一 operation 下重新预览并明确继续，不能自动重放。已有库升级前通过 SQLite `VACUUM INTO` 保存一致快照至数据目录 `backups/`（0600）；所有待应用 DDL 和版本记录一次事务提交。快照失败不迁移，迁移失败保留原库及恢复依据；不初始化替代数据库。新版本启动拒绝不兼容版本，schema1 账号和有效 Session 升级后保持可用。`control.Store.Authorize` / `AuthorizeTx` 从持久会话与当前账号读取角色及失效依据，后续业务必须复用当前授权，不接受浏览器角色断言。
 
 生命周期入口：POST `/operations/{id}/retry`、`/cancel`、`/continue-unsent` 绑定 `expectedOperationRevision`、`expectedAttemptId`、`expectedAttemptRevision`，仍需当前授权及幂等键。普通重试只接受确定失败，同 operationId 和固定发布版本产生新 attempt；旧 attempt 与原发起者保留。POST `/operations/{id}/refresh` 只读核验结果，身份不明不能补认。POST `/instances/{id}/deletion-previews` 只读目标并保存删除确认范围；POST `/instances/{id}/deletions` 使用该 `previewId` 和原 `versionId`，按原 UID/新读 RV 发送唯一 Foreground DELETE；只有原 CR 及持久 owner UID 图中的 workload、ReplicaSet、Pod 全部核验消失才解除保护。平台不直接清理 Pod、PVC 或 finalizer。删除的 retry/continue 需先对同一 operation 重新预览，再显式传 `deletePreviewId`；目标规范化配置或 namespace 影响范围变化须重新确认，status/RV 与同范围 Pod 滚动不产生误冲突。
+
+## Agent 配置与来源
+
+统一添加入口使用 `component: "Prometheus Agent"` 与类型化 `agent` 分支。默认 StatefulSet、Prometheus v2.55.1 固定镜像、单 shard/单副本、200m CPU/512Mi memory 请求、1Gi memory 上限和每卷1Gi RWO PVC；需要已有 namespace、ServiceAccount 及默认动态 StorageClass。当前配置仅开放 Running、shards=1 和 PVC；创建后容量与存储身份固定，保存、预览、受理及实际派发均重新核对不可变版本。后续运行/存储策略通过同一组件接缝扩展。
+
+四类采集关联分别保存对象 None/All/Labels 和 namespace Own/All/Labels。None/Own 对应省略，All 对应 `{}`；缺失和空对象不能合并。POST `/instances/{id}/association-previews` 绑定 `draftRevision`，只计算草稿匹配；运行来源来自实际 CR，并按 `PVC`、`association:ServiceMonitor`、`association:PodMonitor`、`association:Probe`、`association:ScrapeConfig` 独立保存 UID、成功/尝试时间和失败历史。匹配数、Pod Ready 和 CR 写入都不证明远端已收到样本。
+
+remoteWrite 仅开放 URL、name、remoteTimeout、BasicAuth/Bearer 与 TLS 的 Secret name/key 引用，不回显或持久化 Secret 值。平台身份需能核验目标身份、相关 CR/依赖、SAR，以及读取固定 Operator Deployment/ReplicaSet/Pod 和 `pods/proxy` metrics；Operator 的实际 Pod 身份、范围及 Agent controller 启动证据单独核对。非 None ScrapeConfig 还需同一 Pod 的 informer 请求证据。采集 SA 的实际发现权限独立检查；平台不自动创建或修补 SA、Secret、RBAC、StorageClass。
+
+重复验收入口为 `make agent-q-receipt`、`make e2e-agent`、`make e2e-agent-b` 和 `make agent-regressions`。后者独立记录补充安全回归，不增加69个 owned 子例；真实 K/B 要求 `E2E_ARGS` 显式提供 kubectl、两份目标 kubeconfig、两个 context、Pod 可达配置、镜像、源码、输出和跨票 API 锁。每例创建独立平台 Pod/数据库及目标 fixture，整批持锁至 finally 完成；CI profile 不能由宿主 LOCAL_FULL 冒充。

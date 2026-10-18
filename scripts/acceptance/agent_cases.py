@@ -57,7 +57,7 @@ def remote(s,case):
  for wanted,got in zip(cfg['remoteWrite'],actual):
   assert got['url']==wanted['url']
   if 'name' in wanted:assert got['name']==wanted['name']
-  if 'remoteTimeout' in wanted:assert got['remote_timeout'] in [wanted['remoteTimeout'],'1m30s','2m']
+  if 'remoteTimeout' in wanted:assert got['remote_timeout'] in {'1m30s':['1m30s','90s'],'2m':['2m','2m0s','120s']}[wanted['remoteTimeout']]
  if variant=='https-basic':assert actual[0]['basic_auth']['username']==s.secret_values['username'] and actual[0]['basic_auth']['password']==s.secret_values['password']
  if variant=='https-bearer':assert actual[0]['authorization']['type']=='Bearer' and actual[0]['authorization']['credentials']==s.secret_values['credentials']
  if variant in ['tls-ca','tls-client']:
@@ -109,7 +109,7 @@ def global_fault(s,case):
   classes=s.get('storageclasses')['items'];original=[(c['metadata']['name'],copy.deepcopy(c['metadata'].get('annotations',{}))) for c in classes]
   def restore():
    for name,annotations in original:
-    s.k('patch','storageclass',name,'--type=json','-p',json.dumps([{'op':'replace','path':'/metadata/annotations','value':annotations}]),target=s.target)
+    s.k('patch','storageclass',name,'--type=json','-p',json.dumps([{'op':'add','path':'/metadata/annotations','value':annotations}]),target=s.target)
     assert s.get('storageclass',name)['metadata'].get('annotations',{})==annotations
   s.restorers.append(restore)
   for name,annotations in original:
