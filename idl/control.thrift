@@ -90,10 +90,14 @@ struct VersionRequest { 1: required string id, 2: required string versionId }
 struct OperationLookup { 1: required string instanceId, 2: required string idempotencyKey }
 struct ExecutionAttempt { 1: required string attemptId, 2: required string operationId, 3: required string state, 4: required bool possiblySent, 5: required string createdAt, 6: required string updatedAt, 7: optional i64 revision, 8: optional i64 sequence, 9: optional string actorId, 10: optional string message }
 // 生命周期变更绑定当前操作与尝试修订，避免过期页面取消或重试较新的尝试。
-struct LifecycleRequest { 1: required string operationId, 2: required i64 expectedOperationRevision, 3: required string expectedAttemptId, 4: required i64 expectedAttemptRevision }
-struct DeleteInstanceRequest { 1: required string id, 2: required string versionId }
+struct LifecycleRequest { 1: required string operationId, 2: required i64 expectedOperationRevision, 3: required string expectedAttemptId, 4: required i64 expectedAttemptRevision, 5: optional string deletePreviewId }
+struct DeleteInstanceRequest { 1: required string id, 2: required string versionId, 3: optional string previewId }
+// 删除预览绑定原身份和影响语义；RV/status与同范围Pod滚动不改变用户确认范围。
+struct DeletionPreviewRequest { 1: required string id, 2: optional string operationId }
+struct DeletionPreview { 1: required string previewId, 2: required string instanceId, 3: required string versionId, 4: required string uid, 5: required string name, 6: required string namespace, 7: required list<string> impactNamespaces }
 struct AttemptsResult { 1: required list<ExecutionAttempt> attempts }
 service ControlService {
+ DeletionPreview PreviewDeletion(1: RequestContext ctx, 2: DeletionPreviewRequest request) throws (1: APIError error)
  Operation RetryLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)
  Operation CancelLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)
  Operation ContinueLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)

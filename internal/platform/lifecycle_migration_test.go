@@ -64,8 +64,8 @@ func TestF04LifecycleSchema5Upgrade(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			// 关键：裁除所有v6关系/字段，留下精确v5形状；不把v6残余伪装成旧库。
-			_, e = db.Exec(`PRAGMA foreign_keys=OFF;DROP TABLE seen_resources;DROP TABLE deletion_operations;DROP TABLE operation_lifecycle;ALTER TABLE execution_attempts DROP COLUMN revision;ALTER TABLE execution_attempts DROP COLUMN sequence;ALTER TABLE execution_attempts DROP COLUMN actor_id;ALTER TABLE execution_attempts DROP COLUMN message;DELETE FROM schema_migrations WHERE version>5;`)
+			// 关键：裁除所有v6及后续关系/字段，留下精确v5形状；不把新schema残余伪装成旧库。
+			_, e = db.Exec(`PRAGMA foreign_keys=OFF;DROP TABLE deletion_previews;DROP TABLE seen_resources;DROP TABLE deletion_operations;DROP TABLE operation_lifecycle;ALTER TABLE execution_attempts DROP COLUMN revision;ALTER TABLE execution_attempts DROP COLUMN sequence;ALTER TABLE execution_attempts DROP COLUMN actor_id;ALTER TABLE execution_attempts DROP COLUMN message;DELETE FROM schema_migrations WHERE version>5;`)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -105,7 +105,7 @@ func TestF04LifecycleSchema5Upgrade(t *testing.T) {
 				db.QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&version)
 				db.QueryRow(`SELECT count(*) FROM instance_protections WHERE operation_id=?`, oid).Scan(&protected)
 				db.QueryRow(`SELECT count(*) FROM pragma_table_info('execution_attempts') WHERE name='revision'`).Scan(&columns)
-				snapshots, _ := filepath.Glob(filepath.Join(dir, "backups", "schema-5-to-6-*"))
+				snapshots, _ := filepath.Glob(filepath.Join(dir, "backups", "schema-5-to-*-*"))
 				if version != 5 || protected != 1 || columns != 0 || len(snapshots) == 0 {
 					t.Fatal("迁移失败改变旧库或丢失恢复快照", version, protected, columns, len(snapshots))
 				}

@@ -11,6 +11,7 @@ import (
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
+	PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest, callOptions ...callopt.Option) (r *control.DeletionPreview, err error)
 	RetryLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
 	CancelLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
 	ContinueLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
@@ -84,6 +85,11 @@ func MustNewClient(destService string, opts ...client.Option) Client {
 
 type kControlServiceClient struct {
 	*kClient
+}
+
+func (p *kControlServiceClient) PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest, callOptions ...callopt.Option) (r *control.DeletionPreview, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.PreviewDeletion(ctx, ctx_, request)
 }
 
 func (p *kControlServiceClient) RetryLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error) {

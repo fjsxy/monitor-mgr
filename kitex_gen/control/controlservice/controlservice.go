@@ -13,6 +13,13 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
+	"PreviewDeletion": kitex.NewMethodInfo(
+		previewDeletionHandler,
+		newControlServicePreviewDeletionArgs,
+		newControlServicePreviewDeletionResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"RetryLifecycle": kitex.NewMethodInfo(
 		retryLifecycleHandler,
 		newControlServiceRetryLifecycleArgs,
@@ -385,6 +392,30 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 		Extra:           extra,
 	}
 	return svcInfo
+}
+
+func previewDeletionHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServicePreviewDeletionArgs)
+	realResult := result.(*control.ControlServicePreviewDeletionResult)
+	success, err := handler.(control.ControlService).PreviewDeletion(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServicePreviewDeletionArgs() interface{} {
+	return control.NewControlServicePreviewDeletionArgs()
+}
+
+func newControlServicePreviewDeletionResult() interface{} {
+	return control.NewControlServicePreviewDeletionResult()
 }
 
 func retryLifecycleHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -1451,6 +1482,21 @@ func newServiceClient(c client.Client) *kClient {
 	return &kClient{
 		c: c,
 	}
+}
+
+func (p *kClient) PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest) (r *control.DeletionPreview, err error) {
+	var _args control.ControlServicePreviewDeletionArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServicePreviewDeletionResult
+	if err = p.c.Call(ctx, "PreviewDeletion", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
 }
 
 func (p *kClient) RetryLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest) (r *control.Operation, err error) {

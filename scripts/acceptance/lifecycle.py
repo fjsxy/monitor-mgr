@@ -20,7 +20,7 @@ class Suite(KSMSuite):
   op=self.call('GET','/operations/'+o['operationId']);attempts=self.call('GET','/operations/'+o['operationId']+'/attempts')['attempts'];a=next(x for x in attempts if x['attemptId']==op['attemptId']);return {'expectedOperationRevision':op['revision'],'expectedAttemptId':a['attemptId'],'expectedAttemptRevision':a['revision']}
  def action(self,o,action,status=202):return self.call('POST','/operations/'+o['operationId']+'/'+action,self.request_revision(o),status=status)
  def delete(self,i,wait=True):
-  current=self.call('GET','/instances/'+i['id']);o=self.call('POST','/instances/'+i['id']+'/deletions',{'versionId':current['currentVersionId']},status=202)
+  preview=self.call('POST','/instances/'+i['id']+'/deletion-previews',{});o=self.call('POST','/instances/'+i['id']+'/deletions',{'versionId':preview['versionId'],'previewId':preview['previewId']},status=202)
   return self.state(o,'SUCCEEDED',timeout=100) if wait else o
  def first(self):
   i=self.create();o=self.publish(i);self.runtime(i);return i,o
@@ -132,11 +132,11 @@ class Suite(KSMSuite):
    self.k('-n',self.ns,'wait','--for=delete','pod/'+self.pod,'--timeout=35s');elapsed=time.monotonic()-start;assert elapsed>=9 and elapsed<30,elapsed
    self.stop_forward();self.k('-n',self.ns,'rollout','status','deployment/monitor-mgr','--timeout=100s');pod=json.loads(self.k('-n',self.ns,'get','pods','-l','app=monitor-mgr','-o','json').stdout)['items'][0];self.pod=pod['metadata']['name'];self.connect();self.connect_gate();a=self.state(sent,'IDENTITY_UNCERTAIN');b=self.state(unsent,'WAITING_CONFIRMATION');assert self.cr_absent() and self.cr_absent(self.crname+'-queued');return {'shutdownSeconds':elapsed,'admissionStatuses':observed,'possiblySent':a,'provenUnsent':b,'podUID':pod['metadata']['uid'],'noReplay':True}
   if case.startswith('P12.'):
-   i,o=self.first();original=self.cr();uid=original['metadata']['uid'];self.k('delete','kubestatemetrics',self.crname,'--wait=true','--timeout=90s',target=self.target)
+   i,o=self.first();original=self.cr();uid=original['metadata']['uid'];preview=self.call('POST','/instances/'+i['id']+'/deletion-previews',{});self.k('delete','kubestatemetrics',self.crname,'--wait=true','--timeout=90s',target=self.target)
    if case.endswith('new-uid'):
     replacement={k:original[k] for k in ['apiVersion','kind','spec']};replacement['metadata']={'name':self.crname};self.k('apply','-f','-',data=replacement,target=self.target);newuid=self.cr()['metadata']['uid'];assert newuid!=uid
    else:newuid=None
-   self.call('POST','/instances/'+i['id']+'/previews',{'draftRevision':1},status=409);failed=self.state(self.delete(i,False),'FAILED');current=self.call('GET','/instances/'+i['id']);assert current['uid']==uid and current['currentVersionId']==o['versionId'];runtime=self.call('POST','/instances/'+i['id']+'/refresh',{})
+   self.call('POST','/instances/'+i['id']+'/previews',{'draftRevision':1},status=409);failed=self.call('POST','/instances/'+i['id']+'/deletions',{'versionId':preview['versionId'],'previewId':preview['previewId']},status=409);current=self.call('GET','/instances/'+i['id']);assert current['uid']==uid and current['currentVersionId']==o['versionId'];runtime=self.call('POST','/instances/'+i['id']+'/refresh',{})
    if newuid:assert self.cr()['metadata']['uid']==newuid and runtime['summary']=='Unknown'
    else:assert self.cr_absent() and runtime['summary']=='Missing'
    return {'originalUID':uid,'replacementUID':newuid,'deleteRejected':failed,'runtime':runtime,'historyPreserved':current['currentVersionId']}
@@ -154,10 +154,10 @@ class Suite(KSMSuite):
    if case.endswith('finalizer'):
     self.k('patch','kubestatemetrics',self.crname,'--type=merge','-p',json.dumps({'metadata':{'finalizers':['phase1.fixture/hold']}}),target=self.target)
    if case.endswith('pod-remains') or case.endswith('read-failure') or case.endswith('delete-response-drop'):
-    proxy=self.setup_proxy();action='pause_before_send' if case.endswith('pod-remains') else ('drop_and_block_reads' if case.endswith('read-failure') else 'drop_after_upstream');proxy.arm('DELETE','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+self.crname,action)
+    proxy=self.setup_proxy();action='pause_before_send' if case.endswith('pod-remains') else ('drop_and_block_aux' if case.endswith('read-failure') else 'drop_after_upstream');proxy.arm('DELETE','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+self.crname,action)
    op=self.delete(i,False)
    if case.endswith('pod-remains'):
-    proxy.paused();pods=json.loads(self.k('-n',moved,'get','pods','-o','json',target=self.target).stdout)['items'];assert pods;orphan=pods[0];self.k('-n',moved,'patch','pod',orphan['metadata']['name'],'--type=merge','-p',json.dumps({'metadata':{'ownerReferences':[],'labels':{'phase1.fixture/orphan':self.a.prefix}}}),target=self.target);proxy.control('release',{'ruleId':proxy.control('state')['rule']['id']})
+    proxy.paused();pods=json.loads(self.k('-n',moved,'get','pods','-o','json',target=self.target).stdout)['items'];assert pods;orphan=pods[0];labels={k:None for k in orphan['metadata'].get('labels',{})};labels['phase1.fixture/orphan']=self.a.prefix;self.k('-n',moved,'patch','pod',orphan['metadata']['name'],'--type=merge','-p',json.dumps({'metadata':{'ownerReferences':[],'labels':labels}}),target=self.target);proxy.control('release',{'ruleId':proxy.control('state')['rule']['id']})
    if case.endswith('delete-response-drop'):
     done=self.state(op,'SUCCEEDED',timeout=100);events=self.capture_proxy();assert len(self.mutations(events,'DELETE'))==1;return {'operation':done,'originalUID':uid,'mutationCount':1,'events':events,'resourcesGone':not self.workloads() and self.cr_absent()}
    blocked=self.state(op,'DELETION_BLOCKED','DELETION_VERIFYING');time.sleep(.5);assert self.call('GET','/operations/'+op['operationId'])['state']!='SUCCEEDED';self.action(op,'retry',409);self.call('POST','/clusters/'+self.cluster['id']+'/unregister',{},status=409)

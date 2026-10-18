@@ -63,7 +63,7 @@ agent-seed-check: ## 共享组件/旧预览迁移与脱敏回归，不替代Agen
 	$(GO) test ./internal/platform -count=1 -run 'Test(Shared|P04|F04Encrypted|F03KSM)'
 
 e2e-lifecycle-q: ## 生命周期快速层，真实HTTP/Kitex/SQLite与确定性派发边界
-	$(GO) test ./internal/platform -count=1 -run 'Test(P08Cancellation|P07Retry|PublicationUnknown|T08Shutdown|P14Foreground|I06Cookie|P13Restart|DeletionCross|DeletionCompletion|Deletion404|ShutdownCloses|F04Lifecycle|Shared|F04Encrypted)' $(E2E_ARGS)
+	$(GO) test ./internal/platform -count=1 -run 'Test(P08Cancellation|P07Retry|PublicationUnknown|T08Shutdown|P14Foreground|I06Cookie|P13Restart|DeletionPreview|DeletionCross|DeletionCompletion|Deletion404|ShutdownCloses|F04Lifecycle|Shared|F04Encrypted)' $(E2E_ARGS)
 
 e2e-lifecycle: ## 发布删除恢复真实集群验收，E2E_ARGS必须明确环境与冻结来源
 	$(PYTHON) scripts/acceptance/lifecycle.py $(E2E_ARGS)
