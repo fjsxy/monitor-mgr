@@ -514,3 +514,37 @@ func TestReferenceMetadataRequiresCompletePagesAndNeverReturnsSecretValues(t *te
 		t.Fatal("Secret values leaked into reference metadata")
 	}
 }
+
+func TestClusterCanRegisterWithRestrictedComponentCapabilities(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/apis/authentication.k8s.io/v1/selfsubjectreviews":
+			io.WriteString(w, `{"status":{"userInfo":{"username":"restricted-reader"}}}`)
+		case "/api/v1/namespaces/kube-system":
+			io.WriteString(w, `{"metadata":{"uid":"restricted-cluster-uid"}}`)
+		case "/version":
+			io.WriteString(w, `{"gitVersion":"v1.28.15"}`)
+		default:
+			w.WriteHeader(403)
+			io.WriteString(w, `{}`)
+		}
+	}))
+	defer srv.Close()
+	ca := base64.StdEncoding.EncodeToString([]byte(pemCert(srv.Certificate().Raw)))
+	cfg := `{"clusters":[{"name":"c","cluster":{"server":"` + srv.URL + `","certificate-authority-data":"` + ca + `"}}],"users":[{"name":"u","user":{"token":"fixture-token"}}],"contexts":[{"name":"explicit","context":{"cluster":"c","user":"u"}}]}`
+	p, c, owner := clusterPlatform(t)
+	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "restricted", "ownerId": owner, "context": "explicit", "kubeconfig": cfg}, c, "restricted", 202)
+	done := awaitClusterOperation(t, p, c, op["operationId"].(string))
+	if done["state"] != "SUCCEEDED" {
+		t.Fatalf("business permissions incorrectly blocked registration: %v", done)
+	}
+	cl := clusterCall(t, p, "GET", "/clusters/"+done["clusterId"].(string), nil, c, "", 200)
+	for _, v := range cl["capabilities"].([]any) {
+		cap := v.(map[string]any)
+		if cap["allowed"] != false || cap["reason"] == "" {
+			t.Fatalf("restricted component claimed available: %v", cap)
+		}
+	}
+	clusterCall(t, p, "GET", "/clusters/"+done["clusterId"].(string)+"/namespaces", nil, c, "", 403)
+}
