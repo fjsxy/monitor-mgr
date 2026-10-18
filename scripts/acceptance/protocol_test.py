@@ -15,6 +15,23 @@ HERE = Path(__file__).resolve().parent
 
 
 class ProtocolCLI(unittest.TestCase):
+    def test_inherited_lane_lease_does_not_relock_or_unlock_batch_owner(self):
+        """受控child共享同一open-file-description；退出后整批owner仍持独占锁。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lane = root / 'api.lock'
+            with lane.open('a') as owner:
+                fcntl.flock(owner, fcntl.LOCK_EX)
+                result = subprocess.run([sys.executable, str(HERE/'session.py'), 'protocol-child',
+                                         '--output', str(root/'child'), '--api-lane', str(lane),
+                                         '--inherited-lane-fd', str(owner.fileno()), '--mode', 'before-first'],
+                                        pass_fds=(owner.fileno(),), capture_output=True, timeout=5)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue((root/'child'/'setup-entered').exists())
+                with lane.open('a') as contender:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(contender, fcntl.LOCK_EX|fcntl.LOCK_NB)
+
     """只从公开 CLI、持久 index 和进程退出观察停止协议。"""
 
     def test_before_first_failure_keeps_all_keys(self):
