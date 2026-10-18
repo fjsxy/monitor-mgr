@@ -48,7 +48,7 @@ class BatchSession:
     """在 Suite 构造前保存期望键，单一 child 持锁至全部 finally 和收据落盘。"""
 
     def __init__(self, output, *, expected, run_id, profile, candidate, lane=None,
-                 environment=None, source=None, protocol_fixture=False):
+                 environment=None, source=None, protocol_fixture=False, inherited_lane_fd=None):
         self.out = Path(output).resolve()
         if self.out.exists() and any(self.out.iterdir()):
             raise ValueError("新的 attempt 不能覆盖已有输出目录")
@@ -56,6 +56,8 @@ class BatchSession:
         os.chmod(self.out, 0o700)
         self.lane_path = lane
         self.lane = None
+        self.inherited_lane_fd = inherited_lane_fd
+        self.borrowed_lane = False
         self.signals = []
         self.old_handlers = {}
         self.cleaning = False
@@ -98,6 +100,20 @@ class BatchSession:
         self.index["state"] = "waiting_lock" if self.lane_path else "running"
         self.flush()
         if self.lane_path:
+            if self.inherited_lane_fd is not None:
+                inherited = os.fstat(self.inherited_lane_fd)
+                declared = os.stat(self.lane_path)
+                if (inherited.st_dev, inherited.st_ino) != (declared.st_dev, declared.st_ino):
+                    raise ValueError("继承lane与声明路径不符")
+                # 关键：同一open-file-description的非阻塞核验不会再次等待父owner；不同租约立即失败。
+                fcntl.flock(self.inherited_lane_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.lane = os.fdopen(os.dup(self.inherited_lane_fd), "a")
+                self.borrowed_lane = True
+                self.index["state"] = "running"
+                self.index["laneOwnership"] = "inherited-batch-lease"
+                self.flush()
+                self.checkpoint()
+                return self
             self.lane = open(self.lane_path, "a")
             while True:
                 self.checkpoint()
@@ -142,7 +158,8 @@ class BatchSession:
             self.flush()
         finally:
             if self.lane:
-                fcntl.flock(self.lane, fcntl.LOCK_UN)
+                if not self.borrowed_lane:
+                    fcntl.flock(self.lane, fcntl.LOCK_UN)
                 self.lane.close()
                 self.lane = None
             for sig, handler in self.old_handlers.items():
@@ -165,7 +182,7 @@ def protocol_child(a):
     session = BatchSession(a.output, expected=[{"variantId": "fixture.first", "layer": "Q"},
                                             {"variantId": "fixture.second", "layer": "Q"}],
                            run_id="protocol-child", profile="validator-test", candidate="fixture",
-                           lane=a.api_lane, protocol_fixture=True)
+                           lane=a.api_lane, protocol_fixture=True, inherited_lane_fd=a.inherited_lane_fd)
     error = None
     try:
         session.start()
@@ -191,5 +208,6 @@ if __name__ == "__main__":
     parser.add_argument("command", choices=["protocol-child"])
     parser.add_argument("--output", required=True)
     parser.add_argument("--api-lane")
+    parser.add_argument("--inherited-lane-fd", type=int)
     parser.add_argument("--mode", choices=["lock-wait", "before-first", "after-first"], required=True)
     raise SystemExit(protocol_child(parser.parse_args()))
