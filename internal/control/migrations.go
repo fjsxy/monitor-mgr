@@ -1,3 +1,4 @@
+// SQLite按连续版本迁移；升级前保留一致性快照，失败不能替换为空库。
 package control
 
 import (

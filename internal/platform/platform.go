@@ -1,4 +1,4 @@
-// Package platform assembles the HTTP adapter and real loopback Kitex service.
+// Package platform 组装HTTP入口与真实loopback Kitex服务，业务规则由管控服务统一执行。
 package platform
 
 import (
@@ -187,6 +187,7 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 		ctx.SessionToken = &cookie.Value
 	}
 	p.cfg.Logger.Info("业务请求", "requestId", requestID, "transport", "http-to-kitex", "method", r.Method, "path", r.URL.Path)
+	// 关键：实例入口同样只调用真实RPC，不以数据库/目标API旁路降级。
 	if p.instanceRoutes(w, r, ctx, requestID) {
 		return
 	}

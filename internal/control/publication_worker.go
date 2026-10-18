@@ -1,3 +1,4 @@
+// 发布执行使用应用生命周期；持久化派发资格后仅发送一次写请求，运行就绪另行观察。
 package control
 
 import (
@@ -5,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
+	"log/slog"
 	"time"
 )
 
@@ -70,7 +72,7 @@ func (s *Store) targetForActor(ctx context.Context, actor, cluster string) (*Tar
 	return t, cl, nil
 }
 func (s *Store) executePublication(life context.Context, id string) {
-	// 与账号/归属/凭据切换共用保护；从当前授权至实际网络写不会穿过失权窗口。
+	// 关键：与账号/归属/凭据切换共用保护；从当前授权至实际网络写不会穿过失权窗口。
 	if s.OperationBoundary != nil {
 		if s.OperationBoundary("beforeDispatch", id) != nil {
 			return
@@ -128,7 +130,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 		s.finishPublication(id, "FAILED", e, nil)
 		return
 	}
-	// 请求体只替换支持的 spec，完整保留目标当前非平台 metadata/status/finalizers。
+	// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
 	body := ksmCR(cfg.Name, cfg.spec())
 	method, path := "POST", ksmPath
 	if i.Uid != "" {
@@ -141,6 +143,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 			return
 		}
 	}
+	// 关键：网络调用前先持久化可能已发送，崩溃后不能猜测未发送并重放。
 	tx, e := s.DB.BeginTx(life, nil)
 	if e != nil {
 		return
@@ -177,6 +180,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 			return
 		}
 	}
+	slog.Info("目标API写请求", "operationId", id, "instanceId", i.Id, "clusterId", i.ClusterId, "method", method, "path", path)
 	outcome := t.Mutate(life, method, path, body)
 	written, e := outcome.Object, outcome.Err
 	if e != nil {

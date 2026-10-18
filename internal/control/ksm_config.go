@@ -1,3 +1,4 @@
+// KSM配置把平台编辑意图映射为固定monitor-op契约；未启用角色值只留在草稿中。
 package control
 
 import (

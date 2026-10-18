@@ -1,3 +1,4 @@
+// Package control 统一承担业务授权、SQLite持久化与目标集群访问；HTTP层不能绕过此边界。
 package control
 
 import (
@@ -104,7 +105,7 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 	db.SetMaxOpenConns(1)
 
 	s := &Store{DB: db, lock: lock, Now: now, SessionTTL: ttl, Key: key, limits: newTargetLimits(), observationEpoch: ID()}
-	// 有密文的旧库必须先用原密钥验证，再制作迁移快照或推进 schema。
+	// 关键：有密文旧库必须先验证原密钥，再制作快照或推进schema，错误密钥不能改变恢复基线。
 	if err = s.verifyExistingCredentials(); err != nil {
 		db.Close()
 		return fail(err)

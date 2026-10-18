@@ -7,6 +7,7 @@ HTTP_ADDR ?= 127.0.0.1:18080
 RPC_ADDR ?= 127.0.0.1:18888
 DATA_DIR ?= data/local
 IMAGE ?= monitor-mgr:dev
+SOURCE_SHA ?= $(shell git rev-parse HEAD)
 PLATFORM ?= linux/arm64
 BASE_URL ?= http://127.0.0.1:18080
 E2E_ARGS ?=
@@ -36,9 +37,14 @@ build: ## 构建平台二进制
 run: build web-build ## 启动本地平台（DATA_DIR/HTTP_ADDR/RPC_ADDR 可配置）
 	./bin/monitor-mgr -data-dir "$(DATA_DIR)" -http "$(HTTP_ADDR)" -rpc "$(RPC_ADDR)" -static web/dist
 image: ## 构建固定平台镜像（IMAGE/PLATFORM 可配置）
-	docker build --platform "$(PLATFORM)" --provenance=false --sbom=false -t "$(IMAGE)" .
+	docker build --platform "$(PLATFORM)" --provenance=false --sbom=false --build-arg SOURCE_SHA="$(SOURCE_SHA)" -t "$(IMAGE)" .
 acceptance-plan: ## 校验验收目录元数据，不代表运行通过
 	$(PYTHON) scripts/validate-acceptance.py
 e2e-clusters: ## 真实集群验收；通过 E2E_ARGS 显式指定环境与来源
 	$(PYTHON) scripts/acceptance/clusters.py $(E2E_ARGS)
 check: acceptance-plan test-race vet web-build ## 运行本地质量检查，不替代完整集群门禁
+
+e2e-ksm: ## KSM真实集群验收；E2E_ARGS必须明确环境、来源和输出
+	$(PYTHON) scripts/acceptance/ksm.py $(E2E_ARGS)
+e2e-ksm-q: ## KSM快速层，仍经过真实HTTP/Kitex/SQLite
+	$(GO) test ./internal/platform -count=1 -run 'Test(K10|P0[245]|ExternalKSM|F03KSM|R03KSM|F02KSM|F05Publication|F04Encrypted)'

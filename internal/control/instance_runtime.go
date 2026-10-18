@@ -1,3 +1,4 @@
+// 运行摘要仅由身份有效且适用于当前generation的CR状态推导，与发布写入结果分别表达。
 package control
 
 import (

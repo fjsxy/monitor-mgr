@@ -1,3 +1,4 @@
+// 发布受理负责冻结来源、校验预览并原子建立版本、操作、尝试、幂等和实例保护。
 package control
 
 import (
@@ -228,7 +229,7 @@ func (s *Store) enrichPublicationOperation(ctx context.Context, q clusterQuery, 
 	}
 }
 func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext, r *rpc.PublishRequest) (*rpc.Operation, error) {
-	// 当前授权先于幂等命中；命中不依赖目标 API 或已变化的草稿。
+	// 关键：授权必须先于幂等命中，否则旧请求键可绕过当前归属或账号失效。
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return nil, e
@@ -306,6 +307,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	version, attempt := ID(), ID()
 	o := &rpc.Operation{OperationId: ID(), Action: "PUBLISH", State: "QUEUED", ClusterId: i.ClusterId, ActorId: p.Account.Id, OwnerId: p.Account.Id, CreatedAt: now, UpdatedAt: now, Message: "已受理，尚未确认 CR 写入", InstanceId: &i.Id, VersionId: &version, AttemptId: &attempt}
+	// 关键：版本来源、操作、首次尝试、幂等和保护必须同事务提交，避免返回受理后缺少恢复依据。
 	config, _ := json.Marshal(cfg)
 	spec, _ := json.Marshal(cfg.spec())
 	for _, q := range []struct {
