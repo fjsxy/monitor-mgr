@@ -17,6 +17,12 @@ test('P07.primary 页面重试固定版本并进入运行信息',async({page},in
  await expect(drawer.getByText(/尝试 1 · 失败/)).toBeVisible();await expect(drawer.getByText(/尝试 2 · 已完成/)).toBeVisible();
  const draft=await (await page.request.get(`/api/v1/instances/${instanceId}/draft`)).json();expect(draft.ksm.resources.requestCPU).toBe('900m');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await expect(drawer.getByText('CR 已写入',{exact:true})).toBeVisible();
+ await expect(drawer.getByText('平台纳管实例',{exact:true})).toBeVisible();
+ await drawer.getByRole('button',{name:'刷新当前状态',exact:true}).click();
+ await expect(drawer.locator('.runtime-details dd').first()).toContainText('Deployment');
  await page.screenshot({path:info.outputPath('lifecycle-original-version-retry.png')});
+ await drawer.getByText(/尝试 2 · 已完成/).scrollIntoViewIfNeeded();
+ await page.screenshot({path:info.outputPath('lifecycle-attempt-history.png')});
  info.annotations.push({type:'browserVersion',description:page.context().browser()?.version()??'unknown'});
 });
