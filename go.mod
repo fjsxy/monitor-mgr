@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	github.com/cloudwego/gopkg v0.2.0
 	github.com/cloudwego/kitex v0.16.3
+	github.com/cloudwego/netpoll v0.7.2
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sys v0.49.0
 	modernc.org/sqlite v1.60.1
@@ -20,7 +21,6 @@ require (
 	github.com/cloudwego/fastpb v0.0.6 // indirect
 	github.com/cloudwego/frugal v0.3.1 // indirect
 	github.com/cloudwego/localsession v0.2.1 // indirect
-	github.com/cloudwego/netpoll v0.7.2 // indirect
 	github.com/cloudwego/runtimex v0.1.1 // indirect
 	github.com/cloudwego/thriftgo v0.4.5 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

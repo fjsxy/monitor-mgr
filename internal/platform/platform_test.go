@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/cloudwego/kitex/client"
+	"github.com/cloudwego/netpoll"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -523,5 +525,72 @@ func TestDirectRPCMutationReplayDoesNotRepeatPasswordOrRoleChange(t *testing.T) 
 	_, err = cli.UpdateAccount(context.Background(), ctx, &rpc.UpdateAccountRequest{Id: account.Id, Role: &role})
 	if !errors.As(err, &apiErr) || apiErr.Code != "UNAUTHENTICATED" {
 		t.Fatalf("幂等命中绕过当前授权: %v", err)
+	}
+}
+
+func TestT07DatabaseCorruptionNeverStartsReady(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "master.key"), bytes.Repeat([]byte{9}, 32), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "platform.db"), []byte("not-a-sqlite-database"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := platform.Start(context.Background(), platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
+	if err == nil {
+		p.Close(context.Background())
+		t.Fatal("损坏数据库仍 ready")
+	}
+}
+
+type switchableDialer struct {
+	mu          sync.Mutex
+	failed      bool
+	connections []net.Conn
+}
+
+func (d *switchableDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.failed {
+		return nil, errors.New("controlled RPC transport unavailable")
+	}
+	conn, err := netpoll.DialConnection(network, address, timeout)
+	if err == nil {
+		d.connections = append(d.connections, conn)
+	}
+	return conn, err
+}
+func (d *switchableDialer) breakConnections() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.failed = true
+	for _, conn := range d.connections {
+		conn.Close()
+	}
+}
+func TestT07ReadyStopsWhenRealRPCTransportFails(t *testing.T) {
+	d := new(switchableDialer)
+	p, err := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", RPCDialer: d})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close(context.Background())
+	res, err := http.Get(p.URL() + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatal("健康平台不 ready")
+	}
+	d.breakConnections()
+	res, err = http.Get(p.URL() + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 503 {
+		t.Fatalf("真实RPC不可达仍 ready: %d", res.StatusCode)
 	}
 }
