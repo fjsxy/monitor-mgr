@@ -29,13 +29,19 @@ class Suite(AgentSuite):
   if (target,ns) not in self.namespace_uids:self.namespace(ns,target)
   cluster=cluster or self.register(target);name=self.a.prefix+'-ksm-'+str(index)+'-'+target
   i=self.call('POST','/clusters/'+cluster['id']+'/instances',{'component':'kube-state-metrics','ksm':self.ksm_cfg(name,ns,mode)},status=201)
+  self.pending_ksms[i['id']]={'target':target,'name':name,'namespace':ns,'clusterId':cluster['id']}
   p=self.call('POST','/instances/'+i['id']+'/previews',{'draftRevision':1})
   op=self.call('POST','/instances/'+i['id']+'/publications',{'draftRevision':p['draftRevision'],'previewId':p['previewId'],'overwriteDrift':False},status=202)
   done=self.operation(op);assert done['state']=='SUCCEEDED',done
-  cr=self.get('kubestatemetrics',name,target=target);self.ksms.append((target,name,cr['metadata']['uid']))
+  # 关键：清理原UID来自平台已确认的创建结果；事后同名GET仅核对，不能成为认领依据。
+  confirmed=self.confirm_ksm(i['id']);cr=self.get('kubestatemetrics',name,target=target);assert cr['metadata']['uid']==confirmed
   data={'instance':i,'cluster':cluster,'target':target,'namespace':ns,'name':name,'uid':cr['metadata']['uid'],'versionId':done['versionId']};self.instances.append(data)
   self.wait(lambda:self.call('POST','/instances/'+i['id']+'/refresh',{}),lambda r:r.get('summary')=='Available' and r.get('desiredPods')==r.get('availablePods')==(2 if mode=='StatefulSetSharded' else 1),'真实KSM Ready',150)
   data['runtimeProof']=self.ksm_proof(data);return data
+ def confirm_ksm(self,instance_id):
+  expected=self.pending_ksms[instance_id];i=self.call('GET','/instances/'+instance_id)
+  assert i['id']==instance_id and i['name']==expected['name'] and i['clusterId']==expected['clusterId'] and i['targetNamespace']==expected['namespace'] and i['component']=='kube-state-metrics' and i['uid'],'平台尚无可确认原UID，保留identity gap'
+  self.ksms.append((expected['target'],expected['name'],i['uid']));del self.pending_ksms[instance_id];return i['uid']
  def ksm_proof(self,item):
   target=item['target'];ns=item['namespace'];cr=self.get('kubestatemetrics',item['name'],target=target)
   assert cr['metadata']['uid']==item['uid']
@@ -142,7 +148,7 @@ class Suite(AgentSuite):
   assert recovered['uid']==item['uid'];return {**rebuild,'before':before,'firstReadUnknown':unknown,'recovered':recovered,'sameKeyAndDatabase':key==afterkey,'sessionExpiryPreserved':True,'keyProof':key,'actualKSM':item['runtimeProof']}
  def run(self):
   for index,case in enumerate(self.a.cases):
-   self.case=case;self.traces=[];self.instances=[];self.proxies=[];self.targetns=None;self.cookies=http.cookiejar.CookieJar()
+   self.case=case;self.traces=[];self.instances=[];self.proxies=[];self.pending_ksms={};self.targetns=None;self.cookies=http.cookiejar.CookieJar()
    record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
    try:
     record['platform']=self.deploy(case,index);assert record['platform']['imageID'].endswith(self.image_metadata.get('manifestDigest') or self.image_metadata['dockerInspectId'])
@@ -160,14 +166,14 @@ class Suite(AgentSuite):
     for number,proxy in enumerate(self.proxies):
      try:(self.out/(case+'.proxy-'+str(number)+'.jsonl')).write_text(proxy.events())
      except Exception:record.setdefault('evidenceErrors',[]).append('proxy事件不可读')
-    for target,kind,namespace in self.resources:
-     if kind!='namespace' or namespace==getattr(self,'ns',None):continue
+    for instance_id in list(self.pending_ksms):
      try:
-      for cr in self.get('kubestatemetrics',target=target)['items']:
-       if cr['spec'].get('targetNamespace')==namespace and cr['metadata']['name'].startswith(self.a.prefix+'-') and (target,cr['metadata']['name'],cr['metadata']['uid']) not in self.ksms:self.ksms.append((target,cr['metadata']['name'],cr['metadata']['uid']))
-     except Exception:record.setdefault('evidenceErrors',[]).append('KSM清理归属列表不可读')
+      self.confirm_ksm(instance_id)
+     except Exception:record.setdefault('evidenceErrors',[]).append('平台尚无可确认KSM原UID；不按同名或prefix认领清理')
     try:record['cleanup']=self.cleanup()
     except Exception as error:record['cleanup']={'success':False,'failures':[str(error)]}
+    if self.pending_ksms:
+     record['identityGaps']=self.pending_ksms;record['cleanup']['success']=False;record['cleanup']['failures'].append('KSM缺少产品确认原UID，保留identity gap且不认领事后同名对象')
     if record.get('evidenceErrors') or not record['cleanup']['success']:record['outcome']='failed'
     trace=self.out/(case+'.http.jsonl');trace.write_text(''.join(json.dumps(t,ensure_ascii=False)+'\n' for t in self.traces))
     record['evidenceRefs']=[{'path':str(p.relative_to(self.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(self.out.rglob('*')) if p.is_file() and (p.name.startswith(case+'.') and p.name!=case+'.json' or 'browser' in p.parts)]

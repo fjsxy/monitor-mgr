@@ -29,15 +29,16 @@ c=sqlite3.connect('/data/platform.db');c.execute('pragma foreign_keys=on');r=c.e
 
 def outside_instance(s,ksm):
  """真实外部CR由fixture创建，仅发现为只读；不以空集合跳过未纳管断言。"""
- external=copy.deepcopy(s.get('kubestatemetrics',ksm['name']));external={k:external[k] for k in ['apiVersion','kind','spec']};external['metadata']={'name':s.a.prefix+'-outside'};s.apply(external)
- actual=s.get('kubestatemetrics',external['metadata']['name']);s.ksms.append(('control',actual['metadata']['name'],actual['metadata']['uid']))
+ external=copy.deepcopy(s.get('kubestatemetrics',ksm['name']));external={k:external[k] for k in ['apiVersion','kind','spec']};external['metadata']={'name':s.a.prefix+'-outside'}
+ created=json.loads(s.k('create','-f','-','-o','json',data=external).stdout);s.ksms.append(('control',created['metadata']['name'],created['metadata']['uid']))
+ actual=s.get('kubestatemetrics',external['metadata']['name']);assert actual['metadata']['uid']==created['metadata']['uid']
  discovered=s.call('GET','/clusters/'+s.cluster['id']+'/instances')['instances'];readonly=next(v for v in discovered if v['uid']==actual['metadata']['uid'] and v['readOnly']);assert not readonly.get('currentVersionId');return readonly
 
 def prepare(s,case,index):
  s.target='control';s.targetns=s.a.prefix+'-browser-'+str(index);s.crname=s.a.prefix+'-agent-'+str(index)
  s.fixture(s.targetns);proxy=s.use_proxy() if case=='U05.primary' else None;s.cluster=s.register('control',proxy.config if proxy else None)
  fixture={'baseURL':s.base,'adminUsername':'admin','adminPassword':s.password,'clusterId':s.cluster['id'],'clusterName':s.cluster['name'],'namespace':s.targetns,'runId':s.a.prefix}
- evidence={}
+ evidence={};managed_uids=set()
  if case=='U01.primary':
   second=s.register('data');fixture.update({'secondClusterId':second['id'],'secondClusterName':second['name']})
  if case=='U05.primary':
@@ -47,12 +48,17 @@ def prepare(s,case,index):
    path='/apis/'+cr['apiVersion']+('/namespaces/'+cr['metadata']['namespace'] if cr['metadata'].get('namespace') else '')+'/'+('prometheusagents' if component=='Prometheus Agent' else 'kubestatemetrics')+'/'+cr['metadata']['name']
    entries.append({'id':instance['id'],'component':component,'name':cr['metadata']['name'],'namespace':s.targetns,'expectedRequestCPU':cpu,'expectedSourceDraftRevision':1,'failureControl':{'baseURL':proxy.base,'controlToken':proxy.token,'writePath':path}})
   fixture['versionedInstances']=entries;evidence.update({'actualKSM':ksm['runtimeProof'],'actualAgent':agent_proof})
+  managed_uids={ksm['uid'],agent_proof['cr']['metadata']['uid']}
   readonly=outside_instance(s,ksm);fixture['unmanagedInstanceId']=readonly['id'];fixture['unmanagedInstances']=[{'id':readonly['id'],'name':readonly['name']}]
   large=large_revision(s,s.cluster,s.targetns);fixture.update({'largeRevisionInstanceId':large['id'],'largeRevision':'9007199254740992','expectedLargeRevision':'9007199254740993'})
  else:
   ksm=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'kube-state-metrics','ksm':s.ksm_cfg(s.a.prefix+'-layout-ksm',s.targetns)},status=201)
   agent=AgentSuite.create(s);fixture['draftInstances']=[{'id':ksm['id'],'component':'kube-state-metrics'},{'id':agent['id'],'component':'Prometheus Agent'}]
-  published=s.new_ksm(index,cluster=s.cluster,namespace=s.targetns);readonly=outside_instance(s,published);fixture['unmanagedInstances']=[{'id':readonly['id'],'name':readonly['name']}];evidence['actualKSM']=published['runtimeProof']
+  published=s.new_ksm(index,cluster=s.cluster,namespace=s.targetns);readonly=outside_instance(s,published);fixture['unmanagedInstances']=[{'id':readonly['id'],'name':readonly['name']}];evidence['actualKSM']=published['runtimeProof'];managed_uids={published['uid']}
+ # 统计期望来自fixture明确创建的3个平台实例和实际完整目标身份集合，不从被测统计字段反推。
+ actual_uids={o['metadata']['uid'] for o in [*s.get('kubestatemetrics')['items'],*s.get('prometheusagents','-A')['items']]}
+ fixture['initialStatistics']={'managed':3,'unmanaged':len(actual_uids-managed_uids)}
+ evidence['independentStatisticsInput']={'explicitManagedInstances':3,'targetObjectCount':len(actual_uids),'managedTargetObjectCount':len(managed_uids),'unmanaged':len(actual_uids-managed_uids)}
  service_access(s);pod=s.get('pod',s.pod,'-n',s.ns);evidence['browserPlatform']={'service':'monitor-mgr','namespace':s.ns,'podUID':pod['metadata']['uid'],'imageID':pod['status']['containerStatuses'][0]['imageID']};return fixture,evidence
 
 def execute(s,selector,fixture):
