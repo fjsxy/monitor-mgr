@@ -125,7 +125,7 @@ func TestDeletionPreviewSchema6UnsentCanContinue(t *testing.T) {
 		t.Fatal(e)
 	}
 	// 关键：移除v7表、列和版本记录，保持原操作/尝试/保护与加密凭据，构造精确旧shape。
-	if _, e = db.Exec(`PRAGMA foreign_keys=OFF;DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DROP TABLE deletion_previews;ALTER TABLE deletion_operations DROP COLUMN preview_id;DELETE FROM schema_migrations WHERE version>6;`); e != nil {
+	if _, e = db.Exec(dropAgentStorageSchema + `PRAGMA foreign_keys=OFF;DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DROP TABLE deletion_previews;ALTER TABLE deletion_operations DROP COLUMN preview_id;DELETE FROM schema_migrations WHERE version>6;`); e != nil {
 		t.Fatal(e)
 	}
 	db.Close()

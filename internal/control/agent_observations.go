@@ -4,7 +4,6 @@ package control
 import (
 	"context"
 	"encoding/json"
-	"net/url"
 	"sort"
 	"time"
 
@@ -211,95 +210,8 @@ func (s *Store) refreshAgentAuxiliary(ctx context.Context, i *rpc.ObservationIns
 	volumes, e := s.readAgentVolumes(ctx, i, t)
 	s.saveAgentSource(ctx, i, "PVC", &rpc.SourceObservation{Source: "PVC", Volumes: volumes}, e)
 }
+
+// readAgentVolumes经完整真实资源图核对并保存原UID卷历史，父资源消失不等于卷消失。
 func (s *Store) readAgentVolumes(ctx context.Context, i *rpc.ObservationInstance, t *Target) ([]*rpc.VolumeObservation, error) {
-	prefix := "/api/v1/namespaces/" + url.PathEscape(i.TargetNamespace)
-	sts, e := t.listObjects(ctx, "/apis/apps/v1/namespaces/"+url.PathEscape(i.TargetNamespace)+"/statefulsets")
-	if e != nil {
-		return nil, e
-	}
-	owners := map[string]bool{}
-	for _, st := range sts {
-		if agentOwnedBy(st, "PrometheusAgent", i.Uid) {
-			uid := objectString(objectMap(st, "metadata"), "uid")
-			if uid == "" {
-				return nil, Error("TARGET_ERROR", "StatefulSet身份不完整")
-			}
-			owners[uid] = true
-		}
-	}
-	pods, e := t.listObjects(ctx, prefix+"/pods")
-	if e != nil {
-		return nil, e
-	}
-	claims := map[string][]string{}
-	for _, pod := range pods {
-		owned := false
-		for uid := range owners {
-			if agentOwnedBy(pod, "StatefulSet", uid) {
-				owned = true
-			}
-		}
-		if !owned {
-			continue
-		}
-		name := objectString(objectMap(pod, "metadata"), "name")
-		ready := false
-		for _, raw := range anySlice(objectMap(pod, "status")["conditions"]) {
-			condition, _ := raw.(map[string]any)
-			if condition["type"] == "Ready" && condition["status"] == "True" {
-				ready = true
-			}
-		}
-		mountedVolumes := map[string]bool{}
-		for _, raw := range anySlice(objectMap(pod, "spec")["containers"]) {
-			container, _ := raw.(map[string]any)
-			for _, rawMount := range anySlice(container["volumeMounts"]) {
-				mount, _ := rawMount.(map[string]any)
-				mountedVolumes[objectString(mount, "name")] = true
-			}
-		}
-		for _, raw := range anySlice(objectMap(pod, "spec")["volumes"]) {
-			v, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			claim := objectString(objectMap(v, "persistentVolumeClaim"), "claimName")
-			if claim != "" {
-				if _, known := claims[claim]; !known {
-					claims[claim] = []string{}
-				}
-				// Ready及真实volumeMount共同证明Pod采用该卷；仅spec声明不冒充挂载成功。
-				if ready && mountedVolumes[objectString(v, "name")] {
-					claims[claim] = append(claims[claim], name)
-				}
-			}
-		}
-	}
-	pvcs, e := t.listObjects(ctx, prefix+"/persistentvolumeclaims")
-	if e != nil {
-		return nil, e
-	}
-	out := []*rpc.VolumeObservation{}
-	for _, pvc := range pvcs {
-		meta := objectMap(pvc, "metadata")
-		name := objectString(meta, "name")
-		mounted, ok := claims[name]
-		if !ok {
-			continue
-		}
-		spec := objectMap(pvc, "spec")
-		access := []string{}
-		for _, raw := range anySlice(spec["accessModes"]) {
-			if v, ok := raw.(string); ok {
-				access = append(access, v)
-			}
-		}
-		uid := objectString(meta, "uid")
-		if uid == "" {
-			return nil, Error("TARGET_ERROR", "PVC身份不完整")
-		}
-		out = append(out, &rpc.VolumeObservation{Namespace: i.TargetNamespace, Name: name, Uid: uid, Phase: objectString(objectMap(pvc, "status"), "phase"), RequestedStorage: objectString(objectMap(objectMap(spec, "resources"), "requests"), "storage"), AccessModes: access, StorageClass: objectString(spec, "storageClassName"), MountedByPods: mounted})
-	}
-	sort.Slice(out, func(a, b int) bool { return out[a].Name < out[b].Name })
-	return out, nil
+	return s.observeAgentVolumes(ctx, i, t)
 }

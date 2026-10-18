@@ -187,3 +187,85 @@ func TestR03AgentZeroUsesApplicableStatus(t *testing.T) {
 		})
 	}
 }
+
+// 已确认原UID卷在父资源消失后仍单独读取；同名新UID不能取代历史身份。
+func TestAgentStorageRetainedIdentitySurvivesParents(t *testing.T) {
+	p, c, cluster, _, f := agentSafetyFixture(t, nil)
+	name := "history-agent"
+	cfg := agentConfig(name, "monitoring")
+	i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
+	id := i["id"].(string)
+	preview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "", 200)
+	op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
+	if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
+		t.Fatal("前置发布失败")
+	}
+	var mu sync.Mutex
+	parents := true
+	pvcUID := "original-pvc-uid"
+	claim := "prom-agent-history-agent-db-prom-agent-history-agent-0"
+	f.mu.Lock()
+	f.hook = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method != "GET" {
+			return false
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		items := []any{}
+		switch r.URL.Path {
+		case "/apis/apps/v1/namespaces/monitoring/statefulsets":
+			if parents {
+				items = append(items, map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": "prom-agent-history-agent", "uid": "original-st-uid", "ownerReferences": []any{map[string]any{"kind": "PrometheusAgent", "uid": "uid-monitoring/history-agent", "controller": true}}}, "spec": map[string]any{"replicas": 1}})
+			}
+		case "/api/v1/namespaces/monitoring/pods":
+			if parents {
+				items = append(items, map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": "prom-agent-history-agent-0", "uid": "original-pod-uid", "ownerReferences": []any{map[string]any{"kind": "StatefulSet", "uid": "original-st-uid", "controller": true}}}, "spec": map[string]any{"volumes": []any{map[string]any{"name": "wal", "persistentVolumeClaim": map[string]any{"claimName": claim}}}, "containers": []any{map[string]any{"volumeMounts": []any{map[string]any{"name": "wal", "mountPath": "/prometheus"}}}}}, "status": map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "True"}}}})
+			}
+		case "/api/v1/namespaces/monitoring/persistentvolumeclaims":
+			items = append(items, map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": claim, "uid": pvcUID}, "spec": map[string]any{"resources": map[string]any{"requests": map[string]any{"storage": "1Gi"}}, "accessModes": []any{"ReadWriteOnce"}}, "status": map[string]any{"phase": "Bound"}})
+		default:
+			return false
+		}
+		json.NewEncoder(w).Encode(map[string]any{"items": items})
+		return true
+	}
+	f.mu.Unlock()
+	source := func() map[string]any {
+		clusterCall(t, p, "POST", "/instances/"+id+"/refresh", map[string]any{}, c, "", 200)
+		current := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+		for _, raw := range current["sources"].([]any) {
+			v := raw.(map[string]any)
+			if v["source"] == "PVC" {
+				return v
+			}
+		}
+		t.Fatal("无PVC来源")
+		return nil
+	}
+	first := source()
+	if len(storageVolumes(first)) != 1 {
+		t.Fatal("未识别原卷", first)
+	}
+	mu.Lock()
+	parents = false
+	mu.Unlock()
+	retained := source()
+	if len(storageVolumes(retained)) != 1 || retained["volumes"].([]any)[0].(map[string]any)["uid"] != "original-pvc-uid" {
+		t.Fatal("父消失后丢失原卷身份", retained)
+	}
+	if len(retained["volumes"].([]any)[0].(map[string]any)["mountedByPods"].([]any)) != 0 {
+		t.Fatal("残留卷误报挂载", retained)
+	}
+	mu.Lock()
+	pvcUID = "replacement-pvc-uid"
+	mu.Unlock()
+	replaced := source()
+	if replaced["error"] == "" || replaced["historical"] != true {
+		t.Fatal("同名新UID被认领", replaced)
+	}
+}
+
+// storageVolumes把合法空列表作为空集断言，避免缺失字段导致测试panic。
+func storageVolumes(source map[string]any) []any { v, _ := source["volumes"].([]any); return v }
+
+const dropAgentStorageSchema = `DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
