@@ -1,0 +1,3907 @@
+{
+  "status": "planned_not_executed",
+  "approved_on": "2026-10-18",
+  "requirements": {
+    "TOPO": [
+      "部署与拓扑",
+      "https://github.com/fjsxy/monitor-mgr/issues/11#issuecomment-6245825277"
+    ],
+    "AUTH": [
+      "账号与归属",
+      "https://github.com/fjsxy/monitor-mgr/issues/5#issuecomment-6097118451"
+    ],
+    "PERSIST": [
+      "数据库与凭据",
+      "https://github.com/fjsxy/monitor-mgr/issues/4#issuecomment-6096776961"
+    ],
+    "KSM": [
+      "KSM配置",
+      "https://github.com/fjsxy/monitor-mgr/issues/6#issuecomment-6137938413"
+    ],
+    "AGENT": [
+      "Agent配置与存储",
+      "https://github.com/fjsxy/monitor-mgr/issues/7#issuecomment-6139516950"
+    ],
+    "PUBLISH": [
+      "发布与恢复",
+      "https://github.com/fjsxy/monitor-mgr/issues/8#issuecomment-6142918240"
+    ],
+    "OBS": [
+      "观测与故障",
+      "https://github.com/fjsxy/monitor-mgr/issues/9#issuecomment-6149704214"
+    ],
+    "UI": [
+      "已通过的C交互",
+      "https://github.com/fjsxy/monitor-mgr/issues/10#issuecomment-6208195215"
+    ],
+    "API": [
+      "接口与模块",
+      "https://github.com/fjsxy/monitor-mgr/issues/12#issuecomment-6214104420"
+    ]
+  },
+  "cases": [
+    {
+      "id": "T01",
+      "requirements": [
+        "TOPO"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "固定运行来源",
+      "steps": "按profile准备集群和依赖；回读节点、CRD、controller镜像及构建revision。",
+      "expected": "均符合锁定版本/摘要；main为1控制面2worker；FULL另有1控制面数据集群；缺锁或不Ready即环境失败。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独占测试运行标识、对应 profile 环境；平台卷及故障 fixture 与其他用例隔离。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "T01.primary",
+          "expected": "均符合锁定版本/摘要；main为1控制面2worker；FULL另有1控制面数据集群；缺锁或不Ready即环境失败。",
+          "steps": "按profile准备集群和依赖；回读节点、CRD、controller镜像及构建revision。 本子例输入：按profile准备集群和依赖；回读节点、CRD、controller镜像及构建revision。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "T02",
+      "requirements": [
+        "TOPO",
+        "API"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "平台实际运行在管控集群",
+      "steps": "启动单平台Pod；经HTTP Service/port-forward请求，并记录生成client与RPC server调用证据。",
+      "expected": "单Go进程真实经过Kitex；HTTP可达；RPC只监听Pod loopback且无Service端口；无宿主机业务旁路。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独占测试运行标识、对应 profile 环境；平台卷及故障 fixture 与其他用例隔离。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "T02.primary",
+          "expected": "单Go进程真实经过Kitex；HTTP可达；RPC只监听Pod loopback且无Service端口；无宿主机业务旁路。",
+          "steps": "启动单平台Pod；经HTTP Service/port-forward请求，并记录生成client与RPC server调用证据。 本子例输入：启动单平台Pod；经HTTP Service/port-forward请求，并记录生成client与RPC server调用证据。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "T03",
+      "requirements": [
+        "TOPO",
+        "AUTH"
+      ],
+      "layer": "K",
+      "target": "multi",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "两集群均可部署观测组件",
+      "steps": "从平台Pod分别注册管控/数据集群，在两边各下发KSM和Agent并读取对象。",
+      "expected": "目标UID独立；CR/workload出现在所选API；本地Operator分别调谐；同集群平台也经过注册授权。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独占测试运行标识、对应 profile 环境；平台卷及故障 fixture 与其他用例隔离。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "T03.primary",
+          "expected": "目标UID独立；CR/workload出现在所选API；本地Operator分别调谐；同集群平台也经过注册授权。",
+          "steps": "从平台Pod分别注册管控/数据集群，在两边各下发KSM和Agent并读取对象。 本子例输入：从平台Pod分别注册管控/数据集群，在两边各下发KSM和Agent并读取对象。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "T04",
+      "requirements": [
+        "TOPO",
+        "AUTH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "识别Pod不可达地址和TLS错误",
+      "steps": "分别提交指向平台Pod自身loopback的API地址、错误CA或名称的测试kubeconfig。",
+      "expected": "注册明确失败、不保存为已生效；不关闭TLS校验、不自动改写endpoint或使用平台Pod身份兜底。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独占测试运行标识、对应 profile 环境；平台卷及故障 fixture 与其他用例隔离。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "T04.loopback",
+          "expected": "连通失败，不保存为有效注册",
+          "steps": "分别提交指向平台Pod自身loopback的API地址、错误CA或名称的测试kubeconfig。 本子例输入：API endpoint 指向平台 Pod 自身未监听的 loopback 地址。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "T04.wrong-ca",
+          "expected": "TLS 校验失败，不能降级跳过校验",
+          "steps": "分别提交指向平台Pod自身loopback的API地址、错误CA或名称的测试kubeconfig。 本子例输入：目标可达，但 CA 错误。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "T04.wrong-name",
+          "expected": "名称核验失败，不能自动更改 endpoint",
+          "steps": "分别提交指向平台Pod自身loopback的API地址、错误CA或名称的测试kubeconfig。 本子例输入：目标可达，但 TLS serverName 不匹配。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "T05",
+      "requirements": [
+        "TOPO",
+        "PERSIST",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "平台Pod重建保留管理状态",
+      "steps": "保存账号/草稿/历史/幂等记录和密文；删除平台Pod；使用原卷与密钥重建。",
+      "expected": "数据、原密钥及有效Session恢复；SQLite可读写；任务按恢复规则处理，不因Pod消失被当作删除。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独占测试运行标识、对应 profile 环境；平台卷及故障 fixture 与其他用例隔离。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "T05.primary",
+          "expected": "数据、原密钥及有效Session恢复；SQLite可读写；任务按恢复规则处理，不因Pod消失被当作删除。",
+          "steps": "保存账号/草稿/历史/幂等记录和密文；删除平台Pod；使用原卷与密钥重建。 本子例输入：保存账号/草稿/历史/幂等记录和密文；删除平台Pod；使用原卷与密钥重建。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "T06",
+      "requirements": [
+        "PERSIST",
+        "TOPO"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "缺密钥不能破坏已有密文",
+      "steps": "在有凭据密文的测试卷上移走密钥后启动，再恢复原密钥。",
+      "expected": "缺密钥时启动明确失败且不生成替代密钥；恢复原密钥后可解密；文件owner/mode符合0600要求。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独占测试运行标识、对应 profile 环境；平台卷及故障 fixture 与其他用例隔离。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "T06.primary",
+          "expected": "缺密钥时启动明确失败且不生成替代密钥；恢复原密钥后可解密；文件owner/mode符合0600要求。",
+          "steps": "在有凭据密文的测试卷上移走密钥后启动，再恢复原密钥。 本子例输入：在有凭据密文的测试卷上移走密钥后启动，再恢复原密钥。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "T07",
+      "requirements": [
+        "API",
+        "TOPO"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "就绪必须覆盖DB与真实RPC",
+      "steps": "参数化注入数据库不可用、RPC探测失败、listener占用及单目标API断联。",
+      "expected": "前三种不ready并清理半启动资源；仅目标断联时平台仍ready；静态页成功不等于业务就绪。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独占测试运行标识、对应 profile 环境；平台卷及故障 fixture 与其他用例隔离。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "T07.db",
+          "expected": "不 ready，清理半启动资源",
+          "steps": "参数化注入数据库不可用、RPC探测失败、listener占用及单目标API断联。 本子例输入：数据库无法打开或探测失败。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "T07.rpc",
+          "expected": "不 ready，静态页面可访问不能代替业务探测",
+          "steps": "参数化注入数据库不可用、RPC探测失败、listener占用及单目标API断联。 本子例输入：真实 RPC 探测失败。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "T07.listener",
+          "expected": "不 ready，另一半 listener 被清理",
+          "steps": "参数化注入数据库不可用、RPC探测失败、listener占用及单目标API断联。 本子例输入：HTTP 或 RPC 所需 listener 已被占用，分别执行。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "T07.target-offline",
+          "expected": "平台仍 ready，目标状态单独失败",
+          "steps": "参数化注入数据库不可用、RPC探测失败、listener占用及单目标API断联。 本子例输入：只有一个已注册目标 API 断联。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "T08",
+      "requirements": [
+        "API",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "退出不误报取消或失败",
+      "steps": "在有排队/发送中任务时终止平台Pod；观测停止接收、等待及重启记录。",
+      "expected": "停止新操作/派发，默认等待10秒；未知结果落盘、DB最后关闭；恢复不自动重放。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独占测试运行标识、对应 profile 环境；平台卷及故障 fixture 与其他用例隔离。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "T08.primary",
+          "expected": "停止新操作/派发，默认等待10秒；未知结果落盘、DB最后关闭；恢复不自动重放。",
+          "steps": "在有排队/发送中任务时终止平台Pod；观测停止接收、等待及重启记录。 本子例输入：在有排队/发送中任务时终止平台Pod；观测停止接收、等待及重启记录。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "I01",
+      "requirements": [
+        "AUTH"
+      ],
+      "layer": "B",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "初始化与临时密码流程",
+      "steps": "空库仅首次初始化管理员；由管理员创建临时密码用户，首次登录、改密后重新登录。",
+      "expected": "已有账号时不能再次初始化；密码以哈希保存；临时密码用户首次登录必须改密，旧Session失效，改密后正常访问自身资源。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "初始化管理员及所需启用/停用用户；经真实认证入口取得测试 Session，秘密仅保存在运行内存。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable",
+        "browser_screenshot_and_console"
+      ],
+      "variants": [
+        {
+          "id": "I01.primary",
+          "expected": "已有账号时不能再次初始化；密码以哈希保存；临时密码用户首次登录必须改密，旧Session失效，改密后正常访问自身资源。",
+          "steps": "空库仅首次初始化管理员；由管理员创建临时密码用户，首次登录、改密后重新登录。 本子例输入：空库仅首次初始化管理员；由管理员创建临时密码用户，首次登录、改密后重新登录。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "I02",
+      "requirements": [
+        "AUTH",
+        "API"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "Session绝对到期与Cookie安全",
+      "steps": "用可控时钟验证默认8小时及配置值；检查Set-Cookie、JSON、错误和日志。",
+      "expected": "HttpOnly交付；轮询不延长绝对寿命；到期用户请求401；token不出现在脚本可读内容或日志。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "初始化管理员及所需启用/停用用户；经真实认证入口取得测试 Session，秘密仅保存在运行内存。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "I02.default-expiry",
+          "expected": "到期后 401，轮询不能延长绝对寿命",
+          "steps": "用可控时钟验证默认8小时及配置值；检查Set-Cookie、JSON、错误和日志。 本子例输入：Session 默认 8 小时，连续轮询跨越到期时刻。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "I02.configured-expiry",
+          "expected": "按配置绝对到期，重启保留仍有效会话",
+          "steps": "用可控时钟验证默认8小时及配置值；检查Set-Cookie、JSON、错误和日志。 本子例输入：使用不同的合法 Session 寿命配置。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "I02.cookie",
+          "expected": "HttpOnly；SameSite/Path 与入口相容，HTTPS 时 Secure；Origin/CSRF 检查有效，token 仅专用响应头交付",
+          "steps": "用可控时钟验证默认8小时及配置值；检查Set-Cookie、JSON、错误和日志。 本子例输入：检查 Set-Cookie、同源变更请求、响应和日志。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "I03",
+      "requirements": [
+        "AUTH",
+        "API"
+      ],
+      "layer": "K",
+      "target": "multi",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "HTTP与直接RPC都隔离账号",
+      "steps": "两用户分别归属两个集群；逐一尝试对方的列表、详情、保存、下发和删除。",
+      "expected": "列表只含授权对象；越权命令明确拒绝、无副作用；伪造账号/角色或换传输入口不能绕过。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "初始化管理员及所需启用/停用用户；经真实认证入口取得测试 Session，秘密仅保存在运行内存。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "I03.primary",
+          "expected": "列表只含授权对象；越权命令明确拒绝、无副作用；伪造账号/角色或换传输入口不能绕过。",
+          "steps": "两用户分别归属两个集群；逐一尝试对方的列表、详情、保存、下发和删除。 本子例输入：两用户分别归属两个集群；逐一尝试对方的列表、详情、保存、下发和删除。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "I04",
+      "requirements": [
+        "AUTH"
+      ],
+      "layer": "K",
+      "target": "multi",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "归属转移立即改变权限",
+      "steps": "管理员转移无在途任务的集群，再用新旧所属用户访问其草稿与历史。",
+      "expected": "原用户立即失权；新用户接收原配置/历史；其他管理员仍有全局权限；审计保留前后归属。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "初始化管理员及所需启用/停用用户；经真实认证入口取得测试 Session，秘密仅保存在运行内存。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "I04.primary",
+          "expected": "原用户立即失权；新用户接收原配置/历史；其他管理员仍有全局权限；审计保留前后归属。",
+          "steps": "管理员转移无在途任务的集群，再用新旧所属用户访问其草稿与历史。 本子例输入：管理员转移无在途任务的集群，再用新旧所属用户访问其草稿与历史。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "I05",
+      "requirements": [
+        "AUTH",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "任务写前按当前权限授权",
+      "steps": "受理后在派发前停用/撤权发起账号；另在请求已发后撤权。",
+      "expected": "未发写被阻止；已发请求继续核验真实结果、不回滚；后台读取不依赖原用户Session。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "初始化管理员及所需启用/停用用户；经真实认证入口取得测试 Session，秘密仅保存在运行内存。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "I05.primary",
+          "expected": "未发写被阻止；已发请求继续核验真实结果、不回滚；后台读取不依赖原用户Session。",
+          "steps": "受理后在派发前停用/撤权发起账号；另在请求已发后撤权。 本子例输入：受理后在派发前停用/撤权发起账号；另在请求已发后撤权。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "I06",
+      "requirements": [
+        "AUTH",
+        "API",
+        "PUBLISH"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "Cookie到期不取消已受理任务",
+      "steps": "持久化任务后令其Session到期，保持账号权限有效并执行任务。",
+      "expected": "旧用户请求401；任务仍按当前账号权限完成或如实核验，不因Cookie到期自动取消。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "初始化管理员及所需启用/停用用户；经真实认证入口取得测试 Session，秘密仅保存在运行内存。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "I06.primary",
+          "expected": "旧用户请求401；任务仍按当前账号权限完成或如实核验，不因Cookie到期自动取消。",
+          "steps": "持久化任务后令其Session到期，保持账号权限有效并执行任务。 本子例输入：持久化任务后令其Session到期，保持账号权限有效并执行任务。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "I07",
+      "requirements": [
+        "AUTH"
+      ],
+      "layer": "B",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "账号生命周期与最后管理员保护",
+      "steps": "参数化重置/停用/变更角色；尝试停用或降级最后启用管理员，并指定停用用户为归属。",
+      "expected": "旧Session失效且历史保留；至少保留一名启用管理员；不接受停用归属用户，已有归属由管理员继续管理。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "初始化管理员及所需启用/停用用户；经真实认证入口取得测试 Session，秘密仅保存在运行内存。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable",
+        "browser_screenshot_and_console"
+      ],
+      "variants": [
+        {
+          "id": "I07.reset",
+          "expected": "旧 Session 失效，历史保留",
+          "steps": "参数化重置/停用/变更角色；尝试停用或降级最后启用管理员，并指定停用用户为归属。 本子例输入：管理员重置密码。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "I07.disable",
+          "expected": "旧 Session 失效，已有归属保留且由管理员管理",
+          "steps": "参数化重置/停用/变更角色；尝试停用或降级最后启用管理员，并指定停用用户为归属。 本子例输入：管理员停用普通账号。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "I07.role-change",
+          "expected": "旧 Session 失效，新请求遵守当前角色",
+          "steps": "参数化重置/停用/变更角色；尝试停用或降级最后启用管理员，并指定停用用户为归属。 本子例输入：授予或撤销管理员角色。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "I07.last-admin-disable",
+          "expected": "拒绝且仍保留一名启用管理员",
+          "steps": "参数化重置/停用/变更角色；尝试停用或降级最后启用管理员，并指定停用用户为归属。 本子例输入：停用最后一名启用管理员。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "I07.last-admin-demote",
+          "expected": "拒绝且仍保留一名启用管理员",
+          "steps": "参数化重置/停用/变更角色；尝试停用或降级最后启用管理员，并指定停用用户为归属。 本子例输入：撤销最后一名启用管理员的角色。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "I07.disabled-owner",
+          "expected": "各入口拒绝停用归属用户",
+          "steps": "参数化重置/停用/变更角色；尝试停用或降级最后启用管理员，并指定停用用户为归属。 本子例输入：注册、转移、重新启用时分别指定停用用户。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "C01",
+      "requirements": [
+        "AUTH",
+        "TOPO"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "有效注册不创建观测负载",
+      "steps": "用内嵌HTTPS CA和cert/key或token、明确context注册；检查SSR、UID和资源变化。",
+      "expected": "非匿名身份、TLS、连通和UID检查通过后才保存；平台账号与Kubernetes身份分开；不创建观测workload。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "仅使用测试所有的目标集群、显式 context 和内嵌 HTTPS 凭据；受控权限/CRD 变更须独占并恢复。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "C01.client-cert",
+          "expected": "身份与 UID 核验通过后保存，不创建观测负载",
+          "steps": "用内嵌HTTPS CA和cert/key或token、明确context注册；检查SSR、UID和资源变化。 本子例输入：明确 context，HTTPS 内嵌 CA 和客户端证书/私钥。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C01.token",
+          "expected": "核验有效非匿名身份，不将平台账号当 Kubernetes 身份",
+          "steps": "用内嵌HTTPS CA和cert/key或token、明确context注册；检查SSR、UID和资源变化。 本子例输入：明确 context，HTTPS 内嵌 CA 与有效 token。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "C02",
+      "requirements": [
+        "AUTH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "同集群不同context不能重复注册",
+      "steps": "以另一context/凭据再次注册同一kube-system Namespace UID。",
+      "expected": "报重复关联，原clusterId、归属和历史保留；引导更新凭据，不另建重复记录。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "仅使用测试所有的目标集群、显式 context 和内嵌 HTTPS 凭据；受控权限/CRD 变更须独占并恢复。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "C02.primary",
+          "expected": "报重复关联，原clusterId、归属和历史保留；引导更新凭据，不另建重复记录。",
+          "steps": "以另一context/凭据再次注册同一kube-system Namespace UID。 本子例输入：以另一context/凭据再次注册同一kube-system Namespace UID。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "C03",
+      "requirements": [
+        "AUTH"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "注册拒绝未核验身份",
+      "steps": "测试API分别返回SSR缺失、Forbidden、匿名和错误；其他version/权限审查仍成功。",
+      "expected": "逐例拒绝注册并显示对应原因；不以version或SSAR成功代替身份；不宣称运行过1.19正向测试。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "仅使用测试所有的目标集群、显式 context 和内嵌 HTTPS 凭据；受控权限/CRD 变更须独占并恢复。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "C03.missing",
+          "expected": "拒绝注册，不伪称已运行 Kubernetes 1.19",
+          "steps": "测试API分别返回SSR缺失、Forbidden、匿名和错误；其他version/权限审查仍成功。 本子例输入：SSR API 不存在，其他公开接口成功。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C03.forbidden",
+          "expected": "拒绝注册，明确权限原因",
+          "steps": "测试API分别返回SSR缺失、Forbidden、匿名和错误；其他version/权限审查仍成功。 本子例输入：SSR 返回 Forbidden。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C03.anonymous",
+          "expected": "拒绝注册，不以 SSAR 成功代替",
+          "steps": "测试API分别返回SSR缺失、Forbidden、匿名和错误；其他version/权限审查仍成功。 本子例输入：SSR 返回匿名身份。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C03.error",
+          "expected": "拒绝注册，不保存为已生效",
+          "steps": "测试API分别返回SSR缺失、Forbidden、匿名和错误；其他version/权限审查仍成功。 本子例输入：SSR 返回受控服务错误。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "C04",
+      "requirements": [
+        "AUTH",
+        "KSM",
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "multi",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "缺CRD可登记但不能下发",
+      "steps": "在独占数据集群fixture中移除相应CRD，使用有效身份注册/重检后发起下发。",
+      "expected": "集群可登记；组件能力受限、原因明确；受影响组件下发被阻止，不把能力不足当作集群身份无效。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "仅使用测试所有的目标集群、显式 context 和内嵌 HTTPS 凭据；受控权限/CRD 变更须独占并恢复。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "C04.ksm-crd",
+          "expected": "允许登记，KSM 下发受阻并说明原因",
+          "steps": "在独占数据集群fixture中移除相应CRD，使用有效身份注册/重检后发起下发。 本子例输入：独占 fixture 缺 KubeStateMetrics CRD。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C04.agent-crd",
+          "expected": "允许登记，Agent 下发受阻并说明原因",
+          "steps": "在独占数据集群fixture中移除相应CRD，使用有效身份注册/重检后发起下发。 本子例输入：独占 fixture 缺 PrometheusAgent CRD。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "C05",
+      "requirements": [
+        "AUTH"
+      ],
+      "layer": "K",
+      "target": "multi",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "按实际namespace核验权限",
+      "steps": "使用有身份/UID读取权限、但无某目标namespace写权限的测试凭据登记并发布。",
+      "expected": "登记允许且展示受限；目标发布被拒绝、无越权资源；其他有权namespace行为不被混淆。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "仅使用测试所有的目标集群、显式 context 和内嵌 HTTPS 凭据；受控权限/CRD 变更须独占并恢复。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "C05.primary",
+          "expected": "登记允许且展示受限；目标发布被拒绝、无越权资源；其他有权namespace行为不被混淆。",
+          "steps": "使用有身份/UID读取权限、但无某目标namespace写权限的测试凭据登记并发布。 本子例输入：使用有身份/UID读取权限、但无某目标namespace写权限的测试凭据登记并发布。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "C06",
+      "requirements": [
+        "AUTH",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "凭据验证后才切换",
+      "steps": "参数化验证坏凭据、同集群好凭据，并在待确认任务中更新；记录切换前后读取。",
+      "expected": "坏候选不替换旧凭据；好候选确认同一UID后切换并恢复读取；切换不自动重放任务。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "仅使用测试所有的目标集群、显式 context 和内嵌 HTTPS 凭据；受控权限/CRD 变更须独占并恢复。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "C06.bad-candidate",
+          "expected": "原凭据不被替换",
+          "steps": "参数化验证坏凭据、同集群好凭据，并在待确认任务中更新；记录切换前后读取。 本子例输入：候选凭据无法核验。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C06.same-uid",
+          "expected": "切换后可恢复读取，不自动重放写请求",
+          "steps": "参数化验证坏凭据、同集群好凭据，并在待确认任务中更新；记录切换前后读取。 本子例输入：候选凭据核验为原 UID，原任务结果待确认。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "C07",
+      "requirements": [
+        "AUTH",
+        "PUBLISH",
+        "OBS"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "注销与重新启用保留资源历史",
+      "steps": "有在途任务时尝试转移/注销；结束后注销，检查凭据清除；重新上传有效kubeconfig并指定启用用户后重新启用。",
+      "expected": "在途时拒绝；注销清除平台保存的集群凭据、停止同步/下发，保留CR、workload及历史；重新启用核对原UID/身份与启用归属后恢复读取，不自动下发。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "仅使用测试所有的目标集群、显式 context 和内嵌 HTTPS 凭据；受控权限/CRD 变更须独占并恢复。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "C07.primary",
+          "expected": "在途时拒绝；注销清除平台保存的集群凭据、停止同步/下发，保留CR、workload及历史；重新启用核对原UID/身份与启用归属后恢复读取，不自动下发。",
+          "steps": "有在途任务时尝试转移/注销；结束后注销，检查凭据清除；重新上传有效kubeconfig并指定启用用户后重新启用。 本子例输入：有在途任务时尝试转移/注销；结束后注销，检查凭据清除；重新上传有效kubeconfig并指定启用用户后重新启用。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "C08",
+      "requirements": [
+        "AUTH",
+        "PERSIST"
+      ],
+      "layer": "K",
+      "target": "multi",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "凭据指向新UID不能继承旧集群",
+      "steps": "用数据集群凭据更新管控集群记录，UID与原值不同。",
+      "expected": "拒绝按原集群切换/继承；旧身份历史保留，新集群须走独立注册。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "仅使用测试所有的目标集群、显式 context 和内嵌 HTTPS 凭据；受控权限/CRD 变更须独占并恢复。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "C08.primary",
+          "expected": "拒绝按原集群切换/继承；旧身份历史保留，新集群须走独立注册。",
+          "steps": "用数据集群凭据更新管控集群记录，UID与原值不同。 本子例输入：用数据集群凭据更新管控集群记录，UID与原值不同。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "C09",
+      "requirements": [
+        "AUTH",
+        "PERSIST"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "拒绝不支持的kubeconfig依赖",
+      "steps": "分别输入HTTP、跳过TLS、依赖外部证书路径、tokenFile、exec/auth-provider或proxy的配置。",
+      "expected": "明确拒绝且不静默读取宿主机文件或执行插件；支持的内嵌HTTPS配置可正常解析。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "仅使用测试所有的目标集群、显式 context 和内嵌 HTTPS 凭据；受控权限/CRD 变更须独占并恢复。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "C09.http",
+          "expected": "拒绝所选 context 的不支持依赖，不执行插件、读取外部文件或降级 TLS",
+          "steps": "分别输入HTTP、跳过TLS、依赖外部证书路径、tokenFile、exec/auth-provider或proxy的配置。 本子例输入：HTTP API endpoint。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C09.skip-tls",
+          "expected": "拒绝所选 context 的不支持依赖，不执行插件、读取外部文件或降级 TLS",
+          "steps": "分别输入HTTP、跳过TLS、依赖外部证书路径、tokenFile、exec/auth-provider或proxy的配置。 本子例输入：insecure-skip-tls-verify。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C09.external-ca",
+          "expected": "拒绝所选 context 的不支持依赖，不执行插件、读取外部文件或降级 TLS",
+          "steps": "分别输入HTTP、跳过TLS、依赖外部证书路径、tokenFile、exec/auth-provider或proxy的配置。 本子例输入：外部 CA 路径。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C09.external-cert",
+          "expected": "拒绝所选 context 的不支持依赖，不执行插件、读取外部文件或降级 TLS",
+          "steps": "分别输入HTTP、跳过TLS、依赖外部证书路径、tokenFile、exec/auth-provider或proxy的配置。 本子例输入：外部客户端证书/私钥路径。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C09.token-file",
+          "expected": "拒绝所选 context 的不支持依赖，不执行插件、读取外部文件或降级 TLS",
+          "steps": "分别输入HTTP、跳过TLS、依赖外部证书路径、tokenFile、exec/auth-provider或proxy的配置。 本子例输入：tokenFile。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C09.exec",
+          "expected": "拒绝所选 context 的不支持依赖，不执行插件、读取外部文件或降级 TLS",
+          "steps": "分别输入HTTP、跳过TLS、依赖外部证书路径、tokenFile、exec/auth-provider或proxy的配置。 本子例输入：exec 插件。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C09.auth-provider",
+          "expected": "拒绝所选 context 的不支持依赖，不执行插件、读取外部文件或降级 TLS",
+          "steps": "分别输入HTTP、跳过TLS、依赖外部证书路径、tokenFile、exec/auth-provider或proxy的配置。 本子例输入：auth-provider。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "C09.proxy",
+          "expected": "拒绝所选 context 的不支持依赖，不执行插件、读取外部文件或降级 TLS",
+          "steps": "分别输入HTTP、跳过TLS、依赖外部证书路径、tokenFile、exec/auth-provider或proxy的配置。 本子例输入：proxy 配置。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K01",
+      "requirements": [
+        "KSM",
+        "AUTH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "KSM多实例与外部只读",
+      "steps": "创建两个自管实例和一个外部CR；只修改/删除其中一个自管实例。",
+      "expected": "按各自name/UID隔离；另一实例不变；外部实例不产生平台发布历史且不能编辑、下发、删除或接管。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K01.primary",
+          "expected": "按各自name/UID隔离；另一实例不变；外部实例不产生平台发布历史且不能编辑、下发、删除或接管。",
+          "steps": "创建两个自管实例和一个外部CR；只修改/删除其中一个自管实例。 本子例输入：创建两个自管实例和一个外部CR；只修改/删除其中一个自管实例。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K02",
+      "requirements": [
+        "KSM"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "Deployment与资源预设实际映射",
+      "steps": "保存并下发默认KSM Deployment；回读CR、容器resources和Ready Pod。",
+      "expected": "单副本Deployment；省略分片分支；声明对应100m/250Mi/500Mi预设；真实Pod就绪，预设不被称为已验证容量。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K02.primary",
+          "expected": "单副本Deployment；省略分片分支；声明对应100m/250Mi/500Mi预设；真实Pod就绪，预设不被称为已验证容量。",
+          "steps": "保存并下发默认KSM Deployment；回读CR、容器resources和Ready Pod。 本子例输入：保存并下发默认KSM Deployment；回读CR、容器resources和Ready Pod。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K03",
+      "requirements": [
+        "KSM"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "StatefulSet分片映射",
+      "steps": "选择StatefulSetSharded并设置2个shards后下发。",
+      "expected": "仅相应分片分支；StatefulSet副本等于2且实际Pod收敛；小于2的输入被拒绝。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K03.primary",
+          "expected": "仅相应分片分支；StatefulSet副本等于2且实际Pod收敛；小于2的输入被拒绝。",
+          "steps": "选择StatefulSetSharded并设置2个shards后下发。 本子例输入：选择StatefulSetSharded并设置2个shards后下发。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K04",
+      "requirements": [
+        "KSM"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "DaemonSet三角色拓扑",
+      "steps": "选择DaemonSetSharded及pods+非Pod collector后下发，读取工作负载。",
+      "expected": "出现node DaemonSet及cluster/unscheduled两个Deployment；无手工数量字段；非法collector组合不能下发。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K04.primary",
+          "expected": "出现node DaemonSet及cluster/unscheduled两个Deployment；无手工数量字段；非法collector组合不能下发。",
+          "steps": "选择DaemonSetSharded及pods+非Pod collector后下发，读取工作负载。 本子例输入：选择DaemonSetSharded及pods+非Pod collector后下发，读取工作负载。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K05",
+      "requirements": [
+        "KSM",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "模式切换遵循替换边界",
+      "steps": "依次切换Deployment、StatefulSetSharded、DaemonSetSharded并记录workload UID事件。",
+      "expected": "旧模式工作负载先消失，再形成新模式；不残留互相冲突的旧负载，不承诺无损滚动。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K05.primary",
+          "expected": "旧模式工作负载先消失，再形成新模式；不残留互相冲突的旧负载，不承诺无损滚动。",
+          "steps": "依次切换Deployment、StatefulSetSharded、DaemonSetSharded并记录workload UID事件。 本子例输入：依次切换Deployment、StatefulSetSharded、DaemonSetSharded并记录workload UID事件。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K06",
+      "requirements": [
+        "KSM"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "角色资源继承与整块覆盖",
+      "steps": "分别启用继承、独立整块覆盖，关闭再开启高级选项并下发。",
+      "expected": "继承用通用声明；独立块整块替换；关闭时CR省略覆盖块但草稿值保留，重新开启恢复值。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K06.node",
+          "expected": "继承不生成覆盖块；独立时整块替换；关闭不下发且保留草稿值，再开启恢复",
+          "steps": "分别启用继承、独立整块覆盖，关闭再开启高级选项并下发。 本子例输入：node 角色依次继承、整块独立覆盖、关闭再开启高级配置。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K06.cluster",
+          "expected": "继承不生成覆盖块；独立时整块替换；关闭不下发且保留草稿值，再开启恢复",
+          "steps": "分别启用继承、独立整块覆盖，关闭再开启高级选项并下发。 本子例输入：cluster 角色依次继承、整块独立覆盖、关闭再开启高级配置。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K06.unscheduled",
+          "expected": "继承不生成覆盖块；独立时整块替换；关闭不下发且保留草稿值，再开启恢复",
+          "steps": "分别启用继承、独立整块覆盖，关闭再开启高级选项并下发。 本子例输入：unscheduled 角色依次继承、整块独立覆盖、关闭再开启高级配置。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K07",
+      "requirements": [
+        "KSM"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "collector与指标过滤映射",
+      "steps": "参数化Default/明确collector和指标All/Allow/Deny等已支持模式，检查CR及容器参数。",
+      "expected": "准确映射已确认字段；默认模式不伪造显式集合；允许/拒绝模式含义及正则保持，不能悄悄开放任意参数。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K07.default-all",
+          "expected": "仅映射该模式启用的 names/patterns；Default/All 保持省略，Include 非空；Allow/Deny 保留正则含义",
+          "steps": "参数化Default/明确collector和指标All/Allow/Deny等已支持模式，检查CR及容器参数。 本子例输入：collectors=Default，metricFilter=All。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K07.default-allow",
+          "expected": "仅映射该模式启用的 names/patterns；Default/All 保持省略，Include 非空；Allow/Deny 保留正则含义",
+          "steps": "参数化Default/明确collector和指标All/Allow/Deny等已支持模式，检查CR及容器参数。 本子例输入：collectors=Default，metricFilter=Allow。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K07.default-deny",
+          "expected": "仅映射该模式启用的 names/patterns；Default/All 保持省略，Include 非空；Allow/Deny 保留正则含义",
+          "steps": "参数化Default/明确collector和指标All/Allow/Deny等已支持模式，检查CR及容器参数。 本子例输入：collectors=Default，metricFilter=Deny。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K07.include-all",
+          "expected": "仅映射该模式启用的 names/patterns；Default/All 保持省略，Include 非空；Allow/Deny 保留正则含义",
+          "steps": "参数化Default/明确collector和指标All/Allow/Deny等已支持模式，检查CR及容器参数。 本子例输入：collectors=Include，metricFilter=All。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K07.include-allow",
+          "expected": "仅映射该模式启用的 names/patterns；Default/All 保持省略，Include 非空；Allow/Deny 保留正则含义",
+          "steps": "参数化Default/明确collector和指标All/Allow/Deny等已支持模式，检查CR及容器参数。 本子例输入：collectors=Include，metricFilter=Allow。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K07.include-deny",
+          "expected": "仅映射该模式启用的 names/patterns；Default/All 保持省略，Include 非空；Allow/Deny 保留正则含义",
+          "steps": "参数化Default/明确collector和指标All/Allow/Deny等已支持模式，检查CR及容器参数。 本子例输入：collectors=Include，metricFilter=Deny。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K08",
+      "requirements": [
+        "KSM",
+        "OBS"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "namespace选择及合法零匹配",
+      "steps": "分别验证已有literal names与namePatterns的并集；零匹配子例清空names，仅使用当前无匹配的namePatterns。",
+      "expected": "CR保持明确选择/正则语义；匹配按规则变化；无匹配显示0/0与无匹配，不报普通停机或读取失败。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K08.all",
+          "expected": "names/namePatterns 省略，不伪造明确全集",
+          "steps": "分别验证已有literal names与namePatterns的并集；零匹配子例清空names，仅使用当前无匹配的namePatterns。 本子例输入：namespaceFilter=All。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K08.union",
+          "expected": "按并集去重，不自动添加模式外 namespace",
+          "steps": "分别验证已有literal names与namePatterns的并集；零匹配子例清空names，仅使用当前无匹配的namePatterns。 本子例输入：已有 literal names 与匹配完整 namespace 名称的 namePatterns 同时配置。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K08.dynamic-pattern",
+          "expected": "匹配集合动态改变，CR/运行状态按真实读取解释",
+          "steps": "分别验证已有literal names与namePatterns的并集；零匹配子例清空names，仅使用当前无匹配的namePatterns。 本子例输入：names=[]，增删被 namePatterns 匹配的 namespace。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K08.zero",
+          "expected": "有效状态最终确认无匹配、0/0；不自动放宽为 All",
+          "steps": "分别验证已有literal names与namePatterns的并集；零匹配子例清空names，仅使用当前无匹配的namePatterns。 本子例输入：names=[]，仅提供当前无匹配的 namePatterns。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K09",
+      "requirements": [
+        "KSM",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "运行挂起停用独立于保存",
+      "steps": "依次保存但不发、明确下发挂起/恢复/停用；检查CR与负载。",
+      "expected": "仅保存不改集群；发布后按各意图收敛；状态、数量和发布结果分别表达。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K09.primary",
+          "expected": "仅保存不改集群；发布后按各意图收敛；状态、数量和发布结果分别表达。",
+          "steps": "依次保存但不发、明确下发挂起/恢复/停用；检查CR与负载。 本子例输入：依次保存但不发、明确下发挂起/恢复/停用；检查CR与负载。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "K10",
+      "requirements": [
+        "KSM",
+        "API"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "名称与不可变字段在后端校验",
+      "steps": "直接HTTP/RPC传入中文/非法名称、重复身份，首次成功创建后改name或targetNamespace，或传原始YAML/未知字段。",
+      "expected": "字段级拒绝、无集群写；名称不自动生成；创建后固定身份不能靠绕过页面修改。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 KSM CRD/Operator、可调度节点和已有部署 namespace；按本例需要准备纳管实例或只读外部 CR。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "K10.name",
+          "expected": "字段级拒绝，不自动生成名称",
+          "steps": "直接HTTP/RPC传入中文/非法名称、重复身份，首次成功创建后改name或targetNamespace，或传原始YAML/未知字段。 本子例输入：分别经 HTTP/直接 RPC 提交空名称、中文或非法 DNS subdomain。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K10.collision",
+          "expected": "冲突，不接管已有 CR",
+          "steps": "直接HTTP/RPC传入中文/非法名称、重复身份，首次成功创建后改name或targetNamespace，或传原始YAML/未知字段。 本子例输入：分别经 HTTP/直接 RPC 提交重复 CR 身份。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K10.fixed-target",
+          "expected": "拒绝修改固定身份；不把仅保存草稿当作已部署",
+          "steps": "直接HTTP/RPC传入中文/非法名称、重复身份，首次成功创建后改name或targetNamespace，或传原始YAML/未知字段。 本子例输入：首次成功创建 CR 后尝试更改 name 或 spec.targetNamespace。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "K10.unsupported",
+          "expected": "拒绝透传，不写集群",
+          "steps": "直接HTTP/RPC传入中文/非法名称、重复身份，首次成功创建后改name或targetNamespace，或传原始YAML/未知字段。 本子例输入：分别提交原始 YAML 或未知配置字段。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A01",
+      "requirements": [
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "Agent实际StatefulSet与预设",
+      "steps": "默认运行配置下发后读取Agent、StatefulSet和Pod容器声明。",
+      "expected": "每shard正常1副本、paused=false；200m/512Mi/1Gi声明正确；真实工作负载就绪。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A01.primary",
+          "expected": "每shard正常1副本、paused=false；200m/512Mi/1Gi声明正确；真实工作负载就绪。",
+          "steps": "默认运行配置下发后读取Agent、StatefulSet和Pod容器声明。 本子例输入：默认运行配置下发后读取Agent、StatefulSet和Pod容器声明。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A02",
+      "requirements": [
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "Agent shards与挂起恢复",
+      "steps": "设置多个shards，下发挂起再恢复；回读每组StatefulSet及Pod数量。",
+      "expected": "每shard单副本；运行/挂起分别replicas=1/0，paused保持false；实际数量与运行摘要一致。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A02.primary",
+          "expected": "每shard单副本；运行/挂起分别replicas=1/0，paused保持false；实际数量与运行摘要一致。",
+          "steps": "设置多个shards，下发挂起再恢复；回读每组StatefulSet及Pod数量。 本子例输入：设置多个shards，下发挂起再恢复；回读每组StatefulSet及Pod数量。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A03",
+      "requirements": [
+        "AGENT",
+        "AUTH"
+      ],
+      "layer": "K",
+      "target": "multi",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "Agent实例与存储身份隔离",
+      "steps": "创建多个Agent及外部Agent，同名配置在不同namespace/集群分别操作。",
+      "expected": "实例、UID及各卷独立；不越界；外部只读不生成平台发布/重试历史。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A03.primary",
+          "expected": "实例、UID及各卷独立；不越界；外部只读不生成平台发布/重试历史。",
+          "steps": "创建多个Agent及外部Agent，同名配置在不同namespace/集群分别操作。 本子例输入：创建多个Agent及外部Agent，同名配置在不同namespace/集群分别操作。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A04",
+      "requirements": [
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "默认PVC为每卷1Gi",
+      "steps": "以默认StorageClass和平台默认存储发布Agent；读取PVC请求、绑定及Pod挂载。",
+      "expected": "PVC每卷请求1Gi、RWO、实际Bound并被目标Pod挂载；不沿用旧fixture的64Mi。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A04.primary",
+          "expected": "PVC每卷请求1Gi、RWO、实际Bound并被目标Pod挂载；不沿用旧fixture的64Mi。",
+          "steps": "以默认StorageClass和平台默认存储发布Agent；读取PVC请求、绑定及Pod挂载。 本子例输入：以默认StorageClass和平台默认存储发布Agent；读取PVC请求、绑定及Pod挂载。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A05",
+      "requirements": [
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "multi",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "无默认StorageClass阻止PVC发布",
+      "steps": "在独占数据集群fixture取消默认StorageClass，使用默认PVC配置预览/发布。",
+      "expected": "明确依赖受阻且不创建Agent负载；原草稿保留；恢复默认class后明确重试可继续。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A05.primary",
+          "expected": "明确依赖受阻且不创建Agent负载；原草稿保留；恢复默认class后明确重试可继续。",
+          "steps": "在独占数据集群fixture取消默认StorageClass，使用默认PVC配置预览/发布。 本子例输入：在独占数据集群fixture取消默认StorageClass，使用默认PVC配置预览/发布。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A06",
+      "requirements": [
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "emptyDir不创建PVC",
+      "steps": "首次创建时选择emptyDir并下发、挂起和删除。",
+      "expected": "Pod使用emptyDir；不创建WAL PVC，不显示虚构的PVC保留/删除结果。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A06.primary",
+          "expected": "Pod使用emptyDir；不创建WAL PVC，不显示虚构的PVC保留/删除结果。",
+          "steps": "首次创建时选择emptyDir并下发、挂起和删除。 本子例输入：首次创建时选择emptyDir并下发、挂起和删除。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A07",
+      "requirements": [
+        "AGENT",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "whenScaled作用于挂起缩零",
+      "steps": "参数化Retain/Delete，先单独发布并核验实际策略，再挂起。",
+      "expected": "策略确已作用于相关StatefulSet；Retain保留PVC，Delete最终删除相应PVC；结果各自核验。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A07.retain",
+          "expected": "Retain 保留原 PVC",
+          "steps": "参数化Retain/Delete，先单独发布并核验实际策略，再挂起。 本子例输入：先确认实际 whenScaled=Retain，再挂起缩零。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A07.delete",
+          "expected": "Delete 最终删除相应 PVC，独立保存证据",
+          "steps": "参数化Retain/Delete，先单独发布并核验实际策略，再挂起。 本子例输入：先确认实际 whenScaled=Delete，再挂起缩零。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A08",
+      "requirements": [
+        "AGENT",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "whenDeleted作用于删除",
+      "steps": "参数化Retain/Delete，先确认策略再删除Agent，分别读取CR、workload、Pod和PVC。",
+      "expected": "CR/workload/Pod消失后实例删除完成；Retain卷保留且不阻止完成，Delete卷结果单独确认。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A08.retain",
+          "expected": "CR/workload/Pod 全消失才完成；PVC 保留不阻止完成",
+          "steps": "参数化Retain/Delete，先确认策略再删除Agent，分别读取CR、workload、Pod和PVC。 本子例输入：先确认实际 whenDeleted=Retain，再删除 Agent。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A08.delete",
+          "expected": "实例完成与 PVC 删除分别回读，不以 CR 消失代替卷核验",
+          "steps": "参数化Retain/Delete，先确认策略再删除Agent，分别读取CR、workload、Pod和PVC。 本子例输入：先确认实际 whenDeleted=Delete，再删除 Agent。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A09",
+      "requirements": [
+        "AGENT",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "减少shards的实际PVC结果",
+      "steps": "运行多shard，确认whenDeleted策略后减少shards，观察被移除StatefulSet及卷。",
+      "expected": "保留shard不受损；被删除StatefulSet对应PVC遵循已生效whenDeleted，不误当whenScaled。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A09.retain",
+          "expected": "仅已移除 StatefulSet 的卷按 whenDeleted 处理，保留 shard 不受损；不能误用 whenScaled",
+          "steps": "运行多shard，确认whenDeleted策略后减少shards，观察被移除StatefulSet及卷。 本子例输入：多个 shard 已运行且 whenDeleted=Retain，然后减少 shards。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A09.delete",
+          "expected": "仅已移除 StatefulSet 的卷按 whenDeleted 处理，保留 shard 不受损；不能误用 whenScaled",
+          "steps": "运行多shard，确认whenDeleted策略后减少shards，观察被移除StatefulSet及卷。 本子例输入：多个 shard 已运行且 whenDeleted=Delete，然后减少 shards。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A10",
+      "requirements": [
+        "AGENT",
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "容量与模式变更必须新实例",
+      "steps": "首次创建前自定义容量；创建后尝试改容量/存储模式/name/namespace，再按新实例重建。",
+      "expected": "首次输入正确落卷；固定字段修改被后端拒绝；新实例用新CR name/UID和新PVC，旧历史及Retain卷不复用。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A10.initial-capacity",
+          "expected": "新 PVC 请求为该容量",
+          "steps": "首次创建前自定义容量；创建后尝试改容量/存储模式/name/namespace，再按新实例重建。 本子例输入：首次创建前使用非默认合法容量。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A10.fixed-capacity",
+          "expected": "后端拒绝，不虚报旧 PVC 扩容成功",
+          "steps": "首次创建前自定义容量；创建后尝试改容量/存储模式/name/namespace，再按新实例重建。 本子例输入：创建成功后修改容量。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A10.fixed-mode",
+          "expected": "后端拒绝，需要新实例",
+          "steps": "首次创建前自定义容量；创建后尝试改容量/存储模式/name/namespace，再按新实例重建。 本子例输入：创建成功后切换 PVC/emptyDir。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A10.fixed-identity",
+          "expected": "后端拒绝，不迁移原资源",
+          "steps": "首次创建前自定义容量；创建后尝试改容量/存储模式/name/namespace，再按新实例重建。 本子例输入：创建成功后修改 namespace/name。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A10.new-instance",
+          "expected": "新 CR UID 和新 PVC，不复用 Retain 残留卷",
+          "steps": "首次创建前自定义容量；创建后尝试改容量/存储模式/name/namespace，再按新实例重建。 本子例输入：复制旧配置后提供新 name/身份并创建。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A11",
+      "requirements": [
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "四类采集关联及动态变化",
+      "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。",
+      "expected": "省略、{}及标签条件各自正确；匹配集合随目标API变化，零匹配为有效空集，读取失败不冒充空集。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A11.servicemonitor-none-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ServiceMonitor：object=none，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.servicemonitor-none-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ServiceMonitor：object=none，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.servicemonitor-none-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ServiceMonitor：object=none，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.servicemonitor-all-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ServiceMonitor：object=all，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.servicemonitor-all-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ServiceMonitor：object=all，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.servicemonitor-all-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ServiceMonitor：object=all，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.servicemonitor-labels-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ServiceMonitor：object=labels，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.servicemonitor-labels-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ServiceMonitor：object=labels，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.servicemonitor-labels-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ServiceMonitor：object=labels，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.podmonitor-none-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：PodMonitor：object=none，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.podmonitor-none-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：PodMonitor：object=none，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.podmonitor-none-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：PodMonitor：object=none，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.podmonitor-all-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：PodMonitor：object=all，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.podmonitor-all-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：PodMonitor：object=all，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.podmonitor-all-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：PodMonitor：object=all，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.podmonitor-labels-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：PodMonitor：object=labels，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.podmonitor-labels-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：PodMonitor：object=labels，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.podmonitor-labels-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：PodMonitor：object=labels，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.probe-none-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：Probe：object=none，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.probe-none-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：Probe：object=none，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.probe-none-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：Probe：object=none，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.probe-all-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：Probe：object=all，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.probe-all-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：Probe：object=all，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.probe-all-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：Probe：object=all，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.probe-labels-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：Probe：object=labels，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.probe-labels-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：Probe：object=labels，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.probe-labels-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：Probe：object=labels，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.scrapeconfig-none-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ScrapeConfig：object=none，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.scrapeconfig-none-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ScrapeConfig：object=none，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.scrapeconfig-none-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ScrapeConfig：object=none，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.scrapeconfig-all-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ScrapeConfig：object=all，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.scrapeconfig-all-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ScrapeConfig：object=all，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.scrapeconfig-all-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ScrapeConfig：object=all，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.scrapeconfig-labels-own",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ScrapeConfig：object=labels，namespace=own；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.scrapeconfig-labels-all",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ScrapeConfig：object=labels，namespace=all；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A11.scrapeconfig-labels-labels",
+          "expected": "none 对象选择映射省略，all 映射 {}，labels 映射条件；own namespace 省略，all 为 {}，labels 为 Namespace 条件；零匹配有效且不是 Pod 数或采集成功，读取失败不是空集",
+          "steps": "对ServiceMonitor/PodMonitor/Probe/ScrapeConfig分别配置对象与namespace模式；增删匹配CR并预览。 本子例输入：ScrapeConfig：object=labels，namespace=labels；增删/改标签并检查独立预览。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A12",
+      "requirements": [
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "remoteWrite与认证TLS正确引用",
+      "steps": "配置HTTP/HTTPS、多endpoint、BasicAuth/Bearer及TLS引用；读Agent和实际生成配置。",
+      "expected": "映射与Secret name/key正确；Agent CR及平台配置/响应/预览/日志不内联秘密；Operator生成配置仅在受控断言中验证并脱敏取证；不据此声称下游收到样本。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A12.http-none",
+          "expected": "合法 URL 映射正确，不能声称样本已到达",
+          "steps": "配置HTTP/HTTPS、多endpoint、BasicAuth/Bearer及TLS引用；读Agent和实际生成配置。 本子例输入：HTTP endpoint，无认证。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A12.https-basic",
+          "expected": "引用与受控生成配置正确，平台不保存 Secret 内容",
+          "steps": "配置HTTP/HTTPS、多endpoint、BasicAuth/Bearer及TLS引用；读Agent和实际生成配置。 本子例输入：HTTPS endpoint，BasicAuth username/password Secret key 引用。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A12.https-bearer",
+          "expected": "不退化为明文 token 字段；证据脱敏",
+          "steps": "配置HTTP/HTTPS、多endpoint、BasicAuth/Bearer及TLS引用；读Agent和实际生成配置。 本子例输入：HTTPS endpoint，authorization Bearer credentials Secret 引用。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A12.tls-ca",
+          "expected": "保持 TLS 校验开启且引用准确",
+          "steps": "配置HTTP/HTTPS、多endpoint、BasicAuth/Bearer及TLS引用；读Agent和实际生成配置。 本子例输入：HTTPS endpoint，Secret CA 引用。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A12.tls-client",
+          "expected": "配对及 serverName 映射正确，秘密不泄露",
+          "steps": "配置HTTP/HTTPS、多endpoint、BasicAuth/Bearer及TLS引用；读Agent和实际生成配置。 本子例输入：HTTPS endpoint，成对客户端证书/私钥和 serverName。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A12.multiple",
+          "expected": "全部受支持字段保持，重复 name 拒绝；不开放 queue/headers/writeRelabel 等高级透传",
+          "steps": "配置HTTP/HTTPS、多endpoint、BasicAuth/Bearer及TLS引用；读Agent和实际生成配置。 本子例输入：多个 endpoint，分别设置唯一可选 name、合法 remoteTimeout。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "A13",
+      "requirements": [
+        "AGENT",
+        "AUTH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "缺失Secret key或SA不能下发",
+      "steps": "参数化缺Secret、key和ServiceAccount后发起预览/发布，再修复相应fixture。",
+      "expected": "字段/依赖错误明确且无越权写；修复后按明确操作继续；响应、diff和日志不泄露秘密值。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "固定 Agent CRD/Operator、已有 namespace、可用默认 StorageClass、所需 SA/Secret/采集配置；缺依赖例显式移除指定项。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "A13.missing-secret",
+          "expected": "依赖错误，阻止发布",
+          "steps": "参数化缺Secret、key和ServiceAccount后发起预览/发布，再修复相应fixture。 本子例输入：配置引用不存在的 Secret。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A13.missing-key",
+          "expected": "明确 key 错误，不能 optional 绕过",
+          "steps": "参数化缺Secret、key和ServiceAccount后发起预览/发布，再修复相应fixture。 本子例输入：Secret 存在但所需 key 缺失。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A13.forbidden-secret",
+          "expected": "不能当作依赖可用或空值，不泄露内容",
+          "steps": "参数化缺Secret、key和ServiceAccount后发起预览/发布，再修复相应fixture。 本子例输入：Secret 存在但访问被拒绝。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A13.missing-sa",
+          "expected": "阻止发布，平台不自动补建",
+          "steps": "参数化缺Secret、key和ServiceAccount后发起预览/发布，再修复相应fixture。 本子例输入：ServiceAccount 不存在。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "A13.insufficient-sa",
+          "expected": "显示原因并阻止发布，不自动补 RBAC",
+          "steps": "参数化缺Secret、key和ServiceAccount后发起预览/发布，再修复相应fixture。 本子例输入：已有 ServiceAccount 明确缺少所需采集权限。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P01",
+      "requirements": [
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "保存不产生集群写",
+      "steps": "记录平台集群mutation请求及CR spec，修改并保存草稿后回读；将独立status更新与保存动作分别取证。",
+      "expected": "仅DB草稿修订推进，平台集群写请求为0、CR spec未因保存变化；独立status/RV可变化，页面不显示已下发。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P01.primary",
+          "expected": "仅DB草稿修订推进，平台集群写请求为0、CR spec未因保存变化；独立status/RV可变化，页面不显示已下发。",
+          "steps": "记录平台集群mutation请求及CR spec，修改并保存草稿后回读；将独立status更新与保存动作分别取证。 本子例输入：记录平台集群mutation请求及CR spec，修改并保存草稿后回读；将独立status更新与保存动作分别取证。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P02",
+      "requirements": [
+        "PUBLISH",
+        "UI"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "不可变发布与来源快照",
+      "steps": "受理草稿vN发布后继续保存新草稿；读取固定版本、任务及最终CR。",
+      "expected": "受理版本与sourceDraftRevision冻结；新草稿不污染该次发布；确认写入前不提升最近写入版本。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P02.primary",
+          "expected": "受理版本与sourceDraftRevision冻结；新草稿不污染该次发布；确认写入前不提升最近写入版本。",
+          "steps": "受理草稿vN发布后继续保存新草稿；读取固定版本、任务及最终CR。 本子例输入：受理草稿vN发布后继续保存新草稿；读取固定版本、任务及最终CR。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P03",
+      "requirements": [
+        "PUBLISH",
+        "API"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "重复点击只受理一次",
+      "steps": "并发发送同键同内容，再以同键不同内容和另一个变更请求提交。",
+      "expected": "同键返回同一operationId和当前结果；不同内容冲突；实例仅一项未结束变更，真实副作用不重复。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P03.same",
+          "expected": "返回同一 operationId 与当前结果，实际副作用不重复",
+          "steps": "并发发送同键同内容，再以同键不同内容和另一个变更请求提交。 本子例输入：同账号同动作同目标，同键同内容并发。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P03.different-content",
+          "expected": "409 幂等冲突",
+          "steps": "并发发送同键同内容，再以同键不同内容和另一个变更请求提交。 本子例输入：同作用域同键但内容不同。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P03.another-active",
+          "expected": "拒绝第二变更，仍可保存新草稿",
+          "steps": "并发发送同键同内容，再以同键不同内容和另一个变更请求提交。 本子例输入：实例已有未结束操作时使用不同键发起变更。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P04",
+      "requirements": [
+        "PUBLISH",
+        "API"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "过期修订或预览不能提交别版",
+      "steps": "并发保存同修订；预览后修改草稿或目标配置再确认。",
+      "expected": "明确修订/基线冲突，保留本地编辑；不静默把另一版草稿送往集群。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P04.draft-race",
+          "expected": "只有一个成功，另一冲突并保留本地编辑",
+          "steps": "并发保存同修订；预览后修改草稿或目标配置再确认。 本子例输入：两个客户端以同一 expectedDraftRevision 保存。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P04.draft-after-preview",
+          "expected": "要求新预览，不能静默换版",
+          "steps": "并发保存同修订；预览后修改草稿或目标配置再确认。 本子例输入：预览后另存新修订，再确认旧预览。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P04.target-after-preview",
+          "expected": "配置基线冲突，需重新确认",
+          "steps": "并发保存同修订；预览后修改草稿或目标配置再确认。 本子例输入：预览后实际目标配置改变。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P05",
+      "requirements": [
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "漂移覆盖与非平台元数据保护",
+      "steps": "外部改配置并添加额外spec及非平台labels/annotations；先普通发布，再明确覆盖。",
+      "expected": "普通发布被阻止；YAML列出删除项；明确覆盖仅按范围重写spec，非平台元数据保留。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P05.supported-drift",
+          "expected": "阻止普通发布，明确覆盖后恢复受支持 spec 并保留非平台 labels/annotations",
+          "steps": "外部改配置并添加额外spec及非平台labels/annotations；先普通发布，再明确覆盖。 本子例输入：外部修改已支持 spec，同时保留非平台元数据。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P05.extra-spec",
+          "expected": "diff 左侧显示将删除字段；明确覆盖不得删除 status/finalizers",
+          "steps": "外部改配置并添加额外spec及非平台labels/annotations；先普通发布，再明确覆盖。 本子例输入：外部添加平台不支持 spec 字段。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P06",
+      "requirements": [
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "status变化不重复确认配置",
+      "steps": "预览后仅改变status/RV或等价默认表现，再提交同配置；另改变实际spec。",
+      "expected": "前者可重读新RV后继续且保持原UID条件；实际配置变化要求新预览，不静默覆盖。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P06.status-only",
+          "expected": "重读新 RV 后可继续，无需重复确认配置",
+          "steps": "预览后仅改变status/RV或等价默认表现，再提交同配置；另改变实际spec。 本子例输入：预览后只变 status。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P06.rv-only",
+          "expected": "仍使用原 UID 与当前 RV 条件",
+          "steps": "预览后仅改变status/RV或等价默认表现，再提交同配置；另改变实际spec。 本子例输入：配置等价，仅 RV 推进。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P06.default-equivalent",
+          "expected": "不误报漂移；selector nil/{} 不可当作等价",
+          "steps": "预览后仅改变status/RV或等价默认表现，再提交同配置；另改变实际spec。 本子例输入：仅固定 CRD 语义下的等价默认值变化。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P06.spec-change",
+          "expected": "必须新预览，不能静默覆盖",
+          "steps": "预览后仅改变status/RV或等价默认表现，再提交同配置；另改变实际spec。 本子例输入：预览后实际 spec 变化。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P07",
+      "requirements": [
+        "PUBLISH",
+        "API"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "失败重试仍用原固定版本",
+      "steps": "制造确定未成功的失败，保存新草稿后人工重试旧操作。",
+      "expected": "operationId/原发布版本保留、新attemptId增加；失败历史不抹掉，写入的是原配置而非新草稿。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P07.primary",
+          "expected": "operationId/原发布版本保留、新attemptId增加；失败历史不抹掉，写入的是原配置而非新草稿。",
+          "steps": "制造确定未成功的失败，保存新草稿后人工重试旧操作。 本子例输入：制造确定未成功的失败，保存新草稿后人工重试旧操作。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P08",
+      "requirements": [
+        "PUBLISH",
+        "API"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "取消与派发竞争只有一个结果",
+      "steps": "以可控派发屏障并发取消与发送资格提交，再放行。",
+      "expected": "取消获胜则无写；派发获胜则取消不报成功；持久状态与实际发送计数一致。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P08.cancel-wins",
+          "expected": "已取消且没有集群写请求",
+          "steps": "以可控派发屏障并发取消与发送资格提交，再放行。 本子例输入：取消先于派发资格提交。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P08.dispatch-wins",
+          "expected": "取消不报成功，按真实结果核验",
+          "steps": "以可控派发屏障并发取消与发送资格提交，再放行。 本子例输入：派发资格先提交并持久化可能已发送。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P09",
+      "requirements": [
+        "PUBLISH",
+        "API"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "受理响应丢失仍可找回任务",
+      "steps": "真实受理后丢弃HTTP响应/令请求超时，按请求键查询并重复提交同键。",
+      "expected": "找回同一operationId；不得创建第二任务或因HTTP超时取消已受理操作。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P09.response-drop",
+          "expected": "按请求键找回同一任务，不创建第二任务",
+          "steps": "真实受理后丢弃HTTP响应/令请求超时，按请求键查询并重复提交同键。 本子例输入：事务已受理，HTTP 响应被丢弃。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P09.deadline",
+          "expected": "不取消已受理任务，同键仍返回原操作",
+          "steps": "真实受理后丢弃HTTP响应/令请求超时，按请求键查询并重复提交同键。 本子例输入：事务已受理，受理 HTTP/RPC deadline 到期。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P10",
+      "requirements": [
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "已知UID更新响应丢失先核验",
+      "steps": "真实API执行更新后由测试transport丢弃响应；观察恢复读取。",
+      "expected": "进入待确认并保留保护；仅核验原UID配置，不自动重复写；确认后记录真实写入结果。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P10.primary",
+          "expected": "进入待确认并保留保护；仅核验原UID配置，不自动重复写；确认后记录真实写入结果。",
+          "steps": "真实API执行更新后由测试transport丢弃响应；观察恢复读取。 本子例输入：真实API执行更新后由测试transport丢弃响应；观察恢复读取。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P11",
+      "requirements": [
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "首次创建身份不明不能补认",
+      "steps": "创建在API生效但平台未保存UID时丢响应；令同名配置/labels完全匹配。",
+      "expected": "保持资源身份无法确认、拒绝后续更新/删除，不凭同名/内容/labels自动认领或补UID。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P11.primary",
+          "expected": "保持资源身份无法确认、拒绝后续更新/删除，不凭同名/内容/labels自动认领或补UID。",
+          "steps": "创建在API生效但平台未保存UID时丢响应；令同名配置/labels完全匹配。 本子例输入：创建在API生效但平台未保存UID时丢响应；令同名配置/labels完全匹配。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P12",
+      "requirements": [
+        "PUBLISH"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "同名新UID与原CR缺失受保护",
+      "steps": "参数化外部替换同名新UID、外部删除原CR，再操作原平台实例。",
+      "expected": "前者拒绝更新/删除新资源；后者不自动重建；旧管理历史保留，工作负载结果单独核验。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P12.new-uid",
+          "expected": "原实例不得更新/删除新 CR，身份冲突保留历史",
+          "steps": "参数化外部替换同名新UID、外部删除原CR，再操作原平台实例。 本子例输入：外部删除原 CR 后以同名新 UID 重建。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P12.missing",
+          "expected": "显示资源缺失，不自动重建；workload 仍需独立核验",
+          "steps": "参数化外部替换同名新UID、外部删除原CR，再操作原平台实例。 本子例输入：外部删除原 CR 且不重建。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P13",
+      "requirements": [
+        "PUBLISH",
+        "TOPO"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "Pod重启不重放任务",
+      "steps": "分别在明确未发写、可能已发写持久点终止平台Pod并用原卷重建。",
+      "expected": "未发写等待人工继续/取消；可能已发只恢复核验；继续/重试重新授权并留新尝试，当前观测先未知。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P13.unsent",
+          "expected": "等待人工继续/取消，继续产生新 attempt 且重新授权",
+          "steps": "分别在明确未发写、可能已发写持久点终止平台Pod并用原卷重建。 本子例输入：在持久状态能证明未发写时重启 Pod。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P13.possibly-sent",
+          "expected": "只恢复核验，不重放，不按超时解除保护",
+          "steps": "分别在明确未发写、可能已发写持久点终止平台Pod并用原卷重建。 本子例输入：派发资格已提交，无法排除已发写时重启 Pod。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "P14",
+      "requirements": [
+        "PUBLISH",
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "清理阻塞和策略未生效不能报成功",
+      "steps": "参数化未采用新PVC策略的危险操作、带finalizer的删除、CR已没但Pod残留及辅助读取失败。",
+      "expected": "策略未生效先阻止；其余保持清理中/受阻或未知与变更保护；CR和对应workload/Pod全核验消失才完成。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "测试账号具有目标权限；按本例创建独立草稿/已绑定原 UID 的实例、固定版本和基线；首次创建例不预先绑定 UID。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "P14.policy-pending",
+          "expected": "先阻止，单独发布策略并确认后才能继续",
+          "steps": "参数化未采用新PVC策略的危险操作、带finalizer的删除、CR已没但Pod残留及辅助读取失败。 本子例输入：策略尚未作用于相关 StatefulSet 就挂起/减少 shards/删除。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P14.finalizer",
+          "expected": "保持清理中/受阻，平台不强删 finalizer",
+          "steps": "参数化未采用新PVC策略的危险操作、带finalizer的删除、CR已没但Pod残留及辅助读取失败。 本子例输入：原 CR 带阻塞 finalizer，条件 foreground deletion。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P14.pod-remains",
+          "expected": "不能报告删除完成",
+          "steps": "参数化未采用新PVC策略的危险操作、带finalizer的删除、CR已没但Pod残留及辅助读取失败。 本子例输入：原 CR 已消失但对应 workload/Pod 残留。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P14.read-failure",
+          "expected": "未知不是消失，保留保护",
+          "steps": "参数化未采用新PVC策略的危险操作、带finalizer的删除、CR已没但Pod残留及辅助读取失败。 本子例输入：辅助清理核验权限/网络失败。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "P14.delete-response-drop",
+          "expected": "恢复原 UID 与对应资源核验，不重发删除，不操作同名新 UID",
+          "steps": "参数化未采用新PVC策略的危险操作、带finalizer的删除、CR已没但Pod残留及辅助读取失败。 本子例输入：真实 API 处理删除后由受控 transport 丢弃响应。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "R01",
+      "requirements": [
+        "OBS",
+        "API"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "轮询与过期边界可判定",
+      "steps": "可控时钟检查默认10秒、配置1/20秒及越界值；跨越成功观察30秒阈值并注入读取失败。",
+      "expected": "仅允许1–20秒；超过30秒过期；失败立即当前未知，不等待30秒，不自动放宽阈值。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独立实例及按来源保存的成功/历史观测；Q 层使用受控时间/测试 API，K 层使用真实对象并单独注入故障。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "R01.intervals",
+          "expected": "边界合法，越界拒绝，默认仍 10 秒",
+          "steps": "可控时钟检查默认10秒、配置1/20秒及越界值；跨越成功观察30秒阈值并注入读取失败。 本子例输入：分别配置 1/10/20 秒与越界 0/21 秒。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R01.freshness",
+          "expected": "只有超过 30 秒才过期，不自动放宽",
+          "steps": "可控时钟检查默认10秒、配置1/20秒及越界值；跨越成功观察30秒阈值并注入读取失败。 本子例输入：可控时间分别为距成功 29/30/31 秒。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R01.early-error",
+          "expected": "立即当前未知并显示历史，不等待阈值",
+          "steps": "可控时钟检查默认10秒、配置1/20秒及越界值；跨越成功观察30秒阈值并注入读取失败。 本子例输入：成功后不足 30 秒立即读取失败。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "requirements": [
+        "OBS"
+      ],
+      "layer": "K",
+      "target": "multi",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "单目标断联不污染其他目标",
+      "steps": "成功观测两集群后仅阻断一个目标API，再恢复。",
+      "expected": "受影响来源立即未知并保留历史；其他集群继续更新；平台整体ready，恢复后重新核对身份。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独立实例及按来源保存的成功/历史观测；Q 层使用受控时间/测试 API，K 层使用真实对象并单独注入故障。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "R02.primary",
+          "expected": "受影响来源立即未知并保留历史；其他集群继续更新；平台整体ready，恢复后重新核对身份。",
+          "steps": "成功观测两集群后仅阻断一个目标API，再恢复。 本子例输入：成功观测两集群后仅阻断一个目标API，再恢复。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "R03",
+      "requirements": [
+        "OBS"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "缺status与合法零值分开",
+      "steps": "参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。",
+      "expected": "按对应意图/契约区分，缺status不显示0/0可用；历史不作为当前成功。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独立实例及按来源保存的成功/历史观测；Q 层使用受控时间/测试 API，K 层使用真实对象并单独注入故障。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "R03.missing-status",
+          "expected": "运行摘要未知，不显示 0/0 可用",
+          "steps": "参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：整个 status 缺失。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R03.incomplete-status",
+          "expected": "未知，不能仅凭 Ready/Available 当作运行",
+          "steps": "参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：status 不足以对应当前资源/配置。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R03.ksm-suspended",
+          "expected": "解释为挂起，不能把意图即刻当完成",
+          "steps": "参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：有效状态确认 KSM 挂起且合法零值省略。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R03.ksm-disabled",
+          "expected": "解释为停用，保留 CR 与历史",
+          "steps": "参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：有效状态确认 KSM 停用。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R03.ksm-no-match",
+          "expected": "解释为无匹配且 0/0",
+          "steps": "参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：有效状态确认 namespace 零匹配。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R03.agent-zero",
+          "expected": "挂起与零副本分开解释，不因 Available=True 显示运行中",
+          "steps": "参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：Agent replicas=0 且有效状态确认。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R03.agent-paused",
+          "expected": "不能声称 Pod 已停止",
+          "steps": "参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：外部只读 Agent paused=true，仍有 Pod。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R03.deleted",
+          "expected": "生命周期已删除，不能冒充挂起或可用",
+          "steps": "参数化无status、字段合法省略、有效挂起/停用/零匹配及已删除。 本子例输入：原 CR/workload/Pod 全部核验消失。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "R04",
+      "requirements": [
+        "OBS",
+        "UI"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "部分副本就绪合并未就绪",
+      "steps": "令两副本中一个不可Ready，读取CR摘要及详情故障。",
+      "expected": "显示未就绪及实际1/2；保留故障原因，不再出现独立部分可用筛选或状态。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独立实例及按来源保存的成功/历史观测；Q 层使用受控时间/测试 API，K 层使用真实对象并单独注入故障。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "R04.primary",
+          "expected": "显示未就绪及实际1/2；保留故障原因，不再出现独立部分可用筛选或状态。",
+          "steps": "令两副本中一个不可Ready，读取CR摘要及详情故障。 本子例输入：令两副本中一个不可Ready，读取CR摘要及详情故障。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "requirements": [
+        "OBS",
+        "API"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "批次部分失败不能伪造不存在",
+      "steps": "分页/批量读取中令某页或某项失败，同时其余对象成功。",
+      "expected": "逐项/来源更新时间和错误；未完整核验项保持未知，不能当已删除或关联零匹配。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独立实例及按来源保存的成功/历史观测；Q 层使用受控时间/测试 API，K 层使用真实对象并单独注入故障。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "R05.page",
+          "expected": "未完整核验项未知，不按缺失/零匹配处理",
+          "steps": "分页/批量读取中令某页或某项失败，同时其余对象成功。 本子例输入：分页 List 中一页失败。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R05.item",
+          "expected": "逐实例/来源记录独立时间和错误",
+          "steps": "分页/批量读取中令某页或某项失败，同时其余对象成功。 本子例输入：批量结果中一个目标失败而其他成功。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "R06",
+      "requirements": [
+        "API",
+        "OBS"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "请求预算及并发不被内部放大",
+      "steps": "用阻塞测试API与可控时钟发起大量请求、手动和后台重复刷新。",
+      "expected": "HTTP/RPC/K8s遵守15/10/8秒及剩余预算；全局≤8、单集群≤4；同目标合并，不自动重放写请求。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独立实例及按来源保存的成功/历史观测；Q 层使用受控时间/测试 API，K 层使用真实对象并单独注入故障。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "R06.primary",
+          "expected": "HTTP/RPC/K8s遵守15/10/8秒及剩余预算；全局≤8、单集群≤4；同目标合并，不自动重放写请求。",
+          "steps": "用阻塞测试API与可控时钟发起大量请求、手动和后台重复刷新。 本子例输入：用阻塞测试API与可控时钟发起大量请求、手动和后台重复刷新。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "R07",
+      "requirements": [
+        "OBS",
+        "AGENT"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "辅助来源新鲜度独立",
+      "steps": "令CR持续成功而PVC/关联预览读取被拒绝，再修复权限。",
+      "expected": "CR成功时间不刷新辅助来源；其历史/错误分别保留；恢复后只以各自成功读取更新。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独立实例及按来源保存的成功/历史观测；Q 层使用受控时间/测试 API，K 层使用真实对象并单独注入故障。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "R07.pvc",
+          "expected": "PVC 历史/错误独立，CR 成功不能刷新 PVC 时间",
+          "steps": "令CR持续成功而PVC/关联预览读取被拒绝，再修复权限。 本子例输入：CR 成功，PVC 读取失败。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R07.pod",
+          "expected": "Pod 历史/错误独立，不能据此判清理完成",
+          "steps": "令CR持续成功而PVC/关联预览读取被拒绝，再修复权限。 本子例输入：CR 成功，Pod 读取失败。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "R07.association",
+          "expected": "关联未知不是零匹配，恢复按来源更新时间",
+          "steps": "令CR持续成功而PVC/关联预览读取被拒绝，再修复权限。 本子例输入：CR 成功，采集关联预览读取失败。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "R08",
+      "requirements": [
+        "OBS",
+        "TOPO"
+      ],
+      "layer": "K",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "重启首次读取前显示未知",
+      "steps": "有历史可用时重建平台Pod，并在首次读取前阻断目标API。",
+      "expected": "显示历史与当前未知，不能直接恢复可用标记；首次成功读取后才恢复当前判断。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "独立实例及按来源保存的成功/历史观测；Q 层使用受控时间/测试 API，K 层使用真实对象并单独注入故障。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "R08.primary",
+          "expected": "显示历史与当前未知，不能直接恢复可用标记；首次成功读取后才恢复当前判断。",
+          "steps": "有历史可用时重建平台Pod，并在首次读取前阻断目标API。 本子例输入：有历史可用时重建平台Pod，并在首次读取前阻断目标API。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "U01",
+      "requirements": [
+        "UI",
+        "TOPO"
+      ],
+      "layer": "B",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "C方案实际页面与信息层级",
+      "steps": "浏览器经平台Service访问真实构建；检查1137×954页面、表头、两级集群信息与统计。",
+      "expected": "品牌为可观测管控平台；名称下有namespace，类型/组件及状态分列；无横向溢出、重复名称或Operator状态报告。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "浏览器访问真实平台构建与集群；准备相应账号、实例和故障状态，不使用原型内存模拟替代业务响应。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable",
+        "browser_screenshot_and_console"
+      ],
+      "variants": [
+        {
+          "id": "U01.primary",
+          "expected": "品牌为可观测管控平台；名称下有namespace，类型/组件及状态分列；无横向溢出、重复名称或Operator状态报告。",
+          "steps": "浏览器经平台Service访问真实构建；检查1137×954页面、表头、两级集群信息与统计。 本子例输入：浏览器经平台Service访问真实构建；检查1137×954页面、表头、两级集群信息与统计。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "U02",
+      "requirements": [
+        "UI",
+        "KSM",
+        "AGENT"
+      ],
+      "layer": "B",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "统一添加与名称行为",
+      "steps": "由单一添加入口按类型选择两类组件；尝试中文/空名、保存、发布及复制。",
+      "expected": "展示exporter/collector与具体组件；名称直接成为CR name且不自动生成；创建后锁定，复制须新身份。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "浏览器访问真实平台构建与集群；准备相应账号、实例和故障状态，不使用原型内存模拟替代业务响应。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable",
+        "browser_screenshot_and_console"
+      ],
+      "variants": [
+        {
+          "id": "U02.primary",
+          "expected": "展示exporter/collector与具体组件；名称直接成为CR name且不自动生成；创建后锁定，复制须新身份。",
+          "steps": "由单一添加入口按类型选择两类组件；尝试中文/空名、保存、发布及复制。 本子例输入：由单一添加入口按类型选择两类组件；尝试中文/空名、保存、发布及复制。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "U03",
+      "requirements": [
+        "UI",
+        "KSM"
+      ],
+      "layer": "B",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "多选及轮询保持编辑位置",
+      "steps": "在KSM抽屉连续选常用collectors/集群namespace，滚动并等待后台刷新。",
+      "expected": "常用项在前；多选来自所选集群；内容、焦点和滚动不跳回顶部，读取失败保留选择并提示。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "浏览器访问真实平台构建与集群；准备相应账号、实例和故障状态，不使用原型内存模拟替代业务响应。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable",
+        "browser_screenshot_and_console"
+      ],
+      "variants": [
+        {
+          "id": "U03.primary",
+          "expected": "常用项在前；多选来自所选集群；内容、焦点和滚动不跳回顶部，读取失败保留选择并提示。",
+          "steps": "在KSM抽屉连续选常用collectors/集群namespace，滚动并等待后台刷新。 本子例输入：在KSM抽屉连续选常用collectors/集群namespace，滚动并等待后台刷新。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "U04",
+      "requirements": [
+        "UI",
+        "API"
+      ],
+      "layer": "B",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "搜索筛选和最近操作排序",
+      "steps": "组合名称字面搜索/类型/组件/状态、制造零结果并清除；编辑后刷新/等待后台完成。",
+      "expected": "AND及大小写规则正确，组件随类型收窄；统计不随筛选；显式操作置前、未纳管置底，查看和轮询不改顺序。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "浏览器访问真实平台构建与集群；准备相应账号、实例和故障状态，不使用原型内存模拟替代业务响应。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable",
+        "browser_screenshot_and_console"
+      ],
+      "variants": [
+        {
+          "id": "U04.primary",
+          "expected": "AND及大小写规则正确，组件随类型收窄；统计不随筛选；显式操作置前、未纳管置底，查看和轮询不改顺序。",
+          "steps": "组合名称字面搜索/类型/组件/状态、制造零结果并清除；编辑后刷新/等待后台完成。 本子例输入：组合名称字面搜索/类型/组件/状态、制造零结果并清除；编辑后刷新/等待后台完成。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "U05",
+      "requirements": [
+        "UI",
+        "PUBLISH"
+      ],
+      "layer": "B",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL"
+      ],
+      "purpose": "版本入口是原来源配置",
+      "steps": "保留未保存编辑，点击最近写入版本，再返回当前草稿；提交新版本及制造失败。",
+      "expected": "只读快照不被新草稿污染；返回后编辑保留；仅确认写入提升版本，失败/未部署/未纳管不虚构当前版本。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "浏览器访问真实平台构建与集群；准备相应账号、实例和故障状态，不使用原型内存模拟替代业务响应。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable",
+        "browser_screenshot_and_console"
+      ],
+      "variants": [
+        {
+          "id": "U05.primary",
+          "expected": "只读快照不被新草稿污染；返回后编辑保留；仅确认写入提升版本，失败/未部署/未纳管不虚构当前版本。",
+          "steps": "保留未保存编辑，点击最近写入版本，再返回当前草稿；提交新版本及制造失败。 本子例输入：保留未保存编辑，点击最近写入版本，再返回当前草稿；提交新版本及制造失败。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "U06",
+      "requirements": [
+        "UI",
+        "PUBLISH"
+      ],
+      "layer": "B",
+      "target": "control",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_SMOKE"
+      ],
+      "purpose": "YAML预览及确认后导航",
+      "steps": "预览两类CR的左右diff（含数组/selector），确认下发并查看运行信息与尝试历史。",
+      "expected": "YAML可解析且无孤立对象项横杠；确认立即进入运行信息，已接受/CR写入/运行分开，实际CR与预览语义一致。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "浏览器访问真实平台构建与集群；准备相应账号、实例和故障状态，不使用原型内存模拟替代业务响应。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable",
+        "browser_screenshot_and_console"
+      ],
+      "variants": [
+        {
+          "id": "U06.primary",
+          "expected": "YAML可解析且无孤立对象项横杠；确认立即进入运行信息，已接受/CR写入/运行分开，实际CR与预览语义一致。",
+          "steps": "预览两类CR的左右diff（含数组/selector），确认下发并查看运行信息与尝试历史。 本子例输入：预览两类CR的左右diff（含数组/selector），确认下发并查看运行信息与尝试历史。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "F01",
+      "requirements": [
+        "API",
+        "AGENT"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "Thrift往返保留显式配置语义",
+      "steps": "用实际锁定生成参数往返编码外层缺失、空对象、空集合、显式模式及未知枚举。",
+      "expected": "省略与{}及清空含义不混淆；非法组合/未知mode拒绝；HTTP/RPC/平台配置/CR映射一致。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "锁定实际代码生成参数、真实 RPC 与 SQLite；测试适配器只用于明确故障注入，不作为产品旁路。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "F01.absent",
+          "expected": "缺失不意外变为空对象",
+          "steps": "用实际锁定生成参数往返编码外层缺失、空对象、空集合、显式模式及未知枚举。 本子例输入：实际生成类型的缺失 optional 外层配置。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F01.empty-object",
+          "expected": "{} 与省略保持不同语义",
+          "steps": "用实际锁定生成参数往返编码外层缺失、空对象、空集合、显式模式及未知枚举。 本子例输入：显式全选模式产生空 selector 对象。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F01.empty-list",
+          "expected": "清空语义保持，非法组合拒绝",
+          "steps": "用实际锁定生成参数往返编码外层缺失、空对象、空集合、显式模式及未知枚举。 本子例输入：合法显式清空集合与模式配套。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F01.unknown-mode",
+          "expected": "拒绝，不默认退化为全选或不选",
+          "steps": "用实际锁定生成参数往返编码外层缺失、空对象、空集合、显式模式及未知枚举。 本子例输入：未知枚举或缺失必需显式 mode。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "F02",
+      "requirements": [
+        "API",
+        "AUTH"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "真实RPC链路不能被HTTP旁路",
+      "steps": "启动真实Kitex client/server与SQLite测试库；记录同requestId的调用；令RPC不可用。",
+      "expected": "正常HTTP业务抵达server并执行业务授权；RPC不可用时无直接DB/K8s成功旁路；伪造角色/身份无效。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "锁定实际代码生成参数、真实 RPC 与 SQLite；测试适配器只用于明确故障注入，不作为产品旁路。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "F02.primary",
+          "expected": "正常HTTP业务抵达server并执行业务授权；RPC不可用时无直接DB/K8s成功旁路；伪造角色/身份无效。",
+          "steps": "启动真实Kitex client/server与SQLite测试库；记录同requestId的调用；令RPC不可用。 本子例输入：启动真实Kitex client/server与SQLite测试库；记录同requestId的调用；令RPC不可用。。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "F03",
+      "requirements": [
+        "API",
+        "KSM",
+        "AGENT"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "后端字段校验及稳定错误",
+      "steps": "直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。",
+      "expected": "对应字段级错误且不写集群；请求/未认证/无权/冲突/配置错误按稳定code及HTTP类别区分，秘密不泄漏。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "锁定实际代码生成参数、真实 RPC 与 SQLite；测试适配器只用于明确故障注入，不作为产品旁路。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "F03.quantity",
+          "expected": "稳定字段级错误与 HTTP 类别，CR 无写入，敏感值不泄漏",
+          "steps": "直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。 本子例输入：分别经 HTTP/直接 RPC 提交 非法 quantity、负数或 request>limit。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F03.regexp",
+          "expected": "稳定字段级错误与 HTTP 类别，CR 无写入，敏感值不泄漏",
+          "steps": "直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。 本子例输入：分别经 HTTP/直接 RPC 提交 Go regexp 不接受的正则/含逗号指标项。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F03.selector",
+          "expected": "稳定字段级错误与 HTTP 类别，CR 无写入，敏感值不泄漏",
+          "steps": "直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。 本子例输入：分别经 HTTP/直接 RPC 提交 非法 LabelSelector 或不相容模式。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F03.url",
+          "expected": "稳定字段级错误与 HTTP 类别，CR 无写入，敏感值不泄漏",
+          "steps": "直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。 本子例输入：分别经 HTTP/直接 RPC 提交 非法 URL、零 remoteWrite endpoint 或重复 name。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F03.tls-pair",
+          "expected": "稳定字段级错误与 HTTP 类别，CR 无写入，敏感值不泄漏",
+          "steps": "直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。 本子例输入：分别经 HTTP/直接 RPC 提交 未配对客户端证书/私钥或非法认证组合。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F03.unknown-field",
+          "expected": "稳定字段级错误与 HTTP 类别，CR 无写入，敏感值不泄漏",
+          "steps": "直接发送非法quantity/正则/selector/URL/字段组合和未知字段，绕过页面禁用。 本子例输入：分别经 HTTP/直接 RPC 提交 不支持字段、资源键或高级透传。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "F04",
+      "requirements": [
+        "PERSIST"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "迁移失败保留原数据库",
+      "steps": "在带历史与密文的库上制作一致性快照，分别执行成功迁移与受控失败。",
+      "expected": "成功保留关系和可解密性；失败保留原库/可恢复快照；不把迁移失败替换为空库。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "锁定实际代码生成参数、真实 RPC 与 SQLite；测试适配器只用于明确故障注入，不作为产品旁路。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "F04.success",
+          "expected": "关系、历史和可解密性保留",
+          "steps": "在带历史与密文的库上制作一致性快照，分别执行成功迁移与受控失败。 本子例输入：对带历史与密文的库执行成功迁移。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F04.failure",
+          "expected": "保留原库与恢复快照，不替换为空库",
+          "steps": "在带历史与密文的库上制作一致性快照，分别执行成功迁移与受控失败。 本子例输入：一致性快照后受控迁移失败。",
+          "status": "planned_not_executed"
+        }
+      ]
+    },
+    {
+      "id": "F05",
+      "requirements": [
+        "API",
+        "PUBLISH"
+      ],
+      "layer": "Q",
+      "target": "none",
+      "profiles": [
+        "LOCAL_FULL",
+        "CI_FAST"
+      ],
+      "purpose": "幂等与任务受理事务原子",
+      "steps": "在版本、操作、尝试、去重/保护事务的提交边界注入崩溃，并重复相同请求键。",
+      "expected": "仅完整提交或全部未提交；不能返回接受后缺任务；重启重复请求不会产生第二固定意图或绕过授权。",
+      "status": "planned_not_executed",
+      "preconditions": [
+        "锁定实际代码生成参数、真实 RPC 与 SQLite；测试适配器只用于明确故障注入，不作为产品旁路。",
+        "继承本例步骤中指定的额外前置；不依赖其他用例残余状态。"
+      ],
+      "cleanup": [
+        "先保存脱敏证据，再恢复本例的权限、CRD、StorageClass、网络或故障注入。",
+        "由测试工具清理仅本 runId 所属资源；平台删除与测试环境 PVC 清理分别记录，集群顺序删除。"
+      ],
+      "evidence": [
+        "source_revision_and_images",
+        "case_and_variant_result",
+        "sanitized_api_or_rpc_trace",
+        "operation_version_uid_or_observation_when_applicable"
+      ],
+      "variants": [
+        {
+          "id": "F05.before-commit",
+          "expected": "要么完整未提交，不留下半个受理状态",
+          "steps": "在版本、操作、尝试、去重/保护事务的提交边界注入崩溃，并重复相同请求键。 本子例输入：事务提交前崩溃。",
+          "status": "planned_not_executed"
+        },
+        {
+          "id": "F05.after-commit",
+          "expected": "同键重启查询原完整结果，不产生第二操作；仍执行当前授权",
+          "steps": "在版本、操作、尝试、去重/保护事务的提交边界注入崩溃，并重复相同请求键。 本子例输入：提交后、返回前崩溃。",
+          "status": "planned_not_executed"
+        }
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "title": "可观测管控平台一期验收目录",
+  "language": "zh-CN",
+  "decision_map": "https://github.com/fjsxy/monitor-mgr/issues/1",
+  "acceptance_resolution": "https://github.com/fjsxy/monitor-mgr/issues/11#issuecomment-6245825277",
+  "deployment_amendments": [
+    "https://github.com/fjsxy/monitor-mgr/issues/4#issuecomment-6245828652",
+    "https://github.com/fjsxy/monitor-mgr/issues/12#issuecomment-6245828870"
+  ],
+  "profiles": {
+    "LOCAL_FULL": {
+      "base_cases": 80,
+      "host": "macOS arm64",
+      "runtime": "Linux arm64",
+      "clusters": 2,
+      "purpose": "发布前完整门禁"
+    },
+    "CI_FAST": {
+      "base_cases": 17,
+      "host": "Linux amd64",
+      "runtime": "Linux amd64",
+      "clusters": 0,
+      "purpose": "快速/真实进程与协议集成，不冒充 Kubernetes 运行验收"
+    },
+    "CI_SMOKE": {
+      "base_cases": 14,
+      "host": "Linux amd64",
+      "runtime": "Linux amd64",
+      "clusters": 1,
+      "purpose": "真实平台 Pod 单集群通路，不替代完整矩阵"
+    }
+  },
+  "version_baseline": {
+    "kubernetes": "1.28.15",
+    "kind": "0.33.0",
+    "ksm": "2.11.0",
+    "monitor_op_source": "2b2a8b79a52070fb89a08f5afae2b7698901c999",
+    "prometheus_operator": "0.83.0",
+    "prometheus_operator_source": "5cf2f5d37906d64b2259a262e319df4c74639e31",
+    "prometheus": "2.55.1",
+    "locks_source": "https://github.com/fjsxy/monitor-mgr/issues/11#issuecomment-6245825277",
+    "artifact_identity_rule": "运行前记录平台、monitor-op、KSM、provisioner 的实际不可变产物身份与各架构解析结果；不得以浮动 tag 或元数据校验冒充运行成功"
+  },
+  "execution_policy": "子例必须分别执行、取证并记录结果；父例不是任意一子例通过即可通过。元数据校验不产生产品测试通过结果。"
+}
