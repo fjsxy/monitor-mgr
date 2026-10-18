@@ -158,3 +158,32 @@ func TestAgentStorageNewInstanceRejectsOrphanClaim(t *testing.T) {
 		t.Fatal("碰撞后仍创建候选Agent")
 	}
 }
+
+// R03.agent-zero：适用当前generation的零副本status可合法省略计数字段，不能推断仍在运行。
+func TestR03AgentZeroUsesApplicableStatus(t *testing.T) {
+	for _, variant := range []string{"valid-zero", "missing-status", "old-generation"} {
+		t.Run(variant, func(t *testing.T) {
+			p, c, cluster, _, f := agentSafetyFixture(t, nil)
+			cr := map[string]any{"apiVersion": "monitoring.coreos.com/v1alpha1", "kind": "PrometheusAgent", "metadata": map[string]any{"name": "zero-agent", "namespace": "monitoring", "uid": "zero-agent-uid", "generation": 2}, "spec": map[string]any{"replicas": 0, "shards": 3, "paused": false, "mode": "StatefulSet"}}
+			if variant != "missing-status" {
+				generation := 2
+				if variant == "old-generation" {
+					generation = 1
+				}
+				cr["status"] = map[string]any{"conditions": []any{map[string]any{"type": "Available", "status": "True", "observedGeneration": generation}}}
+			}
+			f.mu.Lock()
+			f.objects["monitoring/zero-agent"] = cr
+			f.mu.Unlock()
+			list := clusterCall(t, p, "GET", "/clusters/"+cluster+"/instances", nil, c, "", 200)["instances"].([]any)
+			runtime := list[0].(map[string]any)["runtime"].(map[string]any)
+			if variant == "valid-zero" {
+				if runtime["summary"] != "Suspended" || runtime["desiredPods"] != float64(0) || runtime["availablePods"] != float64(0) || runtime["shards"] != float64(3) || runtime["paused"] != false {
+					t.Fatal("合法零值被丢失或被误报运行", runtime)
+				}
+			} else if runtime["summary"] != "Unknown" {
+				t.Fatal("无适用status猜测挂起", runtime)
+			}
+		})
+	}
+}
