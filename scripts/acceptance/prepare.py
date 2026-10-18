@@ -86,6 +86,16 @@ def _request(request):
     return result
 
 
+def operator_bundle_objects(text):
+    """固定官方bundle转对象；保留SafeLoader的标准类型及安全边界。"""
+    import yaml
+    class OperatorBundleSafeLoader(yaml.SafeLoader):
+        pass
+    # 关键：YAML1.1将裸'='标为标准value；只在局部SafeLoader补字符串构造，不放开Python标签或改原bundle。
+    OperatorBundleSafeLoader.add_constructor('tag:yaml.org,2002:value', yaml.SafeLoader.construct_scalar)
+    return list(yaml.load_all(text, Loader=OperatorBundleSafeLoader))
+
+
 class _Preparation:
     """只组合公开命令和 checkpoint；不管理 lane 或自行启动子进程。"""
     def __init__(self, request, execute, ledger):
@@ -322,7 +332,7 @@ class _Preparation:
             os.chmod(bundle, 0o600)
         if hashlib.sha256(bundle.read_bytes()).hexdigest() != LOCK['prometheusOperator']['bundleSHA256']:
             raise PrepareError('PREPARE_PUBLIC_BUNDLE_DIGEST_MISMATCH')
-        objects = list(yaml.safe_load_all(bundle.read_text()))
+        objects = operator_bundle_objects(bundle.read_text())
         for obj in objects:
             if not obj:
                 continue

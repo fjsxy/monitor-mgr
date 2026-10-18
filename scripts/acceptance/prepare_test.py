@@ -9,11 +9,26 @@ import subprocess
 import tempfile
 import unittest
 
-from prepare import PrepareError, prepare_environment, cleanup_environment, verify_environment
+from prepare import PrepareError, prepare_environment, cleanup_environment, verify_environment, operator_bundle_objects
 from transport import ProcessFailure
 
 
 class PrepareProtocolTest(unittest.TestCase):
+    def test_public_operator_bundle_preserves_literal_equal_enum_and_scalar_types(self):
+        """官方0.83 bundle合法裸'='必须保留；不能为绕过解析把bool/int全改string。"""
+        objects=operator_bundle_objects("apiVersion: v1\nkind: ConfigMap\nspec:\n  enabled: true\n  replicas: 2\n  matchType:\n    enum:\n    - '!='\n    - =\n    - =~\n    - '!~'\n")
+        self.assertEqual(objects[0]['spec']['matchType']['enum'],['!=','=','=~','!~'])
+        self.assertIs(objects[0]['spec']['enabled'],True)
+        self.assertIs(type(objects[0]['spec']['replicas']),int)
+
+    def test_public_operator_bundle_cannot_enable_python_tags_or_mutate_global_loader(self):
+        """局部构造器仅兼容YAML标准value标量，未知/Python标签仍拒绝。"""
+        import yaml
+        with self.assertRaises(yaml.constructor.ConstructorError):
+            operator_bundle_objects('!!python/name:builtins.eval')
+        with self.assertRaises(yaml.constructor.ConstructorError):
+            yaml.safe_load('value: =')
+
     def test_fast_has_no_cluster_and_never_invokes_environment_commands(self):
         with tempfile.TemporaryDirectory() as directory:
             request = {'profile': 'CI_FAST', 'runId': 'protocol-fast', 'candidate': 'a' * 40,
