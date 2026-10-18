@@ -66,6 +66,9 @@ func (a componentAdapter) normalizeSpec(spec map[string]any) string {
 	return normalizedSpec(spec)
 }
 func (a componentAdapter) interpret(cr map[string]any, now string) *rpc.InstanceRuntime {
+	if a.component == AgentComponent {
+		return interpretAgent(cr, now)
+	}
 	return interpretKSM(cr, now)
 }
 func (t *Target) readComponent(ctx context.Context, i *rpc.ObservationInstance) (map[string]any, error) {

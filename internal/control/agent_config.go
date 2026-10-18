@@ -3,10 +3,13 @@ package control
 
 import (
 	"encoding/json"
+	"math"
 	"net/url"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -233,7 +236,7 @@ func (c *AgentConfig) validate() error {
 			}
 			names[*r.Name] = true
 		}
-		if r.RemoteTimeout != nil && (*r.RemoteTimeout == "" || !prometheusDurationRE.MatchString(*r.RemoteTimeout)) {
+		if r.RemoteTimeout != nil && (*r.RemoteTimeout == "" || !validPrometheusDuration(*r.RemoteTimeout)) {
 			return fieldError("agent.remoteWrite.remoteTimeout", "须为合法Prometheus duration")
 		}
 		switch r.Auth.Mode {
@@ -347,7 +350,7 @@ func (r RemoteEndpoint) references() []*SecretReference {
 }
 func (r *SecretReference) cr() map[string]any { return map[string]any{"name": r.Name, "key": r.Key} }
 func (c *AgentConfig) spec() map[string]any {
-	spec := map[string]any{"mode": "StatefulSet", "version": "v2.55.1", "shards": c.Shards, "replicas": 1, "paused": false, "serviceAccountName": c.ServiceAccountName, "resources": c.Resources.cr(), "storage": map[string]any{"volumeClaimTemplate": map[string]any{"spec": map[string]any{"accessModes": []string{"ReadWriteOnce"}, "resources": map[string]any{"requests": map[string]any{"storage": *c.Storage.Capacity}}}}}, "persistentVolumeClaimRetentionPolicy": map[string]any{"whenScaled": c.Storage.WhenScaled, "whenDeleted": c.Storage.WhenDeleted}}
+	spec := map[string]any{"mode": "StatefulSet", "version": "v2.55.1", "image": "quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3", "shards": c.Shards, "replicas": 1, "paused": false, "serviceAccountName": c.ServiceAccountName, "resources": c.Resources.cr(), "storage": map[string]any{"volumeClaimTemplate": map[string]any{"spec": map[string]any{"accessModes": []string{"ReadWriteOnce"}, "resources": map[string]any{"requests": map[string]any{"storage": *c.Storage.Capacity}}}}}, "persistentVolumeClaimRetentionPolicy": map[string]any{"whenScaled": c.Storage.WhenScaled, "whenDeleted": c.Storage.WhenDeleted}}
 	for kind, rule := range c.associationRules() {
 		prefix := strings.ToLower(kind[:1]) + kind[1:]
 		if x := rule.Object.cr(); x != nil {
@@ -406,4 +409,26 @@ func sameAgentStorage(a, b *AgentConfig) bool {
 	}
 	y, e := resource.ParseQuantity(*b.Storage.Capacity)
 	return e == nil && x.Cmp(y) == 0
+}
+
+// validPrometheusDuration保留y/w/d语法并逐段检查乘加溢出，与Prometheus的time.Duration范围一致。
+func validPrometheusDuration(value string) bool {
+	if !prometheusDurationRE.MatchString(value) || value == "" {
+		return false
+	}
+	if value == "0" {
+		return true
+	}
+	units := map[string]uint64{"ms": uint64(time.Millisecond), "s": uint64(time.Second), "m": uint64(time.Minute), "h": uint64(time.Hour), "d": uint64(24 * time.Hour), "w": uint64(7 * 24 * time.Hour), "y": uint64(365 * 24 * time.Hour)}
+	parts := regexp.MustCompile(`([0-9]+)(ms|[ywdhms])`).FindAllStringSubmatch(value, -1)
+	total := uint64(0)
+	for _, part := range parts {
+		number, e := strconv.ParseUint(part[1], 10, 64)
+		unit := units[part[2]]
+		if e != nil || unit == 0 || number > (uint64(math.MaxInt64)-total)/unit {
+			return false
+		}
+		total += number * unit
+	}
+	return len(parts) > 0
 }

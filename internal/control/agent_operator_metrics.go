@@ -1,9 +1,10 @@
-// 固定Operator运行能力证据取自同一原Pod；仅当前RBAC或CRD不能证明启动时建立了informer。
+// 固定Operator运行能力证据取自同一原Pod；当前RBAC或CRD不能证明启动时建立了controller/informer。
 package control
 
 import (
 	"context"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -16,6 +17,35 @@ func agentOwnedBy(obj map[string]any, kind, uid string) bool {
 		}
 	}
 	return false
+}
+
+var scrapeEndpointMetric = regexp.MustCompile(`endpoint="/apis/monitoring\.coreos\.com/v1alpha1/(namespaces/[^/]+/)?scrapeconfigs"`)
+
+func operatorContainer(pod map[string]any) map[string]any {
+	for _, raw := range anySlice(objectMap(pod, "spec")["containers"]) {
+		c, ok := raw.(map[string]any)
+		if ok && strings.Contains(objectString(c, "image"), "prometheus-operator/prometheus-operator") {
+			return c
+		}
+	}
+	return nil
+}
+func operatorContainerID(pod map[string]any, name string) (string, bool) {
+	for _, raw := range anySlice(objectMap(pod, "status")["containerStatuses"]) {
+		c, ok := raw.(map[string]any)
+		if ok && c["name"] == name {
+			return objectString(c, "containerID"), c["ready"] == true
+		}
+	}
+	return "", false
+}
+func operatorFlagsSafe(args map[string]string) bool {
+	for _, flag := range []string{"as", "as-group", "apiserver", "cert-file", "key-file", "ca-file", "tls-insecure", "tls-server-name", "kubeconfig"} {
+		if _, ok := args[flag]; ok {
+			return false
+		}
+	}
+	return true
 }
 func (t *Target) verifyOperatorRuntime(ctx context.Context, o *operatorAccess, requireScrape bool) error {
 	if o.uid == "" {
@@ -35,6 +65,9 @@ func (t *Target) verifyOperatorRuntime(ctx context.Context, o *operatorAccess, r
 	if e != nil {
 		return Error("TARGET_ERROR", "无法核验Operator Pod身份")
 	}
+	template := objectMap(objectMap(o.deployment, "spec"), "template")
+	expected := operatorContainer(map[string]any{"spec": objectMap(template, "spec")})
+	proven := 0
 	for _, pod := range pods {
 		owned := false
 		for uid := range owners {
@@ -46,21 +79,19 @@ func (t *Target) verifyOperatorRuntime(ctx context.Context, o *operatorAccess, r
 			continue
 		}
 		meta := objectMap(pod, "metadata")
+		if meta["deletionTimestamp"] != nil {
+			continue
+		}
 		name, uid := objectString(meta, "name"), objectString(meta, "uid")
-		if uid == "" || objectString(objectMap(pod, "status"), "phase") != "Running" {
-			continue
+		container := operatorContainer(pod)
+		// 关键：同Deployment旧RS并不能代表当前template；滚动中不同scope/身份一律阻止，不能任选绿Pod。
+		if uid == "" || container == nil || expected == nil || objectString(objectMap(pod, "spec"), "serviceAccountName") != objectString(objectMap(template, "spec"), "serviceAccountName") || container["image"] != expected["image"] || canonical(argumentMap(container["args"])) != canonical(o.args) || len(anySlice(container["command"])) > 0 || !operatorFlagsSafe(argumentMap(container["args"])) {
+			return Error("CONFLICT", "Operator实际Pod的访问身份/目标/参数与当前配置无法一致确认")
 		}
-		ready := false
-		for _, raw := range anySlice(objectMap(pod, "status")["containerStatuses"]) {
-			status, ok := raw.(map[string]any)
-			if ok && status["name"] == "prometheus-operator" && status["ready"] == true {
-				ready = true
-			}
+		containerID, ready := operatorContainerID(pod, objectString(container, "name"))
+		if containerID == "" || !ready || objectString(objectMap(pod, "status"), "phase") != "Running" {
+			return Error("CONFLICT", "Operator实际Pod尚未就绪")
 		}
-		if !ready {
-			continue
-		}
-		// 关键：通过API代理取同Pod的metrics，API连接的TLS/身份与权限沿用目标适配器。
 		var metrics targetText
 		if e = t.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(o.namespace)+"/pods/"+url.PathEscape(name+":8080")+"/proxy/metrics", nil, &metrics); e != nil {
 			return Error("TARGET_FORBIDDEN", "无法读取Operator运行能力指标，需要pods/proxy读取权限")
@@ -82,7 +113,7 @@ func (t *Target) verifyOperatorRuntime(ctx context.Context, o *operatorAccess, r
 			if strings.HasPrefix(metric, "prometheus_operator_ready{") && strings.Contains(metric, `controller="prometheus-agent"`) && value == 1 {
 				hasAgent = true
 			}
-			if strings.HasPrefix(metric, "prometheus_operator_kubernetes_client_http_request_duration_seconds_count{") && strings.Contains(metric, "scrapeconfigs\"") && value > 0 {
+			if strings.HasPrefix(metric, "prometheus_operator_kubernetes_client_http_request_duration_seconds_count{") && scrapeEndpointMetric.MatchString(metric) && value > 0 {
 				hasScrape = true
 			}
 		}
@@ -90,12 +121,17 @@ func (t *Target) verifyOperatorRuntime(ctx context.Context, o *operatorAccess, r
 		if e = t.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(o.namespace)+"/pods/"+url.PathEscape(name), nil, &current); e != nil {
 			return e
 		}
-		if objectString(objectMap(current, "metadata"), "uid") != uid {
-			return Error("CONFLICT", "Operator Pod读取期间被替换")
+		currentID, currentReady := operatorContainerID(current, objectString(container, "name"))
+		if objectString(objectMap(current, "metadata"), "uid") != uid || currentID != containerID || !currentReady || objectMap(current, "metadata")["deletionTimestamp"] != nil {
+			return Error("CONFLICT", "Operator Pod或容器读取期间被替换")
 		}
-		if hasBuild && hasAgent && (!requireScrape || hasScrape) {
-			return nil
+		if !hasBuild || !hasAgent || requireScrape && !hasScrape {
+			return Error("CONFLICT", "原Operator进程未证明Agent controller及所需ScrapeConfig informer已就绪")
 		}
+		proven++
 	}
-	return Error("CONFLICT", "运行Operator未证明Agent controller及ScrapeConfig informer已就绪")
+	if proven == 0 {
+		return Error("CONFLICT", "没有身份与运行能力均可确认的Operator原Pod")
+	}
+	return nil
 }

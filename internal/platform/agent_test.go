@@ -84,6 +84,7 @@ func TestAgentDefaultPublicationWithDependencies(t *testing.T) {
 type agentFixture struct {
 	mu      sync.Mutex
 	objects map[string]map[string]any
+	hook    func(http.ResponseWriter, *http.Request) bool
 }
 
 func agentTarget(t *testing.T) (*agentFixture, string) {
@@ -92,6 +93,12 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 	f := &agentFixture{objects: map[string]map[string]any{}}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		f.mu.Lock()
+		hook := f.hook
+		f.mu.Unlock()
+		if hook != nil && hook(w, r) {
+			return
+		}
 		switch {
 		case r.URL.Path == "/api/v1/namespaces/monitoring":
 			io.WriteString(w, `{"metadata":{"name":"monitoring","uid":"ns-uid"}}`)
@@ -104,13 +111,21 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 		case r.URL.Path == "/apis/apps/v1/namespaces/operators/replicasets":
 			io.WriteString(w, `{"items":[{"metadata":{"name":"operator-rs","uid":"operator-rs-uid","ownerReferences":[{"kind":"Deployment","uid":"operator-uid","controller":true}]}}]}`)
 		case r.URL.Path == "/api/v1/namespaces/operators/pods":
-			io.WriteString(w, `{"items":[{"metadata":{"name":"operator-pod","uid":"operator-pod-uid","ownerReferences":[{"kind":"ReplicaSet","uid":"operator-rs-uid","controller":true}]},"status":{"phase":"Running","containerStatuses":[{"name":"prometheus-operator","ready":true}]}}]}`)
+			io.WriteString(w, `{"items":[{"metadata":{"name":"operator-pod","uid":"operator-pod-uid","ownerReferences":[{"kind":"ReplicaSet","uid":"operator-rs-uid","controller":true}]},"spec":{"serviceAccountName":"prometheus-operator","containers":[{"name":"prometheus-operator","image":"quay.io/prometheus-operator/prometheus-operator:v0.83.0","args":[]}]},"status":{"phase":"Running","containerStatuses":[{"name":"prometheus-operator","ready":true,"containerID":"containerd://operator-instance"}]}}]}`)
 		case r.URL.Path == "/api/v1/namespaces/operators/pods/operator-pod":
-			io.WriteString(w, `{"metadata":{"name":"operator-pod","uid":"operator-pod-uid"}}`)
+			io.WriteString(w, `{"metadata":{"name":"operator-pod","uid":"operator-pod-uid"},"status":{"containerStatuses":[{"name":"prometheus-operator","ready":true,"containerID":"containerd://operator-instance"}]}}`)
 		case strings.HasSuffix(r.URL.Path, "/proxy/metrics"):
 			io.WriteString(w, "prometheus_operator_build_info{version=\"0.83.0\",revision=\"5cf2f5d\"} 1\nprometheus_operator_ready{controller=\"prometheus-agent\"} 1\nprometheus_operator_kubernetes_client_http_request_duration_seconds_count{endpoint=\"/apis/monitoring.coreos.com/v1alpha1/scrapeconfigs\"} 1\n")
 		case r.URL.Path == "/apis/authorization.k8s.io/v1/subjectaccessreviews":
 			io.WriteString(w, `{"status":{"allowed":true}}`)
+		case r.URL.Path == "/apis/monitoring.coreos.com/v1alpha1/prometheusagents":
+			f.mu.Lock()
+			items := []any{}
+			for _, cr := range f.objects {
+				items = append(items, cr)
+			}
+			f.mu.Unlock()
+			json.NewEncoder(w).Encode(map[string]any{"items": items})
 		case strings.Contains(r.URL.Path, "/prometheusagents") && strings.Contains(r.URL.Path, "/namespaces/"):
 			parts := strings.Split(r.URL.Path, "/")
 			ns := parts[5]
@@ -152,4 +167,25 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 	pem := base64.StdEncoding.EncodeToString([]byte(pemCert(srv.Certificate().Raw)))
 	target := `{"apiVersion":"v1","kind":"Config","clusters":[{"name":"target","cluster":{"server":"` + srv.URL + `","certificate-authority-data":"` + pem + `"}}],"users":[{"name":"identity","user":{"token":"fixture-sensitive-token"}}],"contexts":[{"name":"explicit","context":{"cluster":"target","user":"identity"}}]}`
 	return f, target
+}
+
+// R03.agent-paused：外部paused仅停止调谐，已有Pod不能被宣称停止。
+func TestR03AgentPausedReadOnly(t *testing.T) {
+	f, target := agentTarget(t)
+	p, c, owner := clusterPlatform(t)
+	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "agent", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
+	cluster := awaitClusterOperation(t, p, c, op["operationId"].(string))["clusterId"].(string)
+	f.mu.Lock()
+	f.objects["monitoring/outside"] = map[string]any{"apiVersion": "monitoring.coreos.com/v1alpha1", "kind": "PrometheusAgent", "metadata": map[string]any{"name": "outside", "namespace": "monitoring", "uid": "outside-agent", "generation": 1}, "spec": map[string]any{"paused": true, "replicas": 1, "shards": 1}, "status": map[string]any{"paused": true, "replicas": 1, "availableReplicas": 1, "conditions": []any{map[string]any{"type": "Available", "status": "True", "observedGeneration": 1}}}}
+	f.mu.Unlock()
+	list := clusterCall(t, p, "GET", "/clusters/"+cluster+"/instances", nil, c, "", 200)["instances"].([]any)
+	if len(list) != 1 {
+		t.Fatal("未发现外部Agent")
+	}
+	i := list[0].(map[string]any)
+	r := i["runtime"].(map[string]any)
+	if i["readOnly"] != true || i["type"] != "collector" || r["summary"] == "Suspended" || r["paused"] != true {
+		t.Fatal("paused被错误解释为停止Pod")
+	}
+	clusterCall(t, p, "PUT", "/instances/"+i["id"].(string)+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": agentConfig("outside", "monitoring")}, c, "cannot-adopt", 403)
 }

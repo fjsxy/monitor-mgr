@@ -150,6 +150,9 @@ func (s *Store) GetInstance(ctx context.Context, c *rpc.RequestContext, r *rpc.I
 	}
 	if !i.ReadOnly {
 		i.Runtime, e = s.GetRuntime(ctx, c, r)
+		if i.Component == AgentComponent {
+			i.Sources = s.agentSources(ctx, i)
+		}
 	}
 	return i, e
 }
@@ -181,6 +184,9 @@ func (s *Store) ListInstances(ctx context.Context, c *rpc.RequestContext, r *rpc
 			return nil, e
 		}
 		i.Runtime = runtime
+		if i.Component == AgentComponent {
+			i.Sources = s.agentSources(ctx, i)
+		}
 	}
 	cl, e := s.GetCluster(ctx, c, r)
 	if e != nil {

@@ -3,6 +3,8 @@ package control
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"net/url"
 	"strings"
 
@@ -87,18 +89,21 @@ func argumentMap(raw any) map[string]string {
 	values, _ := raw.([]any)
 	for n := 0; n < len(values); n++ {
 		v, _ := values[n].(string)
-		if !strings.HasPrefix(v, "--") {
+		if !strings.HasPrefix(v, "-") || v == "-" {
 			continue
 		}
-		p := strings.SplitN(strings.TrimPrefix(v, "--"), "=", 2)
+		p := strings.SplitN(strings.TrimLeft(v, "-"), "=", 2)
 		if len(p) == 2 {
 			m[p[0]] = p[1]
 		} else if n+1 < len(values) {
+			m[p[0]] = "true"
 			next, _ := values[n+1].(string)
-			if !strings.HasPrefix(next, "--") {
+			if !strings.HasPrefix(next, "-") {
 				m[p[0]] = next
 				n++
 			}
+		} else {
+			m[p[0]] = "true"
 		}
 	}
 	return m
@@ -184,7 +189,7 @@ func (t *Target) agentDependencies(ctx context.Context, cl *rpc.Cluster, cfg *Ag
 	}
 	var sa map[string]any
 	if e := t.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(cfg.Namespace)+"/serviceaccounts/"+url.PathEscape(cfg.ServiceAccountName), nil, &sa); e != nil {
-		return Error("CONFLICT", "Agent ServiceAccount不存在或不可读")
+		return dependencyReadError(e, "agent.serviceAccountName", "ServiceAccount")
 	}
 	if objectString(objectMap(sa, "metadata"), "name") != cfg.ServiceAccountName {
 		return Error("CONFLICT", "Agent ServiceAccount身份无法确认")
@@ -203,16 +208,35 @@ func (t *Target) agentDependencies(ctx context.Context, cl *rpc.Cluster, cfg *Ag
 	if !available {
 		return Error("CONFLICT", "PVC发布需要可用默认动态StorageClass")
 	}
+	// 关键：Secret值只保留在当前栈的内存缓存，既不写配置/观察表，也不进入错误正文。
+	secrets := map[string]map[string][]byte{}
 	for _, endpoint := range cfg.RemoteWrite {
 		for _, ref := range endpoint.references() {
-			var secret struct {
-				Data map[string]any `json:"data"`
+			if _, loaded := secrets[ref.Name]; !loaded {
+				var secret struct {
+					Data map[string][]byte `json:"data"`
+				}
+				if e := t.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(cfg.Namespace)+"/secrets/"+url.PathEscape(ref.Name), nil, &secret); e != nil {
+					return dependencyReadError(e, "agent.remoteWrite.secretRef", "Secret")
+				}
+				secrets[ref.Name] = secret.Data
 			}
-			if e := t.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(cfg.Namespace)+"/secrets/"+url.PathEscape(ref.Name), nil, &secret); e != nil {
-				return Error("CONFLICT", "remoteWrite Secret不存在或不可读")
-			}
-			if _, exists := secret.Data[ref.Key]; !exists {
+			if _, ok := secrets[ref.Name][ref.Key]; !ok {
 				return fieldError("agent.remoteWrite.secretRef", "Secret所需key不存在")
+			}
+		}
+		if endpoint.TLS != nil {
+			tlsConfig := endpoint.TLS
+			if tlsConfig.CA != nil {
+				pool := x509.NewCertPool()
+				if !pool.AppendCertsFromPEM(secrets[tlsConfig.CA.Name][tlsConfig.CA.Key]) {
+					return fieldError("agent.remoteWrite.tls.ca", "CA引用不是有效PEM证书")
+				}
+			}
+			if tlsConfig.Cert != nil {
+				if _, e := tls.X509KeyPair(secrets[tlsConfig.Cert.Name][tlsConfig.Cert.Key], secrets[tlsConfig.Key.Name][tlsConfig.Key.Key]); e != nil {
+					return fieldError("agent.remoteWrite.tls", "客户端证书和私钥内容无效或不匹配")
+				}
 			}
 		}
 	}
@@ -225,6 +249,9 @@ func (t *Target) agentDependencies(ctx context.Context, cl *rpc.Cluster, cfg *Ag
 	}
 	for _, kind := range associationKinds {
 		rule := cfg.associationRules()[kind.kind]
+		if rule.Object.Mode == "None" {
+			continue
+		}
 		namespaces, e := t.associationNamespaces(ctx, cfg.Namespace, rule.Namespace)
 		if e != nil {
 			return e
@@ -252,4 +279,16 @@ func (t *Target) agentDependencies(ctx context.Context, cl *rpc.Cluster, cfg *Ag
 		}
 	}
 	return nil
+}
+
+// dependencyReadError保留NotFound/Forbidden/读取失败分类，字段错误不包含目标返回体或Secret值。
+func dependencyReadError(cause error, field, kind string) error {
+	code, message := apiCode(cause), kind+"读取失败"
+	if code == "TARGET_NOT_FOUND" {
+		message = kind + "不存在"
+	}
+	if code == "TARGET_FORBIDDEN" {
+		message = kind + "访问被拒绝"
+	}
+	return &rpc.APIError{Code: code, Message: message, FieldErrors: map[string]string{field: message}}
 }

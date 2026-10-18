@@ -108,6 +108,9 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 	if _, saveErr := s.DB.ExecContext(ctx, `INSERT INTO instance_observations VALUES(?,?,?,?) ON CONFLICT(instance_id) DO UPDATE SET runtime=excluded.runtime,cr=excluded.cr,observed_at=excluded.observed_at`, id, raw, obj, now); saveErr != nil {
 		return nil, Error("UNAVAILABLE", "观测保存失败")
 	}
+	if i.Component == AgentComponent && e == nil && cr != nil && i.Uid != "" && objectString(objectMap(cr, "metadata"), "uid") == i.Uid {
+		s.refreshAgentAuxiliary(ctx, i, t, cr)
+	}
 	return out, nil
 }
 func (s *Store) GetRuntime(ctx context.Context, c *rpc.RequestContext, r *rpc.InstanceID) (*rpc.InstanceRuntime, error) {

@@ -51,6 +51,9 @@ func (t *Target) associationNamespaces(ctx context.Context, own string, rule Sel
 }
 func (t *Target) matchAssociation(ctx context.Context, cfg *AgentConfig, kind associationKind) ([]map[string]any, error) {
 	rule := cfg.associationRules()[kind.kind]
+	if rule.Object.Mode == "None" {
+		return []map[string]any{}, nil
+	}
 	namespaces, e := t.associationNamespaces(ctx, cfg.Namespace, rule.Namespace)
 	if e != nil {
 		return nil, e

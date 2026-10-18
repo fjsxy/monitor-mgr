@@ -96,3 +96,14 @@
 | --- | --- | --- | --- | --- |
 | REG18-CAP-004 | 后补Agent CRD/RBAC不能冒充controller已启动 | Operator启动时缺Agent支持；随后恢复CRD/权限而不重启，配置SC None的Agent并预览/发布；再重启原固定Operator。 | 仅当前CRD/SAR成功不能放行；原Pod缺Agent ready=1时阻止，重启后按原Pod身份与真实Agent ready证据重新核验。 | #18 |
 | REG18-CAP-005 | 后补ScrapeConfig支持不能冒充informer已启动 | Operator启动时缺ScrapeConfig API/权限；随后恢复但不重启，配置非None ScrapeConfig并预览；再重启固定Operator。 | Agent ready本身不足；同一原Pod缺SC资源endpoint请求证据时阻止，重启后Agent ready及SC informer证据同时满足才放行。 | #18 |
+
+## 输入与依赖范围补充回归
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG18-CAP-004.single-dash-namespace | Go flag单横线namespace范围生效 | 固定Operator实际Pod使用 `-namespaces=other`，Agent位于不同namespace且当前API/SAR可用，发起预览。 | 阻止发布，不将单横线当作全namespace；不创建Agent。 | #18 |
+| REG18-CAP-004.single-dash-selector | Go flag单横线实例selector生效 | 实际Pod使用 `-prometheus-instance-selector=team=other`，平台CR不匹配，发起预览。 | 明确范围受阻，不修改CR labels绕过。 | #18 |
+| REG18-CAP-004.override | Operator访问身份/目标override不能按Pod SA推断 | 实际Pod带 `--as` 或访问API/TLS override，模板及metrics可读，发起预览。 | 无法确认真实Operator身份/目标时阻止，不把Pod SA的SAR当其真实权限。 | #18 |
+| REG18-CAP-004.old-rs | 旧RS的绿色Pod不能代表新template | 同Deployment UID旧RS Pod的实际SA/args与新template不符，而旧Podmetrics绿色，发起预览。 | 阻止，原Pod/template绑定不能被绿色指标绕过。 | #18 |
+| REG18-CAP-004.none-short-circuit | None规则不依赖未关联的采集API | 四类None，撤掉ScrapeConfig API/读取权限，保留已运行Agent controller与Agent CR能力后预览。 | 不因SC依赖被拒绝；None不读取全namespace/SC API，不虚称SC informer已验证。 | #18 |
+| REG18-VALID-006 | Prometheus Duration校验含范围上限 | 经HTTP和直接RPC分别提交合法 `1y2w3d4h5m6s7ms`、重复/逆序单位及超长年份 `999999999999999999999999y`。 | 合法组合保持；重复/逆序/溢出稳定字段拒绝且CR无写，不退化为Go duration。 | #18 |
