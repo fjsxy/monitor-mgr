@@ -12,6 +12,9 @@ import sys
 import time
 import uuid
 
+# 关键：无法确认writer退出时不能显式解锁；仅保留到本进程退出，由仍持租约的父执行独立恢复。
+_LEASES_UNTIL_PROCESS_EXIT = []
+
 
 def stamp():
     """所有持久事件使用明确的 UTC 时间。"""
@@ -145,12 +148,14 @@ class BatchSession:
         self.cleanup_count += 1
         self.index["cleanup"] = cleanup or {"success": True, "scope": "无外部资源动作"}
         self.index["cleanup"]["entryCount"] = self.cleanup_count
+        if getattr(self, "retain_lane_until_exit", False):
+            self.index["cleanup"].update(success=False, laneRetainedUntilProcessExit=True)
         if self.signals or isinstance(error, (StopRequested, KeyboardInterrupt)):
             self.index["state"] = "interrupted"
         elif error:
             self.index["state"] = "failed"
         else:
-            self.index["state"] = "completed" if all(r["outcome"] == "passed" for r in self.index["results"]) else "failed"
+            self.index["state"] = "completed" if self.index["cleanup"].get("success") is True and all(r["outcome"] == "passed" for r in self.index["results"]) else "failed"
         if error:
             self.index["failure"] = {"type": type(error).__name__, "stage": self.index.get("stage", "setup")}
         self.index["finishedAt"] = stamp()
@@ -158,9 +163,12 @@ class BatchSession:
             self.flush()
         finally:
             if self.lane:
-                if not self.borrowed_lane:
-                    fcntl.flock(self.lane, fcntl.LOCK_UN)
-                self.lane.close()
+                if getattr(self, "retain_lane_until_exit", False):
+                    _LEASES_UNTIL_PROCESS_EXIT.append(self.lane)
+                else:
+                    if not self.borrowed_lane:
+                        fcntl.flock(self.lane, fcntl.LOCK_UN)
+                    self.lane.close()
                 self.lane = None
             for sig, handler in self.old_handlers.items():
                 signal.signal(sig, handler)

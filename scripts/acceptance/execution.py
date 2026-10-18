@@ -10,6 +10,7 @@ from pathlib import Path
 import secrets
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 import urllib.parse
@@ -18,7 +19,7 @@ import uuid
 import registry
 from kube_transport import KubeFailure, KubeTransport, identity
 from ledger import Ledger
-from session import BatchSession, atomic_json, stamp
+from session import BatchSession, StopRequested, atomic_json, stamp
 from transport import ProcessRunner
 
 
@@ -74,9 +75,19 @@ class ExecutionSession(BatchSession):
         self.instances = {}
         self.publications = {}
         self.servers = []
+        self.handler_drain_timeout = 900
+        self.handler_abort_timeout = 45
+        self.abort_handlers = False
+        self.owner_thread = threading.get_ident()
         self.kube_lock = threading.RLock()
         self.ipc_token = secrets.token_urlsafe(32)
         self.register_secrets(self.ipc_token)
+
+    def checkpoint(self):
+        """强制排空阶段禁止handler开始下一条外部动作；已得原响应仍先确认/fsync。"""
+        if self.abort_handlers and threading.get_ident() != self.owner_thread:
+            raise StopRequested("HTTP handler 已停止新动作")
+        super().checkpoint()
 
     def process_event(self, event):
         """PID出生身份先持久化；Suite未赋值也不能丢失已启动child。"""
@@ -404,6 +415,40 @@ class ExecutionSession(BatchSession):
         """所有本地控制入口只监听loopback，生命周期仍归同一Session。"""
         class QuietServer(http.server.ThreadingHTTPServer):
             daemon_threads = True
+            def __init__(self, *args):
+                self.condition = threading.Condition()
+                self.accepting = True
+                self.handlers = 0
+                super().__init__(*args)
+            def get_request(self):
+                request, address = super().get_request()
+                request.settimeout(45)
+                return request, address
+            def process_request(self, request, address):
+                with self.condition:
+                    if not self.accepting:
+                        self.shutdown_request(request)
+                        return
+                    self.handlers += 1
+                try:
+                    super().process_request(request, address)
+                except BaseException:
+                    with self.condition:
+                        self.handlers -= 1
+                        self.condition.notify_all()
+                    raise
+            def process_request_thread(self, request, address):
+                try:
+                    super().process_request_thread(request, address)
+                finally:
+                    with self.condition:
+                        self.handlers -= 1
+                        self.condition.notify_all()
+            def wait_handlers(self, deadline):
+                with self.condition:
+                    while self.handlers and time.monotonic() < deadline:
+                        self.condition.wait(max(.001, deadline-time.monotonic()))
+                    return self.handlers == 0
             def handle_error(self, *_):
                 pass
         server = QuietServer(("127.0.0.1", 0), handler)
@@ -511,6 +556,14 @@ class ExecutionSession(BatchSession):
     def cleanup_case(self, suite):
         """原Suite清理统一委托；故障恢复先于资源GC，失败原件不被后续恢复涂绿。"""
         with self.cleanup_phase():
+            drained = self.drain_servers()
+            if drained:
+                return dict(success=False, failures=drained, mode="handler-identity-confirmation-unconfirmed")
+            # 原Service路径不变；排空后仅由主线程做剩余只读确认，不能与旧handler的UID确认/GC并发。
+            access = self.platform_accesses.get(id(suite))
+            if access:
+                suite.base = access["upstream"]
+                self.proxied_suites.discard(id(suite))
             failures = []
             identity_gaps = []
             writer_absences = []
@@ -588,10 +641,42 @@ class ExecutionSession(BatchSession):
             result["writerStoppedCurrentAbsences"] = writer_absences
             return result
 
+    def drain_servers(self):
+        """先停接收再在lane内等已接收handler；普通run完成不等于原UID已确认。"""
+        servers, self.servers = self.servers, []
+        for server, _ in servers:
+            with server.condition:
+                server.accepting = False
+        close_failures = []
+        for server, thread in servers:
+            try:
+                server.shutdown(); server.server_close(); thread.join(timeout=5)
+            except BaseException:
+                close_failures.append(dict(errorCode="http-listener-close-unconfirmed"))
+        deadline = time.monotonic() + self.handler_drain_timeout
+        if all(server.wait_handlers(deadline) for server, _ in servers):
+            return close_failures
+        self.abort_handlers = True
+        failures = close_failures + [dict(errorCode="accepted-http-handler-drain-timeout")]
+        try:
+            # 复用已核原PID/birth/PGID恢复原语；不得用同名GET补创建UID。
+            from recovery import stop_processes
+            runner = ProcessRunner(self.private / "handler-process-stop")
+            snapshot = {key: copy.deepcopy(value) for key, value in self.process_events.items() if value.get("stage") != "exited"}
+            stopped = stop_processes(snapshot, runner.run,
+                lambda value: atomic_json(self.private / "handler-process-stop.json", value))
+            if not stopped["success"]:
+                failures.append(dict(errorCode="handler-process-stop-unconfirmed"))
+        except BaseException:
+            failures.append(dict(errorCode="handler-process-stop-unconfirmed"))
+        deadline = time.monotonic() + self.handler_abort_timeout
+        if not all(server.wait_handlers(deadline) for server, _ in servers):
+            self.retain_lane_until_exit = True
+            failures.append(dict(errorCode="handler-still-running-lease-retained"))
+        return failures
+
     def shutdown(self):
         """服务器先结束，最后核所有实际辅助进程退出；不重入原case finally。"""
         with self.cleanup_phase():
-            for server, thread in self.servers:
-                server.shutdown(); server.server_close(); thread.join(timeout=5)
-            self.servers = []
-            return self.processes.close_auxiliary()
+            failures = self.drain_servers()
+            return failures + self.processes.close_auxiliary()

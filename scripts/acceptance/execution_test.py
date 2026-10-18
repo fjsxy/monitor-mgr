@@ -2,17 +2,82 @@
 """实际执行接缝的Host边界检查，不产生产品K/B通过。"""
 import json
 import hashlib
+import http.server
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from types import SimpleNamespace
 import unittest
+import urllib.request
 
 from execution import ExecutionSession, go_events
 
 
 class ExecutionBoundary(unittest.TestCase):
+    def test_undrained_handler_keeps_failed_lease_until_process_exit(self):
+        """有界未排空不能解锁；Host夹具确认原handler结束后才手工撤回自己的保留fd。"""
+        import fcntl
+        import session as session_module
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);release=threading.Event();entered=threading.Event()
+            value=ExecutionSession(root/'run',expected=[],run_id='host-undrained',profile='validator-test',candidate='fixture',
+                protocol_fixture=True,lane=str(root/'lane'))
+            value.handler_drain_timeout=.01;value.handler_abort_timeout=.01
+            class Handler(http.server.BaseHTTPRequestHandler):
+                def log_message(self,*_):pass
+                def do_GET(self):
+                    entered.set();release.wait(5);self.send_response(200);self.end_headers()
+            address=value._server(Handler)
+            def request():
+                with urllib.request.urlopen(address,timeout=6) as response:response.read()
+            client=threading.Thread(target=request)
+            prior=len(session_module._LEASES_UNTIL_PROCESS_EXIT)
+            try:
+                value.start();client.start();self.assertTrue(entered.wait(5))
+                failures=value.shutdown()
+                self.assertIn('handler-still-running-lease-retained',[f['errorCode'] for f in failures])
+                value.close(cleanup={'success':False,'failures':failures})
+                self.assertEqual(value.index['state'],'failed')
+                self.assertTrue(value.index['cleanup']['laneRetainedUntilProcessExit'])
+                with open(root/'lane','a') as other:
+                    with self.assertRaises(BlockingIOError):fcntl.flock(other,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            finally:
+                release.set();client.join(timeout=6);value.shutdown();value.close()
+                # 只恢复本Host夹具已确认停止的原handler持有fd，不作为业务恢复能力或passing键。
+                for descriptor in session_module._LEASES_UNTIL_PROCESS_EXIT[prior:]:descriptor.close()
+                del session_module._LEASES_UNTIL_PROCESS_EXIT[prior:]
+
+    def test_shutdown_drains_accepted_http_handler_and_ordinary_process_before_return(self):
+        """已接受的handler及同步run须在锁内结束，不能shutdown后才继续写原响应。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);started=root/'started';marker=root/'marker';finished=threading.Event()
+            session=ExecutionSession(root/'run',expected=[],run_id='host-drain',profile='validator-test',candidate='fixture',protocol_fixture=True)
+            class Handler(http.server.BaseHTTPRequestHandler):
+                def log_message(self,*_):pass
+                def do_GET(self):
+                    session.processes.run([sys.executable,'-c',"import pathlib,time;pathlib.Path("+repr(str(started))+").write_text('started');time.sleep(1.2);pathlib.Path("+repr(str(marker))+").write_text('completed')"],label='host-handler-ordinary')
+                    self.send_response(200);self.end_headers();self.wfile.write(b'{}');finished.set()
+            address=session._server(Handler)
+            errors=[]
+            def request():
+                try:
+                    with urllib.request.urlopen(address,timeout=5) as response:response.read()
+                except Exception as error:errors.append(type(error).__name__)
+            client=threading.Thread(target=request);client.start()
+            end=time.monotonic()+5
+            while not started.exists() and time.monotonic()<end:time.sleep(.01)
+            try:
+                self.assertTrue(started.exists())
+                self.assertEqual(session.shutdown(),[])
+                self.assertTrue(finished.is_set(),'handler仍未结束却已返回清理成功')
+                self.assertTrue(marker.exists(),'普通run仍可能在释放lane后写入')
+                self.assertEqual(errors,[])
+            finally:
+                client.join(timeout=5);session.shutdown();session.close()
+
     def test_browser_client_yaml_conversion_and_formal_create_keep_distinct_identity_boundaries(self):
         """真实loopback/子进程保留Node的YAML字节；正式create仍先有intent才确认原UID。"""
         with tempfile.TemporaryDirectory() as tmp:
