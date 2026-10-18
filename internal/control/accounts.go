@@ -164,16 +164,6 @@ func (s *Store) ListAccounts(ctx context.Context, c *rpc.RequestContext) (*rpc.A
 	return &rpc.AccountsResult_{Accounts: accounts}, nil
 }
 func (s *Store) CreateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc.CreateAccountRequest) (*rpc.Account, error) {
-	if err := validCredentials(r.Username, r.Password); err != nil {
-		return nil, err
-	}
-	if r.Role != "ADMIN" && r.Role != "USER" {
-		return nil, Error("INVALID_INPUT", "角色无效")
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(r.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, Error("INVALID_INPUT", "密码无效")
-	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")
@@ -193,6 +183,16 @@ func (s *Store) CreateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	}
 	if hit {
 		return &replay, nil
+	}
+	if err := validCredentials(r.Username, r.Password); err != nil {
+		return nil, err
+	}
+	if r.Role != "ADMIN" && r.Role != "USER" {
+		return nil, Error("INVALID_INPUT", "角色无效")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(r.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, Error("INVALID_INPUT", "密码无效")
 	}
 
 	var n int
@@ -226,12 +226,6 @@ func audit(ctx context.Context, tx *sql.Tx, actor, action, target string, now ti
 }
 
 func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc.UpdateAccountRequest) (*rpc.Account, error) {
-	if r.Role == nil && r.Enabled == nil {
-		return nil, Error("INVALID_INPUT", "至少选择一个账号变更")
-	}
-	if r.Role != nil && *r.Role != "ADMIN" && *r.Role != "USER" {
-		return nil, Error("INVALID_INPUT", "角色无效")
-	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")
@@ -251,6 +245,12 @@ func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	}
 	if hit {
 		return &replay, nil
+	}
+	if r.Role == nil && r.Enabled == nil {
+		return nil, Error("INVALID_INPUT", "至少选择一个账号变更")
+	}
+	if r.Role != nil && *r.Role != "ADMIN" && *r.Role != "USER" {
+		return nil, Error("INVALID_INPUT", "角色无效")
 	}
 
 	a, err := scanAccount(tx.QueryRowContext(ctx, `SELECT `+accountColumns+` FROM accounts WHERE id=?`, r.Id))
@@ -295,13 +295,6 @@ func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	return a, nil
 }
 func (s *Store) ResetPassword(ctx context.Context, c *rpc.RequestContext, r *rpc.ResetPasswordRequest) (*rpc.Empty, error) {
-	if err := validPassword(r.Password); err != nil {
-		return nil, err
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(r.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, Error("INVALID_INPUT", "密码无效")
-	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, Error("UNAVAILABLE", "暂不可用")
@@ -321,6 +314,13 @@ func (s *Store) ResetPassword(ctx context.Context, c *rpc.RequestContext, r *rpc
 	}
 	if hit {
 		return &replay, nil
+	}
+	if err := validPassword(r.Password); err != nil {
+		return nil, err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(r.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, Error("INVALID_INPUT", "密码无效")
 	}
 
 	res, err := tx.ExecContext(ctx, `UPDATE accounts SET password_hash=?,must_change=1,auth_version=auth_version+1 WHERE id=?`, hash, r.Id)

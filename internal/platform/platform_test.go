@@ -407,6 +407,7 @@ func TestAccountMutationsAreDurablyIdempotentAndStillAuthorize(t *testing.T) {
 		t.Fatal("同键产生不同账号")
 	}
 	send(`{"username":"different-user","password":"temporary-password","role":"USER"}`, "create-unique-key", 409)
+	send(`{"username":"different-user","password":"short","role":"UNKNOWN"}`, "create-unique-key", 409)
 	p.Close(context.Background())
 	p, err = platform.Start(context.Background(), cfg)
 	if err != nil {
