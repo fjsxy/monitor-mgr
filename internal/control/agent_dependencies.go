@@ -244,6 +244,11 @@ func (t *Target) agentOperator(ctx context.Context, cfg *AgentConfig) (*operator
 	return &found[0], nil
 }
 func (t *Target) agentDependencies(ctx context.Context, cl *rpc.Cluster, cfg *AgentConfig, create bool) error {
+	if create {
+		if e := t.checkNewAgentClaims(ctx, cfg); e != nil {
+			return e
+		}
+	}
 	var ns map[string]any
 	if e := t.Request(ctx, "GET", "/api/v1/namespaces/kube-system", nil, &ns); e != nil {
 		return e

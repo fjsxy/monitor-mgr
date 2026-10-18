@@ -133,3 +133,28 @@ func TestAgentStorageEmptyDirDoesNotRequirePVCClass(t *testing.T) {
 	changed := agentConfig("ephemeral-agent", "monitoring")
 	clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": changed}, c, "change-mode", 409)
 }
+
+// REG20-STORAGE-001.orphan：孤卷没有ownerRef也不能被新Agent确定名称自动挂载。
+func TestAgentStorageNewInstanceRejectsOrphanClaim(t *testing.T) {
+	p, c, cluster, _, f := agentSafetyFixture(t, nil)
+	claim := "prom-agent-orphan-candidate-db-prom-agent-orphan-candidate-0"
+	f.mu.Lock()
+	f.hook = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method == "GET" && r.URL.Path == "/api/v1/namespaces/monitoring/persistentvolumeclaims/"+claim {
+			json.NewEncoder(w).Encode(map[string]any{"metadata": map[string]any{"name": claim, "namespace": "monitoring", "uid": "old-orphan-pvc"}, "spec": map[string]any{"resources": map[string]any{"requests": map[string]any{"storage": "1Gi"}}}})
+			return true
+		}
+		return false
+	}
+	f.mu.Unlock()
+	cfg := agentConfig("orphan-candidate", "monitoring")
+	i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
+	id := i["id"].(string)
+	clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "", 409)
+	f.mu.Lock()
+	_, created := f.objects["monitoring/orphan-candidate"]
+	f.mu.Unlock()
+	if created {
+		t.Fatal("碰撞后仍创建候选Agent")
+	}
+}

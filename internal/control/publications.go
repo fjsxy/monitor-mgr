@@ -291,6 +291,15 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		return nil, e
 	}
 	defer t.Close()
+	if i.Component == AgentComponent && i.Uid == "" {
+		original, _, readErr := readDraft(ctx, s.DB, i.Id)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if e = t.checkNewAgentClaims(ctx, original.(*AgentConfig)); e != nil {
+			return nil, e
+		}
+	}
 	cr, e := t.readComponent(ctx, i)
 	if e != nil {
 		return nil, e
