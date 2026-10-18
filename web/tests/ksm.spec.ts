@@ -120,6 +120,9 @@ test("U03.primary 连续选择保留编辑、焦点和滚动，namespace 失败�
     .getByRole("button", { name: "刷新 namespace", exact: true })
     .click();
   await expect(drawer.getByRole("alert")).toContainText("namespace");
+  await expect(drawer.getByRole("alert")).toContainText(
+    "网络请求失败，请稍后重试",
+  );
   await expect(
     drawer.getByRole("checkbox", { name: "default", exact: true }),
   ).toBeChecked();

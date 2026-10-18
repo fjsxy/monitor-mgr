@@ -136,8 +136,9 @@ const defaultConfig = (): KSM => ({
   advancedResources: false,
 });
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+// 后端明确字段错误保留原文；浏览器网络异常统一中文，避免直接暴露英文实现提示。
 const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "请求失败，请稍后重试";
+  error instanceof APIError ? error.message : "网络请求失败，请稍后重试";
 const stateName = (value: string) =>
   (
     ({
