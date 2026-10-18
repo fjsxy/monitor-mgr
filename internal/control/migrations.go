@@ -135,7 +135,15 @@ func migrate(db *sql.DB, dataDir string, key []byte) error {
 			return e
 		}
 		broken := fk.Next()
-		fk.Close()
+		readErr := fk.Err()
+		closeErr := fk.Close()
+		// 关键：空结果只有在游标完整成功结束时才证明无外键违规；读取/关闭失败均回滚。
+		if readErr != nil {
+			return fmt.Errorf("迁移外键核验读取失败: %w", readErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("迁移外键核验关闭失败: %w", closeErr)
+		}
 		if broken {
 			return errors.New("迁移产生外键错误，保留原库")
 		}

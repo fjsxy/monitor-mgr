@@ -89,6 +89,26 @@ func TestSharedSchema4PreviewSurvivesUpgrade(t *testing.T) {
 	if _, e = db.Exec(`UPDATE publication_previews SET target_spec='null' WHERE id=?`, preview["previewId"]); e != nil {
 		t.Fatal(e)
 	}
+	// 原库存在孤立关系时，foreign_key_check必须使整次迁移失败。
+	if _, e = db.Exec(`PRAGMA foreign_keys=OFF; INSERT INTO drafts(instance_id,revision,config) VALUES('orphan-history',1,'{}')`); e != nil {
+		t.Fatal(e)
+	}
+	db.Close()
+	if bad, err := platform.Start(context.Background(), cfg); err == nil {
+		bad.Close(context.Background())
+		t.Fatal("外键违规仍提交迁移")
+	}
+	db, e = sql.Open("sqlite", filepath.Join(dir, "platform.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	db.QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&oldVersion)
+	if oldVersion != 4 {
+		t.Fatal("FK失败未回滚schema版本")
+	}
+	if _, e = db.Exec(`DELETE FROM drafts WHERE instance_id='orphan-history'`); e != nil {
+		t.Fatal(e)
+	}
 	db.Close()
 	p, e = platform.Start(context.Background(), cfg)
 	if e != nil {
