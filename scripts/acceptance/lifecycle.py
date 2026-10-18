@@ -75,12 +75,22 @@ class Suite(KSMSuite):
   role={'apiVersion':'rbac.authorization.k8s.io/v1','kind':'ClusterRole','metadata':{'name':name},'rules':[{'apiGroups':[''],'resources':['namespaces','pods'],'verbs':['get','list']},{'apiGroups':['monitoring.fjsxy.github.io'],'resources':['kubestatemetrics'],'verbs':['get','list']},{'apiGroups':['monitoring.coreos.com'],'resources':['prometheusagents'],'verbs':['get','list']},{'apiGroups':['apps'],'resources':['deployments','statefulsets','daemonsets','replicasets'],'verbs':['get','list']},{'apiGroups':['authentication.k8s.io'],'resources':['selfsubjectreviews'],'verbs':['create']},{'apiGroups':['authorization.k8s.io'],'resources':['selfsubjectaccessreviews'],'verbs':['create']},{'nonResourceURLs':['/version'],'verbs':['get']}]}
   self.k('apply','-f','-',data=role,target=self.target);self.k('create','clusterrolebinding',name,'--clusterrole='+name,'--serviceaccount='+self.ns+':'+name,target=self.target)
   token=self.k('-n',self.ns,'create','token',name,'--duration=1h',target=self.target).stdout.decode().strip();cfg=self.config(self.target);cfg['users']=[{'name':'restricted','user':{'token':token}}];cfg['contexts'][0]['context']['user']='restricted';return cfg
+ def browser_retry(self,i,o):
+  out=self.out/(self.case+'.browser');out.mkdir(parents=True,exist_ok=True)
+  env=dict(os.environ,BASE_URL=self.base,ADMIN_PASSWORD=self.password,LIFECYCLE_UI_OPERATION=o['operationId'],LIFECYCLE_UI_INSTANCE=i['id'],LIFECYCLE_UI_VERSION=o['versionId'],LIFECYCLE_UI_NAME=i['name'])
+  command=['npm','--prefix','web','run','test:e2e','--','lifecycle.spec.ts','--reporter=json','--output='+str(out)]
+  result=subprocess.run(command,cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=80)
+  raw=result.stdout.decode();start=raw.find('{\n  "config"');assert start>=0,'浏览器未产生JSON报告'
+  report=json.loads(raw[start:]);clean=json.dumps(report,ensure_ascii=False).replace(self.password,'[REDACTED]');(out/'results.json').write_text(clean);(out/'stderr.log').write_text(result.stderr.decode().replace(self.password,'[REDACTED]'))
+  stats=report['stats'];assert result.returncode==0 and stats['expected']==1 and not stats['unexpected'] and not stats['skipped'],stats
+  screenshots=list(out.rglob('lifecycle-original-version-retry.png'));assert len(screenshots)==1
+  return {'command':command,'exitCode':result.returncode,'stats':stats,'screenshot':str(screenshots[0].relative_to(self.out))}
  def run_case(self,case):
   if case=='T05.primary':
    i,o=self.first();draft=self.call('GET','/instances/'+i['id']+'/draft');session=self.call('GET','/session');proof=self.proof('before-rebuild');rebuild=self.rebuild();after=self.proof('after-rebuild');assert proof==after and after['keyMode']=='0o600' and after['integrity']=='ok';assert self.call('GET','/session')['expiresAt']==session['expiresAt'];assert self.call('GET','/instances/'+i['id']+'/draft')==draft;assert self.call('GET','/operations/'+o['operationId'])['state']=='SUCCEEDED';versions=self.call('GET','/instances/'+i['id']+'/versions')['versions'];assert len(versions)==1;self.save(i,self.cfg());return {'rebuild':rebuild,'persistentProof':after,'sessionPreserved':True,'versionIds':[v['versionId'] for v in versions],**self.evidence(i)}
   if case=='P07.primary':
    i=self.create();preview=self.preview(i);self.gate('arm',{'stage':'beforeDispatch'});o=self.publish(i,preview=preview,wait=False);self.barrier('beforeDispatch');restricted=self.restricted();changed=self.operation(self.accept(restricted,path='/clusters/'+self.cluster['id']+'/credentials'));assert changed['state']=='SUCCEEDED';self.gate('release',{'stage':'beforeDispatch'});failed=self.state(o,'FAILED');assert self.cr_absent()
-   cfg=self.cfg();cfg['resources']['requestCPU']='900m';self.save(i,cfg);restored=self.operation(self.accept(self.config(),path='/clusters/'+self.cluster['id']+'/credentials'));assert restored['state']=='SUCCEEDED';retry=self.action(o,'retry');done=self.state(o,'SUCCEEDED');assert retry['operationId']==o['operationId'] and retry['versionId']==o['versionId'] and retry['attemptId']!=o['attemptId'];assert self.cr()['spec']['podResources']['requests']['cpu']=='100m';attempts=self.call('GET','/operations/'+o['operationId']+'/attempts')['attempts'];assert len(attempts)==2 and attempts[0]['state']=='FAILED' and attempts[1]['sequence']==2;return {'failed':failed,'retry':retry,'done':done,'attempts':attempts,**self.evidence(i)}
+   cfg=self.cfg();cfg['resources']['requestCPU']='900m';self.save(i,cfg);restored=self.operation(self.accept(self.config(),path='/clusters/'+self.cluster['id']+'/credentials'));assert restored['state']=='SUCCEEDED';browser=self.browser_retry(i,o);retry=self.call('GET','/operations/'+o['operationId']);done=self.state(o,'SUCCEEDED');assert retry['operationId']==o['operationId'] and retry['versionId']==o['versionId'] and retry['attemptId']!=o['attemptId'];assert self.cr()['spec']['podResources']['requests']['cpu']=='100m';attempts=self.call('GET','/operations/'+o['operationId']+'/attempts')['attempts'];assert len(attempts)==2 and attempts[0]['state']=='FAILED' and attempts[1]['sequence']==2;return {'failed':failed,'retry':retry,'done':done,'attempts':attempts,'browser':browser,**self.evidence(i)}
   if case in ['P10.primary','P11.primary','C06.same-uid']:
    known=case!='P11.primary';i,o=self.first() if known else (self.create(),None)
    cfg=self.cfg();cfg['resources']['requestCPU']='200m'
@@ -210,7 +220,7 @@ class Suite(KSMSuite):
     record['traces']=self.traces
     try:record['cleanup']=self.cleanup()
     except Exception as e:record['cleanup']={'success':False,'failures':[str(e)]}
-    record['finishedAt']=stamp();record['evidenceRefs']=[{'path':str(p.relative_to(self.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(self.out.glob(case+'.*')) if p.is_file() and p.name!=case+'.json']
+    record['finishedAt']=stamp();record['evidenceRefs']=[{'path':str(p.relative_to(self.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(self.out.rglob('*')) if p.is_file() and (p.name.startswith(case+'.') or any(x.startswith(case+'.') for x in p.parts)) and p.name!=case+'.json']
     if not record['cleanup']['success']:record['outcome']='failed';error=error or AssertionError('finally清理失败')
     (self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
    if error:raise error
