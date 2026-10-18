@@ -133,6 +133,51 @@ class _Preparation:
         self.d['targets'][role].setdefault('baseline', []).append(observed)
         return applied
 
+    def make_data_node_schedulable(self, node_name):
+        """单节点kind可原本无taint；只条件移除本轮控制面taint并验证真实调度状态。"""
+        role='data';target=self.d['targets'][role]
+        def read_node(value=None):
+            node=_json(self.k(role,'get','node',node_name,'-o','json')) if value is None else value
+            if not isinstance(node,dict):raise PrepareError('PREPARE_DATA_NODE_RESPONSE_INVALID')
+            metadata=node.get('metadata',{});spec=node.get('spec',{});status=node.get('status',{})
+            if (node.get('kind')!='Node' or not isinstance(metadata,dict) or metadata.get('name')!=node_name or
+                    any(not isinstance(metadata.get(key),str) or not metadata[key] for key in ['uid','resourceVersion']) or
+                    not isinstance(spec,dict) or not isinstance(status,dict)):
+                raise PrepareError('PREPARE_DATA_NODE_RESPONSE_INVALID')
+            taints=spec.get('taints',[])
+            if not isinstance(taints,list) or any(not isinstance(t,dict) or not isinstance(t.get('key'),str) or
+                    not t['key'] or t.get('effect') not in ['NoSchedule','PreferNoSchedule','NoExecute'] for t in taints):
+                raise PrepareError('PREPARE_DATA_NODE_RESPONSE_INVALID')
+            return node,metadata,spec,status,taints
+        _,metadata,_,_,taints=read_node();uid=metadata['uid'];revision=metadata['resourceVersion']
+        indices=[n for n,t in enumerate(taints) if t['key']=='node-role.kubernetes.io/control-plane']
+        if indices:
+            # 关键：原UID/RV是API原子前置条件；只删准确taint索引，不覆盖其他字段或误写替代Node。
+            patch=[{'op':'test','path':'/metadata/uid','value':uid},
+                   {'op':'test','path':'/metadata/resourceVersion','value':revision},
+                   *[{'op':'remove','path':'/spec/taints/'+str(n)} for n in reversed(indices)]]
+            changed=_json(self.mutate([self.d['kubectl'],'--kubeconfig',target['kubeconfig'],'--context',target['context'],
+                                      'patch','node',node_name,'--type=json','-p',json.dumps(patch),'-o','json'],
+                                     'make-data-node-schedulable',{'target':role,'clusterUID':target['clusterUID'],
+                                      'node':node_name,'nodeUID':uid,'resourceVersion':revision}))
+            _,confirmed,_,_,_=read_node(changed)
+            if confirmed['uid']!=uid or confirmed['resourceVersion']==revision:
+                raise PrepareError('PREPARE_DATA_NODE_IDENTITY_CHANGED')
+            self.ledger({'event':'prepare_data_node_taints_removed','runId':self.d['runId'],'target':role,
+                         'nodeUID':uid,'resourceVersion':confirmed['resourceVersion']})
+        _,current,spec,status,taints=read_node()
+        if current['uid']!=uid:raise PrepareError('PREPARE_DATA_NODE_IDENTITY_CHANGED')
+        conditions=status.get('conditions',[])
+        if not isinstance(conditions,list) or any(not isinstance(c,dict) for c in conditions):
+            raise PrepareError('PREPARE_DATA_NODE_RESPONSE_INVALID')
+        ready=[c.get('status') for c in conditions if c.get('type')=='Ready']
+        if (ready!=['True'] or spec.get('unschedulable',False) is not False or
+                any(t['effect'] in ['NoSchedule','NoExecute'] for t in taints)):
+            raise PrepareError('PREPARE_DATA_NODE_NOT_SCHEDULABLE')
+        self.ledger({'event':'prepare_data_node_schedulable','runId':self.d['runId'],'target':role,
+                     'nodeUID':uid,'resourceVersion':current['resourceVersion'],'ready':True,'unschedulable':False,
+                     'blockingTaintCount':0})
+
     def cluster(self, role):
         target = self.d['targets'][role]
         config = {'kind': 'Cluster', 'apiVersion': 'kind.x-k8s.io/v1alpha4', 'name': target['name'],
@@ -176,11 +221,9 @@ class _Preparation:
         pod_config = self.private / (role + '-pod.kubeconfig.json')
         _private_json(pod_config, config)
         target['podConfig'] = str(pod_config)
-        if role == 'data':
-            self.mutate([self.d['kubectl'], '--kubeconfig', target['kubeconfig'], '--context', target['context'],
-                         'taint', 'node', node_name, 'node-role.kubernetes.io/control-plane-'],
-                        'make-data-node-schedulable', {'target': role, 'clusterUID': target['clusterUID'], 'node': node_name})
         self.k(role, 'wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s', timeout=200)
+        if role == 'data':
+            self.make_data_node_schedulable(node_name)
         for container in target['containers']:
             if container['name'].endswith('-control-plane'):
                 gate = self.command(['docker', 'exec', container['name'], 'cat', '/etc/kubernetes/manifests/kube-controller-manager.yaml'], 'verify-pvc-gate')

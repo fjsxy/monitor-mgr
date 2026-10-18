@@ -9,11 +9,96 @@ import subprocess
 import tempfile
 import unittest
 
-from prepare import PrepareError, prepare_environment, cleanup_environment, verify_environment, operator_bundle_objects
+from prepare import PrepareError, prepare_environment, cleanup_environment, verify_environment, operator_bundle_objects, _Preparation
 from transport import ProcessFailure
 
 
 class PrepareProtocolTest(unittest.TestCase):
+    def data_node(self, directory, *, taints=(), unschedulable=False, ready='True', failure=None):
+        """受控API只模拟真实Node读写；保留命令、intent与原响应身份供断言。"""
+        name='mm21-data-control-plane';calls=[];events=[]
+        node={'apiVersion':'v1','kind':'Node','metadata':{'name':name,'uid':'original-node','resourceVersion':'7'},
+              'spec':{'taints':list(taints),'unschedulable':unschedulable},
+              'status':{'conditions':[{'type':'Ready','status':ready}]}}
+        def execute(argv, **kwargs):
+            calls.append(argv);args=argv[5:]
+            self.assertEqual(argv[:5],['kubectl','--kubeconfig',str(pathlib.Path(directory)/'data.kubeconfig'),'--context','kind-mm21-data'])
+            if failure:
+                result=failure(args, node)
+                if result is not None:return result
+            if args[:2]==['patch','node']:
+                self.assertEqual(events[-1]['event'],'prepare_intent')
+                self.assertEqual(events[-1]['identity']['nodeUID'],'original-node')
+                patch=json.loads(args[args.index('-p')+1])
+                self.assertEqual(patch[:2],[{'op':'test','path':'/metadata/uid','value':'original-node'},
+                                           {'op':'test','path':'/metadata/resourceVersion','value':'7'}])
+                for action in patch[2:]:
+                    self.assertEqual(action['op'],'remove')
+                    node['spec']['taints'].pop(int(action['path'].rsplit('/',1)[1]))
+                node['metadata']['resourceVersion']='8'
+            else:self.assertEqual(args,['get','node',name,'-o','json'])
+            return subprocess.CompletedProcess(argv,0,json.dumps(node).encode(),b'')
+        request={'runId':'protocol-data','kubectl':'kubectl','privateRoot':directory,'targets':{'data':{
+            'context':'kind-mm21-data','kubeconfig':str(pathlib.Path(directory)/'data.kubeconfig'),'clusterUID':'original-cluster'}}}
+        return _Preparation(request,execute,events.append),name,calls,events,node
+
+    def test_data_node_without_taint_is_valid_without_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            preparation,name,calls,events,node=self.data_node(directory)
+            preparation.make_data_node_schedulable(name)
+            self.assertFalse(any('patch' in argv for argv in calls))
+            self.assertFalse(any(v['event']=='prepare_intent' for v in events))
+            self.assertEqual(events[-1]['event'],'prepare_data_node_schedulable')
+            self.assertEqual(events[-1]['nodeUID'],'original-node')
+
+    def test_data_node_existing_taint_is_conditionally_removed_before_readback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            soft={'key':'fixture-soft','effect':'PreferNoSchedule'}
+            preparation,name,calls,events,node=self.data_node(directory,taints=[soft,{'key':'node-role.kubernetes.io/control-plane','effect':'NoSchedule'}])
+            preparation.make_data_node_schedulable(name)
+            self.assertEqual(node['spec']['taints'],[soft])
+            self.assertEqual([a[5] for a in calls],['get','patch','get'])
+            self.assertEqual(events[1]['event'],'prepare_data_node_taints_removed')
+            self.assertEqual(events[1]['resourceVersion'],'8')
+
+    def test_data_node_postconditions_reject_unready_unschedulable_or_blocking_taint(self):
+        for changes in [{'ready':'False'},{'unschedulable':True},{'taints':[{'key':'other-owner','effect':'NoSchedule'}]},
+                        {'taints':[{'key':'other-owner','effect':'NoExecute'}]}]:
+            with self.subTest(changes=changes),tempfile.TemporaryDirectory() as directory:
+                preparation,name,calls,events,node=self.data_node(directory,**changes)
+                with self.assertRaisesRegex(PrepareError,'PREPARE_DATA_NODE_NOT_SCHEDULABLE'):
+                    preparation.make_data_node_schedulable(name)
+                self.assertFalse(any(v['event']=='prepare_data_node_schedulable' for v in events))
+
+    def test_data_node_read_and_patch_errors_never_become_missing_taint_success(self):
+        for stage in ['get','patch']:
+            for mode in ['forbidden','unknown','timeout']:
+                with self.subTest(stage=stage,mode=mode),tempfile.TemporaryDirectory() as directory:
+                    def failure(args,node):
+                        if args[0]!=stage:return None
+                        if mode=='timeout':raise ProcessFailure('PRIVATE-TIMEOUT')
+                        return subprocess.CompletedProcess(args,1,b'',b'Forbidden PRIVATE' if mode=='forbidden' else b'PRIVATE unknown')
+                    preparation,name,calls,events,node=self.data_node(directory,taints=[{'key':'node-role.kubernetes.io/control-plane','effect':'NoSchedule'}],failure=failure)
+                    with self.assertRaises((PrepareError,ProcessFailure)):
+                        preparation.make_data_node_schedulable(name)
+                    self.assertFalse(any(v['event']=='prepare_data_node_schedulable' for v in events))
+                    if stage=='get':self.assertFalse(any('patch' in a for a in calls))
+
+    def test_data_node_replacement_or_malformed_readback_is_rejected(self):
+        for mode in ['replacement','invalid']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                count=0
+                def failure(args,node):
+                    nonlocal count
+                    if args[0]!='get':return None
+                    count+=1
+                    if mode=='replacement' and count==2:node['metadata']['uid']='replacement-node'
+                    if mode=='invalid':return subprocess.CompletedProcess(args,0,b'{"kind":"Node","metadata":{}}',b'')
+                preparation,name,calls,events,node=self.data_node(directory,failure=failure)
+                with self.assertRaisesRegex(PrepareError,'PREPARE_DATA_NODE_(IDENTITY_CHANGED|RESPONSE_INVALID)'):
+                    preparation.make_data_node_schedulable(name)
+                self.assertFalse(any(v['event']=='prepare_data_node_schedulable' for v in events))
+
     def test_public_operator_bundle_preserves_literal_equal_enum_and_scalar_types(self):
         """官方0.83 bundle合法裸'='必须保留；不能为绕过解析把bool/int全改string。"""
         objects=operator_bundle_objects("apiVersion: v1\nkind: ConfigMap\nspec:\n  enabled: true\n  replicas: 2\n  matchType:\n    enum:\n    - '!='\n    - =\n    - =~\n    - '!~'\n")
