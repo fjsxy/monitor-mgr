@@ -1165,20 +1165,20 @@
   },
   "combinedPlannedExecutionKeys": 386,
   "fiveColumnCaseRows": 307,
-  "allOriginalStepsExpectedPreserved": true,
+  "allOriginalStepsExpectedPreserved": false,
   "passingKeysEstablished": 0,
   "publication": {
     "file": "docs/e2e/issue-21.md",
-    "characters": 63284,
-    "utf8Bytes": 119278,
+    "characters": 63381,
+    "utf8Bytes": 119469,
     "limitCharacters": 65536,
-    "remainingCharacters": 2252,
+    "remainingCharacters": 2155,
     "withinGitHubCommentLimit": true,
-    "sha256": "d6ea2e144e1b5d1ed155830c58bcb14b2a5c6c5d0cc50c3d19ef3d73b0f0244d",
+    "sha256": "521f8a5925d548020209aad84241c2a3e53030d4217daf3f16711c22cc2963cd",
     "status": "full_comment_published_exact_readback",
-    "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254616231",
-    "commentId": 6254616231,
-    "readbackAt": "2026-10-18T20:14:06.702821+00:00"
+    "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254725361",
+    "commentId": 6254725361,
+    "readbackAt": "2026-10-18T20:24:47.498316+00:00"
   },
   "layerSources": [
     "#17冻结regressions-fe9bcc2/results.json仅用于核既定层级，不继承passed状态",
@@ -1199,7 +1199,41 @@
     "inheritedRowsRefreshed": 14,
     "note": "19冻结来源cb79已交付且原生21阻塞清零；全文发布/回读后实现，旧通过不继承",
     "priorV3SHA256": "f370b2df12a71c1ebce35bb3eb26542a335703b4e80d133b651cb6cf4046318a",
-    "reviewPlanFinalSource": "cb79fc517c0fdc2957cbb627eeabe0bbf7227c0b"
+    "reviewPlanFinalSource": "cb79fc517c0fdc2957cbb627eeabe0bbf7227c0b",
+    "sourceBindingRevision": "wrong-source逐个验证wrapper与originalReceipt实际身份维度，不改变104layer或282固定键"
   },
-  "implementationBase": "21f9fdf42b720cb9684b612083c28193ba7713ff"
+  "implementationBase": "21f9fdf42b720cb9684b612083c28193ba7713ff",
+  "publicationHistory": [
+    {
+      "file": "docs/e2e/issue-21.md",
+      "characters": 63284,
+      "utf8Bytes": 119278,
+      "limitCharacters": 65536,
+      "remainingCharacters": 2252,
+      "withinGitHubCommentLimit": true,
+      "sha256": "d6ea2e144e1b5d1ed155830c58bcb14b2a5c6c5d0cc50c3d19ef3d73b0f0244d",
+      "status": "full_comment_published_exact_readback",
+      "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254616231",
+      "commentId": 6254616231,
+      "readbackAt": "2026-10-18T20:14:06.702821+00:00"
+    }
+  ],
+  "originalRowsPreservationScope": {
+    "fixed207": true,
+    "inheritedIssues17Through20": true,
+    "REG21ExceptWrongSource": true,
+    "amendedVariantId": "REG21-VALIDATOR-011.wrong-source",
+    "reason": "实施前评审要求逐一验证原始收据来源，不将新wrapper视为原件身份；307行并非全部逐字等历史外部草案"
+  },
+  "approvedPlanAmendments": [
+    {
+      "variantId": "REG21-VALIDATOR-011.wrong-source",
+      "originalSource": "issue-21-supplemental-reg-plan.md",
+      "originalSourceSHA256": "55207d0cd9840537edd9953dcc7bfc8c0b89a40dbeb5e653cbf2b92a52e9bc37",
+      "changedOnly": "REG21 wrong-source步骤及决定性预期；固定207与继承17–20行不变",
+      "planSHA256": "521f8a5925d548020209aad84241c2a3e53030d4217daf3f16711c22cc2963cd",
+      "commentURL": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254725361",
+      "fullReadback": true
+    }
+  ]
 }
