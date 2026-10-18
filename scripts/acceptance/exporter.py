@@ -16,7 +16,7 @@ import registry
 
 
 PUBLIC_KINDS = {'receipt', 'go-events', 'protocol-events', 'browser-report', 'safe-summary',
-                'safe-json', 'screenshot', 'image-manifest', 'image-config', 'hash'}
+                'safe-json', 'screenshot', 'image-manifest', 'image-config', 'hash', 'source-commit'}
 
 
 def _credential_object(value):
@@ -58,7 +58,8 @@ def _safe(path, data, kind, visibility, canaries):
         for line in data.splitlines():
             if line.strip():
                 gate.json_bytes(line)
-    elif kind == 'safe-summary' and suffix in ['.md', '.txt', '.log']:
+    elif ((kind == 'source-commit' and suffix == '.commit') or
+          (kind == 'safe-summary' and suffix in ['.md', '.txt', '.log'])):
         try:
             data.decode('utf-8')
         except UnicodeError:
