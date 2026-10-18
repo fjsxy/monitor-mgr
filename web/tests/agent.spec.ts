@@ -7,6 +7,8 @@ type Fixture = {
   adminUsername?: string;
   adminPassword?: string;
   kubeconfigPath: string;
+  kubectlKubeconfigPath?: string;
+  kubeContext?: string;
   clusterId?: string;
   namespace?: string;
   serviceAccountName?: string;
@@ -281,6 +283,17 @@ test("U02.primary 统一添加两类组件，名称与复制身份明确", async
   });
 });
 
+// 产品上传使用Pod可达配置；Host kubectl使用独立配置与显式context，不能误用Docker内部endpoint。
+function targetKubeArgs() {
+  expect(fixture!.kubeContext, "真实目标必须提供显式 kubeContext").toBeTruthy();
+  return [
+    "--kubeconfig",
+    fixture!.kubectlKubeconfigPath ?? fixture!.kubeconfigPath,
+    "--context",
+    fixture!.kubeContext!,
+  ];
+}
+
 function yamlObject(text: string) {
   const kubectl =
     fixture!.kubectl ??
@@ -289,8 +302,7 @@ function yamlObject(text: string) {
     execFileSync(
       kubectl,
       [
-        "--kubeconfig",
-        fixture!.kubeconfigPath,
+        ...targetKubeArgs(),
         "create",
         "--dry-run=client",
         "--validate=false",
@@ -314,6 +326,11 @@ async function renderedYAML(page: Page, side: number) {
         .map((cell) => cell.querySelector("code")?.textContent ?? "")
         .join("\n"),
     );
+}
+
+// 固定 v0.83.0 CRD 仅补这两项默认值；其他字段保持严格比较，尤其不合并省略与 {} selector。
+function agentCRDDefaults(spec: Record<string, unknown>) {
+  return { portName: "web", scrapeInterval: "30s", ...spec };
 }
 
 // U06 通过真实左右 YAML 与集群对象校验两类 CR，显示冻结配置而不破坏未保存编辑。
@@ -417,8 +434,7 @@ test("U06.primary 两类 CR 左右 YAML、发布导航与冻结配置保留编�
       await page.request.get(`/api/v1/instances/${created.id}`)
     ).json();
     const args = [
-      "--kubeconfig",
-      fixture!.kubeconfigPath,
+      ...targetKubeArgs(),
       "get",
       component === "agent" ? "prometheusagent" : "kubestatemetrics",
       name,
@@ -434,7 +450,11 @@ test("U06.primary 两类 CR 左右 YAML、发布导航与冻结配置保留编�
         { encoding: "utf8" },
       ),
     );
-    expect(actual.spec).toEqual(next.spec);
+    if (component === "agent")
+      expect(agentCRDDefaults(actual.spec)).toEqual(
+        agentCRDDefaults(next.spec),
+      );
+    else expect(actual.spec).toEqual(next.spec);
     await drawer.getByRole("tab", { name: "下发历史", exact: true }).click();
     await expect(drawer.getByText(/执行尝试/).first()).toBeVisible();
     await expect(
@@ -471,4 +491,192 @@ test("U06.primary 两类 CR 左右 YAML、发布导航与冻结配置保留编�
       .click();
   }
   await page.screenshot({ path: info.outputPath("U06-yaml-snapshots.png") });
+});
+
+// REG18-SOURCE-007：实际集群中不同对象区分规则A/B，不用假响应代替来源隔离验收。
+test("REG18-SOURCE-007 草稿关联预览与已部署运行来源隔离", async ({
+  page,
+  baseURL,
+}, info) => {
+  test.setTimeout(240000);
+  test.skip(
+    !fixture || diagnostic,
+    "需要最终真实平台Pod与独占namespace fixture；Host草稿诊断不执行本例",
+  );
+  await prepare(page, baseURL!, info);
+  const caseName = newName("source"),
+    monitorA = `${caseName}-a`,
+    monitorB = `${caseName}-b`;
+  const namespace = fixture!.namespace!;
+  expect(namespace).toBeTruthy();
+  const kubectl =
+    fixture!.kubectl ??
+    "/tmp/monitor-mgr-implementation/environment/kubectl-v1.28.15";
+  const kubeArgs = targetKubeArgs();
+  const monitor = (name: string, rule: string) => ({
+    apiVersion: "monitoring.coreos.com/v1",
+    kind: "ServiceMonitor",
+    metadata: {
+      name,
+      namespace,
+      labels: { "ui-case": caseName, "ui-rule": rule },
+    },
+    spec: {
+      selector: { matchLabels: { "ui-no-service": caseName } },
+      endpoints: [{ port: "web" }],
+    },
+  });
+  // 关键：调用方必须全程持有real-api-lane；只创建、清理本例唯一namespace/name，标签匹配不等于采集成功。
+  try {
+    execFileSync(kubectl, [...kubeArgs, "apply", "-f", "-"], {
+      input: JSON.stringify({
+        apiVersion: "v1",
+        kind: "List",
+        items: [monitor(monitorA, "a"), monitor(monitorB, "b")],
+      }),
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const drawer = await add(page, "agent", caseName);
+    await drawer
+      .getByLabel("ServiceMonitor 对象模式", { exact: true })
+      .selectOption("Labels");
+    for (const [index, key, value] of [
+      [1, "ui-case", caseName],
+      [2, "ui-rule", "a"],
+    ] as const) {
+      await drawer
+        .getByRole("button", {
+          name: "添加 ServiceMonitor 对象 label",
+          exact: true,
+        })
+        .click();
+      await drawer
+        .getByLabel(`ServiceMonitor 对象 label ${index} key`, { exact: true })
+        .fill(key);
+      await drawer
+        .getByLabel(`ServiceMonitor 对象 label ${index} value`, { exact: true })
+        .fill(value);
+    }
+    const created = await save(page);
+    await publish(page);
+    const region = drawer.getByRole("region", {
+      name: "来源 association:ServiceMonitor",
+      exact: true,
+    });
+    await expect(region).toContainText(monitorA);
+    await expect(region).not.toContainText(monitorB);
+
+    await drawer.getByRole("tab", { name: "配置草稿", exact: true }).click();
+    await drawer
+      .getByLabel("ServiceMonitor 对象 label 2 value", { exact: true })
+      .fill("b");
+    const draftB = await save(page, "PUT");
+    const previewResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname.endsWith("/association-previews"),
+    );
+    await drawer
+      .getByRole("button", { name: "刷新采集关联预览", exact: true })
+      .click();
+    const response = await previewResponse;
+    expect(response.status()).toBe(200);
+    const previewB = await response.json();
+    expect(previewB.draftRevision).toBe(draftB.revision);
+    expect(
+      previewB.sources
+        .find(
+          (source: { source: string }) =>
+            source.source === "association:ServiceMonitor",
+        )
+        .matches.map((match: { name: string }) => match.name),
+    ).toEqual([monitorB]);
+    await expect(
+      drawer.getByText(`草稿修订 ${draftB.revision} 的匹配预览`, {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(region).toContainText(monitorB);
+    await expect(region).not.toContainText(monitorA);
+
+    await drawer.getByRole("tab", { name: "运行信息", exact: true }).click();
+    await expect(region).toContainText(monitorA);
+    await expect(region).not.toContainText(monitorB);
+    await drawer
+      .getByRole("button", { name: "刷新当前状态", exact: true })
+      .click();
+    await expect(region).toContainText(monitorA);
+    await expect(region).not.toContainText(monitorB);
+    const detail = await (
+      await page.request.get(`/api/v1/instances/${created.id}`)
+    ).json();
+    expect(
+      detail.sources
+        .find(
+          (source: { source: string }) =>
+            source.source === "association:ServiceMonitor",
+        )
+        .matches.map((match: { name: string }) => match.name),
+    ).toEqual([monitorA]);
+
+    await drawer.getByRole("tab", { name: "配置草稿", exact: true }).click();
+    await expect(region).toContainText(monitorB);
+    const cpu = drawer.getByLabel("Agent CPU request", { exact: true });
+    await cpu.fill("235m");
+    await cpu.focus();
+    await expect(
+      drawer.getByText(/草稿修订.*已过期，请保存并重新刷新/),
+    ).toBeVisible();
+    await page.waitForTimeout(10500);
+    await expect(cpu).toHaveValue("235m");
+    await expect(cpu).toBeFocused();
+    await expect(region).toContainText(monitorB);
+    await expect(region).not.toContainText(monitorA);
+    await page.screenshot({
+      path: info.outputPath("REG18-SOURCE-007-draft-b-expired.png"),
+    });
+    await save(page, "PUT");
+    await expect(
+      drawer.getByText(/草稿修订.*已过期，请保存并重新刷新/),
+    ).toBeVisible();
+    await drawer.getByRole("tab", { name: "运行信息", exact: true }).click();
+    await expect(region).toContainText(monitorA);
+    await expect(region).not.toContainText(monitorB);
+    await page.screenshot({
+      path: info.outputPath("REG18-SOURCE-007-runtime-a.png"),
+    });
+    const actual = JSON.parse(
+      execFileSync(
+        kubectl,
+        [
+          ...kubeArgs,
+          "get",
+          "prometheusagent",
+          caseName,
+          "-n",
+          namespace,
+          "-o",
+          "json",
+        ],
+        { encoding: "utf8" },
+      ),
+    );
+    expect(actual.spec.serviceMonitorSelector.matchLabels["ui-rule"]).toBe("a");
+  } finally {
+    execFileSync(
+      kubectl,
+      [
+        ...kubeArgs,
+        "delete",
+        "servicemonitor",
+        monitorA,
+        monitorB,
+        "-n",
+        namespace,
+        "--ignore-not-found=true",
+        "--wait=false",
+      ],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
+  }
 });
