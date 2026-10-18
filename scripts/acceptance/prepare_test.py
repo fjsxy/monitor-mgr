@@ -14,6 +14,69 @@ from transport import ProcessFailure
 
 
 class PrepareProtocolTest(unittest.TestCase):
+    def volume_preparation(self,directory,failure=None,foreground_gc=False):
+        """完成Job的真实响应形状；执行器只模拟API边界，验证原UID条件删除。"""
+        events=[];calls=[];objects={};deleted=[];removed=set();rawproof=b'{"uid":10001,"journalMode":"wal","synchronous":2,"lockBlocked":true,"reopenValue":21,"keyMode":"0600"}\n'
+        image='fixture:source';digest='sha256:'+'a'*64;source='b'*40;name='mm21-volume-preflight'
+        pod={'apiVersion':'v1','kind':'Pod','metadata':{'name':name+'-pod','namespace':'mm-phase1-operators','uid':'original-pod','resourceVersion':'8',
+             'ownerReferences':[{'uid':'original-job','kind':'Job','name':name,'controller':True}]},
+             'spec':{'containers':[{'name':'probe','image':image}]},'status':{'phase':'Succeeded','containerStatuses':[
+             {'name':'probe','imageID':'fixture@'+digest,'containerID':'containerd://original-container','state':{'terminated':{'exitCode':0}}}]}}
+        def execute(argv,**kwargs):
+            calls.append(argv);args=argv[5:];output=b''
+            if args[0]=='apply':
+                obj=json.loads(kwargs['input']);kind=obj['kind'];obj['metadata'].update(uid='original-job' if kind=='Job' else 'original-pvc',resourceVersion='7')
+                objects['jobs' if kind=='Job' else 'persistentvolumeclaims']=obj;output=json.dumps(obj).encode()
+            elif args[:3]==['-n','mm-phase1-operators','logs']:output=rawproof
+            elif args[:3]==['-n','mm-phase1-operators','get']:
+                resource=args[3]
+                if failure:
+                    result=failure(resource,deleted,pod)
+                    if result is not None:return result
+                if resource=='pods' and '-l' in args:output=json.dumps({'items':[pod]}).encode()
+                else:output=json.dumps(pod if resource=='pods' else objects[resource]).encode() if resource not in removed else b''
+            elif args[0]=='delete':
+                self.assertEqual(events[-1]['event'],'prepare_probe_cleanup_intent')
+                self.assertTrue((pathlib.Path(directory)/'volume-runtime/control-result.json').is_file())
+                resource='pods' if '/pods/' in args[1] else 'jobs';options=json.loads(kwargs['input'])
+                self.assertEqual(options['propagationPolicy'],'Foreground')
+                self.assertEqual(options['preconditions'],{'uid':'original-pod' if resource=='pods' else 'original-job','resourceVersion':'8' if resource=='pods' else '7'})
+                deleted.append(resource)
+                removed.add(resource)
+                if foreground_gc and resource=='jobs':removed.add('pods')
+            else:self.assertEqual(args[2],'wait')
+            return subprocess.CompletedProcess(argv,0,output,b'')
+        request={'runId':'protocol-volume','source':source,'kubectl':'kubectl','privateRoot':directory,
+                 'fixtureImages':{'environment':image},'imageProofs':{image:{'configDigest':digest,'manifestDigest':digest}},
+                 'targets':{'control':{'context':'kind-mm21-control','kubeconfig':directory+'/control.kubeconfig'}}}
+        return _Preparation(request,execute,events.append),calls,events,deleted,rawproof
+
+    def test_volume_probe_preserves_original_proof_then_normally_deletes_original_job_and_pod(self):
+        for gc in [False,True]:
+            with self.subTest(foregroundGC=gc),tempfile.TemporaryDirectory() as directory:
+                preparation,calls,events,deleted,rawproof=self.volume_preparation(directory,foreground_gc=gc)
+                preparation.volume('control')
+                self.assertEqual(deleted,['jobs'] if gc else ['jobs','pods'])
+                target=preparation.d['targets']['control']
+                self.assertEqual((pathlib.Path(directory)/'volume-runtime/control-result.json').read_bytes(),rawproof)
+                self.assertTrue(target['volumeProofEvidence']['cleanup']['success'])
+                self.assertEqual(target['volumeProofEvidence']['jobUID'],'original-job')
+                self.assertEqual(target['volumeProofEvidence']['pods'][0]['uid'],'original-pod')
+                self.assertFalse(any('persistentvolumeclaims' in a and 'delete' in a for a in calls))
+
+    def test_volume_probe_replacement_or_read_failure_is_not_deleted_or_marked_clean(self):
+        for mode in ['replacement','forbidden']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                def failure(resource,deleted,pod):
+                    if resource!='pods' or 'jobs' not in deleted:return None
+                    if mode=='forbidden':return subprocess.CompletedProcess([],1,b'',b'Forbidden PRIVATE')
+                    replacement=json.loads(json.dumps(pod));replacement['metadata']['uid']='replacement-pod'
+                    return subprocess.CompletedProcess([],0,json.dumps(replacement).encode(),b'')
+                preparation,calls,events,deleted,rawproof=self.volume_preparation(directory,failure)
+                with self.assertRaises(PrepareError):preparation.volume('control')
+                self.assertEqual(deleted,['jobs'])
+                self.assertFalse(preparation.d['targets']['control']['volumeProofEvidence']['cleanup']['success'])
+
     def data_node(self, directory, *, taints=(), unschedulable=False, ready='True', failure=None):
         """受控API只模拟真实Node读写；保留命令、intent与原响应身份供断言。"""
         name='mm21-data-control-plane';calls=[];events=[]

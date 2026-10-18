@@ -5,7 +5,6 @@ import json
 import os
 import pathlib
 import re
-import time
 import uuid
 
 import registry
@@ -249,6 +248,7 @@ def _topology(s, entry):
     _check(arch == ('arm64' if entry['profile'] == 'LOCAL_FULL' else 'amd64'), 'PLATFORM_ARCH_MISMATCH')
     refs, product_proofs = [], {}
     for image, revision in [(descriptor['image'], s.a.source),
+                            (descriptor['fixtureImages']['environment'], s.a.source),
                             (descriptor['monitorOpImage'], lock['monitorOp']['source'])]:
         proof = descriptor['imageProofs'][image]
         _check(proof.get('source') == revision and proof.get('platform') == descriptor['platform'] and
@@ -350,7 +350,15 @@ def _topology(s, entry):
             _check(replica_set['metadata']['uid'] == owner['uid'] and any(o.get('controller') and
                    o.get('uid') == deployment['metadata']['uid'] for o in replica_set['metadata'].get('ownerReferences', [])),
                    'PLATFORM_CONTROLLER_OWNER_CHAIN_MISMATCH')
-            controllers.append(dict(expected, deploymentUID=deployment['metadata']['uid'], replicaSetUID=owner['uid']))
+            controller = dict(expected, deploymentUID=deployment['metadata']['uid'], replicaSetUID=owner['uid'])
+            if expected['name'] == 'prometheus-operator':
+                raw = s.k('get', '--raw', '/api/v1/namespaces/mm-phase1-operators/pods/' +
+                          pod['metadata']['name'] + ':8080/proxy/metrics', target=role).stdout
+                _check(b'version="0.83.0"' in raw and b'revision="5cf2f5d' in raw and
+                       b'prometheus_operator_ready{controller="prometheus-agent"} 1' in raw,
+                       'PLATFORM_AGENT_CONTROLLER_BUILD_OR_READY_MISMATCH')
+                controller['metrics'] = dict(version='0.83.0', revision='5cf2f5d', agentControllerReady=True)
+            controllers.append(controller)
         _check({c['name'] for c in controllers} == {'prometheus-operator', 'monitor-mgr-monitor-op'},
                'PLATFORM_CONTROLLER_SET_MISMATCH')
         storage = target['storageClass']
@@ -370,8 +378,19 @@ def _topology(s, entry):
         proof = descriptor['officialContent']['provisioner']
         _check(any(provisioner_status['imageID'].endswith(proof[k]) for k in
                    ['indexDigest', 'manifestDigest', 'configDigest']), 'PLATFORM_PROVISIONER_RUNTIME_IMAGE_MISMATCH')
+        volume = target['volumeProof']
+        volume_evidence = target['volumeProofEvidence']
+        _check(volume.get('uid') == 10001 and volume.get('journalMode') == 'wal' and volume.get('synchronous') == 2 and
+               volume.get('lockBlocked') is True and volume.get('reopenValue') == 21 and volume.get('keyMode') == '0600' and
+               volume_evidence.get('source') == s.a.source and volume_evidence.get('cleanup', {}).get('success') is True and
+               volume_evidence.get('jobUID') and len(volume_evidence.get('pods', [])) == 1 and
+               volume_evidence.get('image') == descriptor['fixtureImages']['environment'], 'PLATFORM_VOLUME_CAPABILITY_MISSING')
+        copied, _ = _copy_metadata(s, descriptor, volume_evidence)
+        refs.extend(copied)
         observed[role] = dict(clusterUID=uid, nodes=target['nodeTopology'], nodeImages=node_images,
                               crds=crds, controllers=controllers, storageClass=storage,
+                              volume=dict(result=volume, jobUID=volume_evidence['jobUID'], pods=volume_evidence['pods'],
+                                          cleanup=volume_evidence['cleanup']),
                               provisioner=dict(deploymentUID=provisioner['metadata']['uid'],
                                   podUID=provisioner_pods[0]['metadata']['uid'], imageID=provisioner_status['imageID']))
     _check(len({t['clusterUID'] for t in observed.values()}) == len(observed), 'PLATFORM_DUPLICATE_CLUSTER_UID')
@@ -434,81 +453,18 @@ def _single_process(s):
                 httpServiceOnly=True)
 
 
-def _publish(s, instance):
-    """经实际HTTP预览/确认/查询任务，不另建派发状态机。"""
-    draft = s.call('GET', '/instances/' + instance['id'] + '/draft')
-    preview = s.call('POST', '/instances/' + instance['id'] + '/previews', dict(draftRevision=draft['revision']))
-    operation = s.call('POST', '/instances/' + instance['id'] + '/publications',
-                       dict(draftRevision=preview['draftRevision'], previewId=preview['previewId'], overwriteDrift=False), status=202)
-    done = s.operation(operation)
-    _check(done.get('state') == 'SUCCEEDED', 'PLATFORM_DUAL_TARGET_PUBLICATION_FAILED')
-    return done
-
-
-def _ksm_runtime(s, instance, name, namespace, target, expected_image, image_proof):
-    """只读真实KSM owner UID图，不依赖Agent Suite的同名多态cr方法。"""
-    until = time.monotonic() + 180
-    while time.monotonic() < until:
-        runtime = s.call('POST', '/instances/' + instance['id'] + '/refresh', {})
-        cr = s.get('kubestatemetrics', name, target=target)
-        deployments = [d for d in s.get('deployments', '-n', namespace, target=target)['items'] if any(
-            o.get('controller') and o.get('uid') == cr['metadata']['uid'] for o in d['metadata'].get('ownerReferences', []))]
-        deployment_uids = {d['metadata']['uid'] for d in deployments}
-        sets = [r for r in s.get('replicasets', '-n', namespace, target=target)['items'] if any(
-            o.get('controller') and o.get('uid') in deployment_uids for o in r['metadata'].get('ownerReferences', []))]
-        set_uids = {r['metadata']['uid'] for r in sets}
-        pods = [p for p in s.get('pods', '-n', namespace, target=target)['items'] if not p['metadata'].get('deletionTimestamp') and
-                any(o.get('controller') and o.get('uid') in set_uids for o in p['metadata'].get('ownerReferences', []))]
-        if (runtime.get('summary') == 'Available' and runtime.get('desiredPods') == runtime.get('availablePods') == 1 and
-                len(deployments) == len(pods) == 1 and any(c.get('type') == 'Ready' and c.get('status') == 'True'
-                for c in pods[0].get('status', {}).get('conditions', []))):
-            image = pods[0]['spec']['containers'][0]['image']
-            image_id = pods[0]['status']['containerStatuses'][0]['imageID']
-            _check(image in [expected_image['image'], expected_image['tag']] and
-                   any(image_id.endswith(image_proof[k]) for k in ['indexDigest', 'manifestDigest', 'configDigest']),
-                   'PLATFORM_DUAL_TARGET_KSM_IMAGE_MISMATCH')
-            return dict(crUID=cr['metadata']['uid'], deploymentUID=deployments[0]['metadata']['uid'],
-                        podUID=pods[0]['metadata']['uid'], node=pods[0]['spec']['nodeName'],
-                        image=image, imageID=image_id, runtime=runtime)
-        time.sleep(.4)
-    raise AssertionError('PLATFORM_DUAL_TARGET_KSM_NOT_READY')
-
-
 def _dual_target(s, entry):
-    """T03在两个真实UID目标各建两类组件，保留独立清理责任。"""
-    from agent import Suite as AgentSuite
-    from ksm import Suite as KSMSuite
-    descriptor, lock = _descriptor(s, entry)
+    """T03复用原两类组件业务断言；外层只补同候选目标身份绑定。"""
+    from agent_cases import run_case as original_case
+    descriptor, _ = _descriptor(s, entry)
     _check(set(descriptor['targets']) == {'control', 'data'}, 'PLATFORM_DUAL_TARGET_REQUIRED')
-    proofs = []
-    for role in ['control', 'data']:
-        s.target = role
-        s.targetns = s.a.prefix[:34] + '-' + role + '-' + uuid.uuid4().hex[:8]
-        s.fixture(s.targetns, role)
-        cluster, _ = s.registered(s.config(role))
-        _check(cluster['uid'] == descriptor['targets'][role]['clusterUID'], 'PLATFORM_REGISTERED_UID_MISMATCH')
-        s.cluster = cluster
-        ksm_name = s.a.prefix[:34] + '-ksm-' + role + '-' + uuid.uuid4().hex[:6]
-        ksm = s.call('POST', '/clusters/' + cluster['id'] + '/instances',
-                     dict(component='kube-state-metrics', ksm=KSMSuite.cfg(s, ksm_name)), status=201)
-        ksm_operation = _publish(s, ksm)
-        cr = s.get('kubestatemetrics', ksm_name, target=role)
-        _check(cr['metadata']['uid'] == s.call('GET', '/instances/' + ksm['id'])['uid'], 'PLATFORM_KSM_UID_MISMATCH')
-        s.ksms.append((role, ksm_name, cr['metadata']['uid']))
-        ksm_runtime = _ksm_runtime(s, ksm, ksm_name, s.targetns, role,
-                                   lock['images']['ksm'], descriptor['officialContent']['ksm'])
-        s.crname = s.a.prefix[:34] + '-agent-' + role + '-' + uuid.uuid4().hex[:6]
-        agent = s.call('POST', '/clusters/' + cluster['id'] + '/instances',
-                       dict(component='Prometheus Agent', agent=AgentSuite.cfg(s)), status=201)
-        agent_operation = _publish(s, agent)
-        agent_runtime = AgentSuite.runtime(s, agent)
-        proofs.append(dict(target=role, clusterId=cluster['id'], clusterUID=cluster['uid'],
-            ksmOperationId=ksm_operation['operationId'], agentOperationId=agent_operation['operationId'],
-            ksm=ksm_runtime, agent=agent_runtime, remoteWriteDeliveryClaimed=False))
-    _check(len({p['clusterUID'] for p in proofs}) == 2 and
-           len({p['ksm']['crUID'] for p in proofs} | {p['agent']['cr']['metadata']['uid'] for p in proofs}) == 4,
+    s.prepare_target(0, 'control')
+    evidence = original_case(s, 'T03.primary')
+    _check(evidence['clusterUIDs'] == [descriptor['targets'][role]['clusterUID'] for role in ['control', 'data']] and
+           len({evidence[role][kind]['cr']['metadata']['uid'] for role in ['control', 'data']
+                for kind in ['ksm', 'agent']}) == 4,
            'PLATFORM_DUAL_TARGET_IDENTITIES_NOT_DISTINCT')
-    return dict(targets=proofs)
+    return evidence
 
 
 def run_case(s, entry):
@@ -518,8 +474,15 @@ def run_case(s, entry):
     if variant in B_CASES:
         _platform(s)
         return _browser(s, entry)
-    evidence = _topology(s, entry) if variant == 'T01.primary' else (
-        _single_process(s) if variant == 'T02.primary' else _dual_target(s, entry))
+    if variant == 'T01.primary':
+        evidence = _topology(s, entry)
+        # 保留原T01真实Agent发布、PVC和运行时断言；SMOKE只使用声明的control。
+        from agent_cases import published
+        s.prepare_target(0, 'control')
+        instance, operation = published(s)
+        evidence.update(operation=operation, agent=s.runtime(instance))
+    else:
+        evidence = _single_process(s) if variant == 'T02.primary' else _dual_target(s, entry)
     refs = evidence.pop('evidenceRefs', [])
     output = s.out / (variant + '.platform-evidence.json')
     output.write_text(json.dumps(evidence, ensure_ascii=False, sort_keys=True, indent=2) + '\n')

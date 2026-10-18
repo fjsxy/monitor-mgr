@@ -563,19 +563,55 @@ class _Preparation:
         name = 'mm21-volume-preflight'
         self.apply(role, {'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim', 'metadata': {'name': name, 'namespace': NAMESPACE},
                           'spec': {'accessModes': ['ReadWriteOnce'], 'resources': {'requests': {'storage': '1Gi'}}}})
-        self.apply(role, {'apiVersion': 'batch/v1', 'kind': 'Job', 'metadata': {'name': name, 'namespace': NAMESPACE},
+        job = self.apply(role, {'apiVersion': 'batch/v1', 'kind': 'Job', 'metadata': {'name': name, 'namespace': NAMESPACE},
                           'spec': {'backoffLimit': 0, 'template': {'metadata': {'labels': {RUN_LABEL: self.d['runId']}},
                               'spec': {'restartPolicy': 'Never', 'securityContext': {'runAsUser': 10001, 'runAsGroup': 10001, 'fsGroup': 10001},
                                   'containers': [{'name': 'probe', 'image': self.d['fixtureImages']['environment'], 'imagePullPolicy': 'Never',
                                                   'volumeMounts': [{'name': 'data', 'mountPath': '/data'}]}],
                                   'volumes': [{'name': 'data', 'persistentVolumeClaim': {'claimName': name}}]}}}})
         self.k(role, '-n', NAMESPACE, 'wait', '--for=condition=complete', 'job/' + name, '--timeout=180s', timeout=200)
-        proof = _json(self.k(role, '-n', NAMESPACE, 'logs', 'job/' + name))
+        logs = self.k(role, '-n', NAMESPACE, 'logs', 'job/' + name)
+        proof = _json(logs)
         if (proof.get('uid') != 10001 or proof.get('journalMode') != 'wal' or proof.get('synchronous') != 2 or
                 proof.get('lockBlocked') is not True or proof.get('reopenValue') != 21 or proof.get('keyMode') != '0600'):
             raise PrepareError('PREPARE_VOLUME_CAPABILITY_FAILED')
         self.d['targets'][role]['volumeProof'] = proof
-        # 预检卷留在本 run 基线直到整体清理；不将部分 finally 当环境成功。
+        pods = _json(self.k(role, '-n', NAMESPACE, 'get', 'pods', '-l', 'job-name=' + name, '-o', 'json'))['items']
+        owned = [pod for pod in pods if any(owner.get('uid') == job['metadata']['uid'] and
+                 owner.get('controller') is True for owner in pod['metadata'].get('ownerReferences', []))]
+        if len(owned) != 1:
+            raise PrepareError('PREPARE_VOLUME_POD_IDENTITY_MISSING')
+        pod = owned[0]
+        status = next((item for item in pod.get('status', {}).get('containerStatuses', []) if item['name'] == 'probe'), {})
+        image = self.d['fixtureImages']['environment']
+        expected = self.d['imageProofs'][image]
+        if (pod.get('status', {}).get('phase') != 'Succeeded' or
+                status.get('state', {}).get('terminated', {}).get('exitCode') != 0 or
+                not any(c.get('name') == 'probe' and c.get('image') == image for c in pod['spec']['containers']) or
+                not status.get('containerID') or not any(status.get('imageID', '').endswith(expected[k])
+                    for k in ['configDigest', 'manifestDigest'] if expected.get(k))):
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        directory = self.private / 'volume-runtime'
+        directory.mkdir(exist_ok=True, mode=0o700)
+        path = directory / (role + '-result.json')
+        raw = _bytes(logs.stdout)
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
+            stream.write(raw); stream.flush(); os.fsync(stream.fileno())
+        evidence = dict(source=self.d['source'], image=image, jobUID=job['metadata']['uid'],
+            pods=[dict(name=pod['metadata']['name'], uid=pod['metadata']['uid'], imageID=status['imageID'],
+                       containerID=status['containerID'])], cleanup=dict(success=False),
+            evidenceRefs=[dict(path=str(path), sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))])
+        self.d['targets'][role]['volumeProofEvidence'] = evidence
+        # 关键：先持久原Job/controller-owned Pod与原日志，再正常FG清理；完成Pod不能污染Operator库存。
+        self.ledger({'event': 'prepare_volume_runtime_checkpoint', 'runId': self.d['runId'], 'target': role, 'proof': evidence})
+        self.delete_owned(role, job, 'jobs', '/apis/batch/v1/namespaces/' + NAMESPACE + '/jobs/' + name)
+        remaining = self.k(role, '-n', NAMESPACE, 'get', 'pods', pod['metadata']['name'], '--ignore-not-found=true', '-o', 'json')
+        if _bytes(remaining.stdout).strip():
+            # 原Job的FG通常已完成GC；尚存的原Pod也只按原UID/RV正常删除，替代UID拒绝。
+            self.delete_owned(role, pod, 'pods', '/api/v1/namespaces/' + NAMESPACE + '/pods/' + pod['metadata']['name'])
+        evidence['cleanup'] = dict(success=True, jobUID=job['metadata']['uid'], podUID=pod['metadata']['uid'], notFound=True)
+        self.ledger({'event': 'prepare_volume_probe_cleaned', 'runId': self.d['runId'], 'target': role, 'proof': evidence})
+        # 预检PVC留在本 run 基线直到整体清理；不force、不改finalizer。
 
 
 def prepare_environment(request, *, execute, ledger):

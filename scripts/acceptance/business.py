@@ -5,7 +5,9 @@ import http.cookiejar
 import importlib
 import json
 from pathlib import Path
+import re
 import time
+import traceback
 
 from execution import reference
 from session import atomic_json, stamp
@@ -18,6 +20,11 @@ def plan(entry):
         return {"derivedFrom": "U02.primary" if variant == "REG18-PATTERN-011" else "U05.primary"}
     if variant.startswith("REG21-"):
         return {"protocol": True}
+    import platform_cases
+    if variant in platform_cases.K_CASES + platform_cases.B_CASES:
+        # 关键：继承owner只说明责任来源；平台case入口不能随后续票的同名覆盖而消失。
+        platform_cases._entry(entry)
+        return {"module": "agent", "platform": True}
     if runner == "run":
         return {"module": "agent", "platform": True}
     if runner == "review":
@@ -27,6 +34,23 @@ def plan(entry):
     if runner not in ["clusters", "ksm", "lifecycle", "agent", "agent_storage"]:
         raise ValueError("business-runner-not-registered")
     return {"module": runner, "browser": entry["layer"] == "B"}
+
+
+def capture_failure(session, failure):
+    """异常原值只落私有0600；公开诊断只保留安全类型和仓库相对frame。"""
+    atomic_json(session.private / "business-exception.json", {
+        "exceptionType": type(failure).__name__,
+        "traceback": "".join(traceback.format_exception(failure))})
+    root = Path(__file__).resolve().parents[2]
+    frames = []
+    for frame in traceback.extract_tb(failure.__traceback__):
+        path = Path(frame.filename)
+        if path.is_absolute() and path.is_relative_to(root) and path.suffix == ".py":
+            frames.append(dict(file=str(path.relative_to(root)), line=frame.lineno,
+                               function=frame.name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,100}", frame.name) else "<module>"))
+    name = type(failure).__name__
+    return dict(exceptionType=name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,100}", name) else "Exception",
+                repositoryFrames=frames, privateCaptureSucceeded=True)
 
 
 def arguments(session, entry):
@@ -174,6 +198,11 @@ def run_case(session, entry):
     except BaseException as failure:
         error = failure
         original["errorCode"] = getattr(failure, "code", "business-assertion-or-setup-failed")
+        try:
+            original["errorDiagnostics"] = capture_failure(session, failure)
+        except Exception:
+            original["errorCode"] = "private-exception-capture-failed"
+            original["errorDiagnostics"] = dict(privateCaptureSucceeded=False)
     finally:
         with session.cleanup_phase():
             if suite is not None:

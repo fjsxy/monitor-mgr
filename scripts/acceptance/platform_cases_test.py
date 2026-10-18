@@ -8,9 +8,25 @@ import tempfile
 import unittest
 
 import platform_cases
+import registry
+import business
 
 
 class PlatformCaseParameters(unittest.TestCase):
+    def test_real_registry_routes_every_platform_case_in_its_declared_profiles(self):
+        """使用真实注册表，避免手工entry掩盖继承owner把T01/T03分派到另一case。"""
+        expected=set(platform_cases.K_CASES+platform_cases.B_CASES)
+        observed=set()
+        for profile in registry.PROFILES:
+            for entry in registry.entries(profile):
+                if entry['variantId'] not in expected:continue
+                with self.subTest(profile=profile,variant=entry['variantId']):
+                    route=business.plan(entry)
+                    self.assertEqual(route,{'module':'agent','platform':True})
+                    self.assertEqual(platform_cases._entry(entry),entry)
+                    observed.add(entry['variantId'])
+        self.assertEqual(observed,expected)
+
     def test_initialization_case_keeps_database_uninitialized(self):
         suite = types.SimpleNamespace(a=types.SimpleNamespace())
         platform_cases.before_deploy(suite, dict(variantId='I01.primary', profile='CI_SMOKE'))
