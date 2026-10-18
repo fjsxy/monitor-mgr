@@ -309,14 +309,14 @@ func (p *Runtime) handle(w http.ResponseWriter, r *http.Request) {
 func decode(r *http.Request, v any) error {
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 65537))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(v); err != nil {
-		return control.Error("BAD_REQUEST", "JSON 格式无效")
+	if err := decoder.Decode(v); err == nil {
+		var extra any
+		if err := decoder.Decode(&extra); err == io.EOF {
+			return nil
+		}
 	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return control.Error("BAD_REQUEST", "JSON 格式无效")
-	}
-	return nil
+	// 关键：解析错误只指向整个 request，不回显解码器错误中的未知字段名或敏感原值。
+	return &rpc.APIError{Code: "BAD_REQUEST", Message: "JSON 格式无效", FieldErrors: map[string]string{"request": "JSON 格式无效或包含不支持的字段"}}
 }
 
 // accountDTO 显式输出账号的非敏感 HTTP 字段。
