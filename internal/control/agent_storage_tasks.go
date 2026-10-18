@@ -64,6 +64,36 @@ type storageRowsQuery interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
+// pendingAgentDeleteVolumes只返回同原Agent UID尚未独立核销的Delete卷，不扩大为实例级存储锁。
+func (s *Store) pendingAgentDeleteVolumes(ctx context.Context, i *rpc.ObservationInstance) (map[string]map[string]bool, error) {
+	rows, e := s.DB.QueryContext(ctx, `SELECT volumes FROM agent_storage_tasks WHERE instance_id=? AND agent_uid=? AND state='PENDING'`, i.Id, i.Uid)
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	out := map[string]map[string]bool{}
+	for rows.Next() {
+		var raw []byte
+		if e = rows.Scan(&raw); e != nil {
+			return nil, e
+		}
+		var volumes []*rpc.VolumeObservation
+		if e = json.Unmarshal(raw, &volumes); e != nil {
+			return nil, Error("UNAVAILABLE", "原卷Delete责任不可读")
+		}
+		for _, v := range volumes {
+			if v.Namespace != i.TargetNamespace || v.GetExpectedPolicy() != "Delete" || v.GetRetentionResult_() == "Deleted" {
+				continue
+			}
+			if out[v.Name] == nil {
+				out[v.Name] = map[string]bool{}
+			}
+			out[v.Name][v.Uid] = true
+		}
+	}
+	return out, rows.Err()
+}
+
 // enrichStorageTask仅读取持久核验结果；不能用CR写入/删除成功替代PVC结果。
 func (s *Store) enrichStorageTask(ctx context.Context, q clusterQuery, o *rpc.Operation) {
 	reader, ok := q.(storageRowsQuery)

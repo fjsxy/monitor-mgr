@@ -306,6 +306,10 @@ func (s *Store) readAgentStorageTransition(ctx context.Context, i *rpc.Observati
 	}
 	// 关键：恢复/新增shard可复用本实例原UID历史Retain卷，但不能接管同名新UID或孤卷。
 	if !deleting && nextReplicas > 0 {
+		pending, err := s.pendingAgentDeleteVolumes(ctx, i)
+		if err != nil {
+			return nil, err
+		}
 		for shard := int32(0); shard < nextShards; shard++ {
 			if oldReplicas > 0 && shard < oldShards {
 				continue
@@ -314,6 +318,12 @@ func (s *Store) readAgentStorageTransition(ctx context.Context, i *rpc.Observati
 				return nil, e
 			}
 			name := agentClaimName(i.Name, shard)
+			// 关键：可信历史不等于Retain。先由原UID只读任务落盘Deleted，再允许新卷；一次GET404不能跳过旧责任。
+			for uid := range pending[name] {
+				if trusted[name][uid] {
+					return nil, Error("CONFLICT", "原PVC的Delete责任尚未核实完成，请先刷新原存储任务")
+				}
+			}
 			var pvc map[string]any
 			e = t.Request(ctx, "GET", "/api/v1/namespaces/"+ns+"/persistentvolumeclaims/"+url.PathEscape(name), nil, &pvc)
 			if apiCode(e) == "TARGET_NOT_FOUND" {

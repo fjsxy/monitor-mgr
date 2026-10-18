@@ -14,6 +14,7 @@ QREG={
  'REG20-STORAGE-002.'+action:['TestAgentStorageResponsibilityOutlivesInstance/'+action+'-'+p for p in ['Delete','Retain']] for action in ['transfer','unregister']}
 QREG.update({'REG20-STORAGE-003.'+v:['TestAgentStoragePreviewImpact/'+v] for v in ['st-uid-accept','st-uid-dispatch','pvc-uid-accept','pvc-uid-dispatch','policy-accept','policy-dispatch','status-rv','same-st-pod-roll']})
 QREG.update({'REG20-STORAGE-004.'+v:['TestAgentStorageIndependentOwnerPolicy/'+v] for v in ['scaled-retain-deleted-delete','delete-with-st-owner']})
+QREG.update({'REG20-STORAGE-005.pending-'+v:['TestAgentStoragePendingDeleteBlocksRestore/'+v+'/'+p for p in ['Delete','Retain']] for v in ['suspend','shard']})
 QOWNED={'R03.agent-zero':['TestR03AgentZeroUsesApplicableStatus/'+v for v in ['valid-zero','missing-status','old-generation']]}
 
 def contracts():
@@ -21,7 +22,7 @@ def contracts():
  for line in (ROOT/'docs/e2e/issue-20.md').read_text().splitlines():
   cells=[v.strip() for v in line.strip('|').split('|')]
   if len(cells)==5 and cells[0] in KREG+list(QREG):out[cells[0]]={'variantId':cells[0],'caseId':cells[0],'kind':'supplementary','layer':'K' if cells[0] in KREG else 'Q','purpose':cells[1],'steps':cells[2],'expected':cells[3],'profiles':['LOCAL_FULL']}
- assert len(OWNED)==12 and len(KOWNED)==11 and len(KREG)==7 and len(QREG)==12
+ assert len(OWNED)==12 and len(KOWNED)==11 and len(KREG)==7 and len(QREG)==14
  assert set(OWNED)=={v.split('|')[1].strip() for v in (ROOT/'docs/e2e/issue-20.md').read_text().splitlines() if v.startswith('| ') and v.split('|')[1].strip() in manifest()}
  return out
 
