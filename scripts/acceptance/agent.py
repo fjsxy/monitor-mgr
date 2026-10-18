@@ -249,19 +249,63 @@ class Suite(ClusterSuite):
     self.k('delete','kubestatemetrics',name,'--wait=true','--timeout=90s',target=target)
    except Exception:failures.append('KSM独占fixture清理失败')
   self.ksms=[]
-  # namespace先删除，保留采集权限直到workload退出；仅删除本例显式登记的资源。
-  ordered=[r for r in reversed(self.resources) if r[1]=='namespace']+[r for r in reversed(self.resources) if r[1]!='namespace']
-  for target,kind,name in ordered:
-   if kind=='namespace':
-    try:
-     actual=self.get('namespace',name,target=target)
-     assert actual['metadata']['uid']==self.namespace_uids[(target,name)] and actual['metadata']['labels']['monitor-mgr-run']==self.a.prefix
-    except Exception:failures.append('namespace身份无法确认，未删除：'+name);continue
-   r=self.k('delete',kind,name,'--wait=true','--timeout=120s',target=target,check=False)
-   if r.returncode:failures.append(kind+'/'+name+'清理失败')
+  # 关键：这是测试fixture清理，不是产品删除能力；先正常GC原Agent/负载，避免namespace按600s Pod grace估计重复空等。
+  namespaces=[];workloads=[]
+  # 清理读取必须区分真实NotFound和权限/网络错误；后者不能变成空集合。
+  def existing(item):
+   args=['get',item['kind'],item['name'],'-o','json']
+   if item.get('namespace'):args+=['-n',item['namespace']]
+   result=self.k(*args,target=item['target'],check=False)
+   if result.returncode:
+    if b'(NotFound)' in result.stderr:return None
+    raise RuntimeError('清理读取失败，不能当作空集合')
+   return json.loads(result.stdout)
+  # 仅等待原UID消失并记录可见终态，不延长宽限、不处理替代UID。
+  def wait_absent(items):
+   pending=[item for item in items if not item.get('notFoundAt')];end=time.monotonic()+660
+   while pending and time.monotonic()<end:
+    for item in pending[:]:
+     actual=existing(item)
+     if actual is None:item['notFoundAt']=stamp();pending.remove(item);continue
+     assert actual['metadata']['uid']==item['uid'],'清理遇到替代UID，停止等待与删除'
+     item['lastDeletionTimestamp']=actual['metadata'].get('deletionTimestamp')
+     if item['kind']=='pod':item.update({'lastPhase':actual.get('status',{}).get('phase'),'lastContainers':[{'name':c['name'],'terminated':{k:v for k,v in c.get('state',{}).get('terminated',{}).items() if k in ['exitCode','reason','startedAt','finishedAt']}} for c in actual.get('status',{}).get('containerStatuses',[])]})
+    if pending:time.sleep(.5)
+   assert not pending,'正常GC未在660s预算内结束'
+  try:
+   for target,kind,name in reversed(self.resources):
+    if kind!='namespace':continue
+    item={'target':target,'kind':'namespace','name':name,'uid':self.namespace_uids[(target,name)]};namespaces.append(item);actual=existing(item)
+    if actual is None:item['notFoundAt']=stamp();continue
+    assert actual['metadata']['uid']==item['uid'] and actual['metadata']['labels'].get('monitor-mgr-run')==self.a.prefix
+    agents=self.get('prometheusagents','-n',name,target=target)['items'];agent_uids={a['metadata']['uid'] for a in agents}
+    sts=[s for s in self.get('statefulsets','-n',name,target=target)['items'] if any(o.get('uid') in agent_uids and o.get('controller') for o in s['metadata'].get('ownerReferences',[]))];sts_uids={s['metadata']['uid'] for s in sts}
+    pods=[p for p in self.get('pods','-n',name,target=target)['items'] if any(o.get('uid') in sts_uids and o.get('controller') for o in p['metadata'].get('ownerReferences',[]))]
+    for resource,objects in [('prometheusagent',agents),('statefulset',sts),('pod',pods)]:
+     for obj in objects:
+      entry={'target':target,'kind':resource,'namespace':name,'name':obj['metadata']['name'],'uid':obj['metadata']['uid']}
+      if resource=='pod':entry.update({'terminationGracePeriodSeconds':obj['spec'].get('terminationGracePeriodSeconds'),'initialDeletionTimestamp':obj['metadata'].get('deletionTimestamp'),'initialPhase':obj.get('status',{}).get('phase'),'initialContainers':[{'name':c['name'],'containerID':c.get('containerID'),'terminated':{k:v for k,v in c.get('state',{}).get('terminated',{}).items() if k in ['exitCode','reason','startedAt','finishedAt']}} for c in obj.get('status',{}).get('containerStatuses',[])]})
+      workloads.append(entry)
+    for obj in agents:
+     path='/apis/'+obj['apiVersion']+'/namespaces/'+name+'/prometheusagents/'+obj['metadata']['name']
+     self.k('delete','--raw',path,'-f','-',data={'apiVersion':'v1','kind':'DeleteOptions','preconditions':{'uid':obj['metadata']['uid']},'propagationPolicy':'Foreground'},target=target)
+   wait_absent(workloads)
+   # 所有namespace先按原UID发删除，统一等待；namespace全部完成之前保留RBAC。
+   for item in namespaces:
+    if item.get('notFoundAt'):continue
+    actual=existing(item);assert actual and actual['metadata']['uid']==item['uid'] and actual['metadata']['labels'].get('monitor-mgr-run')==self.a.prefix
+    self.k('delete','--raw','/api/v1/namespaces/'+item['name'],'-f','-',data={'apiVersion':'v1','kind':'DeleteOptions','preconditions':{'uid':item['uid']}},target=item['target']);item['deleteAcceptedAt']=stamp()
+   wait_absent(namespaces)
+  except Exception as error:failures.append('fixture正常GC清理失败：'+str(error))
+  if all(item.get('notFoundAt') for item in namespaces) and len(namespaces)==sum(kind=='namespace' for _,kind,_ in self.resources):
+   for target,kind,name in reversed(self.resources):
+    if kind=='namespace':continue
+    result=self.k('delete',kind,name,'--wait=true','--timeout=120s',target=target,check=False)
+    if result.returncode:failures.append(kind+'/'+name+'清理失败')
+  else:failures.append('namespace未确认全部NotFound，保留本case RBAC供恢复')
   self.resources=[]
   if hasattr(self,'ns'):del self.ns
-  return {'success':not failures,'failures':failures}
+  return {'success':not failures,'failures':failures,'namespaceResults':namespaces,'agentWorkloadResults':workloads,'mode':'测试工具按原UID正常Foreground/namespace GC；无force或finalizer修改'}
  def run(self):
   for index,case in enumerate(self.a.cases or KCASES):
    self.case=case;self.traces=[];self.targetns=None;record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
@@ -293,7 +337,7 @@ class Suite(ClusterSuite):
     if not record['cleanup']['success']:record['outcome']='failed'
     trace=self.out/(case+'.http.jsonl');trace.write_text(''.join(json.dumps(t,ensure_ascii=False)+'\n' for t in self.traces));record['evidenceRefs']=[{'path':trace.name,'sha256':hashlib.sha256(trace.read_bytes()).hexdigest()},*record.get('evidence',{}).get('evidenceRefs',[])]
     record['finishedAt']=stamp();(self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
-   if record['outcome']!='passed' and self.a.fail_fast:break
+   if not record['cleanup']['success'] or record['outcome']!='passed' and self.a.fail_fast:break
   return 0 if all(r['outcome']=='passed' for r in self.results) else 1
 
 def main():
