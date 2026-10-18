@@ -31,6 +31,7 @@ def outside_instance(s,ksm):
  """真实外部CR由fixture创建，仅发现为只读；不以空集合跳过未纳管断言。"""
  external=copy.deepcopy(s.get('kubestatemetrics',ksm['name']));external={k:external[k] for k in ['apiVersion','kind','spec']};external['metadata']={'name':s.a.prefix+'-outside'}
  created=json.loads(s.k('create','-f','-','-o','json',data=external).stdout);s.ksms.append(('control',created['metadata']['name'],created['metadata']['uid']))
+ s.ksm_identities.append({'target':'control','name':created['metadata']['name'],'uid':created['metadata']['uid'],'namespace':s.targetns,'provenance':'fixture-create-response','capturedAt':stamp()})
  actual=s.get('kubestatemetrics',external['metadata']['name']);assert actual['metadata']['uid']==created['metadata']['uid']
  discovered=s.call('GET','/clusters/'+s.cluster['id']+'/instances')['instances'];readonly=next(v for v in discovered if v['uid']==actual['metadata']['uid'] and v['readOnly']);assert not readonly.get('currentVersionId');return readonly
 
@@ -88,6 +89,9 @@ def execute(s,selector,fixture):
    if name.endswith('.json'):
     content=base64.b64decode(attachment['body']).decode() if attachment.get('body') else pathlib.Path(attachment['path']).read_text();clean=public(content);(artifacts/pathlib.Path(name).name).write_text(clean)
     if attachment.get('body'):attachment['body']=base64.b64encode(clean.encode()).decode()
+   elif name.endswith('.png'):
+    pixels=base64.b64decode(attachment['body']) if attachment.get('body') else pathlib.Path(attachment['path']).read_bytes()
+    (artifacts/pathlib.Path(name).name).write_bytes(pixels)
  report.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
  for path in out.rglob('*'):
   if path.is_file() and path.suffix in ['.txt','.md','.json','.log']:

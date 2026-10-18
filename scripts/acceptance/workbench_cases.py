@@ -41,7 +41,7 @@ class Suite(AgentSuite):
  def confirm_ksm(self,instance_id):
   expected=self.pending_ksms[instance_id];i=self.call('GET','/instances/'+instance_id)
   assert i['id']==instance_id and i['name']==expected['name'] and i['clusterId']==expected['clusterId'] and i['targetNamespace']==expected['namespace'] and i['component']=='kube-state-metrics' and i['uid'],'平台尚无可确认原UID，保留identity gap'
-  self.ksms.append((expected['target'],expected['name'],i['uid']));del self.pending_ksms[instance_id];return i['uid']
+  self.ksms.append((expected['target'],expected['name'],i['uid']));self.ksm_identities.append({**expected,'uid':i['uid'],'instanceId':instance_id,'provenance':'platform-confirmed-instance','confirmedVersionId':i.get('currentVersionId'),'capturedAt':stamp()});del self.pending_ksms[instance_id];return i['uid']
  def ksm_proof(self,item):
   target=item['target'];ns=item['namespace'];cr=self.get('kubestatemetrics',item['name'],target=target)
   assert cr['metadata']['uid']==item['uid']
@@ -148,7 +148,7 @@ class Suite(AgentSuite):
   assert recovered['uid']==item['uid'];return {**rebuild,'before':before,'firstReadUnknown':unknown,'recovered':recovered,'sameKeyAndDatabase':key==afterkey,'sessionExpiryPreserved':True,'keyProof':key,'actualKSM':item['runtimeProof']}
  def run(self):
   for index,case in enumerate(self.a.cases):
-   self.case=case;self.traces=[];self.instances=[];self.proxies=[];self.pending_ksms={};self.targetns=None;self.cookies=http.cookiejar.CookieJar()
+   self.case=case;self.traces=[];self.instances=[];self.proxies=[];self.pending_ksms={};self.ksm_identities=[];self.targetns=None;self.cookies=http.cookiejar.CookieJar()
    record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
    try:
     record['platform']=self.deploy(case,index);assert record['platform']['imageID'].endswith(self.image_metadata.get('manifestDigest') or self.image_metadata['dockerInspectId'])
@@ -172,6 +172,7 @@ class Suite(AgentSuite):
      except Exception:record.setdefault('evidenceErrors',[]).append('平台尚无可确认KSM原UID；不按同名或prefix认领清理')
     try:record['cleanup']=self.cleanup()
     except Exception as error:record['cleanup']={'success':False,'failures':[str(error)]}
+    record['ksmIdentities']=self.ksm_identities
     if self.pending_ksms:
      record['identityGaps']=self.pending_ksms;record['cleanup']['success']=False;record['cleanup']['failures'].append('KSM缺少产品确认原UID，保留identity gap且不认领事后同名对象')
     if record.get('evidenceErrors') or not record['cleanup']['success']:record['outcome']='failed'
