@@ -54,3 +54,16 @@
 | --- | --- | --- | --- | --- |
 | REG20-STORAGE-002.transfer | 未决存储核验期间不丢集群归属责任 | 经真实HTTP→生成Kitex→SQLite和受控TLS API完成原UID Agent删除，使实例/operation已完成，而whenDeleted=Delete原PVC读取Unknown/待核；通过transfer尝试转移。恢复当前凭据/读取并核实原PVC结果，再重新转移。独立Retain正控保留合法原PVC且实际核实Retain后转移。 | pending/Unknown独立卷任务时transfer409，实例与operation仍完成且不重建实例protection；只读核实完成后允许转移，凭据更新不受此责任阻塞。已确认Retain合法残卷是终态，不阻塞转移。 | #20 |
 | REG20-STORAGE-002.unregister | 未决存储核验期间不提前清除原凭据 | 独立应用fixture完成原UID Agent删除，使CR/workload/Pod消失、实例/operation完成但Delete/PVC结果未知；调用unregister，再恢复读取并核实原PVC消失后重试。另以实际核实Retain原PVC仍存在作为独立正控。全程公开HTTP/真实Kitex，不直接改业务表制造结果。 | pending/Unknown任务时unregister409、保留可用凭据供只读核验；实例完成不被回滚/延迟。任务核实终态后注销允许；已确认Retain残卷不阻塞注销，平台不删除该卷。 | #20 |
+
+## Agent发布存储影响预览
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG20-STORAGE-003.st-uid-accept | 提交确认前独立更改实际ST UID必须使旧危险预览失效 | Q：公开HTTP→真实Kitex→SQLite/TLS fixture运行原UID PVC Agent，先保存挂起/减shard草稿并预览；提交确认前仅注入实际ST UID变化，再继续原请求。使用原Agent UID控制的新ST，PVC保持同原UID且在新ST原Pod链中，实际策略已采用；证明安全guard可通过，仅确认影响身份变化。保存请求/目标mutation及操作结果。 | 旧预览拒绝受理/派发，目标无新mutation，必须重新预览；分别证明该输入而非一次注入多种变化。ST-UID变体应记录实时安全重检可通过而旧HMAC拒绝的证据。 | #20 |
+| REG20-STORAGE-003.st-uid-dispatch | 操作受理后、最后存储重验前独立更改实际ST UID必须使旧危险预览失效 | Q：公开HTTP→真实Kitex→SQLite/TLS fixture运行原UID PVC Agent，先保存挂起/减shard草稿并预览；操作受理后、最后存储重验前仅注入实际ST UID变化，再继续原请求。使用原Agent UID控制的新ST，PVC保持同原UID且在新ST原Pod链中，实际策略已采用；证明安全guard可通过，仅确认影响身份变化。保存请求/目标mutation及操作结果。 | 旧预览拒绝受理/派发，目标无新mutation，必须重新预览；分别证明该输入而非一次注入多种变化。ST-UID变体应记录实时安全重检可通过而旧HMAC拒绝的证据。 | #20 |
+| REG20-STORAGE-003.pvc-uid-accept | 提交确认前独立更改原PVC UID必须使旧危险预览失效 | Q：公开HTTP→真实Kitex→SQLite/TLS fixture运行原UID PVC Agent，先保存挂起/减shard草稿并预览；提交确认前仅注入原PVC UID变化，再继续原请求。以同名新PVC UID替换；不认领新UID，不把旧卷消失当新卷授权。保存请求/目标mutation及操作结果。 | 旧预览拒绝受理/派发，目标无新mutation，必须重新预览；分别证明该输入而非一次注入多种变化。ST-UID变体应记录实时安全重检可通过而旧HMAC拒绝的证据。 | #20 |
+| REG20-STORAGE-003.pvc-uid-dispatch | 操作受理后、最后存储重验前独立更改原PVC UID必须使旧危险预览失效 | Q：公开HTTP→真实Kitex→SQLite/TLS fixture运行原UID PVC Agent，先保存挂起/减shard草稿并预览；操作受理后、最后存储重验前仅注入原PVC UID变化，再继续原请求。以同名新PVC UID替换；不认领新UID，不把旧卷消失当新卷授权。保存请求/目标mutation及操作结果。 | 旧预览拒绝受理/派发，目标无新mutation，必须重新预览；分别证明该输入而非一次注入多种变化。ST-UID变体应记录实时安全重检可通过而旧HMAC拒绝的证据。 | #20 |
+| REG20-STORAGE-003.policy-accept | 提交确认前独立更改实际所用存储策略必须使旧危险预览失效 | Q：公开HTTP→真实Kitex→SQLite/TLS fixture运行原UID PVC Agent，先保存挂起/减shard草稿并预览；提交确认前仅注入实际所用存储策略变化，再继续原请求。仅改变本次所用whenScaled/whenDeleted实际ST值，保留CR UID及其余影响事实。保存请求/目标mutation及操作结果。 | 旧预览拒绝受理/派发，目标无新mutation，必须重新预览；分别证明该输入而非一次注入多种变化。ST-UID变体应记录实时安全重检可通过而旧HMAC拒绝的证据。 | #20 |
+| REG20-STORAGE-003.policy-dispatch | 操作受理后、最后存储重验前独立更改实际所用存储策略必须使旧危险预览失效 | Q：公开HTTP→真实Kitex→SQLite/TLS fixture运行原UID PVC Agent，先保存挂起/减shard草稿并预览；操作受理后、最后存储重验前仅注入实际所用存储策略变化，再继续原请求。仅改变本次所用whenScaled/whenDeleted实际ST值，保留CR UID及其余影响事实。保存请求/目标mutation及操作结果。 | 旧预览拒绝受理/派发，目标无新mutation，必须重新预览；分别证明该输入而非一次注入多种变化。ST-UID变体应记录实时安全重检可通过而旧HMAC拒绝的证据。 | #20 |
+| REG20-STORAGE-003.status-rv | status/RV自然推进不改变确认影响 | Q：运行原Agent/原ST/原PVC UID与已采用策略，保存危险预览，仅推进CR/ST status和resourceVersion，再确认发布并回读。 | 原安全guard仍通过、旧预览可以使用；不把status/RV放入稳定存储影响摘要。 | #20 |
+| REG20-STORAGE-003.same-st-pod-roll | 同ST下Pod自然滚动不改变确认影响 | Q：运行原Agent/原ST/原PVC UID与已采用策略，保存危险预览，仅让同ST UID下原Pod被新Pod UID替换且继续引用原PVC，再确认发布并回读。 | UID父链仍可信，原预览可以使用；保留新旧Pod历史，但不把Pod UID作为确认影响冲突。 | #20 |
