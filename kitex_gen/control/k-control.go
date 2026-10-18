@@ -29,6 +29,8 @@ func (p *RequestContext) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetRequestId bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -87,6 +89,10 @@ func (p *RequestContext) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -157,6 +163,7 @@ func (p *RequestContext) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int 
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -168,6 +175,7 @@ func (p *RequestContext) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -237,6 +245,8 @@ func (p *Account) FastRead(buf []byte) (int, error) {
 	var issetMustChangePassword bool = false
 	var issetCreatedAt bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -342,6 +352,10 @@ func (p *Account) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -482,6 +496,7 @@ func (p *Account) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField6(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -496,6 +511,7 @@ func (p *Account) BLength() int {
 		l += p.field4Length()
 		l += p.field5Length()
 		l += p.field6Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -595,6 +611,8 @@ func (p *InitializeRequest) FastRead(buf []byte) (int, error) {
 	var issetUsername bool = false
 	var issetPassword bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -640,6 +658,10 @@ func (p *InitializeRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -700,6 +722,7 @@ func (p *InitializeRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -710,6 +733,7 @@ func (p *InitializeRequest) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -752,6 +776,8 @@ func (p *ProbeResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetInitialized bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -782,6 +808,10 @@ func (p *ProbeResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -822,6 +852,7 @@ func (p *ProbeResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -831,6 +862,7 @@ func (p *ProbeResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -860,6 +892,8 @@ func (p *LoginRequest) FastRead(buf []byte) (int, error) {
 	var issetUsername bool = false
 	var issetPassword bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -905,6 +939,10 @@ func (p *LoginRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -965,6 +1003,7 @@ func (p *LoginRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -975,6 +1014,7 @@ func (p *LoginRequest) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -1019,6 +1059,8 @@ func (p *LoginResult_) FastRead(buf []byte) (int, error) {
 	var issetSessionToken bool = false
 	var issetExpiresAt bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -1079,6 +1121,10 @@ func (p *LoginResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -1157,6 +1203,7 @@ func (p *LoginResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -1168,6 +1215,7 @@ func (p *LoginResult_) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -1225,6 +1273,8 @@ func (p *SessionResult_) FastRead(buf []byte) (int, error) {
 	var issetAccount bool = false
 	var issetExpiresAt bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -1270,6 +1320,10 @@ func (p *SessionResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -1328,6 +1382,7 @@ func (p *SessionResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int 
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -1338,6 +1393,7 @@ func (p *SessionResult_) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -1381,6 +1437,8 @@ func (p *ChangePasswordRequest) FastRead(buf []byte) (int, error) {
 	var issetCurrentPassword bool = false
 	var issetNewPassword_ bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -1426,6 +1484,10 @@ func (p *ChangePasswordRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -1486,6 +1548,7 @@ func (p *ChangePasswordRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWrite
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -1496,6 +1559,7 @@ func (p *ChangePasswordRequest) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -1540,6 +1604,8 @@ func (p *CreateAccountRequest) FastRead(buf []byte) (int, error) {
 	var issetPassword bool = false
 	var issetRole bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -1600,6 +1666,10 @@ func (p *CreateAccountRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -1680,6 +1750,7 @@ func (p *CreateAccountRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -1691,6 +1762,7 @@ func (p *CreateAccountRequest) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -1747,6 +1819,8 @@ func (p *AccountsResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetAccounts bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -1777,6 +1851,10 @@ func (p *AccountsResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -1828,6 +1906,7 @@ func (p *AccountsResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -1837,6 +1916,7 @@ func (p *AccountsResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -1876,6 +1956,8 @@ func (p *UpdateAccountRequest) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetId bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -1934,6 +2016,10 @@ func (p *UpdateAccountRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -2004,6 +2090,7 @@ func (p *UpdateAccountRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter
 		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -2015,6 +2102,7 @@ func (p *UpdateAccountRequest) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -2080,6 +2168,8 @@ func (p *ResetPasswordRequest) FastRead(buf []byte) (int, error) {
 	var issetId bool = false
 	var issetPassword bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -2125,6 +2215,10 @@ func (p *ResetPasswordRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -2185,6 +2279,7 @@ func (p *ResetPasswordRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -2195,6 +2290,7 @@ func (p *ResetPasswordRequest) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -2237,6 +2333,8 @@ func (p *KubeconfigRequest) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetKubeconfig bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -2267,6 +2365,10 @@ func (p *KubeconfigRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -2307,6 +2409,7 @@ func (p *KubeconfigRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -2316,6 +2419,7 @@ func (p *KubeconfigRequest) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -2344,6 +2448,8 @@ func (p *ContextsResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetContexts bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -2374,6 +2480,10 @@ func (p *ContextsResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -2424,6 +2534,7 @@ func (p *ContextsResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -2433,6 +2544,7 @@ func (p *ContextsResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -2471,6 +2583,7 @@ func (p *Empty) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -2484,6 +2597,7 @@ func (p *Empty) FastRead(buf []byte) (int, error) {
 		if err != nil {
 			goto SkipFieldError
 		}
+		p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 	}
 
 	return offset, nil
@@ -2500,6 +2614,7 @@ func (p *Empty) FastWrite(buf []byte) int {
 func (p *Empty) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -2508,6 +2623,7 @@ func (p *Empty) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 func (p *Empty) BLength() int {
 	l := 0
 	if p != nil {
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -2524,6 +2640,8 @@ func (p *ClusterCapability) FastRead(buf []byte) (int, error) {
 	var issetAllowed bool = false
 	var issetReason bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -2584,6 +2702,10 @@ func (p *ClusterCapability) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -2664,6 +2786,7 @@ func (p *ClusterCapability) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -2675,6 +2798,7 @@ func (p *ClusterCapability) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -2741,6 +2865,8 @@ func (p *Cluster) FastRead(buf []byte) (int, error) {
 	var issetCapabilities bool = false
 	var issetCreatedAt bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -2921,6 +3047,10 @@ func (p *Cluster) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -3172,6 +3302,7 @@ func (p *Cluster) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 		offset += p.fastWriteField7(buf[offset:], w)
 		offset += p.fastWriteField10(buf[offset:], w)
 		offset += p.fastWriteField11(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -3191,6 +3322,7 @@ func (p *Cluster) BLength() int {
 		l += p.field9Length()
 		l += p.field10Length()
 		l += p.field11Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -3370,6 +3502,8 @@ func (p *ClustersResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetClusters bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -3400,6 +3534,10 @@ func (p *ClustersResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -3451,6 +3589,7 @@ func (p *ClustersResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -3460,6 +3599,7 @@ func (p *ClustersResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -3502,6 +3642,8 @@ func (p *RegisterClusterRequest) FastRead(buf []byte) (int, error) {
 	var issetContext bool = false
 	var issetKubeconfig bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -3577,6 +3719,10 @@ func (p *RegisterClusterRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -3677,6 +3823,7 @@ func (p *RegisterClusterRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWrit
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField4(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -3689,6 +3836,7 @@ func (p *RegisterClusterRequest) BLength() int {
 		l += p.field2Length()
 		l += p.field3Length()
 		l += p.field4Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -3759,6 +3907,8 @@ func (p *ClusterID) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetId bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -3789,6 +3939,10 @@ func (p *ClusterID) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -3829,6 +3983,7 @@ func (p *ClusterID) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -3838,6 +3993,7 @@ func (p *ClusterID) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -3868,6 +4024,8 @@ func (p *CredentialRequest) FastRead(buf []byte) (int, error) {
 	var issetContext bool = false
 	var issetKubeconfig bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -3942,6 +4100,10 @@ func (p *CredentialRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -4037,6 +4199,7 @@ func (p *CredentialRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField4(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -4049,6 +4212,7 @@ func (p *CredentialRequest) BLength() int {
 		l += p.field2Length()
 		l += p.field3Length()
 		l += p.field4Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -4124,6 +4288,8 @@ func (p *TransferClusterRequest) FastRead(buf []byte) (int, error) {
 	var issetId bool = false
 	var issetOwnerId bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -4169,6 +4335,10 @@ func (p *TransferClusterRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -4229,6 +4399,7 @@ func (p *TransferClusterRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWrit
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -4239,6 +4410,7 @@ func (p *TransferClusterRequest) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -4291,6 +4463,8 @@ func (p *Operation) FastRead(buf []byte) (int, error) {
 	var issetOwnerId bool = false
 	var issetPreviousOwnerId bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -4513,6 +4687,10 @@ func (p *Operation) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -4798,6 +4976,7 @@ func (p *Operation) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 		offset += p.fastWriteField12(buf[offset:], w)
 		offset += p.fastWriteField13(buf[offset:], w)
 		offset += p.fastWriteField14(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -4820,6 +4999,7 @@ func (p *Operation) BLength() int {
 		l += p.field12Length()
 		l += p.field13Length()
 		l += p.field14Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -5042,6 +5222,8 @@ func (p *OperationID) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetOperationId bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -5072,6 +5254,10 @@ func (p *OperationID) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -5112,6 +5298,7 @@ func (p *OperationID) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -5121,6 +5308,7 @@ func (p *OperationID) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -5149,6 +5337,8 @@ func (p *OperationsResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetOperations bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -5179,6 +5369,10 @@ func (p *OperationsResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -5230,6 +5424,7 @@ func (p *OperationsResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -5239,6 +5434,7 @@ func (p *OperationsResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -5278,6 +5474,8 @@ func (p *NamespacesResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetNamespaces bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -5308,6 +5506,10 @@ func (p *NamespacesResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -5358,6 +5560,7 @@ func (p *NamespacesResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -5367,6 +5570,7 @@ func (p *NamespacesResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -5409,6 +5613,8 @@ func (p *ReferenceMetadata) FastRead(buf []byte) (int, error) {
 	var issetNamespace bool = false
 	var issetKeys bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -5484,6 +5690,10 @@ func (p *ReferenceMetadata) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -5594,6 +5804,7 @@ func (p *ReferenceMetadata) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField4(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -5606,6 +5817,7 @@ func (p *ReferenceMetadata) BLength() int {
 		l += p.field2Length()
 		l += p.field3Length()
 		l += p.field4Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -5689,6 +5901,8 @@ func (p *ReferencesRequest) FastRead(buf []byte) (int, error) {
 	var issetNamespace bool = false
 	var issetKind bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -5749,6 +5963,10 @@ func (p *ReferencesRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -5829,6 +6047,7 @@ func (p *ReferencesRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -5840,6 +6059,7 @@ func (p *ReferencesRequest) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -5896,6 +6116,8 @@ func (p *ReferencesResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetReferences bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -5926,6 +6148,10 @@ func (p *ReferencesResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -5977,6 +6203,7 @@ func (p *ReferencesResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) i
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -5986,6 +6213,7 @@ func (p *ReferencesResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -6024,6 +6252,8 @@ func (p *ContainerResources) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -6095,6 +6325,10 @@ func (p *ContainerResources) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -6174,6 +6408,7 @@ func (p *ContainerResources) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) 
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField4(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -6186,6 +6421,7 @@ func (p *ContainerResources) BLength() int {
 		l += p.field2Length()
 		l += p.field3Length()
 		l += p.field4Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -6272,6 +6508,8 @@ func (p *CollectorSelection) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetMode bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -6316,6 +6554,10 @@ func (p *CollectorSelection) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -6381,6 +6623,7 @@ func (p *CollectorSelection) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) 
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -6391,6 +6634,7 @@ func (p *CollectorSelection) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -6448,6 +6692,8 @@ func (p *MetricSelection) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetMode bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -6492,6 +6738,10 @@ func (p *MetricSelection) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -6557,6 +6807,7 @@ func (p *MetricSelection) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -6567,6 +6818,7 @@ func (p *MetricSelection) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -6624,6 +6876,8 @@ func (p *NamespaceSelection) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetMode bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -6682,6 +6936,10 @@ func (p *NamespaceSelection) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -6772,6 +7030,7 @@ func (p *NamespaceSelection) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) 
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -6783,6 +7042,7 @@ func (p *NamespaceSelection) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -6869,6 +7129,8 @@ func (p *RoleResources) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetMode bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -6913,6 +7175,10 @@ func (p *RoleResources) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -6966,6 +7232,7 @@ func (p *RoleResources) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -6976,6 +7243,7 @@ func (p *RoleResources) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -7030,6 +7298,8 @@ func (p *KSMConfiguration) FastRead(buf []byte) (int, error) {
 	var issetNamespaceFilter bool = false
 	var issetAdvancedResources bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -7236,6 +7506,10 @@ func (p *KSMConfiguration) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -7482,6 +7756,7 @@ func (p *KSMConfiguration) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) in
 		offset += p.fastWriteField11(buf[offset:], w)
 		offset += p.fastWriteField12(buf[offset:], w)
 		offset += p.fastWriteField13(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -7503,6 +7778,7 @@ func (p *KSMConfiguration) BLength() int {
 		l += p.field11Length()
 		l += p.field12Length()
 		l += p.field13Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -7715,6 +7991,8 @@ func (p *InstanceID) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetId bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -7745,6 +8023,10 @@ func (p *InstanceID) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -7785,6 +8067,7 @@ func (p *InstanceID) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -7794,6 +8077,7 @@ func (p *InstanceID) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -7823,6 +8107,8 @@ func (p *CreateInstanceRequest) FastRead(buf []byte) (int, error) {
 	var issetClusterId bool = false
 	var issetComponent bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -7882,6 +8168,10 @@ func (p *CreateInstanceRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -7955,6 +8245,7 @@ func (p *CreateInstanceRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWrite
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -7966,6 +8257,7 @@ func (p *CreateInstanceRequest) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -8027,6 +8319,8 @@ func (p *SaveDraftRequest) FastRead(buf []byte) (int, error) {
 	var issetId bool = false
 	var issetExpectedDraftRevision bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -8086,6 +8380,10 @@ func (p *SaveDraftRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -8159,6 +8457,7 @@ func (p *SaveDraftRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) in
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -8170,6 +8469,7 @@ func (p *SaveDraftRequest) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -8231,6 +8531,8 @@ func (p *ConfigurationDraft) FastRead(buf []byte) (int, error) {
 	var issetRevision bool = false
 	var issetYaml bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -8290,6 +8592,10 @@ func (p *ConfigurationDraft) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -8363,6 +8669,7 @@ func (p *ConfigurationDraft) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) 
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -8374,6 +8681,7 @@ func (p *ConfigurationDraft) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -8439,6 +8747,8 @@ func (p *InstanceRuntime) FastRead(buf []byte) (int, error) {
 	var issetError bool = false
 	var issetObservedAt bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -8572,6 +8882,10 @@ func (p *InstanceRuntime) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -8742,6 +9056,7 @@ func (p *InstanceRuntime) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int
 		offset += p.fastWriteField6(buf[offset:], w)
 		offset += p.fastWriteField7(buf[offset:], w)
 		offset += p.fastWriteField8(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -8758,6 +9073,7 @@ func (p *InstanceRuntime) BLength() int {
 		l += p.field6Length()
 		l += p.field7Length()
 		l += p.field8Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -8903,6 +9219,8 @@ func (p *ObservationInstance) FastRead(buf []byte) (int, error) {
 	var issetActivityAt bool = false
 	var issetOwnership bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -9126,6 +9444,10 @@ func (p *ObservationInstance) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -9414,6 +9736,7 @@ func (p *ObservationInstance) FastWriteNocopy(buf []byte, w thrift.NocopyWriter)
 		offset += p.fastWriteField12(buf[offset:], w)
 		offset += p.fastWriteField13(buf[offset:], w)
 		offset += p.fastWriteField14(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -9436,6 +9759,7 @@ func (p *ObservationInstance) BLength() int {
 		l += p.field12Length()
 		l += p.field13Length()
 		l += p.field14Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -9654,6 +9978,8 @@ func (p *InstancesResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetInstances bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -9684,6 +10010,10 @@ func (p *InstancesResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -9735,6 +10065,7 @@ func (p *InstancesResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) in
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -9744,6 +10075,7 @@ func (p *InstancesResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -9784,6 +10116,8 @@ func (p *PreviewRequest) FastRead(buf []byte) (int, error) {
 	var issetId bool = false
 	var issetDraftRevision bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -9829,6 +10163,10 @@ func (p *PreviewRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -9889,6 +10227,7 @@ func (p *PreviewRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int 
 	if p != nil {
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -9899,6 +10238,7 @@ func (p *PreviewRequest) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -9946,6 +10286,8 @@ func (p *PublicationPreview) FastRead(buf []byte) (int, error) {
 	var issetDrift bool = false
 	var issetWarnings bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -10051,6 +10393,10 @@ func (p *PublicationPreview) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -10201,6 +10547,7 @@ func (p *PublicationPreview) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) 
 		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField4(buf[offset:], w)
 		offset += p.fastWriteField6(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -10215,6 +10562,7 @@ func (p *PublicationPreview) BLength() int {
 		l += p.field4Length()
 		l += p.field5Length()
 		l += p.field6Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -10327,6 +10675,8 @@ func (p *PublishRequest) FastRead(buf []byte) (int, error) {
 	var issetDraftRevision bool = false
 	var issetOverwriteDrift bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -10402,6 +10752,10 @@ func (p *PublishRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -10502,6 +10856,7 @@ func (p *PublishRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int 
 		offset += p.fastWriteField4(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -10514,6 +10869,7 @@ func (p *PublishRequest) BLength() int {
 		l += p.field2Length()
 		l += p.field3Length()
 		l += p.field4Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -10588,6 +10944,8 @@ func (p *PublicationVersion) FastRead(buf []byte) (int, error) {
 	var issetYaml bool = false
 	var issetCreatedAt bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -10692,6 +11050,10 @@ func (p *PublicationVersion) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -10825,6 +11187,7 @@ func (p *PublicationVersion) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) 
 		offset += p.fastWriteField4(buf[offset:], w)
 		offset += p.fastWriteField5(buf[offset:], w)
 		offset += p.fastWriteField6(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -10839,6 +11202,7 @@ func (p *PublicationVersion) BLength() int {
 		l += p.field4Length()
 		l += p.field5Length()
 		l += p.field6Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -10941,6 +11305,8 @@ func (p *VersionsResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetVersions bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -10971,6 +11337,10 @@ func (p *VersionsResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -11022,6 +11392,7 @@ func (p *VersionsResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -11031,6 +11402,7 @@ func (p *VersionsResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -11071,6 +11443,8 @@ func (p *VersionRequest) FastRead(buf []byte) (int, error) {
 	var issetId bool = false
 	var issetVersionId bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -11116,6 +11490,10 @@ func (p *VersionRequest) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -11176,6 +11554,7 @@ func (p *VersionRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int 
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -11186,6 +11565,7 @@ func (p *VersionRequest) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -11229,6 +11609,8 @@ func (p *OperationLookup) FastRead(buf []byte) (int, error) {
 	var issetInstanceId bool = false
 	var issetIdempotencyKey bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -11274,6 +11656,10 @@ func (p *OperationLookup) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -11334,6 +11720,7 @@ func (p *OperationLookup) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -11344,6 +11731,7 @@ func (p *OperationLookup) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -11391,6 +11779,8 @@ func (p *ExecutionAttempt) FastRead(buf []byte) (int, error) {
 	var issetCreatedAt bool = false
 	var issetUpdatedAt bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -11496,6 +11886,10 @@ func (p *ExecutionAttempt) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -11636,6 +12030,7 @@ func (p *ExecutionAttempt) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) in
 		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField5(buf[offset:], w)
 		offset += p.fastWriteField6(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -11650,6 +12045,7 @@ func (p *ExecutionAttempt) BLength() int {
 		l += p.field4Length()
 		l += p.field5Length()
 		l += p.field6Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -11748,6 +12144,8 @@ func (p *AttemptsResult_) FastRead(buf []byte) (int, error) {
 	var fieldId int16
 	var issetAttempts bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -11778,6 +12176,10 @@ func (p *AttemptsResult_) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -11829,6 +12231,7 @@ func (p *AttemptsResult_) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -11838,6 +12241,7 @@ func (p *AttemptsResult_) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -11878,6 +12282,8 @@ func (p *APIError) FastRead(buf []byte) (int, error) {
 	var issetCode bool = false
 	var issetMessage bool = false
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -11937,6 +12343,10 @@ func (p *APIError) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -12030,6 +12440,7 @@ func (p *APIError) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -12041,6 +12452,7 @@ func (p *APIError) BLength() int {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -12114,6 +12526,8 @@ func (p *ControlServiceCreateInstanceArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -12157,6 +12571,10 @@ func (p *ControlServiceCreateInstanceArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -12202,6 +12620,7 @@ func (p *ControlServiceCreateInstanceArgs) FastWriteNocopy(buf []byte, w thrift.
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -12212,6 +12631,7 @@ func (p *ControlServiceCreateInstanceArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -12253,6 +12673,8 @@ func (p *ControlServiceCreateInstanceResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -12296,6 +12718,10 @@ func (p *ControlServiceCreateInstanceResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -12341,6 +12767,7 @@ func (p *ControlServiceCreateInstanceResult) FastWriteNocopy(buf []byte, w thrif
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -12351,6 +12778,7 @@ func (p *ControlServiceCreateInstanceResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -12400,6 +12828,8 @@ func (p *ControlServiceListInstancesArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -12443,6 +12873,10 @@ func (p *ControlServiceListInstancesArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -12488,6 +12922,7 @@ func (p *ControlServiceListInstancesArgs) FastWriteNocopy(buf []byte, w thrift.N
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -12498,6 +12933,7 @@ func (p *ControlServiceListInstancesArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -12539,6 +12975,8 @@ func (p *ControlServiceListInstancesResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -12582,6 +13020,10 @@ func (p *ControlServiceListInstancesResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -12627,6 +13069,7 @@ func (p *ControlServiceListInstancesResult) FastWriteNocopy(buf []byte, w thrift
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -12637,6 +13080,7 @@ func (p *ControlServiceListInstancesResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -12686,6 +13130,8 @@ func (p *ControlServiceGetInstanceArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -12729,6 +13175,10 @@ func (p *ControlServiceGetInstanceArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -12774,6 +13224,7 @@ func (p *ControlServiceGetInstanceArgs) FastWriteNocopy(buf []byte, w thrift.Noc
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -12784,6 +13235,7 @@ func (p *ControlServiceGetInstanceArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -12825,6 +13277,8 @@ func (p *ControlServiceGetInstanceResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -12868,6 +13322,10 @@ func (p *ControlServiceGetInstanceResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -12913,6 +13371,7 @@ func (p *ControlServiceGetInstanceResult) FastWriteNocopy(buf []byte, w thrift.N
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -12923,6 +13382,7 @@ func (p *ControlServiceGetInstanceResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -12972,6 +13432,8 @@ func (p *ControlServiceGetDraftArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -13015,6 +13477,10 @@ func (p *ControlServiceGetDraftArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -13060,6 +13526,7 @@ func (p *ControlServiceGetDraftArgs) FastWriteNocopy(buf []byte, w thrift.Nocopy
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -13070,6 +13537,7 @@ func (p *ControlServiceGetDraftArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -13111,6 +13579,8 @@ func (p *ControlServiceGetDraftResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -13154,6 +13624,10 @@ func (p *ControlServiceGetDraftResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -13199,6 +13673,7 @@ func (p *ControlServiceGetDraftResult) FastWriteNocopy(buf []byte, w thrift.Noco
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -13209,6 +13684,7 @@ func (p *ControlServiceGetDraftResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -13258,6 +13734,8 @@ func (p *ControlServiceSaveDraftArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -13301,6 +13779,10 @@ func (p *ControlServiceSaveDraftArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -13346,6 +13828,7 @@ func (p *ControlServiceSaveDraftArgs) FastWriteNocopy(buf []byte, w thrift.Nocop
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -13356,6 +13839,7 @@ func (p *ControlServiceSaveDraftArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -13397,6 +13881,8 @@ func (p *ControlServiceSaveDraftResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -13440,6 +13926,10 @@ func (p *ControlServiceSaveDraftResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -13485,6 +13975,7 @@ func (p *ControlServiceSaveDraftResult) FastWriteNocopy(buf []byte, w thrift.Noc
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -13495,6 +13986,7 @@ func (p *ControlServiceSaveDraftResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -13544,6 +14036,8 @@ func (p *ControlServiceCopyTemplateArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -13587,6 +14081,10 @@ func (p *ControlServiceCopyTemplateArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -13632,6 +14130,7 @@ func (p *ControlServiceCopyTemplateArgs) FastWriteNocopy(buf []byte, w thrift.No
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -13642,6 +14141,7 @@ func (p *ControlServiceCopyTemplateArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -13683,6 +14183,8 @@ func (p *ControlServiceCopyTemplateResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -13726,6 +14228,10 @@ func (p *ControlServiceCopyTemplateResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -13771,6 +14277,7 @@ func (p *ControlServiceCopyTemplateResult) FastWriteNocopy(buf []byte, w thrift.
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -13781,6 +14288,7 @@ func (p *ControlServiceCopyTemplateResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -13830,6 +14338,8 @@ func (p *ControlServiceRecordEditingActivityArgs) FastRead(buf []byte) (int, err
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -13873,6 +14383,10 @@ func (p *ControlServiceRecordEditingActivityArgs) FastRead(buf []byte) (int, err
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -13918,6 +14432,7 @@ func (p *ControlServiceRecordEditingActivityArgs) FastWriteNocopy(buf []byte, w 
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -13928,6 +14443,7 @@ func (p *ControlServiceRecordEditingActivityArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -13969,6 +14485,8 @@ func (p *ControlServiceRecordEditingActivityResult) FastRead(buf []byte) (int, e
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -14012,6 +14530,10 @@ func (p *ControlServiceRecordEditingActivityResult) FastRead(buf []byte) (int, e
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -14057,6 +14579,7 @@ func (p *ControlServiceRecordEditingActivityResult) FastWriteNocopy(buf []byte, 
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -14067,6 +14590,7 @@ func (p *ControlServiceRecordEditingActivityResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -14116,6 +14640,8 @@ func (p *ControlServicePreviewPublicationArgs) FastRead(buf []byte) (int, error)
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -14159,6 +14685,10 @@ func (p *ControlServicePreviewPublicationArgs) FastRead(buf []byte) (int, error)
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -14204,6 +14734,7 @@ func (p *ControlServicePreviewPublicationArgs) FastWriteNocopy(buf []byte, w thr
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -14214,6 +14745,7 @@ func (p *ControlServicePreviewPublicationArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -14255,6 +14787,8 @@ func (p *ControlServicePreviewPublicationResult) FastRead(buf []byte) (int, erro
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -14298,6 +14832,10 @@ func (p *ControlServicePreviewPublicationResult) FastRead(buf []byte) (int, erro
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -14343,6 +14881,7 @@ func (p *ControlServicePreviewPublicationResult) FastWriteNocopy(buf []byte, w t
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -14353,6 +14892,7 @@ func (p *ControlServicePreviewPublicationResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -14402,6 +14942,8 @@ func (p *ControlServicePublishConfigurationArgs) FastRead(buf []byte) (int, erro
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -14445,6 +14987,10 @@ func (p *ControlServicePublishConfigurationArgs) FastRead(buf []byte) (int, erro
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -14490,6 +15036,7 @@ func (p *ControlServicePublishConfigurationArgs) FastWriteNocopy(buf []byte, w t
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -14500,6 +15047,7 @@ func (p *ControlServicePublishConfigurationArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -14541,6 +15089,8 @@ func (p *ControlServicePublishConfigurationResult) FastRead(buf []byte) (int, er
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -14584,6 +15134,10 @@ func (p *ControlServicePublishConfigurationResult) FastRead(buf []byte) (int, er
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -14629,6 +15183,7 @@ func (p *ControlServicePublishConfigurationResult) FastWriteNocopy(buf []byte, w
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -14639,6 +15194,7 @@ func (p *ControlServicePublishConfigurationResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -14688,6 +15244,8 @@ func (p *ControlServiceListVersionsArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -14731,6 +15289,10 @@ func (p *ControlServiceListVersionsArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -14776,6 +15338,7 @@ func (p *ControlServiceListVersionsArgs) FastWriteNocopy(buf []byte, w thrift.No
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -14786,6 +15349,7 @@ func (p *ControlServiceListVersionsArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -14827,6 +15391,8 @@ func (p *ControlServiceListVersionsResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -14870,6 +15436,10 @@ func (p *ControlServiceListVersionsResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -14915,6 +15485,7 @@ func (p *ControlServiceListVersionsResult) FastWriteNocopy(buf []byte, w thrift.
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -14925,6 +15496,7 @@ func (p *ControlServiceListVersionsResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -14974,6 +15546,8 @@ func (p *ControlServiceGetVersionArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -15017,6 +15591,10 @@ func (p *ControlServiceGetVersionArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -15062,6 +15640,7 @@ func (p *ControlServiceGetVersionArgs) FastWriteNocopy(buf []byte, w thrift.Noco
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -15072,6 +15651,7 @@ func (p *ControlServiceGetVersionArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -15113,6 +15693,8 @@ func (p *ControlServiceGetVersionResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -15156,6 +15738,10 @@ func (p *ControlServiceGetVersionResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -15201,6 +15787,7 @@ func (p *ControlServiceGetVersionResult) FastWriteNocopy(buf []byte, w thrift.No
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -15211,6 +15798,7 @@ func (p *ControlServiceGetVersionResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -15260,6 +15848,8 @@ func (p *ControlServiceGetRuntimeArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -15303,6 +15893,10 @@ func (p *ControlServiceGetRuntimeArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -15348,6 +15942,7 @@ func (p *ControlServiceGetRuntimeArgs) FastWriteNocopy(buf []byte, w thrift.Noco
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -15358,6 +15953,7 @@ func (p *ControlServiceGetRuntimeArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -15399,6 +15995,8 @@ func (p *ControlServiceGetRuntimeResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -15442,6 +16040,10 @@ func (p *ControlServiceGetRuntimeResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -15487,6 +16089,7 @@ func (p *ControlServiceGetRuntimeResult) FastWriteNocopy(buf []byte, w thrift.No
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -15497,6 +16100,7 @@ func (p *ControlServiceGetRuntimeResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -15546,6 +16150,8 @@ func (p *ControlServiceRefreshInstanceArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -15589,6 +16195,10 @@ func (p *ControlServiceRefreshInstanceArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -15634,6 +16244,7 @@ func (p *ControlServiceRefreshInstanceArgs) FastWriteNocopy(buf []byte, w thrift
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -15644,6 +16255,7 @@ func (p *ControlServiceRefreshInstanceArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -15685,6 +16297,8 @@ func (p *ControlServiceRefreshInstanceResult) FastRead(buf []byte) (int, error) 
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -15728,6 +16342,10 @@ func (p *ControlServiceRefreshInstanceResult) FastRead(buf []byte) (int, error) 
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -15773,6 +16391,7 @@ func (p *ControlServiceRefreshInstanceResult) FastWriteNocopy(buf []byte, w thri
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -15783,6 +16402,7 @@ func (p *ControlServiceRefreshInstanceResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -15832,6 +16452,8 @@ func (p *ControlServiceDeleteDraftArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -15875,6 +16497,10 @@ func (p *ControlServiceDeleteDraftArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -15920,6 +16546,7 @@ func (p *ControlServiceDeleteDraftArgs) FastWriteNocopy(buf []byte, w thrift.Noc
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -15930,6 +16557,7 @@ func (p *ControlServiceDeleteDraftArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -15971,6 +16599,8 @@ func (p *ControlServiceDeleteDraftResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -16014,6 +16644,10 @@ func (p *ControlServiceDeleteDraftResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -16059,6 +16693,7 @@ func (p *ControlServiceDeleteDraftResult) FastWriteNocopy(buf []byte, w thrift.N
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -16069,6 +16704,7 @@ func (p *ControlServiceDeleteDraftResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -16118,6 +16754,8 @@ func (p *ControlServiceLookupOperationsArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -16161,6 +16799,10 @@ func (p *ControlServiceLookupOperationsArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -16206,6 +16848,7 @@ func (p *ControlServiceLookupOperationsArgs) FastWriteNocopy(buf []byte, w thrif
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -16216,6 +16859,7 @@ func (p *ControlServiceLookupOperationsArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -16257,6 +16901,8 @@ func (p *ControlServiceLookupOperationsResult) FastRead(buf []byte) (int, error)
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -16300,6 +16946,10 @@ func (p *ControlServiceLookupOperationsResult) FastRead(buf []byte) (int, error)
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -16345,6 +16995,7 @@ func (p *ControlServiceLookupOperationsResult) FastWriteNocopy(buf []byte, w thr
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -16355,6 +17006,7 @@ func (p *ControlServiceLookupOperationsResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -16404,6 +17056,8 @@ func (p *ControlServiceGetAttemptsArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -16447,6 +17101,10 @@ func (p *ControlServiceGetAttemptsArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -16492,6 +17150,7 @@ func (p *ControlServiceGetAttemptsArgs) FastWriteNocopy(buf []byte, w thrift.Noc
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -16502,6 +17161,7 @@ func (p *ControlServiceGetAttemptsArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -16543,6 +17203,8 @@ func (p *ControlServiceGetAttemptsResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -16586,6 +17248,10 @@ func (p *ControlServiceGetAttemptsResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -16631,6 +17297,7 @@ func (p *ControlServiceGetAttemptsResult) FastWriteNocopy(buf []byte, w thrift.N
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -16641,6 +17308,7 @@ func (p *ControlServiceGetAttemptsResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -16690,6 +17358,8 @@ func (p *ControlServiceListKubeconfigContextsArgs) FastRead(buf []byte) (int, er
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -16733,6 +17403,10 @@ func (p *ControlServiceListKubeconfigContextsArgs) FastRead(buf []byte) (int, er
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -16778,6 +17452,7 @@ func (p *ControlServiceListKubeconfigContextsArgs) FastWriteNocopy(buf []byte, w
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -16788,6 +17463,7 @@ func (p *ControlServiceListKubeconfigContextsArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -16829,6 +17505,8 @@ func (p *ControlServiceListKubeconfigContextsResult) FastRead(buf []byte) (int, 
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -16872,6 +17550,10 @@ func (p *ControlServiceListKubeconfigContextsResult) FastRead(buf []byte) (int, 
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -16917,6 +17599,7 @@ func (p *ControlServiceListKubeconfigContextsResult) FastWriteNocopy(buf []byte,
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -16927,6 +17610,7 @@ func (p *ControlServiceListKubeconfigContextsResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -16976,6 +17660,8 @@ func (p *ControlServiceListClustersArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -17005,6 +17691,10 @@ func (p *ControlServiceListClustersArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -17037,6 +17727,7 @@ func (p *ControlServiceListClustersArgs) FastWriteNocopy(buf []byte, w thrift.No
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -17046,6 +17737,7 @@ func (p *ControlServiceListClustersArgs) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -17073,6 +17765,8 @@ func (p *ControlServiceListClustersResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -17116,6 +17810,10 @@ func (p *ControlServiceListClustersResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -17161,6 +17859,7 @@ func (p *ControlServiceListClustersResult) FastWriteNocopy(buf []byte, w thrift.
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -17171,6 +17870,7 @@ func (p *ControlServiceListClustersResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -17220,6 +17920,8 @@ func (p *ControlServiceGetClusterArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -17263,6 +17965,10 @@ func (p *ControlServiceGetClusterArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -17308,6 +18014,7 @@ func (p *ControlServiceGetClusterArgs) FastWriteNocopy(buf []byte, w thrift.Noco
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -17318,6 +18025,7 @@ func (p *ControlServiceGetClusterArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -17359,6 +18067,8 @@ func (p *ControlServiceGetClusterResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -17402,6 +18112,10 @@ func (p *ControlServiceGetClusterResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -17447,6 +18161,7 @@ func (p *ControlServiceGetClusterResult) FastWriteNocopy(buf []byte, w thrift.No
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -17457,6 +18172,7 @@ func (p *ControlServiceGetClusterResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -17506,6 +18222,8 @@ func (p *ControlServiceRegisterClusterArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -17549,6 +18267,10 @@ func (p *ControlServiceRegisterClusterArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -17594,6 +18316,7 @@ func (p *ControlServiceRegisterClusterArgs) FastWriteNocopy(buf []byte, w thrift
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -17604,6 +18327,7 @@ func (p *ControlServiceRegisterClusterArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -17645,6 +18369,8 @@ func (p *ControlServiceRegisterClusterResult) FastRead(buf []byte) (int, error) 
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -17688,6 +18414,10 @@ func (p *ControlServiceRegisterClusterResult) FastRead(buf []byte) (int, error) 
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -17733,6 +18463,7 @@ func (p *ControlServiceRegisterClusterResult) FastWriteNocopy(buf []byte, w thri
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -17743,6 +18474,7 @@ func (p *ControlServiceRegisterClusterResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -17792,6 +18524,8 @@ func (p *ControlServiceUpdateCredentialArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -17835,6 +18569,10 @@ func (p *ControlServiceUpdateCredentialArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -17880,6 +18618,7 @@ func (p *ControlServiceUpdateCredentialArgs) FastWriteNocopy(buf []byte, w thrif
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -17890,6 +18629,7 @@ func (p *ControlServiceUpdateCredentialArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -17931,6 +18671,8 @@ func (p *ControlServiceUpdateCredentialResult) FastRead(buf []byte) (int, error)
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -17974,6 +18716,10 @@ func (p *ControlServiceUpdateCredentialResult) FastRead(buf []byte) (int, error)
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -18019,6 +18765,7 @@ func (p *ControlServiceUpdateCredentialResult) FastWriteNocopy(buf []byte, w thr
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -18029,6 +18776,7 @@ func (p *ControlServiceUpdateCredentialResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -18078,6 +18826,8 @@ func (p *ControlServiceReactivateClusterArgs) FastRead(buf []byte) (int, error) 
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -18121,6 +18871,10 @@ func (p *ControlServiceReactivateClusterArgs) FastRead(buf []byte) (int, error) 
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -18166,6 +18920,7 @@ func (p *ControlServiceReactivateClusterArgs) FastWriteNocopy(buf []byte, w thri
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -18176,6 +18931,7 @@ func (p *ControlServiceReactivateClusterArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -18217,6 +18973,8 @@ func (p *ControlServiceReactivateClusterResult) FastRead(buf []byte) (int, error
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -18260,6 +19018,10 @@ func (p *ControlServiceReactivateClusterResult) FastRead(buf []byte) (int, error
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -18305,6 +19067,7 @@ func (p *ControlServiceReactivateClusterResult) FastWriteNocopy(buf []byte, w th
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -18315,6 +19078,7 @@ func (p *ControlServiceReactivateClusterResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -18364,6 +19128,8 @@ func (p *ControlServiceTransferClusterArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -18407,6 +19173,10 @@ func (p *ControlServiceTransferClusterArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -18452,6 +19222,7 @@ func (p *ControlServiceTransferClusterArgs) FastWriteNocopy(buf []byte, w thrift
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -18462,6 +19233,7 @@ func (p *ControlServiceTransferClusterArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -18503,6 +19275,8 @@ func (p *ControlServiceTransferClusterResult) FastRead(buf []byte) (int, error) 
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -18546,6 +19320,10 @@ func (p *ControlServiceTransferClusterResult) FastRead(buf []byte) (int, error) 
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -18591,6 +19369,7 @@ func (p *ControlServiceTransferClusterResult) FastWriteNocopy(buf []byte, w thri
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -18601,6 +19380,7 @@ func (p *ControlServiceTransferClusterResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -18650,6 +19430,8 @@ func (p *ControlServiceUnregisterClusterArgs) FastRead(buf []byte) (int, error) 
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -18693,6 +19475,10 @@ func (p *ControlServiceUnregisterClusterArgs) FastRead(buf []byte) (int, error) 
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -18738,6 +19524,7 @@ func (p *ControlServiceUnregisterClusterArgs) FastWriteNocopy(buf []byte, w thri
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -18748,6 +19535,7 @@ func (p *ControlServiceUnregisterClusterArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -18789,6 +19577,8 @@ func (p *ControlServiceUnregisterClusterResult) FastRead(buf []byte) (int, error
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -18832,6 +19622,10 @@ func (p *ControlServiceUnregisterClusterResult) FastRead(buf []byte) (int, error
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -18877,6 +19671,7 @@ func (p *ControlServiceUnregisterClusterResult) FastWriteNocopy(buf []byte, w th
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -18887,6 +19682,7 @@ func (p *ControlServiceUnregisterClusterResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -18936,6 +19732,8 @@ func (p *ControlServiceGetOperationArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -18979,6 +19777,10 @@ func (p *ControlServiceGetOperationArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -19024,6 +19826,7 @@ func (p *ControlServiceGetOperationArgs) FastWriteNocopy(buf []byte, w thrift.No
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -19034,6 +19837,7 @@ func (p *ControlServiceGetOperationArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -19075,6 +19879,8 @@ func (p *ControlServiceGetOperationResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -19118,6 +19924,10 @@ func (p *ControlServiceGetOperationResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -19163,6 +19973,7 @@ func (p *ControlServiceGetOperationResult) FastWriteNocopy(buf []byte, w thrift.
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -19173,6 +19984,7 @@ func (p *ControlServiceGetOperationResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -19222,6 +20034,8 @@ func (p *ControlServiceContinueOperationArgs) FastRead(buf []byte) (int, error) 
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -19265,6 +20079,10 @@ func (p *ControlServiceContinueOperationArgs) FastRead(buf []byte) (int, error) 
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -19310,6 +20128,7 @@ func (p *ControlServiceContinueOperationArgs) FastWriteNocopy(buf []byte, w thri
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -19320,6 +20139,7 @@ func (p *ControlServiceContinueOperationArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -19361,6 +20181,8 @@ func (p *ControlServiceContinueOperationResult) FastRead(buf []byte) (int, error
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -19404,6 +20226,10 @@ func (p *ControlServiceContinueOperationResult) FastRead(buf []byte) (int, error
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -19449,6 +20275,7 @@ func (p *ControlServiceContinueOperationResult) FastWriteNocopy(buf []byte, w th
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -19459,6 +20286,7 @@ func (p *ControlServiceContinueOperationResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -19508,6 +20336,8 @@ func (p *ControlServiceListClusterOperationsArgs) FastRead(buf []byte) (int, err
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -19551,6 +20381,10 @@ func (p *ControlServiceListClusterOperationsArgs) FastRead(buf []byte) (int, err
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -19596,6 +20430,7 @@ func (p *ControlServiceListClusterOperationsArgs) FastWriteNocopy(buf []byte, w 
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -19606,6 +20441,7 @@ func (p *ControlServiceListClusterOperationsArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -19647,6 +20483,8 @@ func (p *ControlServiceListClusterOperationsResult) FastRead(buf []byte) (int, e
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -19690,6 +20528,10 @@ func (p *ControlServiceListClusterOperationsResult) FastRead(buf []byte) (int, e
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -19735,6 +20577,7 @@ func (p *ControlServiceListClusterOperationsResult) FastWriteNocopy(buf []byte, 
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -19745,6 +20588,7 @@ func (p *ControlServiceListClusterOperationsResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -19794,6 +20638,8 @@ func (p *ControlServiceListNamespacesArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -19837,6 +20683,10 @@ func (p *ControlServiceListNamespacesArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -19882,6 +20732,7 @@ func (p *ControlServiceListNamespacesArgs) FastWriteNocopy(buf []byte, w thrift.
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -19892,6 +20743,7 @@ func (p *ControlServiceListNamespacesArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -19933,6 +20785,8 @@ func (p *ControlServiceListNamespacesResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -19976,6 +20830,10 @@ func (p *ControlServiceListNamespacesResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -20021,6 +20879,7 @@ func (p *ControlServiceListNamespacesResult) FastWriteNocopy(buf []byte, w thrif
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -20031,6 +20890,7 @@ func (p *ControlServiceListNamespacesResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -20080,6 +20940,8 @@ func (p *ControlServiceListReferencesArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -20123,6 +20985,10 @@ func (p *ControlServiceListReferencesArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -20168,6 +21034,7 @@ func (p *ControlServiceListReferencesArgs) FastWriteNocopy(buf []byte, w thrift.
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -20178,6 +21045,7 @@ func (p *ControlServiceListReferencesArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -20219,6 +21087,8 @@ func (p *ControlServiceListReferencesResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -20262,6 +21132,10 @@ func (p *ControlServiceListReferencesResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -20307,6 +21181,7 @@ func (p *ControlServiceListReferencesResult) FastWriteNocopy(buf []byte, w thrif
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -20317,6 +21192,7 @@ func (p *ControlServiceListReferencesResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -20366,6 +21242,8 @@ func (p *ControlServiceProbeArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -20395,6 +21273,10 @@ func (p *ControlServiceProbeArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -20427,6 +21309,7 @@ func (p *ControlServiceProbeArgs) FastWriteNocopy(buf []byte, w thrift.NocopyWri
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -20436,6 +21319,7 @@ func (p *ControlServiceProbeArgs) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -20463,6 +21347,8 @@ func (p *ControlServiceProbeResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -20506,6 +21392,10 @@ func (p *ControlServiceProbeResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -20551,6 +21441,7 @@ func (p *ControlServiceProbeResult) FastWriteNocopy(buf []byte, w thrift.NocopyW
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -20561,6 +21452,7 @@ func (p *ControlServiceProbeResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -20610,6 +21502,8 @@ func (p *ControlServiceInitializeArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -20653,6 +21547,10 @@ func (p *ControlServiceInitializeArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -20698,6 +21596,7 @@ func (p *ControlServiceInitializeArgs) FastWriteNocopy(buf []byte, w thrift.Noco
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -20708,6 +21607,7 @@ func (p *ControlServiceInitializeArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -20749,6 +21649,8 @@ func (p *ControlServiceInitializeResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -20792,6 +21694,10 @@ func (p *ControlServiceInitializeResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -20837,6 +21743,7 @@ func (p *ControlServiceInitializeResult) FastWriteNocopy(buf []byte, w thrift.No
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -20847,6 +21754,7 @@ func (p *ControlServiceInitializeResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -20896,6 +21804,8 @@ func (p *ControlServiceLoginArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -20939,6 +21849,10 @@ func (p *ControlServiceLoginArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -20984,6 +21898,7 @@ func (p *ControlServiceLoginArgs) FastWriteNocopy(buf []byte, w thrift.NocopyWri
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -20994,6 +21909,7 @@ func (p *ControlServiceLoginArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -21035,6 +21951,8 @@ func (p *ControlServiceLoginResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -21078,6 +21996,10 @@ func (p *ControlServiceLoginResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -21123,6 +22045,7 @@ func (p *ControlServiceLoginResult) FastWriteNocopy(buf []byte, w thrift.NocopyW
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -21133,6 +22056,7 @@ func (p *ControlServiceLoginResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -21182,6 +22106,8 @@ func (p *ControlServiceGetSessionArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -21211,6 +22137,10 @@ func (p *ControlServiceGetSessionArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -21243,6 +22173,7 @@ func (p *ControlServiceGetSessionArgs) FastWriteNocopy(buf []byte, w thrift.Noco
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -21252,6 +22183,7 @@ func (p *ControlServiceGetSessionArgs) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -21279,6 +22211,8 @@ func (p *ControlServiceGetSessionResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -21322,6 +22256,10 @@ func (p *ControlServiceGetSessionResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -21367,6 +22305,7 @@ func (p *ControlServiceGetSessionResult) FastWriteNocopy(buf []byte, w thrift.No
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -21377,6 +22316,7 @@ func (p *ControlServiceGetSessionResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -21426,6 +22366,8 @@ func (p *ControlServiceLogoutArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -21455,6 +22397,10 @@ func (p *ControlServiceLogoutArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -21487,6 +22433,7 @@ func (p *ControlServiceLogoutArgs) FastWriteNocopy(buf []byte, w thrift.NocopyWr
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -21496,6 +22443,7 @@ func (p *ControlServiceLogoutArgs) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -21523,6 +22471,8 @@ func (p *ControlServiceLogoutResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -21566,6 +22516,10 @@ func (p *ControlServiceLogoutResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -21611,6 +22565,7 @@ func (p *ControlServiceLogoutResult) FastWriteNocopy(buf []byte, w thrift.Nocopy
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -21621,6 +22576,7 @@ func (p *ControlServiceLogoutResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -21670,6 +22626,8 @@ func (p *ControlServiceChangePasswordArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -21713,6 +22671,10 @@ func (p *ControlServiceChangePasswordArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -21758,6 +22720,7 @@ func (p *ControlServiceChangePasswordArgs) FastWriteNocopy(buf []byte, w thrift.
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -21768,6 +22731,7 @@ func (p *ControlServiceChangePasswordArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -21809,6 +22773,8 @@ func (p *ControlServiceChangePasswordResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -21852,6 +22818,10 @@ func (p *ControlServiceChangePasswordResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -21897,6 +22867,7 @@ func (p *ControlServiceChangePasswordResult) FastWriteNocopy(buf []byte, w thrif
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -21907,6 +22878,7 @@ func (p *ControlServiceChangePasswordResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -21956,6 +22928,8 @@ func (p *ControlServiceListAccountsArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -21985,6 +22959,10 @@ func (p *ControlServiceListAccountsArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -22017,6 +22995,7 @@ func (p *ControlServiceListAccountsArgs) FastWriteNocopy(buf []byte, w thrift.No
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -22026,6 +23005,7 @@ func (p *ControlServiceListAccountsArgs) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -22053,6 +23033,8 @@ func (p *ControlServiceListAccountsResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -22096,6 +23078,10 @@ func (p *ControlServiceListAccountsResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -22141,6 +23127,7 @@ func (p *ControlServiceListAccountsResult) FastWriteNocopy(buf []byte, w thrift.
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -22151,6 +23138,7 @@ func (p *ControlServiceListAccountsResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -22200,6 +23188,8 @@ func (p *ControlServiceCreateAccountArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -22243,6 +23233,10 @@ func (p *ControlServiceCreateAccountArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -22288,6 +23282,7 @@ func (p *ControlServiceCreateAccountArgs) FastWriteNocopy(buf []byte, w thrift.N
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -22298,6 +23293,7 @@ func (p *ControlServiceCreateAccountArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -22339,6 +23335,8 @@ func (p *ControlServiceCreateAccountResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -22382,6 +23380,10 @@ func (p *ControlServiceCreateAccountResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -22427,6 +23429,7 @@ func (p *ControlServiceCreateAccountResult) FastWriteNocopy(buf []byte, w thrift
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -22437,6 +23440,7 @@ func (p *ControlServiceCreateAccountResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -22486,6 +23490,8 @@ func (p *ControlServiceUpdateAccountArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -22529,6 +23535,10 @@ func (p *ControlServiceUpdateAccountArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -22574,6 +23584,7 @@ func (p *ControlServiceUpdateAccountArgs) FastWriteNocopy(buf []byte, w thrift.N
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -22584,6 +23595,7 @@ func (p *ControlServiceUpdateAccountArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -22625,6 +23637,8 @@ func (p *ControlServiceUpdateAccountResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -22668,6 +23682,10 @@ func (p *ControlServiceUpdateAccountResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -22713,6 +23731,7 @@ func (p *ControlServiceUpdateAccountResult) FastWriteNocopy(buf []byte, w thrift
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -22723,6 +23742,7 @@ func (p *ControlServiceUpdateAccountResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -22772,6 +23792,8 @@ func (p *ControlServiceResetPasswordArgs) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -22815,6 +23837,10 @@ func (p *ControlServiceResetPasswordArgs) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -22860,6 +23886,7 @@ func (p *ControlServiceResetPasswordArgs) FastWriteNocopy(buf []byte, w thrift.N
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -22870,6 +23897,7 @@ func (p *ControlServiceResetPasswordArgs) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
@@ -22911,6 +23939,8 @@ func (p *ControlServiceResetPasswordResult) FastRead(buf []byte) (int, error) {
 	var fieldTypeId thrift.TType
 	var fieldId int16
 	for {
+		var isUnknownField bool
+		var beginOff int = offset
 		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
 		offset += l
 		if err != nil {
@@ -22954,6 +23984,10 @@ func (p *ControlServiceResetPasswordResult) FastRead(buf []byte) (int, error) {
 			if err != nil {
 				goto SkipFieldError
 			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
 		}
 	}
 
@@ -22999,6 +24033,7 @@ func (p *ControlServiceResetPasswordResult) FastWriteNocopy(buf []byte, w thrift
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
@@ -23009,6 +24044,7 @@ func (p *ControlServiceResetPasswordResult) BLength() int {
 	if p != nil {
 		l += p.field0Length()
 		l += p.field1Length()
+		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l

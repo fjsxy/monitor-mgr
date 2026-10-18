@@ -17,6 +17,13 @@ type command struct{ actor, action, target, key, digest string }
 // 关键：调用者必须先在同一事务中完成当前授权；幂等命中不能绕过失权检查。
 // 含密码或凭据的请求只保存独立主密钥计算的 HMAC，不保存原文或普通可枚举摘要。
 func (s *Store) beginCommand(ctx context.Context, tx *sql.Tx, p *Principal, c *rpc.RequestContext, action, target string, request any, result any) (*command, bool, error) {
+	// 关键：当前授权由调用方先完成；未知字段必须在规范化及幂等命中前拒绝，防止静默丢字段后回放旧结果。
+	if err := rejectUnknownFields(c, "context"); err != nil {
+		return nil, false, err
+	}
+	if err := rejectUnknownFields(request, "request"); err != nil {
+		return nil, false, err
+	}
 	key := c.GetIdempotencyKey()
 	if len(key) == 0 || len(key) > 128 {
 		return nil, false, Error("INVALID_INPUT", "业务变更需要 1–128 字节 Idempotency-Key")
