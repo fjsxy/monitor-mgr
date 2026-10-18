@@ -29,3 +29,7 @@
 ### Domain docs
 
 采用 single-context；探索代码或讨论领域术语、架构决策前，阅读 `docs/agents/domain.md`。
+
+### Implementation
+
+开始或继续 Issue 实现、编写测试计划、提交代码前，阅读并遵守 `docs/agents/implementation.md`；重复执行的命令维护在根目录 `Makefile`。
