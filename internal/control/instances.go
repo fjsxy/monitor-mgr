@@ -151,6 +151,9 @@ func (s *Store) GetInstance(ctx context.Context, c *rpc.RequestContext, r *rpc.I
 	if e != nil {
 		return nil, e
 	}
+	if i.ReadOnly {
+		return s.externalByID(ctx, i.Id)
+	}
 	if !i.ReadOnly {
 		i.Runtime, e = s.GetRuntime(ctx, c, r)
 		i.Sources = s.instanceSources(ctx, i)

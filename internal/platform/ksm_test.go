@@ -140,7 +140,10 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 }
 
 type ksmFixture struct {
+	clusterUID          string
 	targetConfiguration string
+	inventoryPages      map[string]map[string]any
+	inventoryFailure    string
 	mu                  sync.Mutex
 	cr                  map[string]any
 	writes              int
@@ -172,6 +175,15 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 	f := &ksmFixture{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/namespaces/kube-system" {
+			f.mu.Lock()
+			uid := f.clusterUID
+			f.mu.Unlock()
+			if uid != "" {
+				json.NewEncoder(w).Encode(map[string]any{"metadata": map[string]any{"uid": uid}})
+				return
+			}
+		}
 		if r.URL.Path == "/api/v1/namespaces/monitoring" {
 			f.mu.Lock()
 			gate, entered := f.readGate, f.readEntered
@@ -218,6 +230,17 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 		defer f.mu.Unlock()
 		if r.Method == "GET" {
 			if strings.HasSuffix(r.URL.Path, "kubestatemetrics") {
+				if f.inventoryPages != nil {
+					token := r.URL.Query().Get("continue")
+					if f.inventoryFailure != "" && f.inventoryFailure == token {
+						w.WriteHeader(403)
+						io.WriteString(w, `{}`)
+						return
+					}
+					json.NewEncoder(w).Encode(f.inventoryPages[token])
+					return
+				}
+
 				items := []any{}
 				if f.cr != nil {
 					items = append(items, f.cr)

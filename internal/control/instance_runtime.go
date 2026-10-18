@@ -144,7 +144,11 @@ func (s *Store) GetRuntime(ctx context.Context, c *rpc.RequestContext, r *rpc.In
 		return nil, e
 	}
 	if i.ReadOnly {
-		return i.Runtime, nil
+		external, err := s.externalByID(ctx, i.Id)
+		if err != nil {
+			return nil, err
+		}
+		return external.Runtime, nil
 	}
 	if i.Lifecycle == "DELETED" {
 		return &rpc.InstanceRuntime{Summary: "Deleted", ObservedAt: i.ActivityAt, LastSuccessAt: i.ActivityAt}, nil

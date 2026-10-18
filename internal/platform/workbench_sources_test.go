@@ -198,3 +198,31 @@ func TestWorkbenchLateObservationAfterCredentialSwitch(t *testing.T) {
 		t.Fatal("旧修订失败覆盖了新成功", after)
 	}
 }
+
+func TestR03WorkbenchMissingStatus(t *testing.T) {
+	p, c, id, f, _ := workbenchSourceFixture(t)
+	f.mu.Lock()
+	delete(f.cr, "status")
+	f.mu.Unlock()
+	runtime := clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "", 200)
+	if runtime["summary"] != "Unknown" || runtime["availablePods"] != nil || runtime["desiredPods"] != nil {
+		t.Fatal("无status伪造0/0", runtime)
+	}
+}
+func TestR03WorkbenchIncompleteStatus(t *testing.T) {
+	p, c, id, f, _ := workbenchSourceFixture(t)
+	for _, status := range []map[string]any{
+		{"phase": "Ready", "conditions": []any{map[string]any{"type": "Ready", "status": "True"}}},
+		{"phase": "Ready", "observedGeneration": 1, "desiredPods": 1},
+		{"phase": "Ready", "observedGeneration": 1, "desiredPods": 1, "conditions": []any{map[string]any{"type": "Ready", "status": "True", "observedGeneration": 0}}},
+		{"phase": "Ready", "observedGeneration": 0, "desiredPods": 1, "conditions": []any{map[string]any{"type": "Ready", "status": "True", "observedGeneration": 0}}},
+	} {
+		f.mu.Lock()
+		f.cr["status"] = status
+		f.mu.Unlock()
+		runtime := clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "", 200)
+		if runtime["summary"] != "Unknown" || runtime["availablePods"] != nil || runtime["desiredPods"] != nil {
+			t.Fatal("不适用状态伪造运行", runtime)
+		}
+	}
+}
