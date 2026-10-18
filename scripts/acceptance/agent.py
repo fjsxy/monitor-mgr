@@ -5,6 +5,7 @@ import yaml
 from clusters import Suite as ClusterSuite
 from ksm import manifest,source_state,fingerprint
 from agent_cases import run_case
+from agent_browser import run_browser
 
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 QCASES={'R03.agent-paused':'TestR03AgentPausedReadOnly',**{'F01.'+v:'TestF01Agent/'+v for v in ['absent','empty-object','empty-list','unknown-mode']},**{'F03.'+v:'TestF03Agent' for v in ['selector','url','tls-pair']}}
@@ -55,6 +56,9 @@ def run_regressions(a):
 class Suite(ClusterSuite):
  def __init__(self,a):
   super().__init__(a);self.contract=manifest();self.source=source_state();self.traces=[];self.resources=[];self.namespace_uids={};self.ksms=[];self.restorers=[];self.target='control';self.targetns=None
+  for line in (ROOT/'docs/e2e/issue-18.md').read_text().splitlines():
+   cells=[c.strip() for c in line.strip('|').split('|')]
+   if len(cells)==5 and cells[0]=='REG18-SOURCE-007':self.contract[cells[0]]={'variantId':cells[0],'caseId':cells[0],'layer':'B','kind':'supplementary','purpose':cells[1],'steps':cells[2],'expected':cells[3],'profiles':['LOCAL_FULL']}
   assert not self.source['dirty'] or a.allow_dirty_runner,'门禁来源必须干净'
   assert a.source==self.source['commit'],'运行器与产品必须同源'
   m=json.loads(subprocess.check_output(['docker','image','inspect',a.image],text=True))[0]
@@ -226,7 +230,7 @@ class Suite(ClusterSuite):
    self.case=case;self.traces=[];self.targetns=None;record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.source['tree'],'runnerCommit':self.source['commit'],'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
    try:
     record['platform']=self.deploy(case,index);assert record['platform']['imageID'].endswith(self.image_metadata.get('manifestDigest') or self.image_metadata['dockerInspectId'])
-    self.prepare_target(index,'data' if case in ['C04.agent-crd','A05.primary'] else 'control');record['evidence']=run_case(self,case);record['outcome']='passed'
+    self.prepare_target(index,'data' if case in ['C04.agent-crd','A05.primary'] else 'control');record['evidence']=run_browser(self,case) if self.a.layer=='B' else run_case(self,case);record['outcome']='passed'
    except Exception as e:
     record['error']=str(e);record['traceback']=traceback.format_exc()
     try:
@@ -239,15 +243,24 @@ class Suite(ClusterSuite):
      except Exception:record['failureEventsError']='事件读取失败'
    finally:
     record['traces']=self.traces
+    # 即使浏览器中途失败，也登记本例namespace内已创建的KSM，不能遗留cluster-scoped对象。
+    if self.a.layer=='B' and self.targetns:
+     try:
+      seen={v[1] for v in self.ksms}
+      for cr in self.get('kubestatemetrics')['items']:
+       if cr['spec'].get('targetNamespace')==self.targetns and cr['metadata']['name'] not in seen:self.ksms.append((self.target,cr['metadata']['name'],cr['metadata']['uid']))
+     except Exception:record['browserCleanupInventoryError']='KSM列表失败，无法确认清理范围'
     try:record['cleanup']=self.cleanup()
     except Exception as e:record['cleanup']={'success':False,'failures':[str(e)]}
+    if record.get('browserCleanupInventoryError'):record['cleanup']['success']=False;record['cleanup']['failures'].append(record['browserCleanupInventoryError'])
     if not record['cleanup']['success']:record['outcome']='failed'
+    trace=self.out/(case+'.http.jsonl');trace.write_text(''.join(json.dumps(t,ensure_ascii=False)+'\n' for t in self.traces));record['evidenceRefs']=[{'path':trace.name,'sha256':hashlib.sha256(trace.read_bytes()).hexdigest()},*record.get('evidence',{}).get('evidenceRefs',[])]
     record['finishedAt']=stamp();(self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
    if record['outcome']!='passed' and self.a.fail_fast:break
   return 0 if all(r['outcome']=='passed' for r in self.results) else 1
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('--layer',choices=['Q','K','REG'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');p.add_argument('--output');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--fail-fast',action='store_true')
+ p=argparse.ArgumentParser();p.add_argument('--layer',choices=['Q','K','B','REG'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');p.add_argument('--output');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--fail-fast',action='store_true')
  for field in ['kubectl','control-config','data-config','control-context','data-context','control-pod-config','data-pod-config','image','source','api-lane']:p.add_argument('--'+field)
  p.add_argument('--prefix',default='mm18-agent');p.add_argument('--port',type=int,default=18700);a=p.parse_args();contract=manifest()
  if a.list:
@@ -255,9 +268,9 @@ def main():
  if a.layer=='REG':
   if not a.output or a.cases and any(v not in REGCASES for v in a.cases):p.error('补充回归需要output及已计划子例')
   return run_regressions(a)
- valid=list(QCASES) if a.layer=='Q' else KCASES
+ valid=list(QCASES) if a.layer=='Q' else (BCASES+['REG18-SOURCE-007'] if a.layer=='B' else KCASES)
  if a.cases and any(v not in valid for v in a.cases):p.error('未知/层级不符子例')
- if any(a.profile not in contract[v]['profiles'] for v in a.cases or valid):p.error('子例不属于profile')
+ if any(a.profile not in (contract[v]['profiles'] if v in contract else ['LOCAL_FULL']) for v in a.cases or valid):p.error('子例不属于profile')
  if not a.output:p.error('必须显式output')
  if a.layer=='Q':
   from ksm_q import run_q
@@ -265,6 +278,7 @@ def main():
  for field in ['kubectl','control_config','data_config','control_context','data_context','control_pod_config','data_pod_config','image','source','api_lane']:
   if not getattr(a,field):p.error('K层必须显式'+field)
  if a.profile!='LOCAL_FULL':p.error('本runner当前只执行实际双集群LOCAL_FULL；CI_SMOKE由最终单集群编排')
+ if a.layer=='B':a.cases=a.cases or BCASES
  # 关键：全局namespace/CRD/SC故障会影响其他Operator实例，锁覆盖准备、整批及finally清理。
  with open(a.api_lane,'a') as lane:
   fcntl.flock(lane,fcntl.LOCK_EX);return Suite(a).run()
