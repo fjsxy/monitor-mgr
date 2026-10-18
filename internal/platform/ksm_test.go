@@ -153,6 +153,9 @@ type ksmFixture struct {
 	retainPod           bool
 	crReadFailure       bool
 	crReads             int
+	observationGate     chan struct{}
+	observationEntered  chan struct{}
+	observationOnce     sync.Once
 	readFailure         bool
 	readFailureOnDelete bool
 	block               chan struct{}
@@ -222,6 +225,17 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 				return
 			}
 			f.crReads++
+			if f.observationGate != nil {
+				gate := f.observationGate
+				f.observationOnce.Do(func() { close(f.observationEntered) })
+				f.mu.Unlock()
+				select {
+				case <-gate:
+				case <-r.Context().Done():
+				}
+				f.mu.Lock()
+			}
+
 			if f.crReadFailure {
 				w.WriteHeader(403)
 				io.WriteString(w, `{}`)

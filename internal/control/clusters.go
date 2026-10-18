@@ -443,6 +443,8 @@ func (s *Store) TargetForCluster(ctx context.Context, c *rpc.RequestContext, id 
 	}
 	target.limits = s.limits
 	target.clusterID = id
+	target.credentialRevision = cl.CredentialRevision
+	target.clusterUID = cl.Uid
 	return target, nil
 }
 

@@ -35,6 +35,8 @@ func (s *Store) targetForRecovery(ctx context.Context, cluster string) (*Target,
 	}
 	t.limits = s.limits
 	t.clusterID = cluster
+	t.credentialRevision = cl.CredentialRevision
+	t.clusterUID = cl.Uid
 	var ns map[string]any
 	if e = t.Request(ctx, "GET", "/api/v1/namespaces/kube-system", nil, &ns); e != nil {
 		t.Close()

@@ -30,8 +30,11 @@ type Config struct {
 	RPCDialer                                           remote.Dialer
 	DataDir, HTTPAddr, RPCAddr, PublicOrigin, StaticDir string
 	SessionTTL                                          time.Duration
-	Now                                                 func() time.Time
-	Logger                                              *slog.Logger
+	ObservationInterval                                 *time.Duration
+	// ObservationTicks 仅供受控时钟测试；生产使用应用自身的周期调度。
+	ObservationTicks <-chan time.Time
+	Now              func() time.Time
+	Logger           *slog.Logger
 }
 
 // Runtime 组合 HTTP adapter、真实 loopback Kitex 服务与单实例管控存储。
@@ -49,6 +52,9 @@ type Runtime struct {
 
 // Start 依次建立单 writer、监听器和真实 RPC，完成数据库/RPC 探测后才提供 HTTP。
 func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
+	if cfg.ObservationInterval != nil && (*cfg.ObservationInterval < time.Second || *cfg.ObservationInterval > 20*time.Second || *cfg.ObservationInterval%time.Second != 0) {
+		return nil, errors.New("CR轮询间隔必须为1–20整秒")
+	}
 	if cfg.HTTPAddr == "" {
 		cfg.HTTPAddr = ":8080"
 	}
@@ -68,6 +74,10 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 		return nil, err
 	}
 	store.OperationBoundary = cfg.OperationBoundary
+	if cfg.ObservationInterval != nil {
+		store.ObservationInterval = *cfg.ObservationInterval
+	}
+	store.ObservationTicks = cfg.ObservationTicks
 	rpcLn, err := net.Listen("tcp", cfg.RPCAddr)
 	if err != nil {
 		store.Close()

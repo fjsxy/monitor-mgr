@@ -79,6 +79,8 @@ func (s *Store) targetForActor(ctx context.Context, actor, cluster string) (*Tar
 	}
 	t.limits = s.limits
 	t.clusterID = cluster
+	t.credentialRevision = cl.CredentialRevision
+	t.clusterUID = cl.Uid
 	return t, cl, nil
 }
 func (s *Store) executePublication(life context.Context, id string) {

@@ -11,12 +11,15 @@ import (
 )
 
 // workbenchSourceFixture 仅控制外部API与时钟，实例/版本/授权始终经真实HTTP和Kitex建立。
-func workbenchSourceFixture(t *testing.T) (*platform.Runtime, *http.Cookie, string, *ksmFixture, *atomic.Int64) {
+func workbenchSourceFixture(t *testing.T, configure ...func(*platform.Config)) (*platform.Runtime, *http.Cookie, string, *ksmFixture, *atomic.Int64) {
 	t.Helper()
 	f, target := ksmTarget(t)
 	stamp := &atomic.Int64{}
 	stamp.Store(time.Date(2026, 10, 19, 2, 0, 0, 0, time.UTC).UnixNano())
 	cfg := platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", Now: func() time.Time { return time.Unix(0, stamp.Load()) }}
+	for _, apply := range configure {
+		apply(&cfg)
+	}
 	p, e := platform.Start(context.Background(), cfg)
 	if e != nil {
 		t.Fatal(e)
