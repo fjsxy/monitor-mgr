@@ -176,12 +176,15 @@ def projection_case(s,case):
   assert no_marker(s.call('POST','/instances/'+item['id']+'/refresh',{}),markers),'刷新读模型含认证marker'
   assert no_marker(s.call('GET','/operations?instanceId='+item['id']),markers),'历史读模型含认证marker'
  preview=s.preview(instance);assert no_marker(preview,markers) and '[敏感内容已隐藏]' in preview['leftYAML'],'左右YAML未失败关闭'
- projected=yaml.safe_load(preview['leftYAML'])
+ projected=yaml.safe_load(preview['leftYAML']);checked_conditions=0;checked_fields=0
  for original in s.cr().get('status',{}).get('conditions',[]):
   if no_marker(original,markers):
    # 普通Operator诊断必须仍可读；只比较稳定type/reason/message，不比较独立变化的时间戳。
+   fields=[k for k in ['reason','message'] if isinstance(original.get(k),str) and original[k]]
+   if not fields:continue
    kept=next((c for c in projected.get('status',{}).get('conditions',[]) if c.get('type')==original.get('type')),None)
-   assert kept is not None and all(kept.get(k)==original.get(k) for k in ['reason','message']),'普通Operator诊断被隐藏'
+   assert kept is not None and all(kept.get(k)==original.get(k) for k in fields),'普通Operator诊断被隐藏'
+   checked_conditions+=1;checked_fields+=len(fields)
  rpc=rpc_reads(s,[instance['id'],external['id']],markers)
  s.projection_stage='hidden-value-drift'
  managed=drift(markers[1]);rejected=s.call('POST','/instances/'+instance['id']+'/publications',{'draftRevision':preview['draftRevision'],'previewId':preview['previewId'],'overwriteDrift':True},status=409)
@@ -194,4 +197,4 @@ def projection_case(s,case):
  assert logs.count('目标API写请求')==logs_before,'只读投影产生平台目标写请求'
  for name,before in originals.items():assert metadata(s.cr(name))==before,'投影改写目标原UID或metadata'
  assert s.cr()['spec']['remoteWrite'][0][field]==malformed(markers[1]),'投影改写原始认证URL'
- return {'field':field,'fixedCRDAcceptedMalformedURL':True,'operatorStatusBranch':s.projection_status_branch,'runtimeReasonBranch':s.projection_reason_branch,'publicReadDiagnostics':s.projection_read_diagnostics,'benignOperatorDiagnosticsPreserved':True,'externalReadOnly':True,'noMarkerInHTTPYAMLHistory':True,'directRPC':rpc,'noMarkerInDatabaseWALOrLogs':True,'hiddenValueChangeRejectsOldPreview':True,'originalMetadataUnchanged':True,'historicalEffectiveSpecUnchanged':True,'noPlatformReadSideTargetMutation':True,'sampleDeliveryClaimed':False,'malformedConfigHealthClaimed':False,'fixtureUIDs':{name:before['uid'] for name,before in originals.items()}}
+ return {'field':field,'fixedCRDAcceptedMalformedURL':True,'operatorStatusBranch':s.projection_status_branch,'runtimeReasonBranch':s.projection_reason_branch,'publicReadDiagnostics':s.projection_read_diagnostics,'benignOperatorDiagnosticsPreserved':True if checked_fields else None,'benignOperatorDiagnosticCoverage':{'checkedConditions':checked_conditions,'checkedFields':checked_fields,'coveredInThisK':checked_fields>0,'positiveControlBoundary':'K只记录实际比较；无普通诊断样本时正控由同013 Q真实HTTP/RPC覆盖'},'externalReadOnly':True,'noMarkerInHTTPYAMLHistory':True,'directRPC':rpc,'noMarkerInDatabaseWALOrLogs':True,'hiddenValueChangeRejectsOldPreview':True,'originalMetadataUnchanged':True,'historicalEffectiveSpecUnchanged':True,'noPlatformReadSideTargetMutation':True,'sampleDeliveryClaimed':False,'malformedConfigHealthClaimed':False,'fixtureUIDs':{name:before['uid'] for name,before in originals.items()}}
