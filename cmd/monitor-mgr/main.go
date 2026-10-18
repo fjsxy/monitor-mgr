@@ -1,3 +1,4 @@
+// monitor-mgr 在单进程内启动 HTTP、Kitex 与持久化 worker，并处理有期限的退出。
 package main
 
 import (
@@ -11,8 +12,10 @@ import (
 	"time"
 )
 
+// buildSource 由镜像构建注入，用于记录实际运行来源。
 var buildSource = "development"
 
+// main 读取部署参数，等待平台就绪，并在收到退出信号后有序停止。
 func main() {
 	cfg := platform.Config{}
 	flag.StringVar(&cfg.DataDir, "data-dir", "./data", "SQLite WAL 与原密钥目录")
@@ -32,6 +35,7 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	<-signals
+	// 关键：退出等待有界，恢复状态由运行时保存，不能把终止信号视为已受理操作的撤销。
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err = p.Close(ctx); err != nil {
