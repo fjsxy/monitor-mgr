@@ -3,6 +3,11 @@ package platform_test
 import (
 	"context"
 	"fmt"
+	"github.com/cloudwego/kitex/client"
+	"github.com/cloudwego/kitex/pkg/transmeta"
+	"github.com/cloudwego/kitex/transport"
+	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
+	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
 	"net/http"
 	"sync"
 	"testing"
@@ -121,5 +126,35 @@ func TestR06WorkbenchCoalescesReads(t *testing.T) {
 	}
 	if during-before != 1 {
 		t.Fatalf("相同目标并发读取未合并:实际GET=%d", during-before)
+	}
+}
+
+// R06：下游不得使用超过短调用方剩余预算的8秒新预算。
+func TestR06WorkbenchRemainingBudget(t *testing.T) {
+	p, c, id, f, _ := workbenchSourceFixture(t)
+	gate, entered, canceled := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	f.mu.Lock()
+	f.observationGate = gate
+	f.observationEntered = entered
+	f.observationCanceled = canceled
+	f.mu.Unlock()
+	defer close(gate)
+	cli, e := controlservice.NewClient("workbench-short-budget", client.WithHostPorts(p.RPCAddress()), client.WithRPCTimeout(250*time.Millisecond), client.WithTransportProtocol(transport.TTHeader), client.WithMetaHandler(transmeta.ClientTTHeaderHandler))
+	if e != nil {
+		t.Fatal(e)
+	}
+	token := c.Value
+	if _, e = cli.RefreshInstance(context.Background(), &rpc.RequestContext{SessionToken: &token}, &rpc.InstanceID{Id: id}); e == nil {
+		t.Fatal("阻塞RPC未受短预算限制")
+	}
+	select {
+	case <-entered:
+	default:
+		t.Fatal("未进入真实目标读取")
+	}
+	select {
+	case <-canceled:
+	case <-time.After(750 * time.Millisecond):
+		t.Fatal("下游忽略调用方剩余预算，仍占用目标请求")
 	}
 }

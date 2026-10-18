@@ -17,7 +17,9 @@ import (
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/endpoint"
 	"github.com/cloudwego/kitex/pkg/remote"
+	"github.com/cloudwego/kitex/pkg/transmeta"
 	"github.com/cloudwego/kitex/server"
+	"github.com/cloudwego/kitex/transport"
 	"github.com/fjsxy/monitor-mgr/internal/control"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
@@ -90,8 +92,11 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 		return nil, err
 	}
 	p = &Runtime{cfg: cfg, store: store, ln: httpLn, rpcAddr: rpcLn.Addr().String()}
-	p.rpc = controlservice.NewServer(store, server.WithListener(rpcLn), server.WithExitWaitTime(time.Second), server.WithMiddleware(func(next endpoint.Endpoint) endpoint.Endpoint {
+	p.rpc = controlservice.NewServer(store, server.WithListener(rpcLn), server.WithExitWaitTime(time.Second), server.WithMetaHandler(transmeta.ServerTTHeaderHandler), server.WithEnableContextTimeout(true), server.WithMiddleware(func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, req, resp any) error {
+			// 关键：无超时元信息的直接RPC也最多10秒；已传入的更短预算继续收窄。
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
 			if !store.Accepting() {
 				// 关键：通过生成Result的声明异常返回业务拒绝，不能把退出包装成transport错误。
 				if result, ok := resp.(interface{ SetError(*rpc.APIError) }); ok {
@@ -108,7 +113,7 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	}))
 	rpcErr := make(chan error, 1)
 	go func() { rpcErr <- p.rpc.Run() }()
-	clientOptions := []client.Option{client.WithHostPorts(p.rpcAddr), client.WithRPCTimeout(10 * time.Second)}
+	clientOptions := []client.Option{client.WithHostPorts(p.rpcAddr), client.WithRPCTimeout(10 * time.Second), client.WithTransportProtocol(transport.TTHeader), client.WithMetaHandler(budgetClientMeta)}
 	if cfg.RPCDialer != nil {
 		clientOptions = append(clientOptions, client.WithDialer(cfg.RPCDialer))
 	}

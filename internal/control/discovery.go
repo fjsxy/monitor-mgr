@@ -19,6 +19,12 @@ type externalDocument struct {
 	Epoch string `json:"observationEpoch"`
 }
 
+// discoveryScope 在任何目标预读前固定范围，失败分支也必须经过同一事务CAS。
+type discoveryScope struct {
+	uid                string
+	credentialRevision int64
+}
+
 func (s *Store) externalInstance(raw []byte, active bool) (*rpc.ObservationInstance, error) {
 	doc := externalDocument{ObservationInstance: new(rpc.ObservationInstance)}
 	if json.Unmarshal(raw, &doc) != nil || !doc.ReadOnly {
@@ -73,10 +79,15 @@ func (s *Store) cachedExternal(ctx context.Context, cluster string) ([]*rpc.Obse
 
 // discoverKSM 保留原RPC接缝并覆盖两组件，各自失败不覆盖另一组件的成功。
 func (s *Store) discoverKSM(ctx context.Context, c *rpc.RequestContext, cluster string, managed []*rpc.ObservationInstance) ([]*rpc.ObservationInstance, error) {
+	cl, e := s.GetCluster(ctx, c, &rpc.ClusterID{Id: cluster})
+	if e != nil {
+		return nil, e
+	}
+	scope := discoveryScope{cl.Uid, cl.CredentialRevision}
 	t, e := s.TargetForCluster(ctx, c, cluster)
 	if e != nil {
 		for _, component := range []string{KSMComponent, AgentComponent} {
-			if err := s.persistDiscovery(ctx, cluster, component, nil, e, nil); err != nil {
+			if err := s.persistDiscovery(ctx, cluster, component, nil, e, scope); err != nil {
 				return nil, err
 			}
 		}
@@ -130,7 +141,7 @@ func (s *Store) discoverTarget(ctx context.Context, cluster string, managed []*r
 				out = append(out, i)
 			}
 		}
-		if err := s.persistDiscovery(ctx, cluster, component, out, e, t); err != nil {
+		if err := s.persistDiscovery(ctx, cluster, component, out, e, discoveryScope{t.clusterUID, t.credentialRevision}); err != nil {
 			result = err
 		}
 	}
@@ -138,7 +149,7 @@ func (s *Store) discoverTarget(ctx context.Context, cluster string, managed []*r
 }
 
 // persistDiscovery 与当前凭据比较后提交；成功全集才允许移除未返回对象。
-func (s *Store) persistDiscovery(ctx context.Context, cluster, component string, current []*rpc.ObservationInstance, cause error, target *Target) error {
+func (s *Store) persistDiscovery(ctx context.Context, cluster, component string, current []*rpc.ObservationInstance, cause error, scope discoveryScope) error {
 	durable, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	tx, e := s.DB.BeginTx(durable, nil)
@@ -146,11 +157,10 @@ func (s *Store) persistDiscovery(ctx context.Context, cluster, component string,
 		return Error("UNAVAILABLE", "发现记录保存失败")
 	}
 	defer tx.Rollback()
-	if target != nil {
-		var n int
-		if tx.QueryRowContext(durable, `SELECT count(*) FROM clusters WHERE id=? AND state='ACTIVE' AND uid=? AND credential_revision=?`, cluster, target.clusterUID, target.credentialRevision).Scan(&n) != nil || n != 1 {
-			return Error("CONFLICT", "发现目标修订已变化")
-		}
+	var n int
+	// 关键：没有目标transport也不能缺省放行；迟到身份错误不得覆盖新修订成功/epoch。
+	if scope.uid == "" || tx.QueryRowContext(durable, `SELECT count(*) FROM clusters WHERE id=? AND state='ACTIVE' AND uid=? AND credential_revision=?`, cluster, scope.uid, scope.credentialRevision).Scan(&n) != nil || n != 1 {
+		return Error("CONFLICT", "发现目标修订已变化")
 	}
 	if cause != nil {
 		rows, e := tx.QueryContext(durable, `SELECT document FROM discovered_instances WHERE cluster_id=?`, cluster)

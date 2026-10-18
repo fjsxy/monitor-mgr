@@ -92,6 +92,21 @@ class FaultState:
         self.request_number = 0
         self.block_reads = False
         self.block_aux_only=False
+        self.reject_write_path = ""
+
+    def configure_faults(self, body):
+        """受控读取故障与单一路径写拒绝；字段白名单避免暴露任意控制能力。"""
+        if (not isinstance(body, dict) or set(body) != {"readMode", "rejectWritePath"}
+                or body["readMode"] not in {"all", "aux", "none"}):
+            raise RuleError("fixture faults rejected")
+        path = body["rejectWritePath"]
+        if (not isinstance(path, str) or path and (clean_path(path) != path or "?" in path
+                or not path.startswith(("/api/", "/apis/")))):
+            raise RuleError("fixture exact write path rejected")
+        with self.lock:
+            self.block_reads = body["readMode"] != "none"
+            self.block_aux_only = body["readMode"] == "aux"
+            self.reject_write_path = path
 
     def snapshot(self):
         with self.lock:
@@ -147,6 +162,8 @@ class FaultState:
                 old.event.set()
             self.rule = None
             self.block_reads = False
+            self.block_aux_only = False
+            self.reject_write_path = ""
 
     def wait(self, rule, timeout):
         awakened = rule.event.wait(timeout)
@@ -310,9 +327,16 @@ class APIHandler(QuietHandler):
         app.log.emit(number, self.command, path, "frontend_received", rule)
         with app.state.lock:
             blocked=app.state.block_reads and self.command=="GET" and (not app.state.block_aux_only or path.startswith("/apis/apps/v1/") or path.endswith("/pods"))
+            # 关键：真实写入拒绝不拦dryRun，预检成功不能冒充执行已确认；其他资源不受故障影响。
+            write_blocked=(app.state.reject_write_path == path and self.command in MUTATING
+                           and "dryRun" not in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query,keep_blank_values=True))
         if blocked:
             app.log.emit(number,self.command,path,"controlled_read_rejected",status=403)
             self.json_response(403,{"code":"FIXTURE_READ_BLOCKED"})
+            return
+        if write_blocked:
+            app.log.emit(number,self.command,path,"controlled_write_rejected",status=403)
+            self.json_response(403,{"code":"FIXTURE_WRITE_BLOCKED"})
             return
         if rule and rule.action == "pause_before_send":
             app.log.emit(number, self.command, path, "paused_before_send", rule)
@@ -411,6 +435,9 @@ class ControlHandler(QuietHandler):
                 self.json_response(200, {"rule": app.state.release(body["ruleId"])})
             elif path == "/reset" and body == {}:
                 app.state.reset()
+                self.json_response(200, app.state.snapshot())
+            elif path == "/faults":
+                app.state.configure_faults(body)
                 self.json_response(200, app.state.snapshot())
             else:
                 raise RuleError("fixture control route rejected")

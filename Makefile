@@ -14,7 +14,7 @@ PLATFORM ?= linux/arm64
 BASE_URL ?= http://127.0.0.1:18080
 E2E_ARGS ?=
 
-.PHONY: e2e-agent-storage e2e-agent-storage-q e2e-agent-storage-reg e2e-agent-lifecycle-q help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check
+.PHONY: web-workbench-host help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check workbench-seed-check workbench-i64-check e2e-workbench-q e2e-workbench workbench-q-receipt fault-proxy-check e2e-agent-storage e2e-agent-storage-q e2e-agent-storage-reg e2e-agent-lifecycle-q
 help: ## 查看重复操作入口
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 generate: ## 按锁定版本生成 Thrift/Kitex
@@ -33,6 +33,8 @@ web-build: ## 构建前端
 	$(NPM) --prefix web run build
 web-e2e: ## 对 BASE_URL 运行真实浏览器测试
 	BASE_URL="$(BASE_URL)" $(NPM) --prefix web run test:e2e -- $(E2E_ARGS)
+web-workbench-host: web-build ## 受控TLS目标的真实Host工作台诊断；显式私有fixture/stop文件，不计Pod B
+	$(GO) test ./internal/platform -count=1 -run '^TestWorkbenchBrowserFixture$$' -v -timeout 12m
 build: ## 构建平台二进制
 	mkdir -p bin
 	$(GO) build -o bin/monitor-mgr ./cmd/monitor-mgr
@@ -100,6 +102,13 @@ workbench-i64-check: ## HTTP大i64精确往返与RPC保持协议检查
 e2e-workbench-q: ## 工作台Q层，真实HTTP/Kitex/SQLite与受控时钟/API
 	$(GO) test ./internal/platform -count=1 -run 'Test(R0[1356]Workbench|Workbench)' $(E2E_ARGS)
 
+e2e-workbench: ## 工作台逐例Q/K/B入口；真实目标须E2E_ARGS显式指定独占lane和环境
+	$(PYTHON) scripts/acceptance/workbench.py $(E2E_ARGS)
+workbench-q-receipt: ## 工作台Q8逐variant收据；显式profile/output，不能冒充Pod验收
+	$(PYTHON) scripts/acceptance/workbench.py --layer Q $(E2E_ARGS)
+
+fault-proxy-check: ## 仅自测独占故障fixture的认证、读拒绝、精确写拒绝和恢复机制
+	$(PYTHON) -m unittest discover -s scripts/acceptance -p fault_proxy_test.py
 e2e-agent-storage: ## Agent存储逐例真实Pod门禁；E2E_ARGS显式提供来源、双集群与lane
 	$(PYTHON) scripts/acceptance/agent_storage.py --layer K $(E2E_ARGS)
 e2e-agent-storage-q: ## Agent合法零副本owned Q收据

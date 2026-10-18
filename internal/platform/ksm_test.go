@@ -140,6 +140,11 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 }
 
 type ksmFixture struct {
+	identityGate        chan struct{}
+	identityEntered     chan struct{}
+	identityOnce        sync.Once
+	identityFailure     bool
+	readDelay           time.Duration
 	clusterUID          string
 	targetConfiguration string
 	inventoryPages      map[string]map[string]any
@@ -159,6 +164,7 @@ type ksmFixture struct {
 	crReads             int
 	observationGate     chan struct{}
 	observationEntered  chan struct{}
+	observationCanceled chan struct{}
 	observationOnce     sync.Once
 	readFailure         bool
 	readFailureOnDelete bool
@@ -175,8 +181,37 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 	f := &ksmFixture{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		f.mu.Lock()
+		delay := f.readDelay
+		f.mu.Unlock()
+		if r.Method == "GET" && delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-r.Context().Done():
+				return
+			}
+		}
 		if r.URL.Path == "/api/v1/namespaces/kube-system" {
 			f.mu.Lock()
+			if f.identityGate != nil {
+				gate := f.identityGate
+				f.identityOnce.Do(func() { close(f.identityEntered) })
+				f.mu.Unlock()
+				select {
+				case <-gate:
+				case <-r.Context().Done():
+					return
+				}
+				f.mu.Lock()
+			}
+			if f.identityFailure {
+				f.mu.Unlock()
+				w.WriteHeader(403)
+				io.WriteString(w, `{}`)
+				return
+			}
 			uid := f.clusterUID
 			f.mu.Unlock()
 			if uid != "" {
@@ -256,6 +291,9 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 				select {
 				case <-gate:
 				case <-r.Context().Done():
+					if f.observationCanceled != nil {
+						close(f.observationCanceled)
+					}
 				}
 				f.mu.Lock()
 			}

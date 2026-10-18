@@ -3,6 +3,7 @@ package platform_test
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -242,5 +243,69 @@ func TestWorkbenchPodSourceIndependent(t *testing.T) {
 	failed := workbenchSource(t, current, "Pod")
 	if cr["lastSuccessAt"] == pod["lastSuccessAt"] || cr["error"] != "" || failed["lastSuccessAt"] != pod["lastSuccessAt"] || failed["error"] == "" || failed["historical"] != true || current["runtime"].(map[string]any)["summary"] != "Available" {
 		t.Fatal("CR成功污染Pod独立失败来源", current)
+	}
+}
+
+// REG19-SOURCE-001：后台集群身份预读失败也必须保留读取开始时的凭据范围。
+func TestWorkbenchLateObservationIdentityRead(t *testing.T) {
+	ticks := make(chan time.Time, 1)
+	p, c, id, f, clock := workbenchSourceFixture(t, func(cfg *platform.Config) { cfg.ObservationTicks = ticks })
+	instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+	f.mu.Lock()
+	f.inventoryPages = map[string]map[string]any{"": {"items": []any{map[string]any{"apiVersion": "monitoring.fjsxy.github.io/v1alpha1", "kind": "KubeStateMetrics", "metadata": map[string]any{"name": "outside", "uid": "outside-uid", "generation": 1}, "spec": map[string]any{"targetNamespace": "monitoring"}}}, "metadata": map[string]any{}}}
+	f.mu.Unlock()
+	var externalID string
+	for _, raw := range clusterCall(t, p, "GET", "/clusters/"+instance["clusterId"].(string)+"/instances", nil, c, "", 200)["instances"].([]any) {
+		if v := raw.(map[string]any); v["readOnly"] == true {
+			externalID = v["id"].(string)
+		}
+	}
+	if externalID == "" {
+		t.Fatal("缺少外部发现前置")
+	}
+	gate, entered := make(chan struct{}), make(chan struct{})
+	f.mu.Lock()
+	f.identityGate = gate
+	f.identityEntered = entered
+	f.mu.Unlock()
+	defer func() {
+		select {
+		case <-gate:
+		default:
+			close(gate)
+		}
+	}()
+	clock.Add(int64(10 * time.Second))
+	ticks <- time.Unix(0, clock.Load())
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("后台没有读取原集群身份")
+	}
+	f.mu.Lock()
+	f.identityGate = nil
+	f.mu.Unlock()
+	updated := clusterCall(t, p, "POST", "/clusters/"+instance["clusterId"].(string)+"/credentials", map[string]any{"context": "explicit", "kubeconfig": f.targetConfiguration}, c, "rotate-identity", 202)
+	if awaitClusterOperation(t, p, c, updated["operationId"].(string))["state"] != "SUCCEEDED" {
+		t.Fatal("凭据切换失败")
+	}
+	clock.Add(int64(time.Second))
+	clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "", 200)
+	before := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200), "CR")
+	clusterCall(t, p, "GET", "/clusters/"+instance["clusterId"].(string)+"/instances", nil, c, "", 200)
+	externalBefore := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+externalID, nil, c, "", 200), "CR")
+	clock.Add(int64(time.Second))
+	f.mu.Lock()
+	f.identityFailure = true
+	f.mu.Unlock()
+	close(gate)
+	time.Sleep(75 * time.Millisecond)
+	after := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200), "CR")
+	if !reflect.DeepEqual(after, before) {
+		t.Fatal("旧身份预读错误覆盖新凭据成功", after)
+	}
+	externalAfter := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+externalID, nil, c, "", 200), "CR")
+	if !reflect.DeepEqual(externalAfter, externalBefore) {
+		t.Fatal("旧身份预读错误覆盖新凭据外部发现", externalAfter)
 	}
 }
