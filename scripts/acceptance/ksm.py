@@ -4,8 +4,10 @@ import argparse,copy,datetime,platform,concurrent.futures,traceback,hashlib,http
 from clusters import Suite as ClusterSuite
 from ksm_cases import run_case
 from ksm_proxy import Proxy
+from ksm_browser import run_browser
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 KCASES=['I03.primary','C04.ksm-crd','C05.primary','K02.primary','K03.primary','K04.primary','K05.primary','K06.node','K06.cluster','K06.unscheduled','K07.default-all','K07.default-allow','K07.default-deny','K07.include-all','K07.include-allow','K07.include-deny','K08.all','K08.union','K08.dynamic-pattern','K08.zero','K09.primary','P01.primary','P02.primary','P03.same','P03.different-content','P03.another-active','P05.supported-drift','P05.extra-spec','P06.status-only','P06.rv-only','P06.default-equivalent','P06.spec-change','P09.response-drop','P09.deadline']
+BCASES=['U03.primary']
 QCASES={'K10.name':'TestF03KSMValidationThroughHTTPAndDirectRPC','K10.collision':'TestF03KSMValidationThroughHTTPAndDirectRPC','K10.fixed-target':'TestP05DriftOverwritePreservesMetadataAndP06Equivalent','K10.unsupported':'TestF03KSMValidationThroughHTTPAndDirectRPC','P04.draft-race':'TestK10DraftNameAndRevision','P04.draft-after-preview':'TestP04DraftAndTargetPreviewRaces','P04.target-after-preview':'TestP04DraftAndTargetPreviewRaces','R03.ksm-suspended':'TestR03KSMEffectiveZeroValuesAndMissingStatus/ksm-suspended','R03.ksm-disabled':'TestR03KSMEffectiveZeroValuesAndMissingStatus/ksm-disabled','R03.ksm-no-match':'TestR03KSMEffectiveZeroValuesAndMissingStatus/ksm-no-match','F02.primary':'TestF02KSMHTTPHasRealRPCAndCannotBypassUnavailableRPC','F03.quantity':'TestF03KSMValidationThroughHTTPAndDirectRPC','F03.regexp':'TestF03KSMValidationThroughHTTPAndDirectRPC','F03.unknown-field':'TestF03KSMValidationThroughHTTPAndDirectRPC','F05.before-commit':'TestF05PublicationCrashBoundaries/beforeAcceptanceCommit','F05.after-commit':'TestF05PublicationCrashBoundaries/afterAcceptanceCommit'}
 def stamp():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def fingerprint(case):return hashlib.sha256(json.dumps(case,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
@@ -125,7 +127,10 @@ class Suite(ClusterSuite):
     if case=='I03.primary':
      assert self.a.rpc_image,'I03需要只追加RPC探针的测试镜像';self.a.image=self.a.rpc_image
     record['platform']=self.deploy(case,index);self.a.image=product_image;record['platform']['baseProductImage']=product_image
-    self.prepare_target(index,'data' if case in ['C04.ksm-crd','C05.primary'] else 'control');record['evidence']=self.run_case(case);record['outcome']='passed'
+    if case in BCASES:record['evidence']=run_browser(self)
+    else:
+     self.prepare_target(index,'data' if case in ['C04.ksm-crd','C05.primary'] else 'control');record['evidence']=self.run_case(case)
+    record['outcome']='passed'
    except Exception as e:
     record['error']=str(e);record['traceback']=traceback.format_exc();error=e
     if hasattr(self,'targetns'):
@@ -142,11 +147,11 @@ class Suite(ClusterSuite):
     (self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
    if error:raise error
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--data-config');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--rpc-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-ksm-k');p.add_argument('--port',type=int,default=18500);p.add_argument('--workers',type=int,choices=range(1,5),default=1);p.add_argument('--layer',choices=['Q','K'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--data-config');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--rpc-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-ksm-k');p.add_argument('--port',type=int,default=18500);p.add_argument('--workers',type=int,choices=range(1,5),default=1);p.add_argument('--layer',choices=['Q','K','B'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');a=p.parse_args()
  if a.list:
   contracts=manifest();print(json.dumps([{'id':id,'layer':contracts[id]['layer'],'testSelector':QCASES.get(id,id),'profiles':contracts[id]['profiles']} for id in list(QCASES)+KCASES+['U03.primary']],ensure_ascii=False,indent=2));raise SystemExit(0)
  if not a.output:p.error('必须显式output')
- valid=list(QCASES) if a.layer=='Q' else KCASES
+ valid=list(QCASES) if a.layer=='Q' else (BCASES if a.layer=='B' else KCASES)
  if a.cases and any(c not in valid for c in a.cases):p.error('未知或层级不符的子例')
  if any(a.profile not in manifest()[c]['profiles'] for c in (a.cases or valid)):p.error('子例不属于所选profile')
  if a.layer=='Q':
@@ -155,7 +160,8 @@ if __name__=='__main__':
  for field in ['kubectl','control_config','data_config','control_pod_config','data_pod_config','image','source']:
   if not getattr(a,field):p.error('K层必须显式'+field)
  if a.profile!='LOCAL_FULL':p.error('本票K runner当前为双目标LOCAL_FULL；CI_SMOKE由最终CI单集群编排执行')
- if a.workers==1:Suite(a).run()
+ if a.layer=='B':a.cases=a.cases or BCASES
+ if a.workers==1 or a.layer=='B':Suite(a).run()
  else:
   rootout=pathlib.Path(a.output);rootout.mkdir(parents=True,exist_ok=True);cases=a.cases or KCASES;parallel=[c for c in cases if c!='C04.ksm-crd'];results=[]
   def one(item):

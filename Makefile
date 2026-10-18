@@ -48,9 +48,12 @@ check: acceptance-plan test-race vet web-build ## 运行本地质量检查，不
 e2e-ksm: ## KSM真实集群验收；E2E_ARGS必须明确环境、来源和输出
 	$(PYTHON) scripts/acceptance/ksm.py $(E2E_ARGS)
 e2e-ksm-q: ## KSM快速层，仍经过真实HTTP/Kitex/SQLite
-	$(GO) test ./internal/platform -count=1 -run 'Test(K10|P0[245]|ExternalKSM|F03KSM|R03KSM|F02KSM|F05Publication|F04Encrypted)'
+	$(GO) test ./internal/platform -count=1 -run 'Test(K10|P0[245]|ExternalKSM|F03KSM|R03KSM|F02KSM|F05Publication|F04Encrypted|PublicationPreflight)'
 
 ksm-rpc-image: ## 构建只追加RPC探针的测试镜像（IMAGE产品基线/RPC_IMAGE输出）
 	docker build --platform "$(PLATFORM)" --provenance=false --sbom=false --build-arg PLATFORM_IMAGE="$(IMAGE)" -f scripts/acceptance/Dockerfile.rpcprobe -t "$(RPC_IMAGE)" .
 ksm-q-receipt: ## 生成KSM Q逐例收据；通过E2E_ARGS指定output/profile/cases
 	$(PYTHON) scripts/acceptance/ksm.py --layer Q $(E2E_ARGS)
+
+e2e-ksm-b: ## KSM真实平台Pod浏览器验收；凭据和trace不进入收据
+	$(PYTHON) scripts/acceptance/ksm.py --layer B $(E2E_ARGS)

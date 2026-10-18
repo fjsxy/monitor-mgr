@@ -67,6 +67,7 @@ test("U03.primary 连续选择保留编辑、焦点和滚动，namespace 失败�
   baseURL,
 }, info) => {
   test.setTimeout(60000);
+  info.annotations.push({ type: "browserVersion", description: page.context().browser()?.version() ?? "unknown" });
   test.skip(!fixture, "需要显式真实集群 kubeconfig，仅执行读取和平台草稿保存");
   await prepare(page, baseURL!);
   await page.getByRole("button", { name: "观测配置", exact: true }).click();

@@ -15,7 +15,7 @@ class Proxy:
     (p/'ext').write_text('basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n' + ('subjectAltName=DNS:fault-proxy.'+self.ns+'.svc\nextendedKeyUsage=serverAuth\n' if name=='server' else 'extendedKeyUsage=clientAuth\n'))
     openssl('x509','-req','-in',name+'.csr','-CA','ca.crt','-CAkey','ca.key','-CAcreateserial','-out',name+'.crt','-days','1','-extfile','ext')
    original=s.config(target);cluster=original['clusters'][0]['cluster'];user=original['users'][0]['user'];u=urllib.parse.urlsplit(cluster['server'])
-   files={'backend-ca.crt':base64.b64decode(cluster['certificate-authority-data']),'backend-admin.crt':base64.b64decode(user['client-certificate-data']),'backend-admin.key':base64.b64decode(user['client-key-data']),'proxy-server.crt':(p/'server.crt').read_bytes(),'proxy-server.key':(p/'server.key').read_bytes(),'proxy-client-ca.crt':(p/'ca.crt').read_bytes(),'control-token':self.token.encode()}
+   files={'backend-ca.crt':base64.b64decode(cluster['certificate-authority-data']),'backend-admin.crt':base64.b64decode(user['client-certificate-data']),'backend-admin.key':base64.b64decode(user['client-key-data']),'proxy-server.crt':(p/'server.crt').read_bytes(),'proxy-server.key':(p/'server.key').read_bytes(),'proxy-client-ca.crt':(p/'ca.crt').read_bytes(),'proxy-probe.crt':(p/'client.crt').read_bytes(),'proxy-probe.key':(p/'client.key').read_bytes(),'control-token':self.token.encode()}
    cfg={'backend':{'host':u.hostname,'port':u.port or 443,'server_name':cluster.get('tls-server-name',u.hostname),'ca_file':'/private/backend-ca.crt','client_cert_file':'/private/backend-admin.crt','client_key_file':'/private/backend-admin.key'},'frontend':{'bind':'0.0.0.0','port':8443,'cert_file':'/private/proxy-server.crt','key_file':'/private/proxy-server.key','client_ca_file':'/private/proxy-client-ca.crt'},'control':{'port':9090,'token_file':'/private/control-token'},'limits':{'io_timeout_seconds':15,'pause_timeout_seconds':30},'event_log_file':'/evidence/events.jsonl'}
    files['config.json']=json.dumps(cfg).encode()
    secret={'apiVersion':'v1','kind':'Secret','metadata':{'name':'fault-private','namespace':self.ns},'data':{k:base64.b64encode(v).decode() for k,v in files.items()}}
@@ -24,6 +24,8 @@ class Proxy:
    svc={'apiVersion':'v1','kind':'Service','metadata':{'name':'fault-proxy','namespace':self.ns},'spec':{'selector':{'fixture':'fault-proxy'},'ports':[{'port':8443,'targetPort':8443}]}};pod['metadata']['labels']={'fixture':'fault-proxy'}
    for obj in [secret,code,pod,svc]:s.k('apply','-f','-',data=obj)
    s.k('-n',self.ns,'wait','--for=condition=Ready','pod/fault-proxy','--timeout=90s')
+   self.probe=self.verify_frontend()
+   (s.out/(s.case+'.proxy-tls.json')).write_text(json.dumps(self.probe,ensure_ascii=False,indent=2))
    self.config={'apiVersion':'v1','kind':'Config','clusters':[{'name':'proxy','cluster':{'server':'https://fault-proxy.'+self.ns+'.svc:8443','certificate-authority-data':base64.b64encode((p/'ca.crt').read_bytes()).decode()}}],'users':[{'name':'fixture','user':{'client-certificate-data':base64.b64encode((p/'client.crt').read_bytes()).decode(),'client-key-data':base64.b64encode((p/'client.key').read_bytes()).decode()}}],'contexts':[{'name':'explicit','context':{'cluster':'proxy','user':'fixture'}}]}
   self.port=s.port+200;self.base='http://127.0.0.1:'+str(self.port)
   self.pf=subprocess.Popen([s.a.kubectl,'--kubeconfig',s.a.control_config,'-n',self.ns,'port-forward','pod/fault-proxy',str(self.port)+':9090'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -32,6 +34,21 @@ class Proxy:
    try:self.control('state');break
    except Exception:time.sleep(.1)
   else:raise AssertionError('fixture control不可达')
+ def verify_frontend(self):
+  # 在真实Pod内校验mTLS、Service与上游读路径；只输出连接结果，不输出证书或请求材料。
+  probe="""import json,ssl,time,urllib.request
+ctx=ssl.create_default_context(cafile='/private/proxy-client-ca.crt');ctx.load_cert_chain('/private/proxy-probe.crt','/private/proxy-probe.key')
+url='https://fault-proxy.NAMESPACE.svc:8443/version'
+opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(context=ctx));last=''
+for i in range(12):
+ try:
+  r=opener.open(url,timeout=3);print(json.dumps({'verified':r.status==200,'status':r.status}));break
+ except Exception as e:last=type(e).__name__+': '+str(e);time.sleep(.5)
+else:print(json.dumps({'verified':False,'error':last}))
+""".replace('NAMESPACE',self.ns)
+  result=self.s.k('-n',self.ns,'exec','fault-proxy','--','python','-c',probe)
+  value=json.loads(result.stdout);assert value.get('verified'),value
+  return value
  def control(self,action,body=None):
   req=urllib.request.Request(self.base+'/'+('rule' if action=='arm' else action),data=None if body is None else json.dumps(body).encode(),method='GET' if action=='state' else 'POST',headers={'X-Fault-Control':self.token,'Content-Type':'application/json'})
   return json.load(urllib.request.urlopen(req,timeout=5))
