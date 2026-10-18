@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """#16 KSM验收：真实平台Pod→HTTP→Kitex→目标API；每例独立前置并finally清理。"""
-import argparse,copy,datetime,platform,hashlib,http.cookiejar,json,os,pathlib,subprocess,time,urllib.error,urllib.request,uuid
+import argparse,copy,datetime,platform,concurrent.futures,hashlib,http.cookiejar,json,os,pathlib,subprocess,time,urllib.error,urllib.request,uuid
 from clusters import Suite as ClusterSuite
 from ksm_cases import run_case
 from ksm_proxy import Proxy
@@ -114,7 +114,13 @@ class Suite(ClusterSuite):
      assert self.a.rpc_image,'I03需要只追加RPC探针的测试镜像';self.a.image=self.a.rpc_image
     record['platform']=self.deploy(case,index);self.a.image=product_image;record['platform']['baseProductImage']=product_image
     self.prepare_target(index,'data' if case in ['C04.ksm-crd','C05.primary'] else 'control');record['evidence']=self.run_case(case);record['outcome']='passed'
-   except Exception as e:record['error']=str(e);error=e
+   except Exception as e:
+    record['error']=str(e);error=e
+    if hasattr(self,'targetns'):
+     try:
+      record['failureObjects']={'crs':json.loads(self.k('get','kubestatemetrics','-o','json',target=self.target).stdout),'workloads':self.workloads(),'events':json.loads(self.k('-n',self.targetns,'get','events','-o','json',target=self.target).stdout)}
+     except Exception:record['failureObjectsError']='目标对象读取失败，不能据此推断为空'
+
    finally:
     record['traces']=self.traces
     try:record['cleanup']=self.cleanup()
@@ -124,7 +130,7 @@ class Suite(ClusterSuite):
     (self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
    if error:raise error
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--data-config');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--rpc-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-ksm-k');p.add_argument('--port',type=int,default=18500);p.add_argument('--layer',choices=['Q','K'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--data-config');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--rpc-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-ksm-k');p.add_argument('--port',type=int,default=18500);p.add_argument('--workers',type=int,choices=range(1,5),default=1);p.add_argument('--layer',choices=['Q','K'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');a=p.parse_args()
  if a.list:
   contracts=manifest();print(json.dumps([{'id':id,'layer':contracts[id]['layer'],'testSelector':QCASES.get(id,id),'profiles':contracts[id]['profiles']} for id in list(QCASES)+KCASES+['U03.primary']],ensure_ascii=False,indent=2));raise SystemExit(0)
  if not a.output:p.error('必须显式output')
@@ -137,4 +143,17 @@ if __name__=='__main__':
  for field in ['kubectl','control_config','data_config','control_pod_config','data_pod_config','image','source']:
   if not getattr(a,field):p.error('K层必须显式'+field)
  if a.profile!='LOCAL_FULL':p.error('本票K runner当前为双目标LOCAL_FULL；CI_SMOKE由最终CI单集群编排执行')
- Suite(a).run()
+ if a.workers==1:Suite(a).run()
+ else:
+  rootout=pathlib.Path(a.output);rootout.mkdir(parents=True,exist_ok=True);cases=a.cases or KCASES;parallel=[c for c in cases if c!='C04.ksm-crd'];results=[]
+  def one(item):
+   index,case=item;b=copy.copy(a);b.cases=[case];b.prefix=a.prefix+'-c'+str(index);b.port=a.port+index;b.output=str(rootout/case)
+   try:Suite(b).run()
+   except Exception as e:
+    if not (pathlib.Path(b.output)/(case+'.json')).exists():(pathlib.Path(b.output)/(case+'.json')).write_text(json.dumps({'variantId':case,'outcome':'environment_failed','error':str(e),'testedCommit':a.source,'cleanup':{'success':False}},ensure_ascii=False))
+   return json.load(open(pathlib.Path(b.output)/(case+'.json')))
+  with concurrent.futures.ThreadPoolExecutor(max_workers=a.workers) as pool:results=list(pool.map(one,enumerate(parallel)))
+  # CRD是全局故障；全部普通fixture完成并清理后，独占执行并finally恢复。
+  if 'C04.ksm-crd' in cases:results.append(one((len(parallel),'C04.ksm-crd')))
+  (rootout/'results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2));failed=[x['variantId'] for x in results if x['outcome']!='passed' or not x.get('cleanup',{}).get('success')];print(json.dumps({'total':len(results),'failed':failed},ensure_ascii=False));raise SystemExit(1 if failed else 0)
+
