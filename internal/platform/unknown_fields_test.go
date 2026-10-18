@@ -83,6 +83,14 @@ func TestF03KSMUnknownFieldsHTTPAndRPC(t *testing.T) {
 			if result["code"] != "BAD_REQUEST" || strings.Contains(result["message"].(string), "unknown-sensitive-value") {
 				t.Fatal("HTTP 未稳定拒绝未知字段或泄漏原值")
 			}
+			fields, ok := result["fieldErrors"].(map[string]any)
+			if !ok || fields["request"] != "JSON 格式无效或包含不支持的字段" {
+				t.Fatal("HTTP 未知字段缺少稳定 fieldErrors.request")
+			}
+			raw, err := json.Marshal(fields)
+			if err != nil || strings.Contains(string(raw), "unknown-sensitive-value") || strings.Contains(string(raw), "rawYAML") || strings.Contains(string(raw), "extendedResource") {
+				t.Fatal("HTTP 字段错误泄漏未知字段名或值")
+			}
 		}
 	})
 
