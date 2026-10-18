@@ -54,7 +54,11 @@ func sanitizeTarget(v any, parent string) {
 			}
 			if lower == "url" || lower == "proxyurl" {
 				if raw, ok := value.(string); ok {
-					if u, e := url.Parse(raw); e == nil && u.User != nil {
+					u, e := url.Parse(raw)
+					// 关键：外部CR可含schema接受但无法解析的认证URL；不能因解析失败回显原值。
+					if e != nil {
+						x[k] = "[敏感内容已隐藏]"
+					} else if u.User != nil {
 						u.User = url.User("[已隐藏]")
 						x[k] = u.String()
 					}

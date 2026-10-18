@@ -6,6 +6,7 @@ from clusters import Suite as ClusterSuite
 from ksm import manifest,source_state,fingerprint
 from agent_cases import run_case
 from agent_browser import run_browser
+from agent_projection import projection_case, projection_failure, projection_artifact_scan
 
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 QCASES={'R03.agent-paused':'TestR03AgentPausedReadOnly',**{'F01.'+v:'TestF01Agent/'+v for v in ['absent','empty-object','empty-list','unknown-mode']},**{'F03.'+v:'TestF03Agent' for v in ['selector','url','tls-pair']}}
@@ -27,7 +28,10 @@ def owned():
  assert len(ids)==len(set(ids))==69,'固定owned子例必须保持69且无重复'
  return ids
 KCASES=[v for v in owned() if manifest()[v]['layer']=='K']
+assert len(KCASES)==59,'默认owned K数量不得混入补充用例'
 BCASES=['U02.primary','U06.primary']
+# 关键：补充K只允许显式选择，默认owned批次始终59项。
+PROJECTION_KCASES=['REG18-PROJECTION-013.'+v for v in ['url-parse-error','proxy-parse-error']]
 REGCASES={
  'REG18-SHARED-001':['TestSharedSchema4PreviewSurvivesUpgrade'],
  'REG18-SHARED-002':['TestSharedSchema4PreviewSurvivesUpgrade','TestAgentTypedDraftIdentityAndDefaults'],
@@ -44,7 +48,8 @@ REGCASES={
  'REG18-FIXED-008':['TestAgentFixedCapacityRevalidated','TestAgentFixedCapacityPossiblySent'],
  'REG18-HEADERS-009':['TestAgentHeadersReadProjection'],
  **{'REG18-CAP-010.'+v:['TestAgentOperatorCapabilityBoundaries/'+v] for v in ['positional','terminator','duplicate-scope','boolean-arity','known-scope-space','env-expansion']},
- **{'REG18-SELECTOR-012.'+v:['TestAgentSelectorExpressionProjection/'+v] for v in ['exists-nil','exists-empty','not-exists-nil','not-exists-empty','in','not-in']}}
+ **{'REG18-SELECTOR-012.'+v:['TestAgentSelectorExpressionProjection/'+v] for v in ['exists-nil','exists-empty','not-exists-nil','not-exists-empty','in','not-in']},
+ **{'REG18-PROJECTION-013.'+v:['TestAgentMalformedURLReadProjection/'+v] for v in ['url-parse-error','proxy-parse-error']}}
 
 def run_regressions(a):
  """补充回归单独计数：真实HTTP/Kitex/SQLite加受控目标，不冒充Operator真实启动故障。"""
@@ -72,7 +77,7 @@ class Suite(ClusterSuite):
   super().__init__(a);self.contract=manifest();self.source=source_state();self.traces=[];self.resources=[];self.namespace_uids={};self.ksms=[];self.restorers=[];self.target='control';self.targetns=None
   for line in (ROOT/'docs/e2e/issue-18.md').read_text().splitlines():
    cells=[c.strip() for c in line.strip('|').split('|')]
-   if len(cells)==5 and cells[0]=='REG18-SOURCE-007':self.contract[cells[0]]={'variantId':cells[0],'caseId':cells[0],'layer':'B','kind':'supplementary','purpose':cells[1],'steps':cells[2],'expected':cells[3],'profiles':['LOCAL_FULL']}
+   if len(cells)==5 and cells[0] in ['REG18-SOURCE-007',*PROJECTION_KCASES]:self.contract[cells[0]]={'variantId':cells[0],'caseId':cells[0],'layer':'K' if cells[0] in PROJECTION_KCASES else 'B','kind':'supplementary','purpose':cells[1],'steps':cells[2],'expected':cells[3],'profiles':['LOCAL_FULL']}
   assert not self.source['dirty'] or a.allow_dirty_runner,'门禁来源必须干净'
   self.bridge=None
   if a.source!=self.source['commit']:
@@ -309,20 +314,22 @@ class Suite(ClusterSuite):
   return {'success':not failures,'failures':failures,'namespaceResults':namespaces,'agentWorkloadResults':workloads,'mode':'测试工具按原UID正常Foreground/namespace GC；无force或finalizer修改'}
  def run(self):
   for index,case in enumerate(self.a.cases or KCASES):
-   self.case=case;self.traces=[];self.targetns=None;record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
+   self.case=case;self.traces=[];self.targetns=None;self.projection_markers=[];record={**self.contract[case],'source':self.source,'testedCommit':self.a.source,'testedTree':self.bridge['productTree'] if self.bridge else self.source['tree'],'runnerCommit':self.source['commit'],'sourceBridge':self.bridge,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':self.image_metadata,'outcome':'failed','startedAt':stamp()}
    try:
     record['platform']=self.deploy(case,index);assert record['platform']['imageID'].endswith(self.image_metadata.get('manifestDigest') or self.image_metadata['dockerInspectId'])
-    self.prepare_target(index,'data' if case in ['C04.agent-crd','A05.primary'] else 'control');record['evidence']=run_browser(self,case) if self.a.layer=='B' else run_case(self,case);record['outcome']='passed'
+    self.prepare_target(index,'data' if case in ['C04.agent-crd','A05.primary'] else 'control');record['evidence']=run_browser(self,case) if self.a.layer=='B' else (projection_case(self,case) if case in PROJECTION_KCASES else run_case(self,case));record['outcome']='passed'
    except Exception as e:
-    record['error']=str(e);record['traceback']=traceback.format_exc()
-    try:
-     record['platformLogs']=self.k('logs','pod/'+self.pod,'-n',self.ns,'--tail=150').stdout.decode()
-    except Exception:record['platformLogsError']='平台日志不可读'
-    if self.targetns:
+    if case in PROJECTION_KCASES:record.update(projection_failure(self))
+    else:
+     record['error']=str(e);record['traceback']=traceback.format_exc()
      try:
-      record['failureEvents']=[{'reason':e.get('reason'),'message':e.get('message'),'object':e.get('involvedObject',{}),'lastTimestamp':e.get('lastTimestamp')} for e in self.get('events','-n',self.targetns)['items']]
-      record['actualFixtureAgents']=self.get('prometheusagents','-n',self.targetns)['items']
-     except Exception:record['failureEventsError']='事件读取失败'
+      record['platformLogs']=self.k('logs','pod/'+self.pod,'-n',self.ns,'--tail=150').stdout.decode()
+     except Exception:record['platformLogsError']='平台日志不可读'
+     if self.targetns:
+      try:
+       record['failureEvents']=[{'reason':e.get('reason'),'message':e.get('message'),'object':e.get('involvedObject',{}),'lastTimestamp':e.get('lastTimestamp')} for e in self.get('events','-n',self.targetns)['items']]
+       record['actualFixtureAgents']=self.get('prometheusagents','-n',self.targetns)['items']
+      except Exception:record['failureEventsError']='事件读取失败'
    finally:
     record['traces']=self.traces
     # 即使浏览器中途失败，也登记本例namespace内已创建的KSM，不能遗留cluster-scoped对象。
@@ -337,6 +344,9 @@ class Suite(ClusterSuite):
     if record.get('browserCleanupInventoryError'):record['cleanup']['success']=False;record['cleanup']['failures'].append(record['browserCleanupInventoryError'])
     if not record['cleanup']['success']:record['outcome']='failed'
     trace=self.out/(case+'.http.jsonl');trace.write_text(''.join(json.dumps(t,ensure_ascii=False)+'\n' for t in self.traces));record['evidenceRefs']=[{'path':trace.name,'sha256':hashlib.sha256(trace.read_bytes()).hexdigest()},*record.get('evidence',{}).get('evidenceRefs',[])]
+    if case in PROJECTION_KCASES:
+     record['projectionArtifactScan']=projection_artifact_scan(self,record)
+     if not record['projectionArtifactScan']['noMarker']:record['outcome']='failed'
     record['finishedAt']=stamp();(self.out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));self.results.append(record);(self.out/'results.json').write_text(json.dumps(self.results,ensure_ascii=False,indent=2));print(case,record['outcome'],flush=True)
    if not record['cleanup']['success'] or record['outcome']!='passed' and self.a.fail_fast:break
   return 0 if all(r['outcome']=='passed' for r in self.results) else 1
@@ -345,13 +355,14 @@ def main():
  p=argparse.ArgumentParser();p.add_argument('--layer',choices=['Q','K','B','REG'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');p.add_argument('--output');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--allow-source-bridge',action='store_true');p.add_argument('--fail-fast',action='store_true')
  for field in ['kubectl','control-config','data-config','control-context','data-context','control-pod-config','data-pod-config','image','source','api-lane']:p.add_argument('--'+field)
  p.add_argument('--prefix',default='mm18-agent');p.add_argument('--port',type=int,default=18700);a=p.parse_args();contract=manifest()
+ valid=list(REGCASES) if a.layer=='REG' else (list(QCASES) if a.layer=='Q' else (BCASES+['REG18-SOURCE-007'] if a.layer=='B' else KCASES+PROJECTION_KCASES))
+ if a.cases is not None and (not a.cases or any(v not in valid for v in a.cases)):p.error('未知/层级不符子例')
  if a.list:
-  print(json.dumps([{'id':v,'layer':contract[v]['layer'],'testSelector':QCASES.get(v,v),'profiles':contract[v]['profiles']} for v in owned()],ensure_ascii=False,indent=2));return 0
+  selected=a.cases or (list(REGCASES) if a.layer=='REG' else (list(QCASES) if a.layer=='Q' else (BCASES if a.layer=='B' else KCASES)))
+  print(json.dumps([{'id':v,'layer':'Q' if a.layer=='REG' else a.layer,'kind':'supplementary' if v.startswith('REG') else 'owned','testSelector':REGCASES[v] if a.layer=='REG' else QCASES.get(v,v),'profiles':contract[v]['profiles'] if v in contract else ['LOCAL_FULL']} for v in selected],ensure_ascii=False,indent=2));return 0
  if a.layer=='REG':
-  if not a.output or a.cases and any(v not in REGCASES for v in a.cases):p.error('补充回归需要output及已计划子例')
+  if not a.output:p.error('补充回归需要output及已计划子例')
   return run_regressions(a)
- valid=list(QCASES) if a.layer=='Q' else (BCASES+['REG18-SOURCE-007'] if a.layer=='B' else KCASES)
- if a.cases and any(v not in valid for v in a.cases):p.error('未知/层级不符子例')
  if any(a.profile not in (contract[v]['profiles'] if v in contract else ['LOCAL_FULL']) for v in a.cases or valid):p.error('子例不属于profile')
  if not a.output:p.error('必须显式output')
  if a.layer=='Q':
