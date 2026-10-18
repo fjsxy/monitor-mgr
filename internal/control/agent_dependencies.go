@@ -38,6 +38,15 @@ func agentDependenciesFromSpec(original *AgentConfig, spec map[string]any) (*Age
 	if mode == "" {
 		return nil, Error("CONFLICT", "冻结Agent存储模式缺失")
 	}
+	replicas, shards, e := agentCounts(spec)
+	if e != nil {
+		return nil, e
+	}
+	copy.Shards = shards
+	copy.DesiredState = "Running"
+	if replicas == 0 {
+		copy.DesiredState = "Suspended"
+	}
 	copy.Storage.Mode = mode
 	copy.Storage.Capacity = nil
 	if mode == "PVC" {

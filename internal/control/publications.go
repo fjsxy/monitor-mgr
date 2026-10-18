@@ -160,6 +160,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if e = checkTarget(i, cr); e != nil {
 		return nil, e
 	}
+	if _, e = s.readAgentStorageTransition(ctx, i, t, cr, cfg.spec(), false); e != nil {
+		return nil, e
+	}
 	current := "null"
 	uid := ""
 	left := "# 首次创建：当前不存在 CR\n"
@@ -303,6 +306,15 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	cr, e := t.readComponent(ctx, i)
 	if e != nil {
 		return nil, e
+	}
+	if i.Component == AgentComponent {
+		original, _, readErr := readDraft(ctx, s.DB, i.Id)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if _, e = s.readAgentStorageTransition(ctx, i, t, cr, original.spec(), false); e != nil {
+			return nil, e
+		}
 	}
 	tx, e = s.DB.BeginTx(ctx, nil)
 	if e != nil {

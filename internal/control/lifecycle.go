@@ -41,6 +41,7 @@ func (s *Store) enrichLifecycle(ctx context.Context, q clusterQuery, o *rpc.Oper
 	}
 	o.Revision = reference(rev)
 	o.AttemptId = &a.AttemptId
+	defer s.enrichStorageTask(ctx, q, o)
 	var instance, version string
 	if q.QueryRowContext(ctx, `SELECT instance_id,version_id FROM deletion_operations WHERE operation_id=?`, o.OperationId).Scan(&instance, &version) == nil {
 		o.InstanceId = &instance
@@ -211,7 +212,7 @@ func (s *Store) ContinueLifecycle(ctx context.Context, c *rpc.RequestContext, r 
 }
 
 // markLifecycleDispatch 与撤权、转移、凭据切换共用读写保护，持久资格提交就是可能已发送边界。
-func (s *Store) markLifecycleDispatch(ctx context.Context, o *rpc.Operation, actor string, credentialRevision int64) (func(), error) {
+func (s *Store) markLifecycleDispatch(ctx context.Context, o *rpc.Operation, actor string, credentialRevision int64, snapshots ...*agentStorageSnapshot) (func(), error) {
 	if s.stopping.Load() {
 		return nil, Error("UNAVAILABLE", "平台退出中，未取得派发资格")
 	}
@@ -268,6 +269,11 @@ func (s *Store) markLifecycleDispatch(ctx context.Context, o *rpc.Operation, act
 	}
 	if _, e = tx.ExecContext(ctx, `UPDATE operation_lifecycle SET revision=revision+1 WHERE operation_id=?`, o.OperationId); e != nil {
 		return fail(e)
+	}
+	if len(snapshots) > 0 {
+		if e = s.activateStorageTask(ctx, tx, o, snapshots[0]); e != nil {
+			return fail(e)
+		}
 	}
 	if e = tx.Commit(); e != nil {
 		return fail(e)

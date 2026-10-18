@@ -268,4 +268,197 @@ func TestAgentStorageRetainedIdentitySurvivesParents(t *testing.T) {
 // storageVolumes把合法空列表作为空集断言，避免缺失字段导致测试panic。
 func storageVolumes(source map[string]any) []any { v, _ := source["volumes"].([]any); return v }
 
-const dropAgentStorageSchema = `DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
+const dropAgentStorageSchema = `DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
+
+// A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。
+func TestAgentStorageDangerRequiresAdoptedPolicy(t *testing.T) {
+	for _, action := range []string{"suspend", "shard"} {
+		t.Run(action, func(t *testing.T) {
+			p, c, cluster, _, f := agentSafetyFixture(t, nil)
+			name := "danger-" + action
+			cfg := agentConfig(name, "monitoring")
+			cfg["shards"] = 2
+			i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
+			id := i["id"].(string)
+			preview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "", 200)
+			op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
+			if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
+				t.Fatal("前置发布失败")
+			}
+			var mu sync.Mutex
+			adopted := false
+			f.mu.Lock()
+			f.hook = func(w http.ResponseWriter, r *http.Request) bool {
+				if r.Method != "GET" || r.URL.Path != "/apis/apps/v1/namespaces/monitoring/statefulsets" {
+					return false
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				policy := "Delete"
+				if adopted {
+					policy = "Retain"
+				}
+				items := []any{}
+				for n := 0; n < 2; n++ {
+					stName := "prom-agent-" + name
+					if n > 0 {
+						stName += "-shard-1"
+					}
+					items = append(items, map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": stName, "uid": stName + "-uid", "ownerReferences": []any{map[string]any{"kind": "PrometheusAgent", "uid": "uid-monitoring/" + name, "controller": true}}}, "spec": map[string]any{"replicas": 1, "persistentVolumeClaimRetentionPolicy": map[string]any{"whenScaled": policy, "whenDeleted": policy}}})
+				}
+				json.NewEncoder(w).Encode(map[string]any{"items": items})
+				return true
+			}
+			f.mu.Unlock()
+			if action == "suspend" {
+				cfg["desiredState"] = "Suspended"
+			} else {
+				cfg["shards"] = 1
+			}
+			clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": cfg}, c, "save", 200)
+			clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, c, "", 409)
+			mu.Lock()
+			adopted = true
+			mu.Unlock()
+			clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, c, "", 200)
+			cfg["storage"].(map[string]any)["whenScaled"] = "Delete"
+			cfg["storage"].(map[string]any)["whenDeleted"] = "Delete"
+			clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 2, "agent": cfg}, c, "mixed", 200)
+			clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 3}, c, "", 409)
+		})
+	}
+}
+
+// REG20-STORAGE-002：实例完成与逐卷任务独立；未知/Delete待核验保留凭据责任，合法Retain不阻塞集群变更。
+func TestAgentStorageResponsibilityOutlivesInstance(t *testing.T) {
+	for _, action := range []string{"transfer", "unregister"} {
+		for _, policy := range []string{"Delete", "Retain"} {
+			t.Run(action+"-"+policy, func(t *testing.T) {
+				p, c, cluster, _, f := agentSafetyFixture(t, nil)
+				name := "storage-duty"
+				cfg := agentConfig(name, "monitoring")
+				cfg["storage"].(map[string]any)["whenDeleted"] = policy
+				i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
+				id := i["id"].(string)
+				preview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "", 200)
+				op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
+				if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
+					t.Fatal("前置发布失败")
+				}
+				var mu sync.Mutex
+				removed, denied, gone := false, false, false
+				claim := "prom-agent-storage-duty-db-prom-agent-storage-duty-0"
+				f.mu.Lock()
+				f.hook = func(w http.ResponseWriter, r *http.Request) bool {
+					if r.Method == "DELETE" && strings.HasSuffix(r.URL.Path, "/prometheusagents/"+name) {
+						var body map[string]any
+						json.NewDecoder(r.Body).Decode(&body)
+						if body["propagationPolicy"] != "Foreground" || body["preconditions"].(map[string]any)["uid"] != "uid-monitoring/"+name {
+							t.Error("没有原UID foreground条件")
+						}
+						f.mu.Lock()
+						delete(f.objects, "monitoring/"+name)
+						f.mu.Unlock()
+						mu.Lock()
+						removed = true
+						denied = policy == "Delete"
+						mu.Unlock()
+						json.NewEncoder(w).Encode(map[string]any{})
+						return true
+					}
+					if r.Method != "GET" {
+						return false
+					}
+					mu.Lock()
+					defer mu.Unlock()
+					pvc := map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": claim, "uid": "duty-pvc-uid"}, "spec": map[string]any{"resources": map[string]any{"requests": map[string]any{"storage": "1Gi"}}, "accessModes": []any{"ReadWriteOnce"}}, "status": map[string]any{"phase": "Bound"}}
+					if policy == "Delete" {
+						pvc["metadata"].(map[string]any)["ownerReferences"] = []any{map[string]any{"kind": "StatefulSet", "uid": "duty-st-uid", "controller": true}}
+					}
+					items := []any{}
+					switch r.URL.Path {
+					case "/apis/apps/v1/namespaces/monitoring/statefulsets":
+						if !removed {
+							items = append(items, map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": "prom-agent-" + name, "uid": "duty-st-uid", "ownerReferences": []any{map[string]any{"kind": "PrometheusAgent", "uid": "uid-monitoring/" + name, "controller": true}}}, "spec": map[string]any{"replicas": 1, "persistentVolumeClaimRetentionPolicy": map[string]any{"whenScaled": "Retain", "whenDeleted": policy}}})
+						}
+					case "/api/v1/namespaces/monitoring/pods":
+						if !removed {
+							items = append(items, map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": "prom-agent-" + name + "-0", "uid": "duty-pod-uid", "ownerReferences": []any{map[string]any{"kind": "StatefulSet", "uid": "duty-st-uid", "controller": true}}}, "spec": map[string]any{"volumes": []any{map[string]any{"name": "wal", "persistentVolumeClaim": map[string]any{"claimName": claim}}}}})
+						}
+					case "/api/v1/namespaces/monitoring/persistentvolumeclaims":
+						if !gone {
+							items = append(items, pvc)
+						}
+					case "/api/v1/namespaces/monitoring/persistentvolumeclaims/" + claim:
+						if denied {
+							w.WriteHeader(403)
+							json.NewEncoder(w).Encode(map[string]any{})
+							return true
+						}
+						if gone {
+							w.WriteHeader(404)
+							json.NewEncoder(w).Encode(map[string]any{})
+							return true
+						}
+						json.NewEncoder(w).Encode(pvc)
+						return true
+					default:
+						if removed && (strings.HasSuffix(r.URL.Path, "/statefulsets/prom-agent-"+name) || strings.HasSuffix(r.URL.Path, "/pods/prom-agent-"+name+"-0")) {
+							w.WriteHeader(404)
+							json.NewEncoder(w).Encode(map[string]any{})
+							return true
+						}
+						return false
+					}
+					json.NewEncoder(w).Encode(map[string]any{"items": items})
+					return true
+				}
+				f.mu.Unlock()
+				current := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+				dp := clusterCall(t, p, "POST", "/instances/"+id+"/deletion-previews", map[string]any{}, c, "", 200)
+				deletion := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": current["currentVersionId"], "previewId": dp["previewId"]}, c, "delete", 202)
+				oid := deletion["operationId"].(string)
+				if awaitClusterOperation(t, p, c, oid)["state"] != "SUCCEEDED" {
+					t.Fatal("实例删除未独立完成")
+				}
+				current = clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+				if current["lifecycle"] != "DELETED" {
+					t.Fatal("卷任务延迟实例完成", current)
+				}
+				body := map[string]any{}
+				if action == "transfer" {
+					u := clusterCall(t, p, "POST", "/accounts", map[string]any{"username": "new-owner", "password": "new-owner-password-123", "role": "USER"}, c, "new-owner", 201)
+					body["ownerId"] = u["id"]
+				}
+				if policy == "Delete" {
+					current = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+					if current["storageResult"] != "Unknown" {
+						t.Fatal("PVC读取失败未独立表达", current)
+					}
+					clusterCall(t, p, "POST", "/clusters/"+cluster+"/"+action, body, c, "blocked-unknown", 409)
+					mu.Lock()
+					denied = false
+					mu.Unlock()
+					current = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+					if current["storageResult"] != "Deleting" {
+						t.Fatal("原卷残留未保持独立待确认", current)
+					}
+					clusterCall(t, p, "POST", "/clusters/"+cluster+"/"+action, body, c, "blocked-pending", 409)
+					mu.Lock()
+					gone = true
+					mu.Unlock()
+					current = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+					if current["storageResult"] != "Deleted" {
+						t.Fatal("原卷消失未核实", current)
+					}
+				} else {
+					current = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+					if current["storageResult"] != "Retained" {
+						t.Fatal("合法Retain未单独完成", current)
+					}
+				}
+				clusterCall(t, p, "POST", "/clusters/"+cluster+"/"+action, body, c, "allowed", 200)
+			})
+		}
+	}
+}

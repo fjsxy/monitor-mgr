@@ -3,7 +3,7 @@ package control
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
 	"net/url"
 	"sort"
 	"time"
@@ -149,6 +149,10 @@ func (s *Store) observeAgentVolumes(ctx context.Context, i *rpc.ObservationInsta
 		}
 		byName[name] = pvc
 	}
+	confirmedAbsent, e := s.confirmedAbsentAgentVolumes(ctx, i)
+	if e != nil {
+		return nil, e
+	}
 	out := []*rpc.VolumeObservation{}
 	links := []agentVolumeLink{}
 	seen := map[string]bool{}
@@ -172,7 +176,12 @@ func (s *Store) observeAgentVolumes(ctx context.Context, i *rpc.ObservationInsta
 		pvc := byName[h.name]
 		// 关键：父已消失时仅原PVC UID可以延续记录；同名替换必须保持读取错误而不能自动接管。
 		if pvc != nil && objectString(objectMap(pvc, "metadata"), "uid") != h.uid {
-			return nil, Error("CONFLICT", "历史PVC名称出现新UID，禁止认领")
+			// 关键：只有已独立核实原UID消失，且本次真实原owner链已采用新UID，才允许记录本实例新建卷。
+			replacement := objectString(objectMap(pvc, "metadata"), "uid")
+			if !confirmedAbsent[h.uid] || !seen[replacement] {
+				return nil, Error("CONFLICT", "历史PVC名称出现新UID，禁止认领")
+			}
+			pvc = nil
 		}
 		if pvc != nil {
 			out = append(out, agentVolumeObservation(h.namespace, pvc, []string{}))
@@ -180,7 +189,7 @@ func (s *Store) observeAgentVolumes(ctx context.Context, i *rpc.ObservationInsta
 			out = append(out, &rpc.VolumeObservation{Namespace: h.namespace, Name: h.name, Uid: h.uid, Phase: "NotFound", AccessModes: []string{}, MountedByPods: []string{}})
 		}
 	}
-	if e = s.rememberAgentVolumes(ctx, i, links); e != nil && e != sql.ErrNoRows {
+	if e = s.rememberAgentVolumes(ctx, i, links); e != nil {
 		return nil, e
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].Name+out[a].Uid < out[b].Name+out[b].Uid })
@@ -199,4 +208,33 @@ func agentVolumeObservation(namespace string, pvc map[string]any, mounted []stri
 	}
 	sort.Strings(mounted)
 	return &rpc.VolumeObservation{Namespace: namespace, Name: objectString(meta, "name"), Uid: objectString(meta, "uid"), Phase: objectString(objectMap(pvc, "status"), "phase"), RequestedStorage: objectString(objectMap(objectMap(spec, "resources"), "requests"), "storage"), AccessModes: access, StorageClass: objectString(spec, "storageClassName"), MountedByPods: mounted}
+}
+
+// confirmedAbsentAgentVolumes仅认可持久只读核验的原UID消失，不按相同名称推断新旧卷。
+func (s *Store) confirmedAbsentAgentVolumes(ctx context.Context, i *rpc.ObservationInstance) (map[string]bool, error) {
+	out := map[string]bool{}
+	if i.ReadOnly {
+		return out, nil
+	}
+	rows, e := s.DB.QueryContext(ctx, `SELECT volumes FROM agent_storage_tasks WHERE instance_id=? AND agent_uid=?`, i.Id, i.Uid)
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw []byte
+		if e = rows.Scan(&raw); e != nil {
+			return nil, e
+		}
+		var volumes []*rpc.VolumeObservation
+		if e = json.Unmarshal(raw, &volumes); e != nil {
+			return nil, Error("UNAVAILABLE", "卷核验历史不可读")
+		}
+		for _, v := range volumes {
+			if v.GetRetentionResult_() == "Deleted" || v.GetRetentionResult_() == "Lost" {
+				out[v.Uid] = true
+			}
+		}
+	}
+	return out, rows.Err()
 }

@@ -76,7 +76,7 @@ func agentClaimName(name string, shard int32) string {
 
 // checkNewAgentClaims只查询本次实际会使用的确定WAL名称；已有孤卷或读取错误都拒绝首次创建。
 func (t *Target) checkNewAgentClaims(ctx context.Context, cfg *AgentConfig) error {
-	if cfg.Storage.Mode != "PVC" {
+	if cfg.Storage.Mode != "PVC" || cfg.DesiredState == "Suspended" {
 		return nil
 	}
 	for shard := int32(0); shard < cfg.Shards; shard++ {

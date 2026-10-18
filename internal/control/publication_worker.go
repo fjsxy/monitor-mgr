@@ -151,6 +151,11 @@ func (s *Store) executePublication(life context.Context, id string) {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
+	storageSnapshot, e := s.readAgentStorageTransition(life, i, t, cr, frozen, false)
+	if e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
+		return
+	}
 	// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
 	body := cfg.document()
 	body["spec"] = frozen
@@ -165,7 +170,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 			return
 		}
 	}
-	releaseDispatch, e := s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision)
+	releaseDispatch, e := s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision, storageSnapshot)
 	if e != nil {
 		if apiCode(e) != "ALREADY_FINISHED" {
 			s.finishExecution(life, o, "FAILED", e, nil)
@@ -207,6 +212,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 	s.finishExecution(life, o, "SUCCEEDED", nil, written)
 	// 写入与运行分别表达；立即读取不将受理或意图当成已就绪。
 	s.refreshObserved(life, i.Id, t)
+	s.verifyAgentStorageTasks(life, id)
 }
 
 // finishExecution 以实际 attempt 身份保存结果，退出时不能把未完成网络读取误报为失败。
@@ -286,6 +292,11 @@ func (s *Store) finishPublication(expected *rpc.Operation, state string, cause e
 	if state == "SUCCEEDED" {
 		uid := objectString(objectMap(cr, "metadata"), "uid")
 		if _, e = tx.ExecContext(ctx, `UPDATE instances SET uid=?,lifecycle='DEPLOYED',current_version_id=? WHERE id=?`, uid, o.GetVersionId(), o.GetInstanceId()); e != nil {
+			return
+		}
+	}
+	if state == "FAILED" || state == "CANCELLED" {
+		if _, e = tx.ExecContext(ctx, `UPDATE agent_storage_tasks SET state='CANCELLED' WHERE operation_id=? AND attempt_id=? AND state='PENDING'`, id, o.GetAttemptId()); e != nil {
 			return
 		}
 	}

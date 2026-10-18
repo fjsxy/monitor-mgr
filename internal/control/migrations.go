@@ -42,7 +42,7 @@ var migrationSQL = [][]string{
 	// v8仅修复已有敏感读cache，没有结构变更；与版本标记在同一事务执行。
 	nil,
 	activitySchema,
-	agentStorageSchema,
+	append(append([]string{}, agentStorageSchema...), storageTasksSchema...),
 }
 
 // migrate 配置 SQLite WAL，并在保留恢复依据的前提下原子升级数据库。

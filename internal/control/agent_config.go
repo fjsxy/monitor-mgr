@@ -185,11 +185,11 @@ func (c *AgentConfig) validate() error {
 	if c.Shards < 1 {
 		return fieldError("agent.shards", "必须为正整数")
 	}
-	if c.Shards > 1 {
-		return fieldError("agent.shards", "多shard生命周期尚未开放")
+	if len(agentStatefulName(c.Name, c.Shards-1)+"-0") > 63 {
+		return fieldError("agent.name", "名称过长，无法生成所选shards的Pod DNS label")
 	}
-	if c.DesiredState != "Running" {
-		return fieldError("agent.desiredState", "当前只支持运行；挂起需先实现实际存储策略保护")
+	if c.DesiredState != "Running" && c.DesiredState != "Suspended" {
+		return fieldError("agent.desiredState", "只支持运行或挂起")
 	}
 	if e := c.Resources.validate("agent.resources"); e != nil {
 		return e
@@ -364,7 +364,11 @@ func (r RemoteEndpoint) references() []*SecretReference {
 }
 func (r *SecretReference) cr() map[string]any { return map[string]any{"name": r.Name, "key": r.Key} }
 func (c *AgentConfig) spec() map[string]any {
-	spec := map[string]any{"mode": "StatefulSet", "version": "v2.55.1", "image": "quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3", "shards": c.Shards, "replicas": 1, "paused": false, "serviceAccountName": c.ServiceAccountName, "resources": c.Resources.cr(), "storage": map[string]any{"emptyDir": map[string]any{}}}
+	replicas := int32(1)
+	if c.DesiredState == "Suspended" {
+		replicas = 0
+	}
+	spec := map[string]any{"mode": "StatefulSet", "version": "v2.55.1", "image": "quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3", "shards": c.Shards, "replicas": replicas, "paused": false, "serviceAccountName": c.ServiceAccountName, "resources": c.Resources.cr(), "storage": map[string]any{"emptyDir": map[string]any{}}}
 	if c.Storage.Mode == "PVC" {
 		spec["storage"] = map[string]any{"volumeClaimTemplate": map[string]any{"spec": map[string]any{"accessModes": []string{"ReadWriteOnce"}, "resources": map[string]any{"requests": map[string]any{"storage": *c.Storage.Capacity}}}}}
 		spec["persistentVolumeClaimRetentionPolicy"] = map[string]any{"whenScaled": c.Storage.WhenScaled, "whenDeleted": c.Storage.WhenDeleted}

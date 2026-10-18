@@ -73,6 +73,7 @@ func (s *Store) launchRecovery(ctx context.Context) {
 			s.verifyLifecycle(ctx, id)
 		}(id)
 	}
+	s.launchStorageRecovery(ctx)
 }
 
 // RefreshOperation 验证当前查看授权后主动只读核验，身份不明不会通过此入口补认。
@@ -88,6 +89,7 @@ func (s *Store) RefreshOperation(ctx context.Context, c *rpc.RequestContext, r *
 		defer recoveryFlights.Delete(s.observationEpoch + o.OperationId)
 		s.verifyLifecycle(ctx, o.OperationId)
 	}
+	s.verifyAgentStorageTasks(ctx, o.OperationId)
 	return s.GetOperation(ctx, c, r)
 }
 

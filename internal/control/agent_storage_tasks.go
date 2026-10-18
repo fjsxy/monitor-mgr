@@ -1,0 +1,262 @@
+// 存储核验与实例生命周期分离：只读原PVC UID，实例完成后仍保存未决管理责任。
+package control
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"net/url"
+	"time"
+
+	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
+)
+
+// storageTasksSchema与首次存储v10一同引入；每次派发保留独立不可替换的卷身份列表。
+var storageTasksSchema = []string{
+	`CREATE TABLE agent_storage_tasks(attempt_id TEXT PRIMARY KEY REFERENCES execution_attempts(id),operation_id TEXT NOT NULL REFERENCES operations(id),instance_id TEXT NOT NULL REFERENCES instances(id),agent_uid TEXT NOT NULL,mode TEXT NOT NULL,state TEXT NOT NULL,volumes BLOB NOT NULL,last_attempt_at TEXT NOT NULL)`,
+	`CREATE INDEX pending_agent_storage_tasks ON agent_storage_tasks(state,operation_id)`,
+}
+
+func snapshotVolumes(snapshot *agentStorageSnapshot, agentUID string) []*rpc.VolumeObservation {
+	out := []*rpc.VolumeObservation{}
+	if snapshot == nil {
+		return out
+	}
+	for _, v := range snapshot.volumes {
+		out = append(out, &rpc.VolumeObservation{Namespace: v.Namespace, Name: v.Name, Uid: v.UID, AccessModes: []string{}, MountedByPods: []string{}, ExpectedPolicy: reference(v.Policy), RetentionResult_: reference("Pending"), StatefulUID: reference(v.StatefulUID), StatefulName: reference(v.StatefulName), Shard: reference(v.Shard), AgentUID: reference(agentUID)})
+	}
+	return out
+}
+func snapshotPolicies(snapshot *agentStorageSnapshot) []*rpc.AgentStatefulPolicy {
+	out := []*rpc.AgentStatefulPolicy{}
+	if snapshot == nil {
+		return out
+	}
+	for _, p := range snapshot.policies {
+		out = append(out, &rpc.AgentStatefulPolicy{Name: p.Name, Uid: p.UID, WhenScaled: p.WhenScaled, WhenDeleted: p.WhenDeleted})
+	}
+	return out
+}
+
+// activateStorageTask必须在possibly_sent事务内；未发/取消不会留下虚构的卷删除责任。
+func (s *Store) activateStorageTask(ctx context.Context, tx *sql.Tx, o *rpc.Operation, snapshot *agentStorageSnapshot) error {
+	if snapshot == nil {
+		return nil
+	}
+	var uid string
+	if e := tx.QueryRowContext(ctx, `SELECT uid FROM instances WHERE id=?`, o.GetInstanceId()).Scan(&uid); e != nil {
+		return e
+	}
+	raw, e := json.Marshal(snapshotVolumes(snapshot, uid))
+	if e != nil {
+		return e
+	}
+	state := "PENDING"
+	if len(snapshot.volumes) == 0 {
+		state = "DONE"
+	}
+	_, e = tx.ExecContext(ctx, `INSERT INTO agent_storage_tasks VALUES(?,?,?,?,?,?,?,?)`, o.GetAttemptId(), o.OperationId, o.GetInstanceId(), uid, snapshot.mode, state, raw, "")
+	return e
+}
+
+type storageRowsQuery interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+// enrichStorageTask仅读取持久核验结果；不能用CR写入/删除成功替代PVC结果。
+func (s *Store) enrichStorageTask(ctx context.Context, q clusterQuery, o *rpc.Operation) {
+	reader, ok := q.(storageRowsQuery)
+	if !ok {
+		return
+	}
+	rows, e := reader.QueryContext(ctx, `SELECT t.mode,t.state,t.volumes FROM agent_storage_tasks t JOIN execution_attempts a ON a.id=t.attempt_id WHERE t.operation_id=? ORDER BY a.sequence`, o.OperationId)
+	if e != nil {
+		return
+	}
+	volumes := []*rpc.VolumeObservation{}
+	found := false
+	mode := ""
+	allCancelled := true
+	for rows.Next() {
+		var state string
+		var raw []byte
+		if rows.Scan(&mode, &state, &raw) != nil {
+			continue
+		}
+		found = true
+		if state != "CANCELLED" {
+			allCancelled = false
+			var vs []*rpc.VolumeObservation
+			if json.Unmarshal(raw, &vs) == nil {
+				volumes = append(volumes, vs...)
+			}
+		}
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return
+	}
+	if !found {
+		return
+	}
+	result := "NOT_AFFECTED"
+	if mode == "emptyDir" {
+		result = "NOT_APPLICABLE"
+	} else if allCancelled {
+		result = "NotApplied"
+	} else if len(volumes) > 0 {
+		result = volumes[0].GetRetentionResult_()
+		for _, v := range volumes {
+			r := v.GetRetentionResult_()
+			if r == "Unknown" {
+				result = "Unknown"
+				break
+			}
+			if r == "Pending" || r == "Deleting" {
+				result = "Deleting"
+			} else if result != r && result != "Deleting" {
+				result = "Completed"
+			}
+		}
+	}
+	o.StorageResult_ = &result
+	o.StorageVolumes = volumes
+}
+
+// verifyAgentStorageTasks每次只读指定操作的原UID卷；使用当前ACTIVE凭据，允许轮换凭据后继续核验。
+func (s *Store) verifyAgentStorageTasks(ctx context.Context, operation string) {
+	key := s.observationEpoch + "storage:" + operation
+	if _, busy := recoveryFlights.LoadOrStore(key, true); busy {
+		return
+	}
+	defer recoveryFlights.Delete(key)
+	s.verifyAgentStorageTasksLocked(ctx, operation)
+}
+
+// verifyAgentStorageTasksLocked由同操作只读flight串行执行，旧读取不能覆盖更新的卷结果。
+func (s *Store) verifyAgentStorageTasksLocked(ctx context.Context, operation string) {
+	rows, e := s.DB.QueryContext(ctx, `SELECT t.attempt_id,t.instance_id,t.agent_uid,t.volumes,o.cluster_id,o.state FROM agent_storage_tasks t JOIN operations o ON o.id=t.operation_id WHERE t.operation_id=? AND t.state='PENDING'`, operation)
+	if e != nil {
+		return
+	}
+	type task struct {
+		attempt, instance, uid, cluster, state string
+		raw                                    []byte
+	}
+	tasks := []task{}
+	for rows.Next() {
+		var v task
+		if rows.Scan(&v.attempt, &v.instance, &v.uid, &v.raw, &v.cluster, &v.state) == nil {
+			tasks = append(tasks, v)
+		}
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return
+	}
+	for _, v := range tasks {
+		if v.state == "FAILED" || v.state == "CANCELLED" {
+			s.DB.ExecContext(ctx, `UPDATE agent_storage_tasks SET state='CANCELLED' WHERE attempt_id=? AND state='PENDING'`, v.attempt)
+			continue
+		}
+		if v.state != "SUCCEEDED" && v.state != "DELETION_VERIFYING" && v.state != "DELETION_BLOCKED" && v.state != "RESULT_UNCERTAIN" {
+			continue
+		}
+		var volumes []*rpc.VolumeObservation
+		if json.Unmarshal(v.raw, &volumes) != nil {
+			continue
+		}
+		target, _, targetErr := s.targetForRecovery(ctx, v.cluster)
+		now := s.Now().UTC().Format(time.RFC3339Nano)
+		done := true
+		for _, volume := range volumes {
+			// 关键：已确认Retain/Deleted是该次操作的终态，不延迟实例完成，也不继续占用凭据责任。
+			if volume.GetRetentionResult_() == "Retained" || volume.GetRetentionResult_() == "Deleted" || volume.GetRetentionResult_() == "Lost" {
+				continue
+			}
+			volume.LastAttemptAt = &now
+			cause := targetErr
+			var pvc map[string]any
+			if cause == nil {
+				cause = target.Request(ctx, "GET", "/api/v1/namespaces/"+url.PathEscape(volume.Namespace)+"/persistentvolumeclaims/"+url.PathEscape(volume.Name), nil, &pvc)
+			}
+			result := "Unknown"
+			message := ""
+			if apiCode(cause) == "TARGET_NOT_FOUND" {
+				if volume.GetExpectedPolicy() == "Delete" {
+					result = "Deleted"
+				} else {
+					result = "Lost"
+					message = "原Retain PVC已缺失，不代表WAL保留"
+				}
+				volume.LastSuccessAt = &now
+			} else if cause != nil {
+				message = safeSourceError(cause)
+			} else if objectString(objectMap(pvc, "metadata"), "uid") != volume.Uid {
+				message = "同名PVC出现新UID，禁止认领或清理"
+			} else {
+				volume.Phase = objectString(objectMap(pvc, "status"), "phase")
+				volume.LastSuccessAt = &now
+				if volume.GetExpectedPolicy() == "Delete" {
+					result = "Deleting"
+				} else if objectString(objectMap(pvc, "metadata"), "deletionTimestamp") != "" {
+					message = "原Retain PVC删除中，结果无法确认"
+				} else if len(anySlice(objectMap(pvc, "metadata")["ownerReferences"])) > 0 {
+					message = "Retain PVC仍有owner引用，不能确认最终保留"
+				} else if v.state == "SUCCEEDED" {
+					result = "Retained"
+				} else {
+					result = "Pending"
+				}
+			}
+			volume.RetentionResult_ = &result
+			volume.Error = &message
+			if result == "Unknown" || result == "Deleting" || result == "Pending" {
+				done = false
+			}
+		}
+		if target != nil {
+			target.Close()
+		}
+		raw, _ := json.Marshal(volumes)
+		state := "PENDING"
+		if done {
+			state = "DONE"
+		}
+		s.DB.ExecContext(ctx, `UPDATE agent_storage_tasks SET state=?,volumes=?,last_attempt_at=? WHERE attempt_id=? AND state='PENDING'`, state, raw, now, v.attempt)
+	}
+}
+
+// launchStorageRecovery沿共用应用生命周期启动只读工作，不另造计时器或重放队列。
+func (s *Store) launchStorageRecovery(ctx context.Context) {
+	rows, e := s.DB.QueryContext(ctx, `SELECT DISTINCT operation_id FROM agent_storage_tasks WHERE state='PENDING'`)
+	if e != nil {
+		return
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return
+	}
+	for _, id := range ids {
+		key := s.observationEpoch + "storage:" + id
+		if _, busy := recoveryFlights.LoadOrStore(key, true); busy {
+			continue
+		}
+		s.publicationWG.Add(1)
+		go func(id, key string) {
+			defer s.publicationWG.Done()
+			defer recoveryFlights.Delete(key)
+			s.verifyAgentStorageTasksLocked(ctx, id)
+		}(id, key)
+	}
+}

@@ -20,6 +20,7 @@ var deletionPreviewSchema = []string{
 type deletionSnapshot struct {
 	target, impact, namespace string
 	namespaces                []string
+	storage                   *agentStorageSnapshot
 }
 
 // readDeletionSnapshot 完整读取原资源图，以namespace范围表达影响，忽略Pod数量/UID的自然滚动。
@@ -64,20 +65,22 @@ func (s *Store) readDeletionSnapshot(ctx context.Context, i *rpc.ObservationInst
 		namespaces = append(namespaces, value)
 	}
 	sort.Strings(namespaces)
+	var storage *agentStorageSnapshot
 	impact := s.fingerprint(i, "delete-impact/v1:"+canonical(namespaces))
 	if i.Component == AgentComponent {
-		policies, readErr := t.readAgentDeletionPolicies(ctx, i, cr)
-		if readErr != nil {
-			return nil, readErr
+		storage, e = s.readAgentStorageTransition(ctx, i, t, cr, objectMap(cr, "spec"), true)
+		if e != nil {
+			return nil, e
 		}
-		// 关键：仅Agent扩展实际存储影响摘要，不使既有KSM预览因协议扩展而无故失效。
-		impact = s.fingerprint(i, "delete-impact/agent-storage/v1:"+canonical(struct {
+		// 关键：实际策略和原PVC UID属于确认影响；自然Pod滚动不改变影响。
+		impact = s.fingerprint(i, "delete-impact/agent-storage/v2:"+canonical(struct {
 			Namespaces []string
 			Policies   []agentStatefulPolicy
-		}{namespaces, policies}))
+			Volumes    []agentAffectedVolume
+		}{namespaces, storage.policies, storage.volumes}))
 	}
 	// 关键：目标摘要不含status/RV，影响摘要不含易变Pod UID；新增跨namespace原owner链仍使确认过期。
-	return &deletionSnapshot{target: s.fingerprint(i, "delete-target/v1:"+componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))), impact: impact, namespace: ns, namespaces: namespaces}, nil
+	return &deletionSnapshot{target: s.fingerprint(i, "delete-target/v1:"+componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))), impact: impact, namespace: ns, namespaces: namespaces, storage: storage}, nil
 }
 
 // observeDeletionForUser 仅用当前授权凭据读取，并在任何预览/受理前核对原集群UID。
@@ -162,6 +165,11 @@ func (s *Store) PreviewDeletion(ctx context.Context, c *rpc.RequestContext, r *r
 		return nil, e
 	}
 	preview := &rpc.DeletionPreview{PreviewId: ID(), InstanceId: i.Id, VersionId: i.CurrentVersionId, Uid: i.Uid, Name: i.Name, Namespace: snapshot.namespace, ImpactNamespaces: snapshot.namespaces}
+	if snapshot.storage != nil {
+		preview.StorageMode = reference(snapshot.storage.mode)
+		preview.StorageVolumes = snapshotVolumes(snapshot.storage, i.Uid)
+		preview.Policies = snapshotPolicies(snapshot.storage)
+	}
 	ranges, _ := json.Marshal(snapshot.namespaces)
 	if _, e = tx.ExecContext(ctx, `INSERT INTO deletion_previews VALUES(?,?,?,?,?,?,?,?,?,?)`, preview.PreviewId, i.Id, i.CurrentVersionId, i.Uid, r.GetOperationId(), snapshot.target, snapshot.impact, snapshot.namespace, ranges, s.Now().UTC().Format(time.RFC3339Nano)); e != nil {
 		return nil, e
