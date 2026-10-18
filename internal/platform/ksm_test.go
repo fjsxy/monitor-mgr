@@ -151,6 +151,8 @@ type ksmFixture struct {
 	lastDelete          map[string]any
 	retainCR            bool
 	retainPod           bool
+	crReadFailure       bool
+	crReads             int
 	readFailure         bool
 	readFailureOnDelete bool
 	block               chan struct{}
@@ -217,6 +219,12 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 					items = append(items, f.cr)
 				}
 				json.NewEncoder(w).Encode(map[string]any{"items": items})
+				return
+			}
+			f.crReads++
+			if f.crReadFailure {
+				w.WriteHeader(403)
+				io.WriteString(w, `{}`)
 				return
 			}
 			if f.cr == nil {
