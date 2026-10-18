@@ -115,13 +115,6 @@ type Preview = StorageImpactValue & {
   drift: boolean;
   warnings: string[];
 };
-type Attempt = {
-  attemptId: string;
-  state: string;
-  possiblySent: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
 type Reference = {
   kind: string;
   name: string;
@@ -135,6 +128,7 @@ type Props = {
     agentTemplate?: AgentConfiguration;
     versionId?: string;
     tab?: Tab;
+    operation?: Operation;
   };
   cluster: Cluster;
   onAction: (work: () => Promise<void>) => Promise<void>;
@@ -257,9 +251,9 @@ export function AgentEditor({
     [previewSources, setPreviewSources] = useState<{ draftRevision: Int64; sources: Source[] } | null>(null),
     [preview, setPreview] = useState<Preview | null>(null),
     [overwrite, setOverwrite] = useState(false),
-    [operation, setOperation] = useState<Operation | null>(null),
+    // 关键：列表已受理的删除仍是原任务，切到Agent抽屉不能丢掉其ID和后续只读核验。
+    [operation, setOperation] = useState<Operation | null>(selection.operation ?? null),
     [history, setHistory] = useState<Operation[]>([]),
-    [attempts, setAttempts] = useState<Record<string, Attempt[]>>({}),
     [versions, setVersions] = useState<Version[]>([]),
     [viewed, setViewed] = useState<Version | null>(null);
   const currentRef = useRef(current),
@@ -366,20 +360,13 @@ export function AgentEditor({
     ]);
     setVersions(a.versions);
     setHistory(b.operations);
-    const detail = await Promise.all(
-      b.operations.map(
-        async (op) =>
-          [
-            op.operationId,
-            (
-              await api<{ attempts: Attempt[] }>(
-                `/operations/${op.operationId}/attempts`,
-              )
-            ).attempts,
-          ] as const,
-      ),
-    );
-    setAttempts(Object.fromEntries(detail));
+  }
+  // 任务动作由共用LifecycleActions携原operation/attempt修订发出，不能把当前草稿当作重试来源。
+  async function followOperation(value: Operation, showRuntime = false) {
+    setOperation(value);
+    if (showRuntime) setTab("runtime");
+    await refresh();
+    if (currentRef.current) await loadHistory(currentRef.current.id);
   }
   async function refresh() {
     const item = currentRef.current;
@@ -751,7 +738,7 @@ export function AgentEditor({
                         <strong>{stateText(operation.state)}</strong>
                         <p>{operation.message}</p>
                         <p className="help">操作 {operation.operationId}</p>
-                        <LifecycleActions operation={operation} onOperation={async value => { setOperation(value); await refresh(); if (current) await loadHistory(current.id); }} />
+                        <LifecycleActions operation={operation} onOperation={followOperation} />
                       </article>
                     )}
                     <p className="help">
@@ -812,18 +799,7 @@ export function AgentEditor({
                                 查看冻结版本 {item.versionId.slice(0, 8)}
                               </button>
                             )}
-                            {(attempts[item.operationId] ?? []).map(
-                              (attempt) => (
-                                <p className="help" key={attempt.attemptId}>
-                                  执行尝试 {attempt.attemptId} ·{" "}
-                                  {stateText(attempt.state)} ·{" "}
-                                  {attempt.possiblySent
-                                    ? "可能已发送"
-                                    : "尚未发送"}{" "}
-                                  · {timestamp(attempt.updatedAt)}
-                                </p>
-                              ),
-                            )}
+                            <LifecycleActions operation={item} onOperation={value => followOperation(value, true)} />
                           </article>
                         ))}
                         <h3>发布版本</h3>
