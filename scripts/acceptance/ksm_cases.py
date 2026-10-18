@@ -8,6 +8,12 @@ def controller(s,kind,role=None):
  if role=='unscheduled':out=[o for o in out if o['metadata']['name'].endswith('-unscheduled')]
  if role=='node':out=[o for o in out if o['kind']=='DaemonSet']
  assert len(out)==1,(kind,role,[o['metadata']['name'] for o in out]);return out[0]
+def stopped_workloads(s,timeout=90):
+ end=time.monotonic()+timeout
+ while time.monotonic()<end:
+  if not s.workloads():return
+  time.sleep(.5)
+ raise AssertionError('停止意图已写入，但真实workload/Pod仍未完全消失')
 def counts(s,expected,timeout=100):
  end=time.monotonic()+timeout
  while time.monotonic()<end:
@@ -83,12 +89,12 @@ def run_case(s,case):
   # 独立status推进不能被错误归于保存产生的mutation。
   patch(s,{'status':{'availablePods':0}},'status');afterstatus=s.cr();assert afterstatus['spec']==before['spec'];assert afterstatus['metadata']['resourceVersion']!=before['metadata']['resourceVersion']
   if case=='P01.primary':return {'savedRevision':saved['revision'],'platformMutationDelta':0,'before':before,'afterSave':after,'independentStatus':afterstatus,**s.evidence(i)}
-  history=[];s.publish(i);s.runtime(i,'Suspended');assert not [x for x in s.workloads() if x['kind'] in ['Deployment','StatefulSet','DaemonSet','Pod']];services=json.loads(s.k('-n',s.targetns,'get','services,serviceaccounts','-o','json',target=s.target).stdout)['items'];assert services;history.append(s.evidence(i))
-  cfg['desiredState']='Running';s.save(i,cfg);s.publish(i);s.runtime(i);history.append(s.evidence(i));cfg['desiredState']='Disabled';s.save(i,cfg);s.publish(i);s.runtime(i,'Disabled');assert s.cr()['spec']['enabled'] is False and s.cr()['spec']['suspended'] is False;assert not [x for x in s.workloads() if x['kind'] in ['Deployment','StatefulSet','DaemonSet','Pod']];assert not [x for x in json.loads(s.k('-n',s.targetns,'get','services,serviceaccounts','-o','json',target=s.target).stdout)['items'] if any(o.get('uid')==s.cr()['metadata']['uid'] for o in x['metadata'].get('ownerReferences',[]))];history.append(s.evidence(i));return {'saveDidNotMutate':True,'history':history}
+  history=[];s.publish(i);s.runtime(i,'Suspended');stopped_workloads(s);assert not [x for x in s.workloads() if x['kind'] in ['Deployment','StatefulSet','DaemonSet','Pod']];services=json.loads(s.k('-n',s.targetns,'get','services,serviceaccounts','-o','json',target=s.target).stdout)['items'];assert services;history.append(s.evidence(i))
+  cfg['desiredState']='Running';s.save(i,cfg);s.publish(i);s.runtime(i);history.append(s.evidence(i));cfg['desiredState']='Disabled';s.save(i,cfg);s.publish(i);s.runtime(i,'Disabled');stopped_workloads(s);assert s.cr()['spec']['enabled'] is False and s.cr()['spec']['suspended'] is False;assert not [x for x in s.workloads() if x['kind'] in ['Deployment','StatefulSet','DaemonSet','Pod']];assert not [x for x in json.loads(s.k('-n',s.targetns,'get','services,serviceaccounts','-o','json',target=s.target).stdout)['items'] if any(o.get('uid')==s.cr()['metadata']['uid'] for o in x['metadata'].get('ownerReferences',[]))];history.append(s.evidence(i));return {'saveDidNotMutate':True,'history':history}
  if case in ['P02.primary','P03.another-active']:
-  proxy=s.setup_proxy();i=s.create();p=s.preview(i);proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics');o=s.publish(i,preview=p,wait=False);paused=proxy.paused();state=s.call('GET','/instances/'+i['id']);assert not state['currentVersionId'];cfg=s.cfg();cfg['resources']['requestCPU']='300m';s.save(i,cfg)
+  proxy=s.setup_proxy();i=s.create();p=s.preview(i);proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics');o=s.publish(i,preview=p,wait=False);paused=proxy.paused();attempts=s.call('GET','/operations/'+o['operationId']+'/attempts')['attempts'];assert len(attempts)==1 and attempts[0]['possiblySent'] is True;state=s.call('GET','/instances/'+i['id']);assert not state['currentVersionId'];cfg=s.cfg();cfg['resources']['requestCPU']='300m';s.save(i,cfg)
   if case=='P03.another-active':s.publish(i,preview=p,key='another',wait=False,status=409)
-  proxy.control('release',{'ruleId':paused['rule']['id']});done=s.operation(o);assert done['state']=='SUCCEEDED',done;v=s.call('GET','/instances/'+i['id']+'/versions/'+o['versionId']);assert v['sourceDraftRevision']==1 and v['ksm']['resources']['requestCPU']=='100m';assert s.cr()['spec']['podResources']['requests']['cpu']=='100m';s.runtime(i);return {'operation':done,'sourceVersion':v,'currentDraft':s.call('GET','/instances/'+i['id']+'/draft'),'paused':paused,**s.evidence(i)}
+  proxy.control('release',{'ruleId':paused['rule']['id']});done=s.operation(o);assert done['state']=='SUCCEEDED',done;v=s.call('GET','/instances/'+i['id']+'/versions/'+o['versionId']);assert v['sourceDraftRevision']==1 and v['ksm']['resources']['requestCPU']=='100m';assert s.cr()['spec']['podResources']['requests']['cpu']=='100m';s.runtime(i);return {'operation':done,'sourceVersion':v,'currentDraft':s.call('GET','/instances/'+i['id']+'/draft'),'paused':paused,'persistedAttemptsAtNetworkBarrier':attempts,**s.evidence(i)}
  if case in ['P03.same','P03.different-content']:
   i=s.create();p=s.preview(i);body={'previewId':p['previewId'],'draftRevision':p['draftRevision'],'overwriteDrift':False};key='same-acceptance-key'
   if case=='P03.same':
@@ -98,9 +104,9 @@ def run_case(s,case):
    o=s.call('POST','/instances/'+i['id']+'/publications',body,key,202);other={**body,'overwriteDrift':True};s.call('POST','/instances/'+i['id']+'/publications',other,key,409);responses=[o]
   done=s.operation(o);assert done['state']=='SUCCEEDED';s.runtime(i);history=s.call('GET','/instances/'+i['id']+'/versions')['versions'];assert len(history)==1;logs=s.k('-n',s.ns,'logs','deployment/monitor-mgr').stdout.decode();assert logs.count('目标API写请求')==1;return {'responses':responses,'operation':done,'actualMutationAttempts':1,**s.evidence(i)}
  if case.startswith('P05.'):
-  i,cfg,o=base_published(s);extra=case.endswith('extra-spec');spec={'enabled':False} if not extra else {'podResources':{'requests':{'ephemeral-storage':'1Mi'},'limits':{'ephemeral-storage':'2Mi'}}};patch(s,{'metadata':{'labels':{'external-owner':'keep'},'annotations':{'external-note':'keep'},'finalizers':['fixture.monitor-mgr/hold']},'spec':spec});left=s.cr();p=s.preview(i);assert p['drift'] is True
+  i,cfg,o=base_published(s);extra=case.endswith('extra-spec');spec={'enabled':False} if not extra else {'podResources':{'requests':{'ephemeral-storage':'1Mi'},'limits':{'ephemeral-storage':'2Mi'}}};patch(s,{'metadata':{'labels':{'external-owner':'keep'},'annotations':{'external-note':'keep'},'finalizers':s.cr()['metadata'].get('finalizers',[])+['fixture.monitor-mgr/hold']},'spec':spec});left=s.cr();p=s.preview(i);assert p['drift'] is True
   if extra:assert 'ephemeral-storage' in p['leftYAML'] and 'ephemeral-storage' not in p['rightYAML']
-  s.publish(i,preview=p,wait=False,status=409);o=s.publish(i,preview=p,overwrite=True);s.runtime(i);after=s.cr();assert after['metadata']['uid']==left['metadata']['uid'];assert after['metadata']['labels']['external-owner']=='keep' and after['metadata']['annotations']['external-note']=='keep' and after['metadata']['finalizers']==['fixture.monitor-mgr/hold'];assert after.get('status') and after['spec']['enabled'] is True;assert 'ephemeral-storage' not in after['spec']['podResources']['requests'];return {'beforeOverwrite':left,'preview':p,'operation':o,**s.evidence(i)}
+  s.publish(i,preview=p,wait=False,status=409);o=s.publish(i,preview=p,overwrite=True);s.runtime(i);after=s.cr();assert after['metadata']['uid']==left['metadata']['uid'];assert after['metadata']['labels']['external-owner']=='keep' and after['metadata']['annotations']['external-note']=='keep' and set(after['metadata']['finalizers'])>=set(left['metadata']['finalizers']);assert after.get('status') and after['spec']['enabled'] is True;assert 'ephemeral-storage' not in after['spec']['podResources']['requests'];return {'beforeOverwrite':left,'preview':p,'operation':o,**s.evidence(i)}
  if case.startswith('P06.'):
   i,cfg,o=base_published(s);p=s.preview(i);before=s.cr();flavor=case.split('.')[1]
   if flavor=='status-only':patch(s,{'status':{'availablePods':0}},'status')

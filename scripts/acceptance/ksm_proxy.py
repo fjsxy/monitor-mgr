@@ -9,10 +9,10 @@ class Proxy:
    def openssl(*a):
     r=subprocess.run(['openssl',*a],cwd=p,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     if r.returncode:raise RuntimeError('fixture PKI生成失败（敏感参数已隐藏）')
-   openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout','ca.key','-out','ca.crt','-days','1','-subj','/CN=ksm-fixture-ca')
+   openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout','ca.key','-out','ca.crt','-days','1','-subj','/CN=ksm-fixture-ca','-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign')
    for name in ['server','client']:
     openssl('req','-newkey','rsa:2048','-nodes','-keyout',name+'.key','-out',name+'.csr','-subj','/CN='+name)
-    (p/'ext').write_text('subjectAltName=DNS:fault-proxy.'+self.ns+'.svc\nextendedKeyUsage=serverAuth\n' if name=='server' else 'extendedKeyUsage=clientAuth\n')
+    (p/'ext').write_text('basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n' + ('subjectAltName=DNS:fault-proxy.'+self.ns+'.svc\nextendedKeyUsage=serverAuth\n' if name=='server' else 'extendedKeyUsage=clientAuth\n'))
     openssl('x509','-req','-in',name+'.csr','-CA','ca.crt','-CAkey','ca.key','-CAcreateserial','-out',name+'.crt','-days','1','-extfile','ext')
    original=s.config(target);cluster=original['clusters'][0]['cluster'];user=original['users'][0]['user'];u=urllib.parse.urlsplit(cluster['server'])
    files={'backend-ca.crt':base64.b64decode(cluster['certificate-authority-data']),'backend-admin.crt':base64.b64decode(user['client-certificate-data']),'backend-admin.key':base64.b64decode(user['client-key-data']),'proxy-server.crt':(p/'server.crt').read_bytes(),'proxy-server.key':(p/'server.key').read_bytes(),'proxy-client-ca.crt':(p/'ca.crt').read_bytes(),'control-token':self.token.encode()}

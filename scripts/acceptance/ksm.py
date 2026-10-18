@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """#16 KSM验收：真实平台Pod→HTTP→Kitex→目标API；每例独立前置并finally清理。"""
-import argparse,copy,datetime,platform,concurrent.futures,hashlib,http.cookiejar,json,os,pathlib,subprocess,time,urllib.error,urllib.request,uuid
+import argparse,copy,datetime,platform,concurrent.futures,traceback,hashlib,http.cookiejar,json,os,pathlib,subprocess,time,urllib.error,urllib.request,uuid
 from clusters import Suite as ClusterSuite
 from ksm_cases import run_case
 from ksm_proxy import Proxy
@@ -48,7 +48,14 @@ class Suite(ClusterSuite):
   end=time.monotonic()+timeout;last={}
   while time.monotonic()<end:
    last=self.call('POST','/instances/'+i['id']+'/refresh',{})
-   if last['summary']==summary:return last
+   if last['summary']==summary:
+    if summary!='Available':return last
+    objects=self.workloads();controllers=[o for o in objects if o['kind'] in ['Deployment','StatefulSet','DaemonSet']];pods=[o for o in objects if o['kind']=='Pod' and not o['metadata'].get('deletionTimestamp')];settled=len(pods)==last.get('desiredPods') and bool(pods)
+    for pod in pods:
+     match=next((w for w in controllers if all(pod['metadata']['labels'].get(k)==v for k,v in w['spec']['selector']['matchLabels'].items())),None)
+     ready=any(c['type']=='Ready' and c['status']=='True' for c in pod.get('status',{}).get('conditions',[]))
+     settled=settled and bool(match) and ready and pod['spec']['containers'][0].get('resources',{})==match['spec']['template']['spec']['containers'][0].get('resources',{}) and pod['spec']['containers'][0].get('args',[])==match['spec']['template']['spec']['containers'][0].get('args',[])
+    if settled:return last
    time.sleep(.5)
   raise AssertionError('运行状态未收敛：'+str(last))
  def evidence(self,i):
@@ -64,7 +71,7 @@ class Suite(ClusterSuite):
    return {'operation':o,**self.evidence(i)}
   return run_case(self,case)
  def setup_proxy(self):
-  self.proxy=Proxy(self,self.target);done=self.operation(self.accept(self.proxy.config,path='/clusters/'+self.cluster['id']+'/credentials'));assert done['state']=='SUCCEEDED';return self.proxy
+  self.proxy=Proxy(self,self.target);done=self.operation(self.accept(self.proxy.config,path='/clusters/'+self.cluster['id']+'/credentials'));assert done['state']=='SUCCEEDED',done;return self.proxy
  def cleanup(self):
   failures=[]
   if hasattr(self,'proxy'):
@@ -92,7 +99,12 @@ class Suite(ClusterSuite):
    self.other_cleanup=None
   if hasattr(self,'forward'):self.forward.terminate();self.forward.wait(timeout=5)
   if hasattr(self,'targetns'):
-   items=json.loads(self.k('get','kubestatemetrics','-o','json',target=self.target,check=False).stdout or b'{"items":[]}')['items']
+   # 关键：读取失败不能冒充空集；无法核对所属CR时不盲删，且cleanup必须失败。
+   inventory=self.k('get','kubestatemetrics','-o','json',target=self.target,check=False);items=[]
+   if inventory.returncode:failures.append('KSM完整列表读取失败，不能确认cluster-scoped残留')
+   else:
+    try:items=json.loads(inventory.stdout)['items']
+    except (ValueError,KeyError,TypeError):failures.append('KSM列表响应不完整，不能确认cluster-scoped残留')
    for cr in items:
     if cr['metadata']['name'].startswith(self.a.prefix+'-') and cr['spec'].get('targetNamespace')==self.targetns:
      m=copy.deepcopy(cr);m['metadata']['finalizers']=[];self.k('replace','-f','-',data=m,target=self.target,check=False);r=self.k('delete','kubestatemetrics',cr['metadata']['name'],'--wait=true','--timeout=60s',target=self.target,check=False)
@@ -115,7 +127,7 @@ class Suite(ClusterSuite):
     record['platform']=self.deploy(case,index);self.a.image=product_image;record['platform']['baseProductImage']=product_image
     self.prepare_target(index,'data' if case in ['C04.ksm-crd','C05.primary'] else 'control');record['evidence']=self.run_case(case);record['outcome']='passed'
    except Exception as e:
-    record['error']=str(e);error=e
+    record['error']=str(e);record['traceback']=traceback.format_exc();error=e
     if hasattr(self,'targetns'):
      try:
       record['failureObjects']={'crs':json.loads(self.k('get','kubestatemetrics','-o','json',target=self.target).stdout),'workloads':self.workloads(),'events':json.loads(self.k('-n',self.targetns,'get','events','-o','json',target=self.target).stdout)}
@@ -136,7 +148,7 @@ if __name__=='__main__':
  if not a.output:p.error('必须显式output')
  valid=list(QCASES) if a.layer=='Q' else KCASES
  if a.cases and any(c not in valid for c in a.cases):p.error('未知或层级不符的子例')
- if a.cases and any(a.profile not in manifest()[c]['profiles'] for c in a.cases):p.error('子例不属于所选profile')
+ if any(a.profile not in manifest()[c]['profiles'] for c in (a.cases or valid)):p.error('子例不属于所选profile')
  if a.layer=='Q':
   from ksm_q import run_q
   raise SystemExit(run_q(a,QCASES,manifest(),ROOT,source_state(),stamp))
