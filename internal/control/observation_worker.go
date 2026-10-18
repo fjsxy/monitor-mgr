@@ -87,10 +87,15 @@ func (s *Store) launchInventory(life context.Context, cluster string) {
 		defer s.observationPolls.Delete(key)
 		ctx, cancel := context.WithTimeout(life, 8*time.Second)
 		defer cancel()
+		original, err := clusterByID(ctx, s.DB, cluster)
+		if err != nil {
+			return
+		}
+		scope := discoveryScope{original.Uid, original.CredentialRevision}
 		target, _, err := s.targetForRecovery(ctx, cluster)
 		if err != nil {
 			for _, component := range []string{KSMComponent, AgentComponent} {
-				s.persistDiscovery(ctx, cluster, component, nil, err, nil)
+				s.persistDiscovery(ctx, cluster, component, nil, err, scope)
 			}
 			return
 		}
