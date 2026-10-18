@@ -13,8 +13,9 @@ import (
 
 type command struct{ actor, action, target, key, digest string }
 
-// beginCommand is called only after current authorization inside the mutation transaction.
-// The password-bearing request is never stored: its digest uses the independent master key.
+// beginCommand 按当前操作者、动作、目标和请求键查找已经受理的命令。
+// 关键：调用者必须先在同一事务中完成当前授权；幂等命中不能绕过失权检查。
+// 含密码或凭据的请求只保存独立主密钥计算的 HMAC，不保存原文或普通可枚举摘要。
 func (s *Store) beginCommand(ctx context.Context, tx *sql.Tx, p *Principal, c *rpc.RequestContext, action, target string, request any, result any) (*command, bool, error) {
 	key := c.GetIdempotencyKey()
 	if len(key) == 0 || len(key) > 128 {
@@ -49,6 +50,8 @@ func (s *Store) beginCommand(ctx context.Context, tx *sql.Tx, p *Principal, c *r
 	}
 	return cmd, true, nil
 }
+// finishCommand 保存可安全回放的结果，由调用者与业务变更共同提交。
+// 关键：保持同一事务，防止业务已执行但去重结果缺失而造成重复副作用。
 func (s *Store) finishCommand(ctx context.Context, tx *sql.Tx, cmd *command, result any) error {
 	raw, err := json.Marshal(result)
 	if err != nil {

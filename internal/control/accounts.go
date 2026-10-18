@@ -10,18 +10,20 @@ import (
 	"time"
 )
 
-// Principal is read from the current account row, never from browser-provided roles.
-// AuthVersion can be checked inside future mutation/dispatch transactions.
+// Principal 汇总当前账号与会话事实，供请求授权和事务内复核使用。
+// 关键：角色与认证版本来自数据库，浏览器传入的身份不能成为授权依据。
 type Principal struct {
 	Account     *rpc.Account
 	AuthVersion int64
 	ExpiresAt   string
 }
 
+// digest 仅保存会话令牌摘要，数据库不持有可直接使用的令牌。
 func digest(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }
+// authorize 同时检查当前启用状态、认证版本、绝对期限和临时改密要求。
 func authorize(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, token string, now time.Time, allowTemporary bool) (*Principal, error) {
@@ -57,12 +59,13 @@ func token(c *rpc.RequestContext) string {
 	}
 	return c.GetSessionToken()
 }
+// Login 验证密码并创建固定到期的会话；后续访问不会滑动续期。
 func (s *Store) Login(ctx context.Context, _ *rpc.RequestContext, r *rpc.LoginRequest) (*rpc.LoginResult_, error) {
 	a := new(rpc.Account)
 	var hash []byte
 	var version int64
 	err := s.DB.QueryRowContext(ctx, `SELECT `+accountColumns+`,password_hash,auth_version FROM accounts WHERE username=?`, r.Username).Scan(&a.Id, &a.Username, &a.Role, &a.Enabled, &a.MustChangePassword, &a.CreatedAt, &hash, &version)
-	// A fixed real bcrypt hash keeps unknown-account comparisons on the same expensive path.
+	// 未知账号也执行真实 bcrypt 比较，减少通过耗时识别账号的差异。
 	if err != nil {
 		hash = []byte("$2a$10$L7sUQdVEfNpnBzKsaRo7oOmyJTLoxzdutn/dufIEbTCd.YQFAvmKO")
 	}
@@ -72,7 +75,7 @@ func (s *Store) Login(ctx context.Context, _ *rpc.RequestContext, r *rpc.LoginRe
 	}
 	t := ID()
 	expires := s.Now().Add(s.SessionTTL).UTC().Format(time.RFC3339Nano)
-	// Conditional insert closes the password/role/disable race between comparison and session creation.
+	// 关键：条件写入复核认证版本，防止密码比较后发生停用或重置仍产生有效会话。
 	res, err := s.DB.ExecContext(ctx, `INSERT INTO sessions(digest,account_id,auth_version,expires_at) SELECT ?,id,auth_version,? FROM accounts WHERE id=? AND enabled=1 AND auth_version=?`, digest(t), expires, a.Id, version)
 	if err != nil {
 		return nil, Error("UNAVAILABLE", "登录暂不可用")
@@ -96,6 +99,7 @@ func (s *Store) Logout(ctx context.Context, c *rpc.RequestContext) (*rpc.Empty, 
 	}
 	return &rpc.Empty{}, nil
 }
+// ChangePassword 在同一事务中核验旧密码、更新密码并失效全部旧会话。
 func (s *Store) ChangePassword(ctx context.Context, c *rpc.RequestContext, r *rpc.ChangePasswordRequest) (*rpc.Empty, error) {
 	if err := validPassword(r.NewPassword_); err != nil {
 		return nil, err
@@ -137,6 +141,7 @@ func requireAdmin(p *Principal) error {
 	}
 	return nil
 }
+// ListAccounts 只向当前管理员返回不含密码材料的账号列表。
 func (s *Store) ListAccounts(ctx context.Context, c *rpc.RequestContext) (*rpc.AccountsResult_, error) {
 	p, err := s.Authorize(ctx, token(c))
 	if err != nil {
@@ -163,6 +168,7 @@ func (s *Store) ListAccounts(ctx context.Context, c *rpc.RequestContext) (*rpc.A
 	}
 	return &rpc.AccountsResult_{Accounts: accounts}, nil
 }
+// CreateAccount 以临时密码建立账号，并与审计及幂等结果原子提交。
 func (s *Store) CreateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc.CreateAccountRequest) (*rpc.Account, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -217,6 +223,7 @@ func (s *Store) CreateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	}
 	return a, nil
 }
+// audit 保存操作者与动作关系，不记录密码或会话令牌。
 func audit(ctx context.Context, tx *sql.Tx, actor, action, target string, now time.Time) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO audit VALUES(?,?,?,?,?)`, ID(), actor, action, target, now.UTC().Format(time.RFC3339Nano))
 	if err != nil {
@@ -225,6 +232,7 @@ func audit(ctx context.Context, tx *sql.Tx, actor, action, target string, now ti
 	return nil
 }
 
+// UpdateAccount 修改角色或启用状态，并在实际变化时提升认证版本。
 func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc.UpdateAccountRequest) (*rpc.Account, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -267,6 +275,7 @@ func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	if r.Enabled != nil {
 		enabled = *r.Enabled
 	}
+	// 关键：在同一写事务中计数并修改，避免并发请求同时移除最后的启用管理员。
 	if a.Enabled && a.Role == "ADMIN" && (!enabled || role != "ADMIN") {
 		var n int
 		if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM accounts WHERE enabled=1 AND role='ADMIN'`).Scan(&n); err != nil {
@@ -294,6 +303,7 @@ func (s *Store) UpdateAccount(ctx context.Context, c *rpc.RequestContext, r *rpc
 	}
 	return a, nil
 }
+// ResetPassword 设置新的临时密码；认证版本递增使既有会话立即失效。
 func (s *Store) ResetPassword(ctx context.Context, c *rpc.RequestContext, r *rpc.ResetPasswordRequest) (*rpc.Empty, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
