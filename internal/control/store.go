@@ -115,7 +115,7 @@ func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, erro
 		db.Close()
 		return fail(err)
 	}
-	if err = migrate(db, dataDir); err != nil {
+	if err = migrate(db, dataDir, key); err != nil {
 		db.Close()
 		return fail(err)
 	}

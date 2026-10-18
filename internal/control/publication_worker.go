@@ -95,7 +95,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 		s.finishPublication(id, "FAILED", e, nil)
 		return
 	}
-	cfg, e := decodeKSM(v.Ksm)
+	cfg, e := decodeVersionConfiguration(i.Component, v)
 	if e != nil {
 		s.finishPublication(id, "FAILED", e, nil)
 		return
@@ -120,24 +120,24 @@ func (s *Store) executePublication(life context.Context, id string) {
 		s.finishPublication(id, "FAILED", e, nil)
 		return
 	}
-	cr, e := t.readKSM(life, i.Name)
+	cr, e := t.readComponent(life, i)
 	if e != nil {
 		s.finishPublication(id, "FAILED", e, nil)
 		return
 	}
 	r := &rpc.PublishRequest{Id: i.Id, PreviewId: previewID, DraftRevision: v.SourceDraftRevision, OverwriteDrift: overwrite}
-	if e = validatePublication(i, cfg, v.SourceDraftRevision, b, r, cr); e != nil {
+	if e = s.validatePublication(i, cfg, v.SourceDraftRevision, b, r, cr); e != nil {
 		s.finishPublication(id, "FAILED", e, nil)
 		return
 	}
 	// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
-	body := ksmCR(cfg.Name, cfg.spec())
-	method, path := "POST", ksmPath
+	body := cfg.document()
+	method, path := "POST", componentFor(i.Component).collectionPath(instanceCRNamespace(i))
 	if i.Uid != "" {
 		body = cr
 		body["spec"] = cfg.spec()
 		method = "PUT"
-		path = ksmPath + "/" + i.Name
+		path = componentFor(i.Component).objectPath(i)
 		if objectString(objectMap(body, "metadata"), "resourceVersion") == "" {
 			s.finishPublication(id, "FAILED", Error("CONFLICT", "目标 RV 缺失，拒绝无条件更新"), nil)
 			return
@@ -207,7 +207,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 		return
 	}
 	uid := objectString(objectMap(written, "metadata"), "uid")
-	if uid == "" || (i.Uid != "" && uid != i.Uid) || normalizedSpec(objectMap(written, "spec")) != normalizedSpec(cfg.spec()) {
+	if uid == "" || (i.Uid != "" && uid != i.Uid) || componentFor(i.Component).normalizeSpec(objectMap(written, "spec")) != componentFor(i.Component).normalizeSpec(cfg.spec()) {
 		state := "RESULT_UNCERTAIN"
 		if i.Uid == "" {
 			state = "IDENTITY_UNCERTAIN"

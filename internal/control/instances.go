@@ -191,21 +191,20 @@ func (s *Store) ListInstances(ctx context.Context, c *rpc.RequestContext, r *rpc
 	return &rpc.InstancesResult_{Instances: out}, nil
 }
 
-func readDraft(ctx context.Context, q clusterQuery, id string) (*KSMConfig, int64, error) {
+func readDraft(ctx context.Context, q clusterQuery, id string) (configuration, int64, error) {
 	var raw []byte
 	var rev int64
 	if q.QueryRowContext(ctx, `SELECT config,revision FROM drafts WHERE instance_id=?`, id).Scan(&raw, &rev) != nil {
 		return nil, 0, Error("NOT_FOUND", "草稿不存在，外部实例只读")
 	}
-	var cfg KSMConfig
-	if json.Unmarshal(raw, &cfg) != nil {
-		return nil, 0, Error("UNAVAILABLE", "草稿无法读取")
+	i, e := instanceByID(ctx, q, id)
+	if e != nil {
+		return nil, 0, e
 	}
-	return &cfg, rev, nil
+	cfg, e := decodeStoredConfiguration(i.Component, raw)
+	return cfg, rev, e
 }
-func draftDTO(cfg *KSMConfig, rev int64) *rpc.ConfigurationDraft {
-	return &rpc.ConfigurationDraft{Revision: rev, Ksm: cfg.rpc(), Yaml: yamlText(ksmCR(cfg.Name, cfg.spec()))}
-}
+func draftDTO(cfg configuration, rev int64) *rpc.ConfigurationDraft { return cfg.draft(rev) }
 func (s *Store) GetDraft(ctx context.Context, c *rpc.RequestContext, r *rpc.InstanceID) (*rpc.ConfigurationDraft, error) {
 	if i, e := s.authorizedInstance(ctx, c, r.Id); e != nil {
 		return nil, e

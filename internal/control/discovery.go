@@ -59,7 +59,7 @@ func (s *Store) discoverKSM(ctx context.Context, c *rpc.RequestContext, cluster 
 		}
 		h := sha256.Sum256([]byte(cluster + ":" + uid))
 		id := "external-" + hex.EncodeToString(h[:])
-		text := yamlText(cr)
+		text := yamlText(safeTargetDocument(cr))
 		i := &rpc.ObservationInstance{Id: id, ClusterId: cluster, Component: "kube-state-metrics", Type: "exporter", ReadOnly: true, Ownership: "unmanaged", Name: name, TargetNamespace: objectString(objectMap(cr, "spec"), "targetNamespace"), Uid: uid, Lifecycle: "DISCOVERED", Runtime: interpretKSM(cr, now), Yaml: &text}
 		out = append(out, i)
 	}
