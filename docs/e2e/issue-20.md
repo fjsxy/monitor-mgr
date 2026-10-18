@@ -67,3 +67,10 @@
 | REG20-STORAGE-003.policy-dispatch | 操作受理后、最后存储重验前独立更改实际所用存储策略必须使旧危险预览失效 | Q：公开HTTP→真实Kitex→SQLite/TLS fixture运行原UID PVC Agent，先保存挂起/减shard草稿并预览；操作受理后、最后存储重验前仅注入实际所用存储策略变化，再继续原请求。仅改变本次所用whenScaled/whenDeleted实际ST值，保留CR UID及其余影响事实。保存请求/目标mutation及操作结果。 | 旧预览拒绝受理/派发，目标无新mutation，必须重新预览；分别证明该输入而非一次注入多种变化。ST-UID变体应记录实时安全重检可通过而旧HMAC拒绝的证据。 | #20 |
 | REG20-STORAGE-003.status-rv | status/RV自然推进不改变确认影响 | Q：运行原Agent/原ST/原PVC UID与已采用策略，保存危险预览，仅推进CR/ST status和resourceVersion，再确认发布并回读。 | 原安全guard仍通过、旧预览可以使用；不把status/RV放入稳定存储影响摘要。 | #20 |
 | REG20-STORAGE-003.same-st-pod-roll | 同ST下Pod自然滚动不改变确认影响 | Q：运行原Agent/原ST/原PVC UID与已采用策略，保存危险预览，仅让同ST UID下原Pod被新Pod UID替换且继续引用原PVC，再确认发布并回读。 | UID父链仍可信，原预览可以使用；保留新旧Pod历史，但不把Pod UID作为确认影响冲突。 | #20 |
+
+## 两项策略的独立owner语义
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG20-STORAGE-004.scaled-retain-deleted-delete | 挂起不能把合法保留ST的ownerRef误判为危险 | Q：真实HTTP→生成Kitex→SQLite/TLS运行原Agent，whenScaled=Retain、whenDeleted=Delete且实际ST已采用；原WAL PVC有原ST ownerRef、无Pod ownerRef。保存并明确下发挂起，回读CR replicas=0/paused=false、ST仍为原UID、原Pod消失及独立原PVC结果。 | 挂起允许，原PVC当前同UID保留并核实Retained，但不承诺未来删除ST仍保留；ST ownerRef因本次保留ST而合法，不能误拒绝或错误阻塞transfer/unregister。未发WAL风险与删除策略分别说明。 | #20 |
+| REG20-STORAGE-004.delete-with-st-owner | 同一策略组合删除时仍使用whenDeleted而非whenScaled | Q：独立公开API/TLS fixture运行whenScaled=Retain、whenDeleted=Delete且已采用的原Agent/ST/Pod/PVC，保留真实原ST ownerRef。预览并按原UID/RV Foreground删除Agent，先核实实例清空完成，再独立核实原PVC存在/删除。 | 删除允许且原PVC结果按whenDeleted=Delete为Deleting→Deleted；不能因whenScaled=Retain保留该卷或把ST引用当Retain已确认，也不能直接删除PVC。 | #20 |

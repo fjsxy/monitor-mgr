@@ -4749,12 +4749,15 @@ var fieldIDToName_PreviewRequest = map[int16]string{
 }
 
 type PublicationPreview struct {
-	PreviewId      string   `thrift:"previewId,1,required" frugal:"1,required,string" json:"previewId"`
-	DraftRevision  int64    `thrift:"draftRevision,2,required" frugal:"2,required,i64" json:"draftRevision"`
-	LeftYAML       string   `thrift:"leftYAML,3,required" frugal:"3,required,string" json:"leftYAML"`
-	RightYAML      string   `thrift:"rightYAML,4,required" frugal:"4,required,string" json:"rightYAML"`
-	Drift          bool     `thrift:"drift,5,required" frugal:"5,required,bool" json:"drift"`
-	Warnings       []string `thrift:"warnings,6,required" frugal:"6,required,list<string>" json:"warnings"`
+	PreviewId      string                 `thrift:"previewId,1,required" frugal:"1,required,string" json:"previewId"`
+	DraftRevision  int64                  `thrift:"draftRevision,2,required" frugal:"2,required,i64" json:"draftRevision"`
+	LeftYAML       string                 `thrift:"leftYAML,3,required" frugal:"3,required,string" json:"leftYAML"`
+	RightYAML      string                 `thrift:"rightYAML,4,required" frugal:"4,required,string" json:"rightYAML"`
+	Drift          bool                   `thrift:"drift,5,required" frugal:"5,required,bool" json:"drift"`
+	Warnings       []string               `thrift:"warnings,6,required" frugal:"6,required,list<string>" json:"warnings"`
+	StorageVolumes []*VolumeObservation   `thrift:"storageVolumes,7,optional" frugal:"7,optional,list<VolumeObservation>" json:"storageVolumes,omitempty"`
+	Policies       []*AgentStatefulPolicy `thrift:"policies,8,optional" frugal:"8,optional,list<AgentStatefulPolicy>" json:"policies,omitempty"`
+	StorageMode    *string                `thrift:"storageMode,9,optional" frugal:"9,optional,string" json:"storageMode,omitempty"`
 	_unknownFields unknown.Fields
 }
 
@@ -4788,6 +4791,33 @@ func (p *PublicationPreview) GetDrift() (v bool) {
 func (p *PublicationPreview) GetWarnings() (v []string) {
 	return p.Warnings
 }
+
+var PublicationPreview_StorageVolumes_DEFAULT []*VolumeObservation
+
+func (p *PublicationPreview) GetStorageVolumes() (v []*VolumeObservation) {
+	if !p.IsSetStorageVolumes() {
+		return PublicationPreview_StorageVolumes_DEFAULT
+	}
+	return p.StorageVolumes
+}
+
+var PublicationPreview_Policies_DEFAULT []*AgentStatefulPolicy
+
+func (p *PublicationPreview) GetPolicies() (v []*AgentStatefulPolicy) {
+	if !p.IsSetPolicies() {
+		return PublicationPreview_Policies_DEFAULT
+	}
+	return p.Policies
+}
+
+var PublicationPreview_StorageMode_DEFAULT string
+
+func (p *PublicationPreview) GetStorageMode() (v string) {
+	if !p.IsSetStorageMode() {
+		return PublicationPreview_StorageMode_DEFAULT
+	}
+	return *p.StorageMode
+}
 func (p *PublicationPreview) SetPreviewId(val string) {
 	p.PreviewId = val
 }
@@ -4806,9 +4836,30 @@ func (p *PublicationPreview) SetDrift(val bool) {
 func (p *PublicationPreview) SetWarnings(val []string) {
 	p.Warnings = val
 }
+func (p *PublicationPreview) SetStorageVolumes(val []*VolumeObservation) {
+	p.StorageVolumes = val
+}
+func (p *PublicationPreview) SetPolicies(val []*AgentStatefulPolicy) {
+	p.Policies = val
+}
+func (p *PublicationPreview) SetStorageMode(val *string) {
+	p.StorageMode = val
+}
 
 func (p *PublicationPreview) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
+}
+
+func (p *PublicationPreview) IsSetStorageVolumes() bool {
+	return p.StorageVolumes != nil
+}
+
+func (p *PublicationPreview) IsSetPolicies() bool {
+	return p.Policies != nil
+}
+
+func (p *PublicationPreview) IsSetStorageMode() bool {
+	return p.StorageMode != nil
 }
 
 func (p *PublicationPreview) String() string {
@@ -4825,6 +4876,9 @@ var fieldIDToName_PublicationPreview = map[int16]string{
 	4: "rightYAML",
 	5: "drift",
 	6: "warnings",
+	7: "storageVolumes",
+	8: "policies",
+	9: "storageMode",
 }
 
 type PublishRequest struct {

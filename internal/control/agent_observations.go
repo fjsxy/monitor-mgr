@@ -150,11 +150,22 @@ func associationConfigFromCR(cr map[string]any) *AgentConfig {
 }
 func (s *Store) refreshAgentAuxiliary(ctx context.Context, i *rpc.ObservationInstance, t *Target, cr map[string]any) {
 	s.associationObservations(ctx, i, t, associationConfigFromCR(cr), true)
+	policies, policyErr := t.readAgentStatefulPolicies(ctx, i)
+	snapshot := &agentStorageSnapshot{policies: policies}
+	mode, _ := agentStorageIdentity(objectMap(cr, "spec"))
+	s.saveAgentSource(ctx, i, "storagePolicy", &rpc.SourceObservation{Source: "storagePolicy", StorageMode: reference(mode), Policies: snapshotPolicies(snapshot)}, policyErr)
 	volumes, e := s.readAgentVolumes(ctx, i, t)
 	s.saveAgentSource(ctx, i, "PVC", &rpc.SourceObservation{Source: "PVC", Volumes: volumes}, e)
 }
 
 // readAgentVolumes经完整真实资源图核对并保存原UID卷历史，父资源消失不等于卷消失。
 func (s *Store) readAgentVolumes(ctx context.Context, i *rpc.ObservationInstance, t *Target) ([]*rpc.VolumeObservation, error) {
-	return s.observeAgentVolumes(ctx, i, t)
+	volumes, e := s.observeAgentVolumes(ctx, i, t)
+	if e != nil {
+		return nil, e
+	}
+	if e = s.enrichAgentVolumeResults(ctx, i, volumes); e != nil {
+		return nil, e
+	}
+	return volumes, nil
 }

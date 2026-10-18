@@ -51,6 +51,9 @@ func (s *Store) rememberAgentVolumes(ctx context.Context, i *rpc.ObservationInst
 		return e
 	}
 	defer tx.Rollback()
+	if !observationScopeCurrent(ctx, tx, ctx) {
+		return Error("CONFLICT", "卷观察目标修订已变化")
+	}
 	var current string
 	if e = tx.QueryRowContext(ctx, `SELECT uid FROM instances WHERE id=?`, i.Id).Scan(&current); e != nil {
 		return e
@@ -72,6 +75,9 @@ func (s *Store) rememberAgentVolumes(ctx context.Context, i *rpc.ObservationInst
 
 // observeAgentVolumes使用完整ST/Pod/PVC集合；Ready与真实volumeMount共同证明当前挂载。
 func (s *Store) observeAgentVolumes(ctx context.Context, i *rpc.ObservationInstance, t *Target) ([]*rpc.VolumeObservation, error) {
+	if !i.ReadOnly && t.clusterUID != "" {
+		ctx = context.WithValue(ctx, observationScopeKey{}, observationScope{i.Id, i.Uid, i.ClusterId, t.clusterUID, i.Name, i.TargetNamespace, t.credentialRevision})
+	}
 	prefix := "/api/v1/namespaces/" + url.PathEscape(i.TargetNamespace)
 	sts, e := t.listObjects(ctx, "/apis/apps/v1/namespaces/"+url.PathEscape(i.TargetNamespace)+"/statefulsets")
 	if e != nil {

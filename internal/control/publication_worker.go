@@ -158,6 +158,10 @@ func (s *Store) executePublication(life context.Context, id string) {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
+	if e = s.validateAgentStorageImpact(i, b.storage, storageSnapshot); e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
+		return
+	}
 	// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
 	body := cfg.document()
 	body["spec"] = frozen

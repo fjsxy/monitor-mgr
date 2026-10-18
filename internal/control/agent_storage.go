@@ -28,16 +28,13 @@ func agentRetention(spec map[string]any) (string, string, error) {
 	return scaled, deleted, nil
 }
 
-// readAgentDeletionPolicies只读取原Agent UID控制的全部ST；任何读取失败保留错误，不转空集。
-func (t *Target) readAgentDeletionPolicies(ctx context.Context, i *rpc.ObservationInstance, cr map[string]any) ([]agentStatefulPolicy, error) {
+// readAgentStatefulPolicies只读取原Agent UID控制的全部ST实际策略，独立于CR与草稿。
+func (t *Target) readAgentStatefulPolicies(ctx context.Context, i *rpc.ObservationInstance) ([]agentStatefulPolicy, error) {
 	sts, e := t.listObjects(ctx, "/apis/apps/v1/namespaces/"+url.PathEscape(instanceCRNamespace(i))+"/statefulsets")
 	if e != nil {
 		return nil, e
 	}
-	_, expected, e := agentRetention(objectMap(cr, "spec"))
-	if e != nil {
-		return nil, e
-	}
+
 	policies := []agentStatefulPolicy{}
 	for _, st := range sts {
 		if !agentOwnedBy(st, "PrometheusAgent", i.Uid) {
@@ -52,10 +49,7 @@ func (t *Target) readAgentDeletionPolicies(ctx context.Context, i *rpc.Observati
 		if e != nil {
 			return nil, e
 		}
-		// 关键：删除使用ST实际whenDeleted；CR字段已变但ST未采用时必须先独立发布并等待确认。
-		if deleted != expected {
-			return nil, Error("CONFLICT", "StatefulSet尚未采用whenDeleted策略；请先单独发布策略并确认")
-		}
+
 		policies = append(policies, agentStatefulPolicy{Name: name, UID: uid, WhenScaled: scaled, WhenDeleted: deleted})
 	}
 	sort.Slice(policies, func(a, b int) bool { return policies[a].UID < policies[b].UID })

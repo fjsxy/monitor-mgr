@@ -170,7 +170,13 @@ func (c *AgentConfig) document() map[string]any {
 	return map[string]any{"apiVersion": "monitoring.coreos.com/v1alpha1", "kind": "PrometheusAgent", "metadata": map[string]any{"name": c.Name, "namespace": c.Namespace}, "spec": c.spec()}
 }
 func (c *AgentConfig) warnings(cr map[string]any) []string {
-	return []string{"关联匹配和CR就绪不证明实际采集或remote_write样本交付"}
+	out := []string{"关联匹配和CR就绪不证明实际采集或remote_write样本交付"}
+	if c.Storage.Mode == "emptyDir" {
+		out = append(out, "emptyDir不适用PVC保留策略；Pod删除/替换或挂起缩零可丢失未发WAL，容器重启本身不删除emptyDir")
+	} else {
+		out = append(out, "挂起缩零使用whenScaled="+c.Storage.WhenScaled+"；移除shard、删除Agent或Operator替换ST使用whenDeleted="+c.Storage.WhenDeleted+"。先单独发布策略并核实实际ST采用；PVC结果独立确认，平台不清理PVC")
+	}
+	return out
 }
 
 var prometheusDurationRE = regexp.MustCompile(`^(0|([0-9]+y)?([0-9]+w)?([0-9]+d)?([0-9]+h)?([0-9]+m)?([0-9]+s)?([0-9]+ms)?)$`)

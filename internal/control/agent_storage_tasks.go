@@ -13,6 +13,7 @@ import (
 
 // storageTasksSchema与首次存储v10一同引入；每次派发保留独立不可替换的卷身份列表。
 var storageTasksSchema = []string{
+	`ALTER TABLE publication_previews ADD COLUMN storage_fingerprint TEXT NOT NULL DEFAULT ''`,
 	`CREATE TABLE agent_storage_tasks(attempt_id TEXT PRIMARY KEY REFERENCES execution_attempts(id),operation_id TEXT NOT NULL REFERENCES operations(id),instance_id TEXT NOT NULL REFERENCES instances(id),agent_uid TEXT NOT NULL,mode TEXT NOT NULL,state TEXT NOT NULL,volumes BLOB NOT NULL,last_attempt_at TEXT NOT NULL)`,
 	`CREATE INDEX pending_agent_storage_tasks ON agent_storage_tasks(state,operation_id)`,
 }
@@ -168,7 +169,7 @@ func (s *Store) verifyAgentStorageTasksLocked(ctx context.Context, operation str
 		if json.Unmarshal(v.raw, &volumes) != nil {
 			continue
 		}
-		target, _, targetErr := s.targetForRecovery(ctx, v.cluster)
+		target, currentCluster, targetErr := s.targetForRecovery(ctx, v.cluster)
 		now := s.Now().UTC().Format(time.RFC3339Nano)
 		done := true
 		for _, volume := range volumes {
@@ -225,7 +226,22 @@ func (s *Store) verifyAgentStorageTasksLocked(ctx context.Context, operation str
 		if done {
 			state = "DONE"
 		}
-		s.DB.ExecContext(ctx, `UPDATE agent_storage_tasks SET state=?,volumes=?,last_attempt_at=? WHERE attempt_id=? AND state='PENDING'`, state, raw, now, v.attempt)
+		tx, err := s.DB.BeginTx(ctx, nil)
+		if err != nil {
+			continue
+		}
+		valid := true
+		if targetErr == nil {
+			var n int
+			valid = tx.QueryRowContext(ctx, `SELECT count(*) FROM clusters c JOIN instances i ON i.cluster_id=c.id WHERE c.id=? AND c.uid=? AND c.state='ACTIVE' AND c.credential_revision=? AND i.id=? AND i.uid=?`, v.cluster, currentCluster.Uid, currentCluster.CredentialRevision, v.instance, v.uid).Scan(&n) == nil && n == 1
+		}
+		// 关键：迟到的旧凭据结果不能结束当前存储责任；已删除实例仍允许原UID只读核验。
+		if valid {
+			if _, err = tx.ExecContext(ctx, `UPDATE agent_storage_tasks SET state=?,volumes=?,last_attempt_at=? WHERE attempt_id=? AND state='PENDING'`, state, raw, now, v.attempt); err == nil {
+				err = tx.Commit()
+			}
+		}
+		tx.Rollback()
 	}
 }
 
@@ -259,4 +275,49 @@ func (s *Store) launchStorageRecovery(ctx context.Context) {
 			s.verifyAgentStorageTasksLocked(ctx, id)
 		}(id, key)
 	}
+}
+
+// enrichAgentVolumeResults把独立任务结果按原PVC UID接入来源，不改写当前phase/挂载或给结果续期。
+func (s *Store) enrichAgentVolumeResults(ctx context.Context, i *rpc.ObservationInstance, volumes []*rpc.VolumeObservation) error {
+	if i.ReadOnly {
+		return nil
+	}
+	rows, e := s.DB.QueryContext(ctx, `SELECT volumes FROM agent_storage_tasks WHERE instance_id=? AND agent_uid=? AND state<>'CANCELLED' ORDER BY rowid`, i.Id, i.Uid)
+	if e != nil {
+		return e
+	}
+	defer rows.Close()
+	latest := map[string]*rpc.VolumeObservation{}
+	for rows.Next() {
+		var raw []byte
+		if e = rows.Scan(&raw); e != nil {
+			return e
+		}
+		var results []*rpc.VolumeObservation
+		if json.Unmarshal(raw, &results) != nil {
+			return Error("UNAVAILABLE", "存储结果历史不可读")
+		}
+		for _, v := range results {
+			latest[v.Uid] = v
+		}
+	}
+	if e = rows.Err(); e != nil {
+		return e
+	}
+	for _, v := range volumes {
+		r := latest[v.Uid]
+		if r == nil {
+			continue
+		}
+		v.ExpectedPolicy = r.ExpectedPolicy
+		v.RetentionResult_ = r.RetentionResult_
+		v.LastAttemptAt = r.LastAttemptAt
+		v.LastSuccessAt = r.LastSuccessAt
+		v.Error = r.Error
+		v.StatefulUID = r.StatefulUID
+		v.StatefulName = r.StatefulName
+		v.Shard = r.Shard
+		v.AgentUID = r.AgentUID
+	}
+	return nil
 }

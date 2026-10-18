@@ -73,11 +73,7 @@ func (s *Store) readDeletionSnapshot(ctx context.Context, i *rpc.ObservationInst
 			return nil, e
 		}
 		// 关键：实际策略和原PVC UID属于确认影响；自然Pod滚动不改变影响。
-		impact = s.fingerprint(i, "delete-impact/agent-storage/v2:"+canonical(struct {
-			Namespaces []string
-			Policies   []agentStatefulPolicy
-			Volumes    []agentAffectedVolume
-		}{namespaces, storage.policies, storage.volumes}))
+		impact = s.fingerprint(i, "delete-impact/agent-storage/v3:"+canonical(namespaces)+":"+s.agentStorageImpact(i, storage))
 	}
 	// 关键：目标摘要不含status/RV，影响摘要不含易变Pod UID；新增跨namespace原owner链仍使确认过期。
 	return &deletionSnapshot{target: s.fingerprint(i, "delete-target/v1:"+componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))), impact: impact, namespace: ns, namespaces: namespaces, storage: storage}, nil

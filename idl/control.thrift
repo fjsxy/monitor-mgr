@@ -105,7 +105,7 @@ struct InstanceStatistics { 1: required i32 managed, 2: required i32 unmanaged, 
 struct InstancePagination { 1: required i32 number, 2: required i32 size, 3: required i32 total, 4: required i32 pages }
 struct QueryInstancesResult { 1: required list<ObservationInstance> instances, 2: required InstanceStatistics statistics, 3: required InstancePagination page }
 struct PreviewRequest { 1: required string id, 2: required i64 draftRevision }
-struct PublicationPreview { 1: required string previewId, 2: required i64 draftRevision, 3: required string leftYAML, 4: required string rightYAML, 5: required bool drift, 6: required list<string> warnings }
+struct PublicationPreview { 1: required string previewId, 2: required i64 draftRevision, 3: required string leftYAML, 4: required string rightYAML, 5: required bool drift, 6: required list<string> warnings, 7: optional list<VolumeObservation> storageVolumes, 8: optional list<AgentStatefulPolicy> policies, 9: optional string storageMode }
 struct PublishRequest { 1: required string id, 2: required string previewId, 3: required i64 draftRevision, 4: required bool overwriteDrift }
 struct PublicationVersion { 1: required string versionId, 2: required string instanceId, 3: required i64 sourceDraftRevision, 4: optional KSMConfiguration ksm, 5: required string yaml, 6: required string createdAt, 7: optional AgentConfiguration agent }
 struct VersionsResult { 1: required list<PublicationVersion> versions }

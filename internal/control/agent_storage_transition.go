@@ -16,10 +16,13 @@ type agentAffectedVolume struct {
 	Namespace, Name, UID, Policy, StatefulUID, StatefulName string
 	Shard                                                   int32
 }
+type agentPolicyImpact struct{ UID, Name, Action, Policy string }
 type agentStorageSnapshot struct {
-	mode     string
-	policies []agentStatefulPolicy
-	volumes  []agentAffectedVolume
+	dangerous bool
+	facts     []agentPolicyImpact
+	mode      string
+	policies  []agentStatefulPolicy
+	volumes   []agentAffectedVolume
 }
 
 // agentCounts统一读取冻结JSON与当前CR的缺省计数，不丢弃合法零值。
@@ -84,6 +87,7 @@ func (s *Store) readAgentStorageTransition(ctx context.Context, i *rpc.Observati
 		oldReplicas, oldShards = 0, 0
 	}
 	dangerous := deleting || current != nil && (nextReplicas < oldReplicas || nextShards < oldShards)
+	out.dangerous = dangerous
 	if mode == "emptyDir" {
 		return out, nil
 	}
@@ -147,20 +151,23 @@ func (s *Store) readAgentStorageTransition(ctx context.Context, i *rpc.Observati
 			return nil, err
 		}
 		out.policies = append(out.policies, agentStatefulPolicy{Name: name, UID: uid, WhenScaled: a, WhenDeleted: b})
-		policy := ""
-		if deleting || shard >= nextShards {
+		policy, action := "", ""
+		if deleting || dangerous && shard >= nextShards {
 			policy = deleted
+			action = "whenDeleted"
 			if b != deleted {
 				return nil, Error("CONFLICT", "StatefulSet尚未采用whenDeleted，请先单独发布策略并确认")
 			}
-		} else if nextReplicas < oldReplicas {
+		} else if dangerous && nextReplicas < oldReplicas {
 			policy = scaled
+			action = "whenScaled"
 			if a != scaled {
 				return nil, Error("CONFLICT", "StatefulSet尚未采用whenScaled，请先单独发布策略并确认")
 			}
 		}
 		if policy != "" {
 			affected[uid] = policy
+			out.facts = append(out.facts, agentPolicyImpact{UID: uid, Name: name, Action: action, Policy: policy})
 		}
 	}
 	podOwner := map[string]string{}
@@ -323,7 +330,26 @@ func (s *Store) readAgentStorageTransition(ctx context.Context, i *rpc.Observati
 			}
 		}
 	}
+	sort.Slice(out.facts, func(a, b int) bool { return out.facts[a].UID < out.facts[b].UID })
 	sort.Slice(out.policies, func(a, b int) bool { return out.policies[a].UID < out.policies[b].UID })
 	sort.Slice(out.volumes, func(a, b int) bool { return out.volumes[a].UID < out.volumes[b].UID })
 	return out, nil
+}
+
+// agentStorageImpact只绑定会改变当次危险操作影响的规范事实，Pod滚动和status/RV不参与指纹。
+func (s *Store) agentStorageImpact(i *rpc.ObservationInstance, snapshot *agentStorageSnapshot) string {
+	if snapshot == nil || !snapshot.dangerous || snapshot.mode != "PVC" {
+		return ""
+	}
+	return s.fingerprint(i, "agent-storage-impact/v1:"+canonical(struct {
+		Mode     string
+		Policies []agentPolicyImpact
+		Volumes  []agentAffectedVolume
+	}{snapshot.mode, snapshot.facts, snapshot.volumes}))
+}
+func (s *Store) validateAgentStorageImpact(i *rpc.ObservationInstance, baseline string, snapshot *agentStorageSnapshot) error {
+	if baseline != s.agentStorageImpact(i, snapshot) {
+		return Error("CONFLICT", "实际存储影响已变化，请重新预览确认")
+	}
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // P14.policy-pending：真实HTTP/Kitex读取实际ST采用状态，不能仅凭CR策略打开删除预览。
@@ -268,7 +269,7 @@ func TestAgentStorageRetainedIdentitySurvivesParents(t *testing.T) {
 // storageVolumes把合法空列表作为空集断言，避免缺失字段导致测试panic。
 func storageVolumes(source map[string]any) []any { v, _ := source["volumes"].([]any); return v }
 
-const dropAgentStorageSchema = `DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
+const dropAgentStorageSchema = `ALTER TABLE publication_previews DROP COLUMN storage_fingerprint;DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
 
 // A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。
 func TestAgentStorageDangerRequiresAdoptedPolicy(t *testing.T) {
@@ -320,7 +321,11 @@ func TestAgentStorageDangerRequiresAdoptedPolicy(t *testing.T) {
 			mu.Lock()
 			adopted = true
 			mu.Unlock()
-			clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, c, "", 200)
+			adoptedPreview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, c, "", 200)
+			policies, _ := adoptedPreview["policies"].([]any)
+			if adoptedPreview["storageMode"] != "PVC" || len(policies) != 2 {
+				t.Fatal("危险预览缺少实际ST策略与存储影响", adoptedPreview)
+			}
 			cfg["storage"].(map[string]any)["whenScaled"] = "Delete"
 			cfg["storage"].(map[string]any)["whenDeleted"] = "Delete"
 			clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 2, "agent": cfg}, c, "mixed", 200)
@@ -460,5 +465,120 @@ func TestAgentStorageResponsibilityOutlivesInstance(t *testing.T) {
 				clusterCall(t, p, "POST", "/clusters/"+cluster+"/"+action, body, c, "allowed", 200)
 			})
 		}
+	}
+}
+
+// REG20-STORAGE-003：每种影响事实独立注入，ST新UID负例保持安全guard仍可通过。
+func TestAgentStoragePreviewImpact(t *testing.T) {
+	variants := []string{"st-uid-accept", "st-uid-dispatch", "pvc-uid-accept", "pvc-uid-dispatch", "policy-accept", "policy-dispatch", "status-rv", "same-st-pod-roll"}
+	for _, variant := range variants {
+		t.Run(variant, func(t *testing.T) {
+			var mu sync.Mutex
+			armed := false
+			entered, release := make(chan struct{}), make(chan struct{})
+			var once, released sync.Once
+			p, c, cluster, _, f := agentSafetyFixture(t, func(stage, id string) error {
+				mu.Lock()
+				block := armed && stage == "beforeDispatch"
+				mu.Unlock()
+				if block {
+					once.Do(func() { close(entered) })
+					<-release
+				}
+				return nil
+			})
+			defer released.Do(func() { close(release) })
+			name := "impact-agent"
+			cfg := agentConfig(name, "monitoring")
+			i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
+			id := i["id"].(string)
+			preview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "", 200)
+			op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
+			if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
+				t.Fatal("前置发布失败")
+			}
+			stUID, pvcUID, podUID, policy := "impact-st-uid", "impact-pvc-uid", "impact-pod-uid", "Retain"
+			claim := "prom-agent-impact-agent-db-prom-agent-impact-agent-0"
+			f.mu.Lock()
+			f.hook = func(w http.ResponseWriter, r *http.Request) bool {
+				if r.Method != "GET" {
+					return false
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				items := []any{}
+				switch r.URL.Path {
+				case "/apis/apps/v1/namespaces/monitoring/statefulsets":
+					items = append(items, map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": "prom-agent-" + name, "uid": stUID, "resourceVersion": "natural-rv", "ownerReferences": []any{map[string]any{"kind": "PrometheusAgent", "uid": "uid-monitoring/" + name, "controller": true}}}, "spec": map[string]any{"replicas": 1, "persistentVolumeClaimRetentionPolicy": map[string]any{"whenScaled": policy, "whenDeleted": "Retain"}}})
+				case "/api/v1/namespaces/monitoring/pods":
+					items = append(items, map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": "prom-agent-" + name + "-0", "uid": podUID, "ownerReferences": []any{map[string]any{"kind": "StatefulSet", "uid": stUID, "controller": true}}}, "spec": map[string]any{"volumes": []any{map[string]any{"name": "wal", "persistentVolumeClaim": map[string]any{"claimName": claim}}}}})
+				case "/api/v1/namespaces/monitoring/persistentvolumeclaims":
+					items = append(items, map[string]any{"metadata": map[string]any{"namespace": "monitoring", "name": claim, "uid": pvcUID}, "spec": map[string]any{"resources": map[string]any{"requests": map[string]any{"storage": "1Gi"}}}, "status": map[string]any{"phase": "Bound"}})
+				default:
+					return false
+				}
+				json.NewEncoder(w).Encode(map[string]any{"items": items})
+				return true
+			}
+			f.mu.Unlock()
+			cfg["desiredState"] = "Suspended"
+			clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": cfg}, c, "save", 200)
+			preview = clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, c, "", 200)
+			change := func() {
+				mu.Lock()
+				switch {
+				case strings.HasPrefix(variant, "st-uid"):
+					stUID = "replacement-st-uid"
+					podUID = "replacement-st-pod-uid"
+				case strings.HasPrefix(variant, "pvc-uid"):
+					pvcUID = "replacement-pvc-uid"
+				case strings.HasPrefix(variant, "policy"):
+					policy = "Delete"
+				case variant == "same-st-pod-roll":
+					podUID = "rolled-pod-uid"
+				}
+				mu.Unlock()
+				if variant == "status-rv" {
+					f.mu.Lock()
+					f.objects["monitoring/"+name]["metadata"].(map[string]any)["resourceVersion"] = "2"
+					f.objects["monitoring/"+name]["status"].(map[string]any)["replicas"] = 1
+					f.mu.Unlock()
+				}
+			}
+			body := map[string]any{"previewId": preview["previewId"], "draftRevision": 2, "overwriteDrift": false}
+			negative := strings.Contains(variant, "-accept") || strings.Contains(variant, "-dispatch")
+			if strings.HasSuffix(variant, "-dispatch") {
+				mu.Lock()
+				armed = true
+				mu.Unlock()
+				op = clusterCall(t, p, "POST", "/instances/"+id+"/publications", body, c, "danger", 202)
+				select {
+				case <-entered:
+				case <-time.After(3 * time.Second):
+					t.Fatal("未到派发前产品屏障")
+				}
+				change()
+				released.Do(func() { close(release) })
+				if current := awaitClusterOperation(t, p, c, op["operationId"].(string)); current["state"] != "FAILED" {
+					t.Fatal("旧存储影响预览仍派发", current)
+				}
+			} else {
+				change()
+				status := 202
+				if negative {
+					status = 409
+				}
+				op = clusterCall(t, p, "POST", "/instances/"+id+"/publications", body, c, "danger", status)
+				if !negative && awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
+					t.Fatal("自然推进误使预览失效")
+				}
+			}
+			f.mu.Lock()
+			replicas := f.objects["monitoring/"+name]["spec"].(map[string]any)["replicas"]
+			f.mu.Unlock()
+			if negative && replicas != float64(1) {
+				t.Fatal("拒绝前出现目标mutation")
+			}
+		})
 	}
 }

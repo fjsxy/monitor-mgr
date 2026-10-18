@@ -90,7 +90,7 @@ func TestSharedSchema4PreviewSurvivesUpgrade(t *testing.T) {
 		t.Fatal(e)
 	}
 	// 原库存在孤立关系时，foreign_key_check必须使整次迁移失败。
-	if _, e = db.Exec(dropAgentStorageSchema + `PRAGMA foreign_keys=OFF; INSERT INTO drafts(instance_id,revision,config) VALUES('orphan-history',1,'{}')`); e != nil {
+	if _, e = db.Exec(`PRAGMA foreign_keys=OFF; INSERT INTO drafts(instance_id,revision,config) VALUES('orphan-history',1,'{}')`); e != nil {
 		t.Fatal(e)
 	}
 	db.Close()
