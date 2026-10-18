@@ -45,7 +45,11 @@ func checkTarget(i *rpc.ObservationInstance, cr map[string]any) error {
 	}
 	return nil
 }
-func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, cfg *KSMConfig, create bool) error {
+func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, value configuration, create bool) error {
+	cfg, ok := value.(*KSMConfig)
+	if !ok {
+		return Error("INVALID_INPUT", "组件依赖暂不支持")
+	}
 	var ns map[string]any
 	if e := t.Request(ctx, "GET", "/api/v1/namespaces/kube-system", nil, &ns); e != nil {
 		return e
@@ -123,7 +127,7 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if e = t.publicationDependencies(ctx, cl, cfg, i.Uid == ""); e != nil {
 		return nil, e
 	}
-	cr, e := t.readKSM(ctx, i.Name)
+	cr, e := t.readComponent(ctx, i)
 	if e != nil {
 		return nil, e
 	}
@@ -134,9 +138,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	uid := ""
 	left := "# 首次创建：当前不存在 CR\n"
 	if cr != nil {
-		current = normalizedSpec(objectMap(cr, "spec"))
+		current = componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))
 		uid = i.Uid
-		left = yamlText(cr)
+		left = yamlText(safeTargetDocument(cr))
 	}
 	drift := false
 	if i.CurrentVersionId != "" {
@@ -146,21 +150,10 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 		}
 		var spec map[string]any
 		json.Unmarshal(baseline, &spec)
-		drift = normalizedSpec(spec) != current
+		drift = componentFor(i.Component).normalizeSpec(spec) != current
 	}
-	preview := &rpc.PublicationPreview{PreviewId: ID(), DraftRevision: rev, LeftYAML: left, RightYAML: yamlText(ksmCR(cfg.Name, cfg.spec())), Drift: drift, Warnings: []string{}}
-	if cfg.DeploymentMode != "Deployment" {
-		preview.Warnings = append(preview.Warnings, "experimental 模式；切换会重建 workload 并出现采集空窗")
-	}
-	if cr != nil {
-		oldMode := objectString(objectMap(objectMap(cr, "spec"), "deployment"), "mode")
-		if oldMode != cfg.DeploymentMode {
-			preview.Warnings = append(preview.Warnings, "模式切换由 Operator 清理旧 workload 后建立新 workload，不承诺无损")
-		}
-	}
-	if cfg.NamespaceFilter.Mode == "Include" && len(cfg.NamespaceFilter.Names) == 0 {
-		preview.Warnings = append(preview.Warnings, "正则可能零匹配，零匹配会停止全部 workload，不会自动改为 All")
-	}
+	preview := &rpc.PublicationPreview{PreviewId: ID(), DraftRevision: rev, LeftYAML: left, RightYAML: yamlText(cfg.document()), Drift: drift, Warnings: []string{}}
+	preview.Warnings = cfg.warnings(cr)
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
 		return nil, e
@@ -176,7 +169,7 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if latest != rev {
 		return nil, Error("CONFLICT", "预览期间草稿已变化")
 	}
-	if _, e = tx.ExecContext(ctx, `INSERT INTO publication_previews VALUES(?,?,?,?,?,?,?)`, preview.PreviewId, i.Id, rev, uid, []byte(current), []byte(normalizedSpec(cfg.spec())), drift); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO publication_previews VALUES(?,?,?,?,?,?,?)`, preview.PreviewId, i.Id, rev, uid, []byte(s.fingerprint(i, current)), []byte(componentFor(i.Component).normalizeSpec(cfg.spec())), drift); e != nil {
 		return nil, Error("UNAVAILABLE", "预览无法保存")
 	}
 	if tx.Commit() != nil {
@@ -201,8 +194,8 @@ func readPreview(ctx context.Context, q clusterQuery, id, instance string) (*pub
 	b.desired = string(desired)
 	return b, nil
 }
-func validatePublication(i *rpc.ObservationInstance, cfg *KSMConfig, rev int64, b *publicationBaseline, r *rpc.PublishRequest, cr map[string]any) error {
-	if rev != r.DraftRevision || b.revision != rev || b.desired != normalizedSpec(cfg.spec()) {
+func (s *Store) validatePublication(i *rpc.ObservationInstance, cfg configuration, rev int64, b *publicationBaseline, r *rpc.PublishRequest, cr map[string]any) error {
+	if rev != r.DraftRevision || b.revision != rev || b.desired != componentFor(i.Component).normalizeSpec(cfg.spec()) {
 		return Error("CONFLICT", "预览或草稿修订已过期，请重新预览")
 	}
 	if e := checkTarget(i, cr); e != nil {
@@ -210,9 +203,9 @@ func validatePublication(i *rpc.ObservationInstance, cfg *KSMConfig, rev int64, 
 	}
 	target := "null"
 	if cr != nil {
-		target = normalizedSpec(objectMap(cr, "spec"))
+		target = componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))
 	}
-	if b.target != target || b.uid != i.Uid {
+	if b.target != s.fingerprint(i, target) || b.uid != i.Uid {
 		return Error("CONFLICT", "目标配置基线已变化，请重新预览")
 	}
 	if b.drift && !r.OverwriteDrift {
@@ -259,7 +252,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		return nil, e
 	}
 	defer t.Close()
-	cr, e := t.readKSM(ctx, i.Name)
+	cr, e := t.readComponent(ctx, i)
 	if e != nil {
 		return nil, e
 	}
@@ -301,7 +294,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	if e != nil {
 		return nil, e
 	}
-	if e = validatePublication(i, cfg, rev, baseline, r, cr); e != nil {
+	if e = s.validatePublication(i, cfg, rev, baseline, r, cr); e != nil {
 		return nil, e
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
@@ -351,12 +344,15 @@ func versionByID(ctx context.Context, q clusterQuery, id, instance string) (*rpc
 	if q.QueryRowContext(ctx, `SELECT id,instance_id,source_revision,config,effective_spec,created_at FROM publication_versions WHERE id=? AND instance_id=?`, id, instance).Scan(&v.VersionId, &v.InstanceId, &v.SourceDraftRevision, &raw, &spec, &v.CreatedAt) != nil {
 		return nil, Error("NOT_FOUND", "发布版本不存在")
 	}
-	var cfg KSMConfig
-	if json.Unmarshal(raw, &cfg) != nil {
-		return nil, Error("UNAVAILABLE", "来源配置不可读")
+	i, e := instanceByID(ctx, q, instance)
+	if e != nil {
+		return nil, e
 	}
-	v.Ksm = cfg.rpc()
-	v.Yaml = yamlText(ksmCR(cfg.Name, cfg.spec()))
+	cfg, e := decodeStoredConfiguration(i.Component, raw)
+	if e != nil {
+		return nil, e
+	}
+	cfg.version(v)
 	return v, nil
 }
 func (s *Store) ListVersions(ctx context.Context, c *rpc.RequestContext, r *rpc.InstanceID) (*rpc.VersionsResult_, error) {

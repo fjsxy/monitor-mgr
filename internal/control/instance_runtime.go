@@ -92,7 +92,7 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 		return nil, e
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
-	cr, e := t.readKSM(ctx, i.Name)
+	cr, e := t.readComponent(ctx, i)
 	var out *rpc.InstanceRuntime
 	if e != nil {
 		out = &rpc.InstanceRuntime{Summary: "Unknown", ObservedAt: now, Error: "CR 读取失败，当前未知"}
@@ -101,10 +101,10 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 	} else if i.Uid == "" || objectString(objectMap(cr, "metadata"), "uid") != i.Uid {
 		out = &rpc.InstanceRuntime{Summary: "Unknown", ObservedAt: now, Error: "资源身份无法确认"}
 	} else {
-		out = interpretKSM(cr, now)
+		out = componentFor(i.Component).interpret(cr, now)
 	}
 	raw, _ := json.Marshal(savedObservation{Epoch: s.observationEpoch, Runtime: out})
-	obj, _ := json.Marshal(cr)
+	obj, _ := json.Marshal(safeTargetDocument(cr))
 	if _, saveErr := s.DB.ExecContext(ctx, `INSERT INTO instance_observations VALUES(?,?,?,?) ON CONFLICT(instance_id) DO UPDATE SET runtime=excluded.runtime,cr=excluded.cr,observed_at=excluded.observed_at`, id, raw, obj, now); saveErr != nil {
 		return nil, Error("UNAVAILABLE", "观测保存失败")
 	}

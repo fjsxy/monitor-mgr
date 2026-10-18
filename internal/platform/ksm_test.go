@@ -106,8 +106,8 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	// 固定 schema3 旧库前置；测试只裁去本票 schema4 新关系，不触碰既有密文。
-	for _, q := range []string{"DROP TABLE discovered_instances", "DROP TABLE instance_observations", "DROP TABLE instance_protections", "DROP TABLE execution_attempts", "DROP TABLE publication_operations", "DROP TABLE publication_previews", "DROP TABLE publication_versions", "DROP TABLE drafts", "DROP TABLE instances", "DELETE FROM schema_migrations WHERE version=4"} {
+	// 固定 schema3 旧库前置；测试裁去 schema4 及之后的新关系，不触碰既有密文。
+	for _, q := range []string{"DROP TABLE IF EXISTS instance_source_observations", "DROP TABLE discovered_instances", "DROP TABLE instance_observations", "DROP TABLE instance_protections", "DROP TABLE execution_attempts", "DROP TABLE publication_operations", "DROP TABLE publication_previews", "DROP TABLE publication_versions", "DROP TABLE drafts", "DROP TABLE instances", "DELETE FROM schema_migrations WHERE version>=4"} {
 		if _, e = db.Exec(q); e != nil {
 			t.Fatal(e)
 		}
