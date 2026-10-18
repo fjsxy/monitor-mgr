@@ -172,4 +172,14 @@ func TestDeletionPreviewSchema6UnsentCanContinue(t *testing.T) {
 	if len(versions) != 1 || versions[0].(map[string]any)["versionId"] != publication["versionId"] {
 		t.Fatal("删除丢失原版本历史", versions)
 	}
+	// 受限旧库fixture同时证明只读投影没有清除持久的原版本身份。
+	db, e = sql.Open("sqlite", filepath.Join(dir, "platform.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	var persistedVersion string
+	if e = db.QueryRow("SELECT current_version_id FROM instances WHERE id=?", id).Scan(&persistedVersion); e != nil || persistedVersion != publication["versionId"] {
+		t.Fatal("删除清除了持久版本身份", persistedVersion, e)
+	}
 }
