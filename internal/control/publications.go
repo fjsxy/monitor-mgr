@@ -329,8 +329,16 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	if e = audit(ctx, tx, p.Account.Id, "PUBLISH_ACCEPTED", i.Id, s.Now()); e != nil {
 		return nil, e
 	}
+	if s.OperationBoundary != nil {
+		if e = s.OperationBoundary("beforeAcceptanceCommit", o.OperationId); e != nil {
+			return nil, Error("UNAVAILABLE", "受理事务未提交")
+		}
+	}
 	if tx.Commit() != nil {
 		return nil, Error("UNAVAILABLE", "受理提交失败")
+	}
+	if s.OperationBoundary != nil {
+		s.OperationBoundary("afterAcceptanceCommit", o.OperationId)
 	}
 	s.wakeWorker()
 	return o, nil

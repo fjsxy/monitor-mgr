@@ -24,6 +24,8 @@ import (
 )
 
 type Config struct {
+	// OperationBoundary 仅供确定性进程/事务故障测试，不由 HTTP 或运行参数开放。
+	OperationBoundary                                   func(stage, operationID string) error
 	RPCDialer                                           remote.Dialer
 	DataDir, HTTPAddr, RPCAddr, PublicOrigin, StaticDir string
 	SessionTTL                                          time.Duration
@@ -60,6 +62,7 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	if err != nil {
 		return nil, err
 	}
+	store.OperationBoundary = cfg.OperationBoundary
 	rpcLn, err := net.Listen("tcp", cfg.RPCAddr)
 	if err != nil {
 		store.Close()

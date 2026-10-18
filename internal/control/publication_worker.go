@@ -71,6 +71,11 @@ func (s *Store) targetForActor(ctx context.Context, actor, cluster string) (*Tar
 }
 func (s *Store) executePublication(life context.Context, id string) {
 	// 与账号/归属/凭据切换共用保护；从当前授权至实际网络写不会穿过失权窗口。
+	if s.OperationBoundary != nil {
+		if s.OperationBoundary("beforeDispatch", id) != nil {
+			return
+		}
+	}
 	s.dispatch.RLock()
 	defer s.dispatch.RUnlock()
 	o, e := scanOperation(s.DB.QueryRowContext(life, `SELECT `+operationColumns+` FROM operations WHERE id=? AND state='CHECKING'`, id))
@@ -166,6 +171,11 @@ func (s *Store) executePublication(life context.Context, id string) {
 	}
 	if tx.Commit() != nil {
 		return
+	}
+	if s.OperationBoundary != nil {
+		if s.OperationBoundary("afterSendMarker", id) != nil {
+			return
+		}
 	}
 	outcome := t.Mutate(life, method, path, body)
 	written, e := outcome.Object, outcome.Err

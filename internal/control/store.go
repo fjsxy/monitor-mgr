@@ -20,18 +20,19 @@ import (
 )
 
 type Store struct {
-	DB               *sql.DB
-	lock             *os.File
-	Now              func() time.Time
-	SessionTTL       time.Duration
-	Key              []byte
-	limits           *targetLimits
-	workerCancel     context.CancelFunc
-	workerWake       chan struct{}
-	workerDone       chan struct{}
-	dispatch         sync.RWMutex
-	publicationWG    sync.WaitGroup
-	observationEpoch string
+	OperationBoundary func(stage, operationID string) error
+	DB                *sql.DB
+	lock              *os.File
+	Now               func() time.Time
+	SessionTTL        time.Duration
+	Key               []byte
+	limits            *targetLimits
+	workerCancel      context.CancelFunc
+	workerWake        chan struct{}
+	workerDone        chan struct{}
+	dispatch          sync.RWMutex
+	publicationWG     sync.WaitGroup
+	observationEpoch  string
 }
 
 func Open(dataDir string, now func() time.Time, ttl time.Duration) (*Store, error) {

@@ -1,6 +1,9 @@
 package platform_test
 
 import (
+	"errors"
+	"os/exec"
+
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -347,5 +350,85 @@ func TestP05DriftOverwritePreservesMetadataAndP06Equivalent(t *testing.T) {
 		cfg := ksmConfig("instance")
 		cfg[field] = "other"
 		clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "ksm": cfg}, c, "fixed-"+field, 409)
+	}
+}
+
+func TestF05PublicationCrashBoundaries(t *testing.T) {
+	if stage := os.Getenv("MM_F05_STAGE"); stage != "" {
+		p, e := platform.Start(context.Background(), platform.Config{DataDir: os.Getenv("MM_F05_DIR"), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", OperationBoundary: func(s, id string) error {
+			if s == stage {
+				os.Exit(97)
+			}
+			return nil
+		}})
+		if e != nil {
+			t.Fatal(e)
+		}
+		c := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
+		clusterCall(t, p, "POST", "/instances/"+os.Getenv("MM_F05_INSTANCE")+"/publications", map[string]any{"previewId": os.Getenv("MM_F05_PREVIEW"), "draftRevision": 1, "overwriteDrift": false}, c, "crash-key", 202)
+		t.Fatal("未触发崩溃边界")
+		return
+	}
+	for _, stage := range []string{"beforeAcceptanceCommit", "afterAcceptanceCommit"} {
+		t.Run(stage, func(t *testing.T) {
+			f, target := ksmTarget(t)
+			dir := t.TempDir()
+			cfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
+			p, e := platform.Start(context.Background(), cfg)
+			if e != nil {
+				t.Fatal(e)
+			}
+			request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
+			c := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
+			owner := readJSON(t, p, "/session", c)["account"].(map[string]any)["id"].(string)
+			op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "fixture", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
+			cl := awaitClusterOperation(t, p, c, op["operationId"].(string))["clusterId"].(string)
+			i := clusterCall(t, p, "POST", "/clusters/"+cl+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": ksmConfig("instance")}, c, "create", 201)
+			id := i["id"].(string)
+			preview := ksmPreview(t, p, c, id, 1)
+			p.Close(context.Background())
+			cmd := exec.Command(os.Args[0], "-test.run=^TestF05PublicationCrashBoundaries$")
+			cmd.Env = append(os.Environ(), "MM_F05_STAGE="+stage, "MM_F05_DIR="+dir, "MM_F05_INSTANCE="+id, "MM_F05_PREVIEW="+preview["previewId"].(string))
+			raw, e := cmd.CombinedOutput()
+			var exited *exec.ExitError
+			if !errors.As(e, &exited) || exited.ExitCode() != 97 {
+				t.Fatalf("没有在正确边界退出：%v %s", e, raw)
+			}
+			reopened, e := platform.Start(context.Background(), cfg)
+			if e != nil {
+				t.Fatal(e)
+			}
+			defer reopened.Close(context.Background())
+			found := clusterCall(t, reopened, "GET", "/operations?instanceId="+id+"&idempotencyKey=crash-key", nil, c, "", 200)["operations"].([]any)
+			versions := clusterCall(t, reopened, "GET", "/instances/"+id+"/versions", nil, c, "", 200)["versions"].([]any)
+			f.mu.Lock()
+			writes := f.writes
+			f.mu.Unlock()
+			if writes != 0 {
+				t.Fatal("重启自动重放")
+			}
+			count := 0
+			if stage == "afterAcceptanceCommit" {
+				count = 1
+			}
+			if len(found) != count || len(versions) != count {
+				t.Fatalf("受理关系不完整 %d/%d want%d", len(found), len(versions), count)
+			}
+			if count == 1 {
+				old := found[0].(map[string]any)
+				if old["state"] != "WAITING_CONFIRMATION" {
+					t.Fatal(old)
+				}
+				replay := clusterCall(t, reopened, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "crash-key", 202)
+				if replay["operationId"] != old["operationId"] {
+					t.Fatal("崩溃后重复受理")
+				}
+				attempts := clusterCall(t, reopened, "GET", "/operations/"+old["operationId"].(string)+"/attempts", nil, c, "", 200)["attempts"].([]any)
+				if len(attempts) != 1 || attempts[0].(map[string]any)["possiblySent"] != false {
+					t.Fatal(attempts)
+				}
+				request(t, reopened, "POST", "/operations/"+old["operationId"].(string)+"/continue", `{}`, c, 409)
+			}
+		})
 	}
 }
