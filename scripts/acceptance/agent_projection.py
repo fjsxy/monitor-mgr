@@ -4,6 +4,7 @@ import copy,hashlib,json,pathlib,secrets,socket,subprocess,tempfile,time
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 
 def no_marker(value,markers):
+ """认证marker仅在内存比较，不返回命中的原文。"""
  raw=json.dumps(value,ensure_ascii=False) if not isinstance(value,str) else value
  return not any(marker in raw for marker in markers)
 
@@ -27,16 +28,28 @@ def projection_failure(s):
  return out
 
 def projection_artifact_scan(s,record):
- """写收据前核对整个本批证据与候选record；不把marker及命中的原文写成诊断。"""
- paths=[p for p in s.out.rglob('*') if p.is_file()]
- safe_record=no_marker(record,s.projection_markers)
- safe_files=all(not any(m.encode() in p.read_bytes() for m in s.projection_markers) for p in paths)
- if not safe_record:
-  # 仅此补充fixture的失败证据可能带原值；安全边界外的对象不序列化。
-  for field in ['evidence','error','traceback','platformLogs','failureEvents','actualFixtureAgents','traces']:
-   record.pop(field,None)
-  record['error']='PROJECTION013证据安全检查失败，候选原值未输出'
- return {'noMarker':safe_record and safe_files,'candidateRecordSafe':safe_record,'existingArtifactsSafe':safe_files,'checkedFileCount':len(paths)}
+ """关键：命中仍判失败，但交付目录不能保留原文；仅此013 fixture处理已知内存marker。"""
+ markers=s.projection_markers;paths=[p for p in s.out.rglob('*') if p.is_file()]
+ safe_record=no_marker(record,markers);removed=[]
+ for path in paths:
+  if any(m.encode() in path.read_bytes() for m in markers):
+   # 原文件不归档；安全占位保留可核验失败，不能只让gate失败却把秘密留在artifact。
+   path.write_text(json.dumps({'omitted':True,'originalContainsMarker':True,'reason':'013测试敏感原文已移除'},ensure_ascii=False)+'\n')
+   removed.append(str(path.relative_to(s.out)))
+ def hide(value):
+  if isinstance(value,str):return value if no_marker(value,markers) else '[013测试敏感原文已移除]'
+  if isinstance(value,list):return [hide(v) for v in value]
+  if isinstance(value,dict):return {hide(k):hide(v) for k,v in value.items()}
+  return value
+ cleaned=hide(record);record.clear();record.update(cleaned)
+ if not safe_record or removed:record['error']='PROJECTION013证据安全检查失败，原文已移除';record['outcome']='failed'
+ # 原文件被替换后，公开引用必须绑定安全占位的新字节，不能保留旧SHA冒充完整原证据。
+ for refs in [record.get('evidenceRefs',[]),record.get('evidence',{}).get('evidenceRefs',[])]:
+  for ref in refs:
+   if ref['path'] in removed:ref['sha256']=hashlib.sha256((s.out/ref['path']).read_bytes()).hexdigest()
+ published_safe=no_marker(record,markers) and all(not any(m.encode() in p.read_bytes() for m in markers) for p in paths)
+ assert published_safe,'013安全占位未清除marker（原文不输出）'
+ return {'noMarker':safe_record and not removed,'candidateRecordSafe':safe_record,'existingArtifactsSafe':not removed,'checkedFileCount':len(paths),'replacedFiles':removed,'publishedArtifactsSafe':published_safe}
 
 def database_probe(s,markers,expected=None):
  """复用既有只读卷probe；数据库/ WAL原字节不离开Pod，只回传布尔值与内存比较指纹。"""

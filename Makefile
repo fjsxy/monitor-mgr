@@ -14,7 +14,7 @@ PLATFORM ?= linux/arm64
 BASE_URL ?= http://127.0.0.1:18080
 E2E_ARGS ?=
 
-.PHONY: help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k
+.PHONY: help generate check-generated test test-race vet web-install web-build web-e2e build run image acceptance-plan e2e-clusters check e2e-ksm e2e-ksm-q ksm-rpc-image ksm-q-receipt e2e-ksm-b agent-seed-check e2e-lifecycle-q e2e-lifecycle lifecycle-q-receipt lifecycle-fixture-image agent-projection-check agent-projection-k agent-projection-fixture-check
 help: ## 查看重复操作入口
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 generate: ## 按锁定版本生成 Thrift/Kitex
@@ -72,6 +72,8 @@ agent-projection-check: ## 解析失败URL安全投影Q，真实HTTP/Kitex/SQLit
 	$(GO) test ./internal/platform -count=1 -run '^TestAgentMalformedURLReadProjection$$'
 agent-regressions: ## Agent已发布28项Q补充回归，单独收据，不增加69 owned计数
 	$(PYTHON) scripts/acceptance/agent.py --layer REG $(E2E_ARGS)
+agent-projection-fixture-check: ## 013证据命中后不留原文，仅验收工具纯检查
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/acceptance/agent_projection_test.py
 agent-projection-k: ## 仅两项显式PROJECTION K；E2E_ARGS必须明确环境/独立来源/镜像/API锁
 	$(PYTHON) scripts/acceptance/agent.py --layer K $(E2E_ARGS) --cases REG18-PROJECTION-013.url-parse-error REG18-PROJECTION-013.proxy-parse-error
 e2e-agent-b: ## Agent真实平台Pod浏览器，逐例独立fixture并持完整API锁
