@@ -16,6 +16,11 @@ import uuid
 from session import atomic_json
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+# 仅覆盖固定workflow的质量命令及其静态依赖；不按前缀认领动态target。
+QUALITY_MAKE_TARGETS = frozenset(('acceptance-plan', 'acceptance-host-check', 'test-race', 'vet',
+                                 'web-build', 'generate', 'check-generated'))
+# 固定Go1.27.1 testing.runningList使用time.Duration.String；只识别格式，不公开动态时长。
+GO_DURATION = r'(?:[0-9]+(?:\.[0-9]+)?(?:ns|us|µs|ms|s|m|h))+'
 # 关键：只公开审阅过的PrepareError字面量；动态label/转入异常值保持unknown，不能按前缀放行。
 PREPARE_CODES = frozenset('''
 PREPARE_AGENT_CONTAINER_NOT_RUNNING PREPARE_AGENT_POD_OWNER_MISMATCH PREPARE_AGENT_PROBE_GC_INCOMPLETE
@@ -56,7 +61,7 @@ class _FrozenSources:
             if not item:continue
             metadata, name = item.split(b'\t', 1);mode, kind, _ = metadata.split()
             name = name.decode()
-            if mode in (b'100644', b'100755') and kind == b'blob' and (name.endswith('.py') or name.endswith('_test.go')):
+            if mode in (b'100644', b'100755') and kind == b'blob' and (name == 'Makefile' or name.endswith('.py') or name.endswith('_test.go')):
                 self.paths.add(name)
 
     def git(self, *args):
@@ -119,6 +124,17 @@ class _FrozenSources:
             return dict(file=name, line=line, function='<go-source>', sourceBlobSHA256=digest)
         except Exception:self.unknown = True;return None
 
+    def make_frame(self, target, line):
+        """报错行必须属于唯一冻结质量rule的连续tab recipe；不能仅凭target名字放行。"""
+        try:
+            if target not in QUALITY_MAKE_TARGETS:raise ValueError('source-unavailable')
+            data, digest = self.load('Makefile');lines = data.decode().splitlines()
+            rules = [n for n, text in enumerate(lines) if re.fullmatch(re.escape(target) + r':(?![:=])[^;]*', text)]
+            if len(rules) != 1 or not rules[0] + 1 < line <= len(lines):raise ValueError('source-unavailable')
+            if not all(text.startswith('\t') for text in lines[rules[0] + 1:line]):raise ValueError('source-unavailable')
+            return dict(file='Makefile', line=line, function='<make-recipe>', target=target, sourceBlobSHA256=digest)
+        except Exception:self.unknown = True;return None
+
     def test(self, method, identity=None):
         matches = []
         for name in sorted(self.paths):
@@ -151,7 +167,7 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
     value = dict(schemaVersion=1, kind='process-diagnostic', productGate=False,
         operation=label if label in ('quality', 'generated') else 'capture', exit=result.returncode,
         state='completed' if result.returncode == 0 else 'failed', unknown=result.returncode != 0,
-        testFailures=[], repoFrames=[], raw={name: dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+        testFailures=[], runningTests=[], observedMarkers=[], repoFrames=[], raw={name: dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
             for name, data in [('stdout', result.stdout), ('stderr', result.stderr)]})
     if result.returncode == 0:return value
     try:
@@ -159,11 +175,29 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
         # 只读有界前缀；完整原bytes/hash仍在上面的私有捕获摘要中，截断明确unknown。
         limit = 1024 * 1024;attempts = 0
         source.unknown = len(result.stdout) > limit or len(result.stderr) > limit
-        for line in (result.stdout[:limit] + b'\n' + result.stderr[:limit]).decode(errors='replace').splitlines():
+        # 关键：同一有界前缀先排静态阶段/timeout/失败根ID，普通位置不能耗尽查询预算后饿死末尾Make错误。
+        # 每组最多保留65候选以检测64上限；总查询、frame、ID上限保持原值，不重复执行命令。
+        groups = [[], [], [], []];timeout_stage = 0
+        def queue(priority, item):
+            if len(groups[priority]) < 65:groups[priority].append(item)
+            else:source.unknown = True
+        for line in (result.stdout[:limit] + b'\n\n' + result.stderr[:limit]).decode(errors='replace').splitlines():
             if len(line) > 2048:
-                if '_test.go:' in line:source.unknown = True
+                if '_test.go:' in line or line.startswith(('make', 'panic: test timed out after')) or timeout_stage:
+                    source.unknown = True
+                timeout_stage = 0
                 continue
-            item = None
+            make = re.fullmatch(r'make(?:\[[0-9]+\])?: \*\*\* \[Makefile:([0-9]+): ([A-Za-z0-9_-]+)\](?: .*)?', line)
+            if make:queue(0, ('make', make[2], int(make[1])));timeout_stage = 0;continue
+            if re.fullmatch(r'panic: test timed out after ' + GO_DURATION, line):
+                queue(1, ('timeout',));timeout_stage = 1;continue
+            if timeout_stage == 1 and line == 'running tests:':timeout_stage = 2;continue
+            if timeout_stage == 2 and line.startswith('\t'):
+                running = re.fullmatch(r'\t(Test[A-Za-z0-9_]+) \(' + GO_DURATION + r'\)', line)
+                if running:queue(1, ('running', running[1], None))
+                else:source.unknown = True
+                continue
+            timeout_stage = 0
             unit = re.fullmatch(r'(?:FAIL|ERROR): (test_[A-Za-z0-9_]+) \(([A-Za-z0-9_.]+)\)', line)
             go = re.fullmatch(r'--- FAIL: (Test[A-Za-z0-9_]+) \([0-9.]+s\)', line)
             frame = re.fullmatch(r'\s*File "([^"]+)", line ([0-9]+), in [^\r\n]+', line)
@@ -171,24 +205,31 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
             go_location = re.match(r'[ \t]+([A-Za-z_][A-Za-z0-9_]*_test\.go):([0-9]+):', line)
             if not (unit or go or frame or go_location):
                 if (line.startswith(('FAIL: ', 'ERROR: ', '--- FAIL: ')) or line.lstrip().startswith('File "') or
-                        re.match(r'[ \t]+\S.*_test\.go:[0-9]+:', line)):
+                        re.match(r'[ \t]+\S.*_test\.go:[0-9]+:', line) or
+                        re.match(r'make(?:\[[0-9]+\])?: \*\*\*', line) or line.startswith('panic: test timed out after')):
                     source.unknown = True
                 continue
-            if unit or go or frame or go_location:
-                attempts += 1
-                if attempts > 64:source.unknown = True;break
-            if unit:item = source.test(unit[1], unit[2])
-            elif go:item = source.test(go[1])
-            elif frame or go_location:
-                item = source.go_frame(go_location[1], int(go_location[2])) if go_location else source.frame(frame[1], int(frame[2]))
+            if unit:queue(2, ('failed', unit[1], unit[2]))
+            elif go:queue(2, ('failed', go[1], None))
+            elif go_location:queue(3, ('go', go_location[1], int(go_location[2])))
+            elif frame:queue(3, ('python', frame[1], int(frame[2])))
+        for kind, *args in sum(groups, []):
+            attempts += 1
+            if attempts > 64:source.unknown = True;break
+            if kind == 'timeout':
+                if 'go-test-timeout' not in value['observedMarkers']:value['observedMarkers'].append('go-test-timeout')
+                continue
+            if kind in ('failed', 'running'):
+                item = source.test(*args);field = 'runningTests' if kind == 'running' else 'testFailures'
+                if item and item not in value[field]:
+                    if len(value['testFailures']) + len(value['runningTests']) < 32:value[field].append(item)
+                    else:source.unknown = True
+            else:
+                item = source.make_frame(*args) if kind == 'make' else source.go_frame(*args) if kind == 'go' else source.frame(*args)
                 if item and item not in value['repoFrames']:
                     if len(value['repoFrames']) < 8:value['repoFrames'].append(item)
                     else:source.unknown = True
-                continue
-            if item and item not in value['testFailures']:
-                if len(value['testFailures']) < 32:value['testFailures'].append(item)
-                else:source.unknown = True
-        value['unknown'] = source.unknown or not (value['testFailures'] or value['repoFrames'])
+        value['unknown'] = source.unknown or not (value['testFailures'] or value['runningTests'] or value['repoFrames'])
     except Exception:pass
     return value
 
