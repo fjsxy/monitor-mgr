@@ -1,5 +1,6 @@
 """#18逐稳定子例断言；kubectl仅构造独占fixture或核对真实API，业务经平台HTTP/Kitex。"""
 import copy,json,time,uuid
+from kube_transport import KubeFailure,identity as kube_identity
 
 def wait(test,message,seconds=90):
  end=time.monotonic()+seconds
@@ -121,8 +122,16 @@ def global_fault(s,case):
  assert not s.get('prometheusagents','-A')['items'],'数据集群仍有Agent，禁止删除CRD'
  crd=s.get('crd','prometheusagents.monitoring.coreos.com')
  obj={k:copy.deepcopy(crd[k]) for k in ['apiVersion','kind','spec']};obj['metadata']={k:v for k,v in crd['metadata'].items() if k in ['name','labels','annotations']};obj['metadata'].get('annotations',{}).pop('kubectl.kubernetes.io/last-applied-configuration',None)
+ session=getattr(s,'session',None);fault_case=session.ledger.case if session else None;fault_target=s.target
  def restore():
-  s.k('apply','--server-side','-f','-',data=obj,target=s.target);s.k('wait','--for=condition=Established','crd/prometheusagents.monitoring.coreos.com','--timeout=90s',target=s.target);assert s.get('crd','prometheusagents.monitoring.coreos.com')['spec']==crd['spec']
+  # 关键：已删除的原UID不能走普通apply；仅用本case唯一原故障及其持久基线恢复，不认领同名替代对象。
+  if session:
+   faults=[e for e in session.ledger.entries.values() if e['action']=='fault-delete' and e['case']==fault_case
+           and e['target']==fault_target and e['identity']==kube_identity(crd) and e.get('uid')==crd['metadata']['uid']]
+   if session.ledger.case!=fault_case or s.target!=fault_target or len(faults)!=1:raise KubeFailure('fixture_crd_restore_fault_unconfirmed')
+   session.kube.restore_fault(faults[0])
+  else:s.k('apply','--server-side','-f','-',data=obj,target=s.target)
+  s.k('wait','--for=condition=Established','crd/prometheusagents.monitoring.coreos.com','--timeout=90s',target=s.target);assert s.get('crd','prometheusagents.monitoring.coreos.com')['spec']==crd['spec']
  s.restorers.append(restore);s.k('delete','crd','prometheusagents.monitoring.coreos.com','--wait=true','--timeout=90s',target=s.target)
  # 换入相同UID的凭据重新探测能力，证明缺CRD没有使登记身份失效。
  s.restore_credentials();cluster=s.call('GET','/clusters/'+s.cluster['id']);cap=next(c for c in cluster['capabilities'] if c['component']=='Prometheus Agent');assert not cap['allowed'] and cap['reason']
