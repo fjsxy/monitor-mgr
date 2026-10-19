@@ -193,7 +193,8 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
                 queue(1, ('timeout',));timeout_stage = 1;continue
             if timeout_stage == 1 and line == 'running tests:':timeout_stage = 2;continue
             if timeout_stage == 2 and line.startswith('\t'):
-                running = re.fullmatch(r'\t(Test[A-Za-z0-9_]+) \(' + GO_DURATION + r'\)', line)
+                # parallel时runningList可能只有叶子；仅取根名验证冻结blob，suffix与时长均不进入候选。
+                running = re.fullmatch(r'\t(Test[A-Za-z0-9_]+)(?:/[^\s]+)? \(' + GO_DURATION + r'\)', line)
                 if running:queue(1, ('running', running[1], None))
                 else:source.unknown = True
                 continue

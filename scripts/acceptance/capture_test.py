@@ -89,8 +89,43 @@ class CaptureProtocolTest(unittest.TestCase):
                 expected=['fixture_test.go::TestRoot'] if mode in ['subcase','unknown-root','stack','long'] else []
                 self.assertEqual([v['testId'] for v in value['runningTests']],expected)
                 self.assertEqual(value['observedMarkers'],[] if mode=='message' else ['go-test-timeout'])
-                self.assertEqual(value['unknown'],mode!='stack')
+                self.assertEqual(value['unknown'],mode not in ['subcase','stack'])
                 for secret in ['HOST-PRIVATE','HOST_PRIVATE','10m0s',str(root)]:self.assertNotIn(secret,json.dumps(value))
+
+    def test_timeout_parallel_leaf_only_host_projection_verifies_root_and_discards_nested_private_suffix(self):
+        """模拟Go标准runningList的parallel叶子；仅诊断投影Host回归，不是原CI timeout复现。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            for suffixes in [['/HOST-PRIVATE'],['/HOST-PRIVATE/nested(value)/x:y'],['/HOST-PRIVATE','/other/HOST-PRIVATE','']]:
+                with self.subTest(suffixes=suffixes):
+                    output='panic: test timed out after 10m0s\nrunning tests:\n'+''.join('\tTestRoot'+suffix+' (9m59s)\n' for suffix in suffixes)
+                    value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),b''),label='quality',candidate=candidate,
+                        private_root=root/'raw',root=source)
+                    self.assertFalse(value['unknown']);self.assertEqual(value['observedMarkers'],['go-test-timeout'])
+                    self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+                    self.assertEqual(value['runningTests'][0]['function'],'TestRoot')
+                    self.assertEqual(value['testFailures'],[]);self.assertEqual(value['repoFrames'],[])
+                    for secret in ['HOST-PRIVATE','nested','other','9m59s','10m0s',str(root)]:self.assertNotIn(secret,json.dumps(value))
+
+    def test_timeout_parallel_leaf_projection_rejects_unknown_root_malformed_lines_and_keeps_attempt_bound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            for leaf in ['TestHOST_PRIVATE/leaf (1s)','TestRoot/ (1s)','TestRoot/HOST PRIVATE (1s)',
+                         'TestRoot/HOST\tPRIVATE (1s)','TestRoot/HOST-PRIVATE (dynamic)',
+                         'TestRoot/HOST-PRIVATE (1s) HOST-PRIVATE']:
+                with self.subTest(leaf=leaf):
+                    output='panic: test timed out after 10m0s\nrunning tests:\n\t'+leaf+'\n'
+                    value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),b''),label='quality',candidate=candidate,
+                        private_root=root/'raw',root=source)
+                    self.assertTrue(value['unknown']);self.assertEqual(value['runningTests'],[])
+                    self.assertNotIn('HOST',json.dumps(value));self.assertNotIn('dynamic',json.dumps(value))
+            output='panic: test timed out after 10m0s\nrunning tests:\n'+'\tTestRoot/HOST-PRIVATE (1s)\n'*65
+            value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),b''),label='quality',candidate=candidate,
+                private_root=root/'raw',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+            self.assertNotIn('HOST-PRIVATE',json.dumps(value))
 
     def test_priority_projection_keeps_late_make_stage_after_repeated_go_locations(self):
         with tempfile.TemporaryDirectory() as directory:
