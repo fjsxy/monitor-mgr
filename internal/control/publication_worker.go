@@ -170,12 +170,9 @@ func (s *Store) executePublication(life context.Context, id string) {
 		return
 	}
 	// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
-	body := cfg.document()
-	body["spec"] = frozen
+	body := publicationDocument(cfg, cr, frozen)
 	method, path := "POST", componentFor(i.Component).collectionPath(instanceCRNamespace(i))
 	if i.Uid != "" {
-		body = cr
-		body["spec"] = frozen
 		method = "PUT"
 		path = componentFor(i.Component).objectPath(i)
 		if objectString(objectMap(body, "metadata"), "resourceVersion") == "" {

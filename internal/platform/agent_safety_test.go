@@ -117,7 +117,15 @@ func TestAgentHeadersReadProjection(t *testing.T) {
 	cr := f.objects["monitoring/headers"]
 	endpoint := cr["spec"].(map[string]any)["remoteWrite"].([]any)[0].(map[string]any)
 	endpoint["headers"] = map[string]any{"Authorization": values[0], "X-API-Key": values[1], "Unpredictable-Name": values[2]}
-	cr["metadata"].(map[string]any)["annotations"] = map[string]any{"preserve": "metadata-original"}
+	endpoint["url"] = "https://remote-user:remote-password@example.invalid/write"
+	values = append(values, "remote-password", "legacy-last-applied-secret", "legacy-status-password")
+	meta := cr["metadata"].(map[string]any)
+	meta["annotations"] = map[string]any{"preserve": "metadata-original", "kubectl.kubernetes.io/last-applied-configuration": "legacy-last-applied-secret"}
+	meta["labels"] = map[string]any{"external": "keep"}
+	meta["finalizers"] = []any{"external/finalizer"}
+	cr["status"].(map[string]any)["arbitrary"] = "keep"
+	cr["status"].(map[string]any)["message"] = "legacy https://user:legacy-status-password@example.invalid/write"
+	cr["spec"].(map[string]any)["unsupportedExtra"] = map[string]any{"value": "remove"}
 	raw, _ := json.Marshal(cr)
 	var outside map[string]any
 	json.Unmarshal(raw, &outside)
@@ -127,7 +135,24 @@ func TestAgentHeadersReadProjection(t *testing.T) {
 	f.mu.Unlock()
 	clusterCall(t, p, "POST", "/instances/"+id+"/refresh", map[string]any{}, c, "refresh", 200)
 	listing := clusterCall(t, p, "GET", "/clusters/"+cluster+"/instances", nil, c, "", 200)
-	preview = clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "headers-preview", 200)
+	draftBefore, _ := json.Marshal(clusterCall(t, p, "GET", "/instances/"+id+"/draft", nil, c, "", 200))
+	preview = projectionCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "headers-preview", 200)
+	// REG17-YAML-PRESERVE.agent-existing：以夹具的明确脱敏预期核非spec保留，避免调用产品投影反算结果。
+	expected := publicationJSONDocument(t, raw)
+	expected["metadata"].(map[string]any)["annotations"].(map[string]any)["kubectl.kubernetes.io/last-applied-configuration"] = "[敏感内容已隐藏]"
+	expected["status"].(map[string]any)["message"] = "[敏感内容已隐藏]"
+	right := publicationYAMLDocument(t, preview["rightYAML"].(string))
+	assertPublicationNonSpecPreserved(t, right, expected)
+	if right["spec"].(map[string]any)["unsupportedExtra"] != nil {
+		t.Fatal("Agent右侧保留了未知spec")
+	}
+	f.mu.Lock()
+	afterPreview, _ := json.Marshal(f.objects["monitoring/headers"])
+	f.mu.Unlock()
+	draftAfter, _ := json.Marshal(clusterCall(t, p, "GET", "/instances/"+id+"/draft", nil, c, "", 200))
+	if string(raw) != string(afterPreview) || string(draftBefore) != string(draftAfter) {
+		t.Fatal("预览意外改写原Agent或草稿")
+	}
 	output, _ := json.Marshal([]any{listing, preview})
 	for _, secret := range values {
 		if strings.Contains(string(output), secret) {
@@ -164,14 +189,22 @@ func TestAgentHeadersReadProjection(t *testing.T) {
 	endpoint["headers"].(map[string]any)["Unpredictable-Name"] = "changed-arbitrary-header-secret"
 	f.mu.Unlock()
 	clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": true}, c, "header-value-changed", 409)
-	preview = clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "new-header-preview", 200)
+	preview = projectionCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "new-header-preview", 200)
+	right = publicationYAMLDocument(t, preview["rightYAML"].(string))
 	op = clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": true}, c, "overwrite", 202)
 	if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
 		t.Fatal("明确覆盖失败")
 	}
 	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.objects["monitoring/headers"]["metadata"].(map[string]any)["annotations"].(map[string]any)["preserve"] != "metadata-original" {
+	sent := append([]byte(nil), f.lastWrite...)
+	finalRaw, _ := json.Marshal(f.objects["monitoring/headers"])
+	f.mu.Unlock()
+	written := publicationJSONDocument(t, sent)
+	assertPublicationNonSpecPreserved(t, written, publicationJSONDocument(t, raw))
+	written["metadata"].(map[string]any)["annotations"].(map[string]any)["kubectl.kubernetes.io/last-applied-configuration"] = "[敏感内容已隐藏]"
+	written["status"].(map[string]any)["message"] = "[敏感内容已隐藏]"
+	assertPublicationDocumentEqual(t, right, written)
+	if publicationJSONDocument(t, finalRaw)["metadata"].(map[string]any)["annotations"].(map[string]any)["preserve"] != "metadata-original" {
 		t.Fatal("脱敏改写目标metadata")
 	}
 }

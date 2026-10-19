@@ -83,6 +83,15 @@ agent-q-receipt: ## Agent Q逐例收据；E2E_ARGS指定output/profile/cases
 	$(PYTHON) scripts/acceptance/agent.py --layer Q $(E2E_ARGS)
 agent-projection-check: ## 解析失败URL/状态文本及旧cache迁移Q，真实HTTP/Kitex/SQLite/TLS
 	$(GO) test ./internal/platform -count=1 -run '^TestAgentMalformedURLReadProjection$$'
+
+# 发布预览只运行字段保留、首次创建及原敏感投影保护，不扩为全量业务验收。
+PUBLICATION_YAML_TESTS := ^Test(P05DriftOverwritePreservesMetadataAndP06Equivalent|AgentHeadersReadProjection|PublicationYAMLFirstCreate|AgentMalformedURLReadProjection|SharedTargetSensitiveReadProjection|SharedSchema4PreviewSurvivesUpgrade|SharedHMACDetectsHiddenConfigAndPreservesMetadata)$$
+.PHONY: publication-yaml-check publication-yaml-race-check
+publication-yaml-check: ## 发布RightYAML与实际写请求一致及敏感投影的真实HTTP/Kitex/TLS回归
+	$(GO) test ./internal/platform -count=1 -json -run '$(PUBLICATION_YAML_TESTS)'
+publication-yaml-race-check: ## 仅发布YAML字段保留/首次创建/原投影保护的uncached race
+	$(GO) test -race ./internal/platform -count=1 -json -run '$(PUBLICATION_YAML_TESTS)'
+
 agent-regressions: ## Agent已发布28项Q补充回归，单独收据，不增加69 owned计数
 	$(PYTHON) scripts/acceptance/agent.py --layer REG $(E2E_ARGS)
 agent-projection-fixture-check: ## 013证据不留原文及真实状态分支门禁，仅验收工具纯检查

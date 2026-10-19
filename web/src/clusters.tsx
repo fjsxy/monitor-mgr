@@ -1,3 +1,4 @@
+// 集群页管理注册、凭据核验与归属操作，展示能力和历史；后端异步操作通过轮询回读。
 import type { Int64 } from "./api";
 import{useEffect,useState,type FormEvent}from'react';
 import{api,type Account}from'./api';
@@ -9,11 +10,15 @@ export function Clusters({account,onAction,pending}:{account:Account;onAction:(f
  const admin=account.role==='ADMIN';
  async function load(){setClusters((await api<{clusters:Cluster[]}>('/clusters')).clusters);if(admin)setAccounts((await api<{accounts:Account[]}>('/accounts')).accounts)}
  useEffect(()=>{void onAction(load)},[]);
+ // 只轮询当前QUEUED/RUNNING操作；操作变化或卸载时停止计时并忽略在途回包，不取消后端操作。
  useEffect(()=>{if(!operation||!['QUEUED','RUNNING'].includes(operation.state))return;let stopped=false;const interval=setInterval(async()=>{try{const next=await api<Operation>(`/operations/${operation.operationId}`);if(!stopped){setOperation(next);if(!['QUEUED','RUNNING'].includes(next.state)){await load();if(selected)await loadHistory(selected)}}}catch(e){if(!stopped)void onAction(async()=>{throw e})}},500);return()=>{stopped=true;clearInterval(interval)}},[operation?.operationId,operation?.state]);
  async function loadHistory(c:Cluster){setHistory((await api<{operations:Operation[]}>(`/clusters/${c.id}/operations`)).operations)}
+ // 关键：打开新流程和关闭抽屉都清除原始kubeconfig及context候选，避免在后续操作中复用凭据。
  function open(next:Mode,c:Cluster|null=null){setMode(next);setSelected(c);setConfig('');setContexts([]);setContext('');setOwner(c?.ownerId??account.id);setOperation(null);setNamespaces([]);setNsError('');setHistory([]);if(c)void onAction(async()=>{await loadHistory(c)})}
  function close(){setMode(null);setSelected(null);setConfig('');setContexts([]);setContext('')}
+ // 上传仅解析候选context；解析失败保留候选供修正，此时尚未替换后端生效凭据。
  async function inspect(raw:string){setConfig(raw);setContext('');setContexts([]);if(!raw)return;await onAction(async()=>{setContexts((await api<{contexts:string[]}>('/clusters/contexts','POST',{kubeconfig:raw})).contexts)})}
+ // 关键：核验请求被受理后立即清除原始kubeconfig和context候选，后续只保留异步操作状态；拒绝时仍可修正输入。
  async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);await onAction(async()=>{if(mode==='transfer'){await api(`/clusters/${selected!.id}/transfer`,'POST',{ownerId:owner});close();await load();return}if(mode==='unregister'){await api(`/clusters/${selected!.id}/unregister`,'POST',{});close();await load();return}const path=mode==='register'?'/clusters':`/clusters/${selected!.id}/${mode}`;setOperation(await api<Operation>(path,'POST',{...(mode==='register'?{name:f.get('name')}:{}),...(mode==='register'||mode==='reactivate'?{ownerId:owner}:{}),context,kubeconfig:config}));setConfig('');setContexts([]);setContext('')})}
  async function refresh(){await onAction(async()=>{await load();if(selected)await loadHistory(selected)})}
  const username=(id:string)=>accounts.find(a=>a.id===id)?.username??(id===account.id?account.username:id);

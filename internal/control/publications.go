@@ -22,6 +22,20 @@ func objectMap(o map[string]any, key string) map[string]any {
 	return m
 }
 func objectString(o map[string]any, key string) string { v, _ := o[key].(string); return v }
+
+// publicationDocument 统一确认预览与实际写请求：已有CR仅替换整个spec，首次创建使用组件文档。
+func publicationDocument(cfg configuration, current, desired map[string]any) map[string]any {
+	if current == nil {
+		current = cfg.document()
+	}
+	// 关键：独立复制原对象和目标spec，保留UID/RV及外部字段；预览投影不能污染原CR或冻结配置。
+	var body, spec map[string]any
+	json.Unmarshal([]byte(canonical(current)), &body)
+	json.Unmarshal([]byte(canonical(desired)), &spec)
+	body["spec"] = spec
+	return body
+}
+
 func (t *Target) readKSM(ctx context.Context, name string) (map[string]any, error) {
 	var out map[string]any
 	e := t.Request(ctx, "GET", ksmPath+"/"+url.PathEscape(name), nil, &out)
@@ -191,7 +205,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 		json.Unmarshal(baseline, &spec)
 		drift = componentFor(i.Component).normalizeSpec(spec) != current
 	}
-	preview := &rpc.PublicationPreview{PreviewId: ID(), DraftRevision: rev, LeftYAML: left, RightYAML: yamlText(cfg.document()), Drift: drift, Warnings: []string{}}
+	// 两侧均投影独立文档；右侧保留的旧metadata/status也可能包含认证URL或last-applied秘密。
+	right := safeTargetDocument(publicationDocument(cfg, cr, cfg.spec()))
+	preview := &rpc.PublicationPreview{PreviewId: ID(), DraftRevision: rev, LeftYAML: left, RightYAML: yamlText(right), Drift: drift, Warnings: []string{}}
 	preview.Warnings = cfg.warnings(cr)
 	if storageSnapshot != nil {
 		preview.StorageMode = reference(storageSnapshot.mode)

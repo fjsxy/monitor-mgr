@@ -152,6 +152,7 @@ type ksmFixture struct {
 	mu                  sync.Mutex
 	cr                  map[string]any
 	writes              int
+	lastWrite           []byte
 	rejectWrite         int
 	dropResponse        bool
 	owned               map[string][]any
@@ -368,6 +369,8 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 				return
 			}
 		}
+		// 仅在外部TLS目标边界保存原请求快照，早于模拟API补UID/RV响应。
+		f.lastWrite, _ = json.Marshal(body)
 		f.writes++
 		meta := body["metadata"].(map[string]any)
 		meta["uid"] = "created-uid"
@@ -515,10 +518,23 @@ func TestP05DriftOverwritePreservesMetadataAndP06Equivalent(t *testing.T) {
 	f.cr["status"] = map[string]any{"arbitrary": "keep"}
 	f.cr["spec"].(map[string]any)["unsupportedExtra"] = map[string]any{"value": "remove"}
 	f.cr["spec"].(map[string]any)["enabled"] = false
+	beforePreview, _ := json.Marshal(f.cr)
 	f.mu.Unlock()
 	drift := ksmPreview(t, p, c, id, 1)
 	if drift["drift"] != true || !strings.Contains(drift["leftYAML"].(string), "unsupportedExtra") {
 		t.Fatal("漂移未完整显示")
+	}
+	// REG17-YAML-PRESERVE.ksm-existing：确认diff必须保留实际PUT仍保留的全部非spec字段。
+	right := publicationYAMLDocument(t, drift["rightYAML"].(string))
+	assertPublicationNonSpecPreserved(t, right, publicationJSONDocument(t, beforePreview))
+	if right["spec"].(map[string]any)["unsupportedExtra"] != nil || right["spec"].(map[string]any)["enabled"] != true {
+		t.Fatal("右侧未显示覆盖后的完整受支持spec")
+	}
+	f.mu.Lock()
+	afterPreview, _ := json.Marshal(f.cr)
+	f.mu.Unlock()
+	if string(afterPreview) != string(beforePreview) {
+		t.Fatal("预览意外改写原目标CR")
 	}
 	b["previewId"] = drift["previewId"]
 	clusterCall(t, p, "POST", "/instances/"+id+"/publications", b, c, "normal", 409)
@@ -527,6 +543,10 @@ func TestP05DriftOverwritePreservesMetadataAndP06Equivalent(t *testing.T) {
 	if awaitClusterOperation(t, p, c, o["operationId"].(string))["state"] != "SUCCEEDED" {
 		t.Fatal("overwrite failed")
 	}
+	f.mu.Lock()
+	sent := append([]byte(nil), f.lastWrite...)
+	f.mu.Unlock()
+	assertPublicationDocumentEqual(t, right, publicationJSONDocument(t, sent))
 	f.mu.Lock()
 	if f.cr["spec"].(map[string]any)["unsupportedExtra"] != nil || f.cr["metadata"].(map[string]any)["labels"].(map[string]any)["external"] != "keep" || f.cr["status"].(map[string]any)["arbitrary"] != "keep" || len(f.cr["metadata"].(map[string]any)["finalizers"].([]any)) != 1 {
 		t.Fatal("覆盖破坏非平台内容")

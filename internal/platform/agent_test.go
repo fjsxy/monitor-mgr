@@ -83,9 +83,10 @@ func TestAgentDefaultPublicationWithDependencies(t *testing.T) {
 }
 
 type agentFixture struct {
-	mu      sync.Mutex
-	objects map[string]map[string]any
-	hook    func(http.ResponseWriter, *http.Request) bool
+	mu        sync.Mutex
+	objects   map[string]map[string]any
+	lastWrite []byte
+	hook      func(http.ResponseWriter, *http.Request) bool
 }
 
 func agentTarget(t *testing.T) (*agentFixture, string) {
@@ -148,6 +149,8 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 					w.WriteHeader(409)
 					return
 				}
+				// 在API补充默认值与身份前保留实际请求，供预览一致性回归独立比较。
+				f.lastWrite, _ = json.Marshal(body)
 				m["uid"] = "uid-" + key
 				m["resourceVersion"] = "1"
 				m["generation"] = 1
@@ -180,6 +183,7 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 					io.WriteString(w, `{}`)
 					return
 				}
+				f.lastWrite, _ = json.Marshal(body)
 				rv, _ := strconv.Atoi(old["resourceVersion"].(string))
 				meta["resourceVersion"] = strconv.Itoa(rv + 1)
 				f.objects[key] = body
