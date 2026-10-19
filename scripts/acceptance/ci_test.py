@@ -7,12 +7,31 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import yaml
 
 from ci import write_request
 from fetch_source import fetch_source
 
 
 class CIProtocolTest(unittest.TestCase):
+    def test_bootstrap_reports_are_uploaded_always_before_request_without_raw(self):
+        workflow=yaml.safe_load((pathlib.Path(__file__).resolve().parents[2]/'.github/workflows/phase1.yml').read_text())
+        for job in ['fast','smoke']:
+            with self.subTest(job=job):
+                steps=workflow['jobs'][job]['steps']
+                bootstrap=[step for step in steps if 'bootstrap_linux.py' in step.get('run','')]
+                self.assertEqual(len(bootstrap),1)
+                self.assertIn('--public-report "$BOOTSTRAP_REPORT"',bootstrap[0]['run'])
+                artifacts=[step for step in steps if step.get('with',{}).get('path')=='${{ runner.temp }}/phase1-bootstrap-public.json']
+                self.assertEqual(len(artifacts),1)
+                self.assertEqual(artifacts[0]['if'],'always()')
+                self.assertTrue(artifacts[0]['uses'].startswith('actions/upload-artifact@'))
+                self.assertEqual(artifacts[0]['with']['if-no-files-found'],'error')
+                self.assertLess(steps.index(bootstrap[0]),steps.index(artifacts[0]))
+                self.assertLess(steps.index(artifacts[0]),next(i for i,step in enumerate(steps) if step.get('id')=='request'))
+                self.assertIn('BOOTSTRAP_REPORT=$RUNNER_TEMP/phase1-bootstrap-public.json',steps[0]['run'])
+                self.assertNotIn('raw',artifacts[0]['with']['path']);self.assertNotIn('*',artifacts[0]['with']['path'])
+
     def test_smoke_request_contains_one_control_no_data(self):
         with tempfile.TemporaryDirectory() as root:
             root = pathlib.Path(root)

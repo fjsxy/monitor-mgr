@@ -33,6 +33,7 @@ jobs:
           printf '%s\n' "RUN_OUTPUT=$RUNNER_TEMP/phase1-run" "PRIVATE_ROOT=$RUNNER_TEMP/phase1-private" \
             "SAFE_OUTPUT=$RUNNER_TEMP/phase1-safe" "ENV_REQUEST=$RUNNER_TEMP/phase1-environment.json" \
             "TOOL_PREFIX=$RUNNER_TEMP/phase1-tools" "RAW_ROOT=$RUNNER_TEMP/phase1-raw" \
+            "BOOTSTRAP_REPORT=$RUNNER_TEMP/phase1-bootstrap-public.json" \
             "GOCACHE=$RUNNER_TEMP/phase1-go-build" "GOMODCACHE=$RUNNER_TEMP/phase1-go-mod" >> "$GITHUB_ENV"
       - name: checkout 真实候选 C
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,7 +45,16 @@ jobs:
         run: >-
           python3 scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label bootstrap --
           python3 scripts/acceptance/bootstrap_linux.py --prefix "$TOOL_PREFIX"
-          --record "$PRIVATE_ROOT/bootstrap.json"
+          --record "$PRIVATE_ROOT/bootstrap.json" --public-report "$BOOTSTRAP_REPORT"
+      - name: 始终上传 FAST bootstrap 安全诊断
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-fast-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase1-bootstrap-public.json
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: false
       - name: 本地质量与生成一致性
         run: |
           python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label quality -- make check
@@ -106,6 +116,7 @@ jobs:
           printf '%s\n' "RUN_OUTPUT=$RUNNER_TEMP/phase1-run" "PRIVATE_ROOT=$RUNNER_TEMP/phase1-private" \
             "SAFE_OUTPUT=$RUNNER_TEMP/phase1-safe" "ENV_REQUEST=$RUNNER_TEMP/phase1-environment.json" \
             "TOOL_PREFIX=$RUNNER_TEMP/phase1-tools" "RAW_ROOT=$RUNNER_TEMP/phase1-raw" \
+            "BOOTSTRAP_REPORT=$RUNNER_TEMP/phase1-bootstrap-public.json" \
             "GOCACHE=$RUNNER_TEMP/phase1-go-build" "GOMODCACHE=$RUNNER_TEMP/phase1-go-mod" >> "$GITHUB_ENV"
       - name: checkout 真实候选 C
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -117,7 +128,16 @@ jobs:
         run: >-
           python3 scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label bootstrap --
           python3 scripts/acceptance/bootstrap_linux.py --prefix "$TOOL_PREFIX"
-          --record "$PRIVATE_ROOT/bootstrap.json" --browsers
+          --record "$PRIVATE_ROOT/bootstrap.json" --public-report "$BOOTSTRAP_REPORT" --browsers
+      - name: 始终上传 SMOKE bootstrap 安全诊断
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-smoke-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase1-bootstrap-public.json
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: false
       - name: 仅本步骤读取专用只读源密钥
         env:
           MONITOR_OP_DEPLOY_KEY: ${{ secrets.MONITOR_OP_DEPLOY_KEY }}

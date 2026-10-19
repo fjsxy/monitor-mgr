@@ -12,9 +12,11 @@ import sys
 import tarfile
 import urllib.parse
 import urllib.request
+import urllib.error
 import zipfile
 
 from capture import capture
+from session import atomic_json
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 LOCK = json.loads(pathlib.Path(__file__).with_name('source-lock.json').read_text())
@@ -22,6 +24,77 @@ LOCK = json.loads(pathlib.Path(__file__).with_name('source-lock.json').read_text
 
 class BootstrapError(RuntimeError):
     """对外只传播固定错误码。"""
+    def __init__(self, code, *, child_exit=None):
+        super().__init__(code)
+        self.child_exit = child_exit
+
+
+RUN_STAGES = frozenset(['python-official-setup', 'pyyaml-install', 'python-runtime-metadata',
+                        'verify-go', 'verify-node-js', 'verify-kind', 'verify-kubectl', 'npm-ci',
+                        'browser-system-deps', 'browser-actual-launch', 'browser-system-versions', 'browser-system-policy'])
+STAGES = RUN_STAGES | frozenset(['bootstrap-start', 'host-check', 'prefix-init', 'tool-links', 'python-setup-check',
+    'browser-source-check', 'browser-package-check', 'record-private', 'publish-tool-path',
+    'download-go', 'extract-go', 'download-node', 'extract-node', 'download-kind', 'install-kind',
+    'download-kubectl', 'install-kubectl', 'download-python', 'extract-python', 'download-pip', 'download-pyyaml',
+    'download-browser-chromium', 'extract-browser-chromium', 'download-browser-chromium-headless',
+    'extract-browser-chromium-headless', 'download-browser-ffmpeg', 'extract-browser-ffmpeg'])
+ERROR_CODES = frozenset(['BOOTSTRAP_DIGEST_MISMATCH', 'BOOTSTRAP_SOURCE_NOT_HTTPS', 'BOOTSTRAP_REDIRECT_NOT_HTTPS',
+    'BOOTSTRAP_ARCHIVE_UNSAFE', 'BOOTSTRAP_REQUIRES_LINUX_AMD64', 'BOOTSTRAP_REQUIRES_UBUNTU_2404',
+    'BOOTSTRAP_PREFIX_MUST_BE_NEW', 'BOOTSTRAP_PYTHON_SETUP_MISSING', 'BOOTSTRAP_PYTHON_RUNTIME_MISMATCH',
+    'BOOTSTRAP_TOOL_VERSION_MISMATCH', 'BOOTSTRAP_BROWSER_SOURCE_OVERRIDE', 'BOOTSTRAP_BROWSER_REVISION_MISMATCH',
+    'BOOTSTRAP_BROWSER_EXECUTABLE_MISSING', 'BOOTSTRAP_BROWSER_VERSION_MISMATCH', 'BOOTSTRAP_APT_POLICY_INCOMPLETE',
+    'BOOTSTRAP_REPORT_PATH_INVALID', 'BOOTSTRAP_STAGE_INVALID', 'BOOTSTRAP_PYTHON_LOCATION_MISMATCH']) | frozenset(
+        'BOOTSTRAP_STEP_FAILED_' + stage.upper().replace('-', '_') for stage in RUN_STAGES)
+
+
+def safe_failure(error):
+    """关键：异常消息、动态类名和 HTTP reason/body 可含凭据，只投影固定分类与整数状态。"""
+    result = dict(errorCode='BOOTSTRAP_UNEXPECTED', exceptionClass='Exception', httpStatus=None, childExit=None)
+    if type(error) is BootstrapError:
+        result['exceptionClass'] = 'BootstrapError'
+        if error.args and type(error.args[0]) is str and error.args[0] in ERROR_CODES:
+            result['errorCode'] = error.args[0]
+            if type(error.child_exit) is int and -255 <= error.child_exit <= 255:
+                result['childExit'] = error.child_exit
+    else:
+        for kind, name, code in [(urllib.error.HTTPError, 'HTTPError', 'BOOTSTRAP_HTTP_ERROR'),
+                (urllib.error.URLError, 'URLError', 'BOOTSTRAP_DOWNLOAD_ERROR'),
+                (OSError, 'OSError', 'BOOTSTRAP_OS_ERROR'), (ValueError, 'ValueError', 'BOOTSTRAP_VALUE_ERROR'),
+                (KeyError, 'KeyError', 'BOOTSTRAP_KEY_ERROR'), (KeyboardInterrupt, 'KeyboardInterrupt', 'BOOTSTRAP_INTERRUPTED'),
+                (SystemExit, 'SystemExit', 'BOOTSTRAP_INTERRUPTED')]:
+            if isinstance(error, kind):
+                result.update(errorCode=code, exceptionClass=name)
+                if kind is urllib.error.HTTPError and type(error.code) is int and 100 <= error.code <= 599:
+                    result['httpStatus'] = error.code
+                break
+    return result
+
+
+class BootstrapDiagnostic:
+    """bootstrap 独立公共摘要；先 seed 再进入实际步骤，不能冒充正式验收 index。"""
+    def __init__(self, path, *, browsers):
+        self.path = pathlib.Path(path)
+        if not self.path.is_absolute() or self.path.is_symlink():
+            raise BootstrapError('BOOTSTRAP_REPORT_PATH_INVALID')
+        self.value = dict(schemaVersion=1, kind='bootstrap-diagnostic', productGate=False, state='pending',
+                          stage='bootstrap-start', errorCode=None, exceptionClass=None, httpStatus=None, childExit=None,
+                          browsers=bool(browsers), sourceLockSHA256=hashlib.sha256(
+                              pathlib.Path(__file__).with_name('source-lock.json').read_bytes()).hexdigest())
+
+    def write(self):
+        atomic_json(self.path, self.value)
+
+    def enter(self, stage):
+        if stage not in STAGES:
+            raise BootstrapError('BOOTSTRAP_STAGE_INVALID')
+        self.value.update(stage=stage, state='running')
+        self.write()
+
+    def finish(self, error):
+        self.value.update(state='failed' if error is not None else 'completed')
+        if error is not None:
+            self.value.update(safe_failure(error))
+        self.write()
 
 
 def verify_file(path, digest):
@@ -101,13 +174,43 @@ def apt_policy_summary(text):
     return result
 
 
-def install(prefix, record_path, *, browsers=False):
+def python_location_script():
+    """只读实际进程映射和标准库来源；编译期 LIBDIR 不能充当已加载库证明。"""
+    return '''import sys,sysconfig,encodings,pathlib,hashlib,json
+loaded=set()
+for line in pathlib.Path('/proc/self/maps').read_text().splitlines():
+    fields=line.split(maxsplit=5)
+    if len(fields)==6 and pathlib.Path(fields[5]).name=='libpython3.14.so.1.0':
+        loaded.add(str(pathlib.Path(fields[5]).resolve()))
+metadata={'prefix':str(pathlib.Path(sys.prefix).resolve()),'basePrefix':str(pathlib.Path(sys.base_prefix).resolve()),
+          'stdlib':str(pathlib.Path(sysconfig.get_path('stdlib')).resolve()),
+          'encodings':str(pathlib.Path(encodings.__file__).resolve()),
+          'loadedLibpython':[{'path':path,'sha256':hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()} for path in sorted(loaded)]}
+'''
+
+
+def verify_python_location(metadata, python_root, distribution_digest):
+    """关键：解释器、stdlib和实际加载库全部绑定新cache，库字节再绑定已校验的官方分发。"""
+    python_root = pathlib.Path(python_root).resolve()
+    expected = dict(prefix=str(python_root), basePrefix=str(python_root), stdlib=str(python_root / 'lib/python3.14'),
+                    encodings=str(python_root / 'lib/python3.14/encodings/__init__.py'),
+                    loadedLibpython=[dict(path=str(python_root / 'lib/libpython3.14.so.1.0'), sha256=distribution_digest)])
+    if any(metadata.get(key) != value for key, value in expected.items()):
+        raise BootstrapError('BOOTSTRAP_PYTHON_LOCATION_MISMATCH')
+
+
+def install(prefix, record_path, *, browsers=False, diagnostic=None):
     """首次安装在全新 prefix，安装动作/原输出全部私有捕获。"""
+    def mark(stage):
+        if diagnostic is not None:
+            diagnostic.enter(stage)
+    mark('host-check')
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         raise BootstrapError('BOOTSTRAP_REQUIRES_LINUX_AMD64')
     os_release = pathlib.Path('/etc/os-release').read_text()
     if 'ID=ubuntu' not in os_release or 'VERSION_ID="24.04"' not in os_release:
         raise BootstrapError('BOOTSTRAP_REQUIRES_UBUNTU_2404')
+    mark('prefix-init')
     prefix = pathlib.Path(prefix)
     if not prefix.is_absolute() or prefix.exists():
         raise BootstrapError('BOOTSTRAP_PREFIX_MUST_BE_NEW')
@@ -122,45 +225,59 @@ def install(prefix, record_path, *, browsers=False):
     # 关键：禁用用户 pip 配置和远端 index；官方 setup.sh 的升级只看到固定 pip wheel。
     environment.update(PIP_CONFIG_FILE='/dev/null', PIP_NO_INDEX='1', PIP_FIND_LINKS=str(wheels),
                        AGENT_TOOLSDIRECTORY=str(prefix / 'toolcache'), RUNNER_TOOL_CACHE=str(prefix / 'toolcache'))
+    python_root = prefix / 'toolcache/Python/3.14.7/x64'
+    # 关键：官方ELF的RUNPATH写死默认cache；第一次setup启动前替换外来库路径，避免借用runner预装lib。
+    environment['LD_LIBRARY_PATH'] = str(python_root / 'lib')
     def run(argv, label, **kwargs):
+        mark(label)
         result = capture([str(item) for item in argv], private_root=str(prefix / 'raw'), label=label,
                          env=environment, publish=False, **kwargs)
         if result.returncode:
-            raise BootstrapError('BOOTSTRAP_STEP_FAILED_' + label.upper().replace('-', '_'))
+            raise BootstrapError('BOOTSTRAP_STEP_FAILED_' + label.upper().replace('-', '_'), child_exit=result.returncode)
         return result
+    tool_ids = {'Go': 'go', 'Node.js': 'node', 'kind': 'kind', 'kubectl': 'kubectl', 'Python': 'python', 'pip': 'pip', 'PyYAML': 'pyyaml'}
     for name in ('Go', 'Node.js', 'kind', 'kubectl', 'Python', 'pip', 'PyYAML'):
         spec = LOCK['tools'][name]
         path = (wheels if name in ('pip', 'PyYAML') else downloads) / urllib.parse.urlsplit(spec['url']).path.rsplit('/', 1)[1]
+        mark('download-' + tool_ids[name])
         record['tools'][name] = dict(version=spec['version'], **download(spec['url'], path, spec['sha256']))
         if name in ('Go', 'Node.js'):
+            mark('extract-' + tool_ids[name])
             extract_tar(path, prefix)
         elif name in ('kind', 'kubectl'):
+            mark('install-' + tool_ids[name])
             shutil.copyfile(path, bin_dir / name)
             (bin_dir / name).chmod(0o755)
         elif name == 'Python':
+            mark('extract-python')
             extract_tar(path, prefix / 'python-distribution')
+    mark('tool-links')
     for executable in ('go', 'gofmt'):
         (bin_dir / executable).symlink_to(prefix / 'go' / 'bin' / executable)
     for executable in ('node', 'npm', 'npx', 'corepack'):
         source = prefix / 'node-v26.4.0-linux-x64' / 'bin' / executable
         if source.exists():
             (bin_dir / executable).symlink_to(source)
+    mark('python-setup-check')
     setup = prefix / 'python-distribution' / 'setup.sh'
     if not setup.is_file():
         raise BootstrapError('BOOTSTRAP_PYTHON_SETUP_MISSING')
     record['tools']['Python']['actualSetupSHA256'] = hashlib.sha256(setup.read_bytes()).hexdigest()
+    distribution_lib_digest = hashlib.sha256((setup.parent / 'lib/libpython3.14.so.1.0').read_bytes()).hexdigest()
+    record['tools']['Python']['distributionLibSHA256'] = distribution_lib_digest
     # 脚本来自上面已校验的整个分发包；全新 toolcache 避免命中 runner 预装 Python。
     run(['bash', str(setup)], 'python-official-setup', cwd=str(setup.parent), timeout=180)
-    python_bin = prefix / 'toolcache/Python/3.14.7/x64/bin/python3.14'
+    python_bin = python_root / 'bin/python3.14'
     (bin_dir / 'python').symlink_to(python_bin)
     (bin_dir / 'python3').symlink_to(python_bin)
     requirements = prefix / 'requirements-linux.txt'
     requirements.write_text('PyYAML==6.0.3 --hash=sha256:' + LOCK['tools']['PyYAML']['sha256'] + '\n')
     run([python_bin, '-m', 'pip', 'install', '--force-reinstall', '--no-deps', '--only-binary=:all:', '--require-hashes', '-r', requirements], 'pyyaml-install', timeout=180)
-    metadata_script = 'import sys,sysconfig,platform,json,importlib.metadata as m;print(json.dumps({"version":platform.python_version(),"SOABI":sysconfig.get_config_var("SOABI"),"gilDisabled":sysconfig.get_config_var("Py_GIL_DISABLED"),"pip":m.version("pip"),"PyYAML":m.version("PyYAML")}))'
-    metadata = json.loads(run([python_bin, '-c', metadata_script], 'python-runtime-metadata').stdout)
+    metadata_script = python_location_script() + 'import platform,importlib.metadata as m;metadata.update(version=platform.python_version(),SOABI=sysconfig.get_config_var("SOABI"),gilDisabled=sysconfig.get_config_var("Py_GIL_DISABLED"),pip=m.version("pip"),PyYAML=m.version("PyYAML"));print(json.dumps(metadata))'
+    metadata = json.loads(run([python_bin, '-I', '-c', metadata_script], 'python-runtime-metadata').stdout)
     if metadata['version'] != '3.14.7' or metadata['gilDisabled'] or metadata['pip'] != '26.2.1' or metadata['PyYAML'] != '6.0.3':
         raise BootstrapError('BOOTSTRAP_PYTHON_RUNTIME_MISMATCH')
+    verify_python_location(metadata, python_root, distribution_lib_digest)
     record['pythonRuntime'] = metadata
     for name, argv, expected in [('Go', ['go', 'version'], b'go1.27.1 linux/amd64'),
                                  ('Node.js', ['node', '--version'], b'v26.4.0'),
@@ -175,12 +292,14 @@ def install(prefix, record_path, *, browsers=False):
     record['tools']['kubectl']['actualVersion'] = 'v1.28.15'
     run(['npm', '--prefix', str(ROOT / 'web'), 'ci'], 'npm-ci', timeout=300)
     if browsers:
+        mark('browser-source-check')
         for key in ('PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST', 'PLAYWRIGHT_DOWNLOAD_HOST'):
             if environment.get(key):
                 raise BootstrapError('BOOTSTRAP_BROWSER_SOURCE_OVERRIDE')
         browser_root = prefix / 'browsers'
         browser_root.mkdir()
         environment['PLAYWRIGHT_BROWSERS_PATH'] = str(browser_root)
+        mark('browser-package-check')
         package = json.loads((ROOT / 'web/node_modules/playwright-core/package.json').read_text())
         definitions = json.loads((ROOT / 'web/node_modules/playwright-core/browsers.json').read_text())['browsers']
         chromium = next(item for item in definitions if item['name'] == 'chromium')
@@ -193,8 +312,11 @@ def install(prefix, record_path, *, browsers=False):
         executable_paths = ['chrome-linux64/chrome', 'chrome-headless-shell-linux64/chrome-headless-shell', 'ffmpeg-linux']
         for spec, directory, executable_path in zip(LOCK['playwright']['archives'], directories, executable_paths):
             archive = downloads / pathlib.Path(urllib.parse.urlsplit(spec['url']).path).name
+            browser_id = {'chromium': 'chromium', 'chromium_headless': 'chromium-headless', 'ffmpeg': 'ffmpeg'}[spec['name']]
+            mark('download-browser-' + browser_id)
             actual = download(spec['url'], archive)
             destination = browser_root / directory
+            mark('extract-browser-' + browser_id)
             _zip(archive, destination)
             executable = destination / executable_path
             if not executable.is_file():
@@ -218,31 +340,45 @@ def install(prefix, record_path, *, browsers=False):
                               'archives': actual_archives, 'aptPackageVersions': versions.splitlines(),
                               'aptOriginHosts': apt_origins, 'aptPolicy': apt_policy, 'aptSnapshotPinned': False,
                               'digestBoundary': 'archive hashes are observed in this job; no independent upstream archive digest'}
+    mark('record-private')
     record_path = pathlib.Path(record_path)
     record_path.parent.mkdir(parents=True, exist_ok=True)
     with os.fdopen(os.open(record_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as stream:
         json.dump(record, stream, indent=2)
         stream.write('\n')
-    for key, value in [('GITHUB_PATH', str(bin_dir)), ('GITHUB_ENV', 'PLAYWRIGHT_BROWSERS_PATH=' + str(prefix / 'browsers'))]:
+    mark('publish-tool-path')
+    for key, value in [('GITHUB_PATH', str(bin_dir)), ('GITHUB_ENV', 'PLAYWRIGHT_BROWSERS_PATH=' + str(prefix / 'browsers')),
+                       ('GITHUB_ENV', 'LD_LIBRARY_PATH=' + str(python_root / 'lib'))]:
         if os.environ.get(key):
             with open(os.environ[key], 'a') as stream:
                 stream.write(value + '\n')
     return record
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description='安装官方摘要固定的 Linux amd64 工具')
     parser.add_argument('--prefix', required=True)
     parser.add_argument('--record', required=True)
     parser.add_argument('--browsers', action='store_true')
-    args = parser.parse_args()
+    parser.add_argument('--public-report', required=True)
+    args = parser.parse_args(argv)
+    diagnostic = None;failure = None;report_failed = False
     try:
-        install(args.prefix, args.record, browsers=args.browsers)
-        print(json.dumps({'id': 'bootstrap', 'exit': 0, 'tools': 7, 'browsers': 3 if args.browsers else 0}))
-        return 0
-    except (BootstrapError, OSError, ValueError, KeyError):
-        print(json.dumps({'id': 'bootstrap', 'exit': 1}))
-        return 1
+        diagnostic = BootstrapDiagnostic(args.public_report, browsers=args.browsers)
+        diagnostic.write()
+        install(args.prefix, args.record, browsers=args.browsers, diagnostic=diagnostic)
+    except BaseException as error:
+        failure = error
+    finally:
+        if diagnostic is not None:
+            try:diagnostic.finish(failure)
+            except BaseException:report_failed = True
+    code = 1 if failure is not None or report_failed else 0
+    result = dict(id='bootstrap', exit=code)
+    if failure is not None:result.update(safe_failure(failure))
+    if report_failed:result['reportErrorCode'] = 'BOOTSTRAP_REPORT_WRITE_FAILED'
+    print(json.dumps(result))
+    return code
 
 
 if __name__ == '__main__':
