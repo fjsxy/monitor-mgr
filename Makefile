@@ -141,10 +141,14 @@ acceptance-protocol-check: ## Host真实子进程的锁等待、停止与完整i
 acceptance-transport-check: ## 私有进程输出与持久UID账本的Host协议检查
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s scripts/acceptance -p transport_test.py
 
+.PHONY: acceptance-status-fixture-check
+acceptance-status-fixture-check: ## status条件PUT与精确分层选择的相关Host检查；不执行产品Q/K/B
+	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/acceptance $(PYTHON) -m unittest status_fixture_test focus_layer_test agent_projection_test run_test registry_test transport_test.IdentityLedger.test_mutation_uses_original_uid_and_current_revision_conditions transport_test.IdentityLedger.test_restore_only_our_finalizer_and_preserve_later_foreign_token
+
 .PHONY: acceptance-host-check acceptance-list acceptance-run acceptance-validate acceptance-export acceptance-recover acceptance-bootstrap acceptance-prepare-check environment-fixture-image
 acceptance-host-check: ## 全部Host执行协议检查；不建立真实K/B或profile passing键
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s scripts/acceptance -p '*test.py'
-acceptance-list: ## 精确列举固定profile或独立supplemental键；E2E_ARGS指定profile
+acceptance-list: ## 列举固定profile/supplemental键；E2E_ARGS可用focus与focus-layer交集
 	$(PYTHON) scripts/acceptance/run.py list $(E2E_ARGS)
 acceptance-run: ## 唯一候选同源验收；E2E_ARGS显式profile/run/环境/外置output
 	$(PYTHON) scripts/acceptance/run.py run $(E2E_ARGS)

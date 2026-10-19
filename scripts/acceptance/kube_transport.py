@@ -273,7 +273,7 @@ class KubeTransport:
                 if raw != resource_path(identity(data)) + "/status":
                     raise KubeFailure("undeclared_replace_raw_path")
                 subresource = "status"
-            value = self.mutate_obj(target, data, subresource=subresource)
+            value = self.mutate_obj(target, data, subresource=subresource, request_type="replace")
             return subprocess.CompletedProcess(args, 0, json.dumps(value).encode(), b"")
         raw = self.option(tail, "--raw")
         if raw and verb == "delete":
@@ -483,8 +483,10 @@ class KubeTransport:
         self.checkpoint()
         return response
 
-    def mutate_obj(self, target, desired, *, subresource=None, restoring=False):
+    def mutate_obj(self, target, desired, *, subresource=None, restoring=False, request_type=None):
         """已确认 UID 的条件变更；全局故障先私有持久字段基线，恢复只撤回自己的改动。"""
+        if request_type not in [None, "replace"]:
+            raise KubeFailure("undeclared_mutation_request")
         self.checkpoint()
         info = identity(desired)
         if info["namespace"]:
@@ -513,16 +515,23 @@ class KubeTransport:
         origin = "fault-existing" if global_fault else owner["origin"]
         token = self.ledger.intent(target, "fault-mutate" if fault else "restore" if restoring else "mutate", info, origin=origin,
                                    uid=uid, resource_version=revision, baseline=baseline)
-        # 关键：GET 后按名 PATCH 仍有替代竞争窗，实际请求必须原子测试 UID 和读到的 RV。
-        payload = [{"op": "test", "path": "/metadata/uid", "value": uid},
-                   {"op": "test", "path": "/metadata/resourceVersion", "value": revision}, *patch]
-        args = ["patch", RESOURCES[info["kind"]][1], info["name"], "--type=json", "-p", json.dumps(payload), "-o", "json"]
-        if info["namespace"]:
-            args += ["-n", info["namespace"]]
-        if subresource:
-            args += ["--subresource=" + subresource]
+        native_status = request_type == "replace" and subresource == "status"
+        if native_status:
+            # 关键：status PUT以请求原UID作为storage precondition、RV作CAS；不能用后读新UID换绑。
+            # 仅已校验的replace/status保留原生错误协议，普通PATCH及其他写入继续原子test。
+            args = ["replace", "--raw", resource_path(info) + "/status", "-f", "-"]
+        else:
+            # 关键：GET 后按名 PATCH 仍有替代竞争窗，实际请求必须原子测试 UID 和读到的 RV。
+            payload = [{"op": "test", "path": "/metadata/uid", "value": uid},
+                       {"op": "test", "path": "/metadata/resourceVersion", "value": revision}, *patch]
+            args = ["patch", RESOURCES[info["kind"]][1], info["name"], "--type=json", "-p", json.dumps(payload), "-o", "json"]
+            if info["namespace"]:
+                args += ["-n", info["namespace"]]
+            if subresource:
+                args += ["--subresource=" + subresource]
         try:
-            result = self._run(target, args, label="kube-conditional-patch")
+            result = self._run(target, args, label="kube-conditional-status-replace" if native_status else "kube-conditional-patch",
+                               **({"data": desired} if native_status else {}))
             if result.returncode:
                 raise KubeFailure(self.error(result))
             response = json.loads(result.stdout)

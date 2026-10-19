@@ -57,7 +57,9 @@ def reason_runtime_projection(s,instance,outside_name,markers,malformed,timeout=
     path='/apis/monitoring.coreos.com/v1alpha1/namespaces/'+s.targetns+'/prometheusagents/'+name+'/status'
     result=s.k('replace','--raw',path,'-f','-',data=cr,check=False)
     if result.returncode==0:break
-    assert b'(Conflict)' in result.stderr and attempt<7,'reason来源fixture写入失败（原文不输出）'
+    # 关键：仅标准Conflict或传输前明确的本地RV过期允许重读；未知/权限/Invalid不能盲重试。
+    retryable=b'(Conflict)' in result.stderr or result.stderr==b'Error from acceptance boundary (stale_fixture_revision)'
+    assert retryable and attempt<7,'reason来源fixture写入失败（原文不输出）'
   observed=[]
   for name in [managed_name,outside_name]:
    cr=s.cr(name);conditions=cr.get('status',{}).get('conditions',[])

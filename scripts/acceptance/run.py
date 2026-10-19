@@ -37,15 +37,29 @@ def ref(path, root, kind="safe-json"):
             "visibility": "public", "kind": kind}
 
 
+def selected_entries(profile, supplemental=False, focus=None, focus_layer=None):
+    """list与dispatch共用同一交集；registry正式键及合同保持原样。"""
+    selected = registry.entries(profile, supplemental, focus)
+    if focus_layer is not None:
+        if not focus_layer or len(focus_layer) != len(set(focus_layer)) or not set(focus_layer) <= {"Q", "K", "B"}:
+            raise ValueError("未知/重复/空focus-layer")
+        selected = [e for e in selected if e["layer"] in focus_layer]
+        if not selected:
+            raise ValueError("focus与focus-layer交集为空或profile不含该层")
+    return selected
+
+
 def run_batch(a):
     """完整期望 index 先于环境读取、等锁和任何 Suite 构造。"""
+    # 关键：只过滤selected派发，完整seed始终不筛层；未选键仍not_run，不能伪装完整门禁。
     full = registry.entries(a.profile, a.supplemental)
-    selected = registry.entries(a.profile, a.supplemental, a.focus)
+    selected = selected_entries(a.profile, a.supplemental, a.focus, getattr(a, "focus_layer", None))
     actual = source_state()
     session = ExecutionSession(a.output, expected=[{"variantId": e["variantId"], "layer": e["layer"]} for e in full],
                            run_id=a.run_id, profile=a.profile, candidate=a.candidate, source=actual)
     session.index.update(manifestHash=registry.MANIFEST_HASH, supplemental=a.supplemental,
-                         executionBoundary="acceptance", productGate=True, focused=bool(a.focus))
+                         executionBoundary="acceptance", productGate=True,
+                         focused=bool(a.focus or getattr(a, "focus_layer", None)))
     session.flush()
     failure = None
     current = selected[0]
@@ -175,7 +189,7 @@ def run_batch(a):
             ACTIVE.reset(active)
     success = failure is None and session.index["state"] == "completed" and cleanup["success"]
     gate_result = None
-    if success and not a.focus:
+    if success and not (a.focus or getattr(a, "focus_layer", None)):
         import gate
         try:
             gate_result = gate.validate(session.out / "index.json", a.candidate, a.profile, a.supplemental)
@@ -342,6 +356,7 @@ def main():
     listing.add_argument("--profile", choices=registry.PROFILES, required=True)
     listing.add_argument("--supplemental", action="store_true")
     listing.add_argument("--focus", nargs="+")
+    listing.add_argument("--focus-layer", nargs="+", choices=["Q", "K", "B"])
     run = commands.add_parser("run")
     run.add_argument("--profile", choices=registry.PROFILES, required=True)
     run.add_argument("--run-id", required=True)
@@ -351,6 +366,7 @@ def main():
     run.add_argument("--api-lane")
     run.add_argument("--supplemental", action="store_true")
     run.add_argument("--focus", nargs="+")
+    run.add_argument("--focus-layer", nargs="+", choices=["Q", "K", "B"])
     run.add_argument("--fail-fast", action="store_true")
     run.add_argument("--parent-index")
     internal = commands.add_parser("internal-case")
@@ -379,7 +395,7 @@ def main():
     try:
         if a := parser.parse_args():
             if a.command == "list":
-                print(json.dumps(registry.entries(a.profile, a.supplemental, a.focus), ensure_ascii=False, indent=2))
+                print(json.dumps(selected_entries(a.profile, a.supplemental, a.focus, a.focus_layer), ensure_ascii=False, indent=2))
                 return 0
             if a.command == "run":
                 return run_batch(a)
