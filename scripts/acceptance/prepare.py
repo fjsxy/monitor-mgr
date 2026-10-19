@@ -10,7 +10,7 @@ import re
 import time
 import uuid
 
-from image_provenance import ImageProofError, read_docker_archive, read_oci_graph
+from image_provenance import ImageProofError, read_docker_archive, read_oci_graph, runtime_image_proof
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 LOCK = json.loads((pathlib.Path(__file__).with_name('source-lock.json')).read_text())
@@ -764,6 +764,9 @@ def verify_environment(descriptor, *, execute):
         roles = sorted('control-plane' if 'node-role.kubernetes.io/control-plane' in node['metadata'].get('labels', {}) else 'worker' for node in nodes)
         if roles != (['control-plane', 'worker', 'worker'] if role == 'control' else ['control-plane']):
             raise PrepareError('PREPARE_NODE_TOPOLOGY_MISMATCH')
+        if target.get('nodeTopology') and {n['name']: n['uid'] for n in target['nodeTopology']} != {
+                n['metadata']['name']: n['metadata']['uid'] for n in nodes}:
+            raise PrepareError('PREPARE_NODE_TOPOLOGY_MISMATCH')
         for node in nodes:
             if (node.get('status', {}).get('nodeInfo', {}).get('architecture') != result['platform'].split('/')[1] or
                     node.get('status', {}).get('nodeInfo', {}).get('kubeletVersion') != 'v1.28.15') or not any(
@@ -789,13 +792,15 @@ def verify_environment(descriptor, *, execute):
             status = pod['status']['containerStatuses'][0]
             if pod['spec']['containers'][0]['image'] != image or not status.get('imageID'):
                 raise PrepareError('PREPARE_CONTROLLER_IMAGE_MISMATCH')
-            image_proof = next((item for item in target.get('nodeImageProofs', [])
-                                if item['node'] == pod['spec']['nodeName'] and item['image'] == image), None)
-            normalize = lambda value: value.rsplit('@', 1)[-1].split('://', 1)[-1]
-            if image_proof is None or normalize(status['imageID']) not in {normalize(item) for item in
-                    [image_proof['configDigest'], *image_proof['repoDigests']]}:
+            try:
+                runtime_proof = runtime_image_proof(result, role, pod, pod['spec']['containers'][0], status,
+                    next(node for node in nodes if node['metadata']['name'] == pod['spec']['nodeName']),
+                    read=lambda argv: _bytes(_check(execute(argv, label='verify-controller-runtime', timeout=30), 'VERIFY_CONTROLLER_RUNTIME').stdout),
+                    lock=LOCK)
+            except (ImageProofError, StopIteration):
                 raise PrepareError('PREPARE_CONTROLLER_RUNTIME_DIGEST_MISMATCH')
-            controllers.append({'name': name, 'podUID': pod['metadata']['uid'], 'image': image, 'imageID': status['imageID']})
+            controllers.append({'name': name, 'podUID': pod['metadata']['uid'], 'image': image, 'imageID': status['imageID'],
+                                'runtimeProof': runtime_proof})
         target['controllers'] = controllers
     return result
 

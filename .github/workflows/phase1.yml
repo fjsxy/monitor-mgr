@@ -116,7 +116,7 @@ jobs:
           path: ${{ env.SAFE_OUTPUT }}/
           if-no-files-found: error
           retention-days: 14
-          include-hidden-files: false
+          include-hidden-files: true
 
   smoke:
     name: CI_SMOKE 17 Linux amd64
@@ -204,7 +204,7 @@ jobs:
           path: ${{ env.SAFE_OUTPUT }}/
           if-no-files-found: error
           retention-days: 14
-          include-hidden-files: false
+          include-hidden-files: true
       - name: 独立恢复 child 顺序清理 owned cluster
         if: always() && steps.request.outcome == 'success'
         run: |

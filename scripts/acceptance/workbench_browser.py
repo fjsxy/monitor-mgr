@@ -96,7 +96,7 @@ def execute(s,selector,fixture,test_file='tests/workbench.spec.ts'):
  assert not leaked,'浏览器证据出现敏感值，已脱敏但门禁失败'
  assert len(tests)==1 and tests[0]['status']=='expected' and tests[0]['results'][-1]['status']=='passed' and result.returncode==0,'真实浏览器失败，见安全日志'
  assert (artifacts/'browser-console.json').exists() and (artifacts/'browser-layout.json').exists(),'缺少实际浏览器console/layout证据'
- return {'selector':selector,'browserAnnotations':tests[0].get('annotations',[]),'command':command,'exitCode':result.returncode,'trace':'off','report':str(report.relative_to(s.out)),'evidenceRefs':[{'path':str(p.relative_to(s.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(out.rglob('*')) if p.is_file()]}
+ return {'selector':selector,'browserAnnotations':tests[0].get('annotations',[]),'command':command,'exitCode':result.returncode,'trace':'off','report':str(report.relative_to(s.out)),'evidenceRefs':[{'path':str(p.relative_to(s.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),**({'kind':'browser-report','visibility':'public'} if p==report else {})} for p in sorted(out.rglob('*')) if p.is_file()]}
 
 def run_browser(s,case,index):
  if case.startswith('REG19-AGENT-'):

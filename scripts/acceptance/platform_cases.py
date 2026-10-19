@@ -253,7 +253,12 @@ def _topology(s, entry):
         proof = descriptor['imageProofs'][image]
         _check(proof.get('source') == revision and proof.get('platform') == descriptor['platform'] and
                proof.get('originalContentBytesVerified') is True, 'PLATFORM_IMAGE_PROVENANCE_MISSING')
-        copied, contents = _copy_metadata(s, descriptor, proof)
+        if image == descriptor['monitorOpImage']:
+            from image_provenance import source_config_bytes
+            # 私有Operator原config只私有回读；公开仅保留已核digest/revision和实际UID投影。
+            copied, contents = [], {proof['configDigest']: json.loads(source_config_bytes(descriptor, image))}
+        else:
+            copied, contents = _copy_metadata(s, descriptor, proof)
         config = contents.get(proof['configDigest'], {})
         _check(config.get('architecture') == arch and config.get('os') == 'linux' and
                config.get('config', {}).get('Labels', {}).get('org.opencontainers.image.revision') == revision,
@@ -333,11 +338,15 @@ def _topology(s, entry):
             containers = pod.get('status', {}).get('containerStatuses', [])
             _check(containers and all(c.get('ready') for c in containers), 'PLATFORM_CONTROLLER_NOT_READY')
             status = containers[0]
+            from image_provenance import runtime_image_proof
+            def read_runtime(command):
+                private = s.out / '.private' / ('runtime-image-' + uuid.uuid4().hex + '.log')
+                return _captured(s, command, private).stdout
+            runtime_proof = runtime_image_proof(descriptor, role, pod, pod['spec']['containers'][0], status,
+                next(n for n in nodes if n['metadata']['name'] == pod['spec']['nodeName']),
+                read=read_runtime, lock=lock, output=s.out)
             _check(pod['spec']['containers'][0]['image'] == expected['image'] and status['imageID'] == expected['imageID'],
                    'PLATFORM_CONTROLLER_IMAGE_CHANGED')
-            image_proof = descriptor['imageProofs'][expected['image']]
-            allowed = [image_proof.get(k) for k in ['configDigest', 'manifestDigest', 'indexDigest'] if image_proof.get(k)]
-            _check(any(status['imageID'].endswith(digest) for digest in allowed), 'PLATFORM_CONTROLLER_IMAGE_ID_MISMATCH')
             deployment = s.get('deployment', expected['name'], '-n', 'mm-phase1-operators', target=role)
             baseline = [b for b in target['baseline'] if b['kind'] == 'Deployment' and
                         b['name'] == expected['name'] and b.get('namespace') == 'mm-phase1-operators']
@@ -350,7 +359,7 @@ def _topology(s, entry):
             _check(replica_set['metadata']['uid'] == owner['uid'] and any(o.get('controller') and
                    o.get('uid') == deployment['metadata']['uid'] for o in replica_set['metadata'].get('ownerReferences', [])),
                    'PLATFORM_CONTROLLER_OWNER_CHAIN_MISMATCH')
-            controller = dict(expected, deploymentUID=deployment['metadata']['uid'], replicaSetUID=owner['uid'])
+            controller = dict(expected, deploymentUID=deployment['metadata']['uid'], replicaSetUID=owner['uid'], runtimeProof=runtime_proof)
             if expected['name'] == 'prometheus-operator':
                 raw = s.k('get', '--raw', '/api/v1/namespaces/mm-phase1-operators/pods/' +
                           pod['metadata']['name'] + ':8080/proxy/metrics', target=role).stdout
