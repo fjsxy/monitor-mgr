@@ -2,11 +2,13 @@
 """实际执行接缝的Host边界检查，不产生产品K/B通过。"""
 import json
 import hashlib
+import io
 import http.server
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tarfile
 import threading
 import time
 from types import SimpleNamespace
@@ -17,6 +19,99 @@ from execution import ExecutionSession, go_events
 
 
 class ExecutionBoundary(unittest.TestCase):
+    def test_legacy_docker_archive_through_node_prepare_supplies_real_manifest_to_session(self):
+        """真实tar原config→受控node原manifest→Session闭包；不运行Docker或Kubernetes。"""
+        from image_provenance import read_docker_archive
+        from prepare import _Preparation
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);source='a'*40;image='example:fixture';node_id='d'*64
+            config=json.dumps({'os':'linux','architecture':'amd64','config':{'Labels':{'org.opencontainers.image.revision':source}}}).encode()
+            digest='sha256:'+hashlib.sha256(config).hexdigest()
+            manifest=json.dumps({'schemaVersion':2,'config':{'digest':digest,'size':len(config)},'layers':[]}).encode()
+            manifest_digest='sha256:'+hashlib.sha256(manifest).hexdigest()
+            files={'manifest.json':json.dumps([{'Config':digest[7:]+'.json','RepoTags':[image],'Layers':[]}]).encode(),digest[7:]+'.json':config}
+            archive=root/'original.tar'
+            with tarfile.open(archive,'w') as stream:
+                for name,data in files.items():
+                    info=tarfile.TarInfo(name);info.size=len(data);stream.addfile(info,io.BytesIO(data))
+            metadata=read_docker_archive(archive,image=image,expected_source=source,platform='linux/amd64',
+                                         inspect={'Id':digest},destination=root/'host-proof')
+            self.assertIsNone(metadata['manifestDigest']);self.assertIsNone(metadata['indexDigest'])
+            class OfficialBoundary(Exception):pass
+            calls=[]
+            def execute(argv,**kwargs):
+                calls.append(argv)
+                if argv[:2]==['kind','load']:return subprocess.CompletedProcess(argv,0,b'',b'')
+                if 'pull' in argv:raise OfficialBoundary()
+                if 'inspecti' in argv:raw=json.dumps({'status':{'id':digest,'repoDigests':['example@'+manifest_digest]}}).encode()
+                else:
+                    self.assertEqual(argv[:8],['docker','exec',node_id,'ctr','--namespace','k8s.io','content','get'])
+                    raw={digest:config,manifest_digest:manifest}[argv[-1]]
+                return subprocess.CompletedProcess(argv,0,raw,b'')
+            request={'source':source,'platform':'linux/amd64','runId':'host-legacy','privateRoot':str(root/'prepare'),
+                'image':image,'fixtureImages':{},'monitorOpImage':'private:operator','kind':'kind',
+                'imageProofs':{image:metadata,'private:operator':metadata.copy()},
+                'targets':{'control':{'name':'owned','clusterUID':'original-cluster','containers':[{'name':'original-node','id':node_id}]}}}
+            preparation=_Preparation(request,execute,lambda event:None)
+            with self.assertRaises(OfficialBoundary):preparation.load_images('control')
+            session=ExecutionSession(root/'run',expected=[],run_id='host-legacy',profile='validator-test',candidate=source,protocol_fixture=True)
+            try:
+                session.environment_descriptor=preparation.d
+                proof=session.image_metadata(image)
+                raw=(session.out/proof['manifestRef']['path']).read_bytes()
+                self.assertEqual(raw,manifest)
+                self.assertEqual(proof['manifestDigest'],manifest_digest)
+                self.assertEqual(proof['configDigest'],digest)
+                self.assertTrue(all(a[2]==node_id for a in calls if 'inspecti' in a or 'content' in a))
+                from gate import _image
+                _image({'productImage':proof,'platform':dict(podUID='original-pod',nodeName='original-node',
+                        imageID='example@'+manifest_digest,clusterUID='original-cluster',serviceName='monitor-mgr')},
+                       SimpleNamespace(read=lambda ref:(session.out/ref['path']).read_bytes()),source,'amd64',{'original-cluster'})
+            finally:session.shutdown();session.close()
+
+    def test_prepared_config_only_has_fixed_error_and_private_operator_is_not_public(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);source='a'*40;path=root/'config.raw.json';path.write_text('{}')
+            metadata={'source':source,'evidenceRefs':[dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest())]}
+            session=ExecutionSession(root/'run',expected=[],run_id='host-unresolved',profile='validator-test',candidate=source,protocol_fixture=True)
+            try:
+                session.environment_descriptor={'image':'public:fixture','imageProofs':{'public:fixture':metadata,'private:operator':metadata}}
+                with self.assertRaisesRegex(ValueError,'prepared-image-oci-manifest-required'):session.image_metadata('public:fixture')
+                with self.assertRaisesRegex(ValueError,'unapproved-public-image-proof'):session.image_metadata('private:operator')
+            finally:session.shutdown();session.close()
+
+    def test_original_docker_oci_index_prepared_proof_keeps_child_bytes_and_gate_digest_checks(self):
+        from image_provenance import read_docker_archive
+        from gate import _image
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);source='a'*40;image='example:fixture'
+            config=json.dumps({'os':'linux','architecture':'amd64','config':{'Labels':{'org.opencontainers.image.revision':source}}}).encode()
+            digest='sha256:'+hashlib.sha256(config).hexdigest()
+            manifest=json.dumps({'schemaVersion':2,'config':{'digest':digest,'size':len(config)},'layers':[]}).encode()
+            child='sha256:'+hashlib.sha256(manifest).hexdigest()
+            index=json.dumps({'schemaVersion':2,'manifests':[{'digest':child,'size':len(manifest),'platform':{'os':'linux','architecture':'amd64'}}]}).encode()
+            parent='sha256:'+hashlib.sha256(index).hexdigest()
+            files={'manifest.json':json.dumps([{'Config':'blobs/sha256/'+digest[7:],'RepoTags':[image],'Layers':[]}]).encode(),
+                   'blobs/sha256/'+digest[7:]:config,'blobs/sha256/'+child[7:]:manifest,'blobs/sha256/'+parent[7:]:index}
+            with tarfile.open(root/'original.tar','w') as stream:
+                for name,data in files.items():
+                    info=tarfile.TarInfo(name);info.size=len(data);stream.addfile(info,io.BytesIO(data))
+            metadata=read_docker_archive(root/'original.tar',image=image,expected_source=source,platform='linux/amd64',
+                inspect={'Id':parent,'Descriptor':{'digest':parent}},destination=root/'host-proof')
+            session=ExecutionSession(root/'run',expected=[],run_id='host-index',profile='validator-test',candidate=source,protocol_fixture=True)
+            try:
+                session.environment_descriptor={'image':image,'platform':'linux/amd64','imageProofs':{image:metadata}}
+                proof=session.image_metadata(image)
+                self.assertEqual((proof['indexDigest'],proof['manifestDigest']),(parent,child))
+                self.assertEqual((session.out/proof['manifestRef']['path']).read_bytes(),manifest)
+                self.assertEqual((session.out/proof['configRef']['path']).read_bytes(),config)
+                record={'productImage':proof,'platform':dict(podUID='original-pod',nodeName='original-node',imageID='example@'+child,
+                        clusterUID='original-cluster',serviceName='monitor-mgr')}
+                _image(record,SimpleNamespace(read=lambda ref:(session.out/ref['path']).read_bytes()),source,'amd64',{'original-cluster'})
+                session.images.clear();metadata['manifestDigest']='sha256:'+'f'*64
+                with self.assertRaisesRegex(ValueError,'prepared-image-source-or-oci-binding-mismatch'):session.image_metadata(image)
+            finally:session.shutdown();session.close()
+
     def test_undrained_handler_keeps_failed_lease_until_process_exit(self):
         """有界未排空不能解锁；Host夹具确认原handler结束后才手工撤回自己的保留fd。"""
         import fcntl

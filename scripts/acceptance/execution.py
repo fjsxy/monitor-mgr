@@ -245,10 +245,13 @@ class ExecutionSession(BatchSession):
                 refs[source.name] = reference(target, self.out, "image-config" if source.name == "config.raw.json" else "image-manifest")
             config = json.loads((destination / "config.raw.json").read_bytes())
             manifest_name = "oci-manifest.raw.json" if "oci-manifest.raw.json" in refs else "oci-root.raw.json"
+            if manifest_name not in refs:
+                raise ValueError("prepared-image-oci-manifest-required")
             manifest = json.loads((destination / manifest_name).read_bytes())
             config_digest = "sha256:" + refs["config.raw.json"]["sha256"]
             manifest_digest = "sha256:" + refs[manifest_name]["sha256"]
-            if (manifest.get("config", {}).get("digest") != config_digest or existing["configDigest"] != config_digest
+            if (manifest.get("schemaVersion") != 2 or manifest.get("config", {}).get("digest") != config_digest
+                    or existing.get("manifestDigest") != manifest_digest or existing["configDigest"] != config_digest
                     or config.get("config", {}).get("Labels", {}).get("org.opencontainers.image.revision") != self.index["candidateCommit"]
                     or config.get("os") + "/" + config.get("architecture") != self.environment_descriptor["platform"]):
                 raise ValueError("prepared-image-source-or-oci-binding-mismatch")

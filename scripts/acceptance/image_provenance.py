@@ -12,6 +12,66 @@ class ImageProofError(RuntimeError):
     """固定错误码避免异常夹带私有配置。"""
 
 
+def read_oci_graph(read, root_digest, *, expected_config, expected_source, platform, destination=None, require_manifest=False):
+    """核实际内容index/manifest→原config；read只读原node字节，不能由digest声明构造元数据。"""
+    originals = {}
+    def content(digest, name):
+        if not isinstance(digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+            raise ImageProofError('IMAGE_OCI_DIGEST_INVALID')
+        raw = read(digest)
+        if not isinstance(raw, bytes) or 'sha256:' + hashlib.sha256(raw).hexdigest() != digest:
+            raise ImageProofError('IMAGE_OCI_CONTENT_DIGEST_MISMATCH')
+        try:
+            obj = json.loads(raw)
+        except (ValueError, TypeError):
+            raise ImageProofError('IMAGE_METADATA_MISSING') from None
+        if not isinstance(obj, dict):
+            raise ImageProofError('IMAGE_METADATA_MEMBER_INVALID')
+        originals[name] = raw
+        return obj, len(raw)
+    config, config_size = content(expected_config, 'config.raw.json')
+    os_name, architecture = platform.split('/')
+    if config.get('os') != os_name or config.get('architecture') != architecture:
+        raise ImageProofError('IMAGE_ACTUAL_CONFIG_PLATFORM_MISMATCH')
+    labels = config.get('config', {}).get('Labels', {}) if isinstance(config.get('config'), dict) else {}
+    if not isinstance(labels, dict) or labels.get('org.opencontainers.image.revision') != expected_source:
+        raise ImageProofError('IMAGE_ACTUAL_CONFIG_SOURCE_MISMATCH')
+    manifest_digest = index_digest = None
+    if root_digest != expected_config:
+        manifest, _ = content(root_digest, 'oci-root.raw.json')
+        manifest_digest = root_digest
+        if 'manifests' in manifest:
+            index_digest = root_digest
+            items = manifest['manifests']
+            if not isinstance(items, list) or any(not isinstance(v, dict) or not isinstance(v.get('platform', {}), dict) for v in items):
+                raise ImageProofError('IMAGE_OCI_PLATFORM_AMBIGUOUS')
+            selected = [v for v in items if v.get('platform', {}).get('os') == os_name and v['platform'].get('architecture') == architecture]
+            if manifest.get('schemaVersion') != 2 or len(selected) != 1:
+                raise ImageProofError('IMAGE_OCI_PLATFORM_AMBIGUOUS')
+            manifest_digest = selected[0].get('digest')
+            manifest, size = content(manifest_digest, 'oci-manifest.raw.json')
+            if selected[0].get('size') != size:
+                raise ImageProofError('IMAGE_METADATA_MEMBER_INVALID')
+        descriptor = manifest.get('config')
+        if (manifest.get('schemaVersion') != 2 or not isinstance(manifest.get('layers'), list) or not isinstance(descriptor, dict) or
+                descriptor.get('digest') != expected_config or descriptor.get('size') != config_size):
+            raise ImageProofError('IMAGE_OCI_CONFIG_BINDING_MISMATCH')
+    elif require_manifest:
+        raise ImageProofError('IMAGE_OCI_DESCRIPTOR_MISSING')
+    refs = []
+    if destination is not None:
+        destination = pathlib.Path(destination)
+        destination.mkdir(parents=True, exist_ok=False, mode=0o700)
+        for name, raw in originals.items():
+            path = destination / name
+            with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
+                stream.write(raw);stream.flush();os.fsync(stream.fileno())
+            refs.append({'path': str(path), 'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw)})
+    return dict(configDigest=expected_config, manifestDigest=manifest_digest, indexDigest=index_digest,
+                source=expected_source, platform=platform, os=os_name, architecture=architecture,
+                originalContentBytesVerified=True, evidenceRefs=refs)
+
+
 def read_docker_archive(path, *, image, expected_source, platform, inspect, destination):
     """原 Docker-save/OCI graph 与 config 字节是来源依据，inspect.Id 仅记录观测。"""
     refs = []

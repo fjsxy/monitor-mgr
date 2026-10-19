@@ -106,6 +106,35 @@ class PrepareProtocolTest(unittest.TestCase):
             self.assertTrue(runtime_reads)
             self.assertTrue(all(a[2]=='d'*64 for a in runtime_reads))
 
+    def test_local_node_manifest_completion_never_overwrites_first_node_or_publishes_operator(self):
+        for mode in ['matching','different-manifest','wrong-node','wrong-cri','missing','ambiguous','private']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                runtime={};p,_,_,_,_=self.volume_preparation(directory,runtime=runtime)
+                image=p.d['fixtureImages']['environment'];p.d.update(image=image,monitorOpImage='private:operator')
+                expected=p.d['imageProofs'][image];expected['evidenceRefs']=[]
+                reads=[]
+                def execute(argv,**kwargs):
+                    self.assertEqual(argv[:2],['docker','exec']);self.assertIn(argv[2],['d'*64,'e'*64]);reads.append(argv)
+                    return subprocess.CompletedProcess(argv,0,runtime['content'].get(argv[-1],b''),b'')
+                p.execute=execute;node={'name':'original-node','id':'d'*64}
+                status={'id':runtime['configDigest'],'repoDigests':['fixture@'+runtime['manifestDigest']]}
+                p.local_image_content(node,image,status)
+                original=json.loads(json.dumps(expected))
+                node={'name':'second-node','id':'e'*64}
+                if mode=='matching':
+                    p.local_image_content(node,image,status);self.assertEqual(expected,original);continue
+                if mode=='different-manifest':
+                    obj=json.loads(runtime['content'][runtime['manifestDigest']]);obj['annotations']={'different':'node'}
+                    raw=json.dumps(obj).encode();digest='sha256:'+hashlib.sha256(raw).hexdigest();runtime['content'][digest]=raw
+                    status['repoDigests']=['fixture@'+digest]
+                elif mode=='wrong-node':node['id']='unknown'
+                elif mode=='wrong-cri':status['id']='sha256:'+'f'*64
+                elif mode=='missing':status['repoDigests']=[]
+                elif mode=='ambiguous':status['repoDigests'].append('fixture@sha256:'+'f'*64)
+                elif mode=='private':p.d['imageProofs']['private:operator']=expected;image='private:operator'
+                with self.assertRaises(PrepareError):p.local_image_content(node,image,status)
+                self.assertEqual(expected,original)
+
     def test_volume_runtime_index_selects_one_actual_platform_child_without_rewriting_host_proof(self):
         with tempfile.TemporaryDirectory() as directory:
             runtime={};preparation,_,_,_,_=self.volume_preparation(directory,runtime=runtime)

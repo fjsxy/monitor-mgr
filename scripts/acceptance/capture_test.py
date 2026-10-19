@@ -22,6 +22,7 @@ class CaptureProtocolTest(unittest.TestCase):
         (source/'test_fixture.py').write_text('import unittest\nclass Fixture(unittest.TestCase):\n def test_bad(self):\n  raise ValueError("HOST-PRIVATE-MESSAGE")\n')
         (source/'fixture.py').write_text('def fail(error):\n raise error\n')
         (source/'fixture_test.go').write_text('// 中文来源注释\npackage fixture\nimport "testing"\nfunc TestRoot(t *testing.T) {\n t.Fatal("HOST-PRIVATE-MESSAGE")\n}\n')
+        (source/'Makefile').write_text('test-race: ## 质量夹具\n\tgo test -race ./...\nvet:\n\tgo vet ./...\ngenerate:\n\tbash scripts/generate-rpc.sh\n')
         self.commit_fixture(source)
         return source
 
@@ -30,6 +31,135 @@ class CaptureProtocolTest(unittest.TestCase):
                      '-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','-qm','test: 静态来源夹具']]:
             subprocess.run(['git',*args],cwd=source,capture_output=True,timeout=5,check=True)
         return subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+
+    def test_make_recipe_and_timeout_projection_host_fixture_never_replays_remote_failure(self):
+        """受控输出只验证安全诊断投影，不代表恢复原CI错误或实际timeout。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            result=subprocess.CompletedProcess([],2,b'panic: test timed out after 10m0s\nrunning tests:\n\tTestRoot (9m59s)\n',
+                b'make: *** [Makefile:2: test-race] Error HOST-PRIVATE-TAIL\n')
+            value=protected.project_output(result,label='quality',candidate=candidate,private_root=root/'raw',root=source)
+            self.assertFalse(value['unknown']);self.assertIs(value['productGate'],False);self.assertEqual(value['exit'],2)
+            self.assertEqual(value['observedMarkers'],['go-test-timeout'])
+            self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+            self.assertEqual(value['testFailures'],[])
+            self.assertEqual(value['repoFrames'],[dict(file='Makefile',line=2,function='<make-recipe>',target='test-race',
+                sourceBlobSHA256=hashlib.sha256((source/'Makefile').read_bytes()).hexdigest())])
+            for secret in ['HOST-PRIVATE','10m0s','9m59s',str(root)]:self.assertNotIn(secret,json.dumps(value))
+
+    def test_make_projection_rejects_unbound_rules_lines_and_private_dynamic_output(self):
+        for mode in ['fake-target','wrong-target','rule-line','zero','past-end','dirty','symlink','duplicate','dynamic-file','long-tail']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root);filename=source/'Makefile'
+                candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+                name='Makefile';line=2;target='test-race';tail='HOST-PRIVATE-TAIL'
+                if mode=='fake-target':target='test-race-HOST-PRIVATE'
+                elif mode=='wrong-target':target='vet'
+                elif mode=='rule-line':line=1
+                elif mode=='zero':line=0
+                elif mode=='past-end':line=9999
+                elif mode=='dirty':filename.write_text(filename.read_text()+'# changed\n')
+                elif mode=='symlink':
+                    external=root/'HOST-PRIVATE';external.write_bytes(filename.read_bytes());filename.unlink();filename.symlink_to(external)
+                elif mode=='duplicate':
+                    filename.write_text(filename.read_text()+'test-race:\n\tgo test ./...\n');candidate=self.commit_fixture(source)
+                elif mode=='dynamic-file':name=str(filename)
+                elif mode=='long-tail':tail*=300
+                output=('make[2]: *** ['+name+':'+str(line)+': '+target+'] Error '+tail+'\n--- FAIL: TestRoot (0.01s)\n').encode()
+                value=protected.project_output(subprocess.CompletedProcess([],2,b'',output),label='quality',candidate=candidate,
+                    private_root=root/'raw',root=source)
+                self.assertTrue(value['unknown']);self.assertEqual(value['repoFrames'],[])
+                self.assertNotIn('HOST-PRIVATE',json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+
+    def test_timeout_only_projects_source_verified_running_roots_and_fixed_marker(self):
+        for mode in ['subcase','unknown-root','message','stack','stream-boundary','long']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+                candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+                output='panic: test timed out after 10m0s\nrunning tests:\n\tTestRoot (1s)\n';errors=b''
+                if mode=='subcase':output+='\tTestRoot/HOST-PRIVATE (1s)\n'
+                elif mode=='unknown-root':output+='\tTestHOST_PRIVATE (1s)\n'
+                elif mode=='message':output='panic: test timed out after HOST-PRIVATE\nrunning tests:\n\tTestRoot (1s)\n'
+                elif mode=='stack':output='panic: test timed out after 10m0s\nrunning tests:\n\tTestRoot (1s)\n\ngoroutine 7 [HOST-PRIVATE]:\n\tTestHOST_PRIVATE (1s)\n'
+                elif mode=='stream-boundary':output='panic: test timed out after 10m0s\nrunning tests:';errors=b'\tTestRoot (1s)\n'
+                elif mode=='long':output+='\tTestRoot/'+'HOST-PRIVATE'*300+' (1s)\n'
+                value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),errors),label='quality',candidate=candidate,
+                    private_root=root/'raw',root=source)
+                expected=['fixture_test.go::TestRoot'] if mode in ['subcase','unknown-root','stack','long'] else []
+                self.assertEqual([v['testId'] for v in value['runningTests']],expected)
+                self.assertEqual(value['observedMarkers'],[] if mode=='message' else ['go-test-timeout'])
+                self.assertEqual(value['unknown'],mode not in ['subcase','stack'])
+                for secret in ['HOST-PRIVATE','HOST_PRIVATE','10m0s',str(root)]:self.assertNotIn(secret,json.dumps(value))
+
+    def test_timeout_parallel_leaf_only_host_projection_verifies_root_and_discards_nested_private_suffix(self):
+        """模拟Go标准runningList的parallel叶子；仅诊断投影Host回归，不是原CI timeout复现。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            for suffixes in [['/HOST-PRIVATE'],['/HOST-PRIVATE/nested(value)/x:y'],['/HOST-PRIVATE','/other/HOST-PRIVATE','']]:
+                with self.subTest(suffixes=suffixes):
+                    output='panic: test timed out after 10m0s\nrunning tests:\n'+''.join('\tTestRoot'+suffix+' (9m59s)\n' for suffix in suffixes)
+                    value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),b''),label='quality',candidate=candidate,
+                        private_root=root/'raw',root=source)
+                    self.assertFalse(value['unknown']);self.assertEqual(value['observedMarkers'],['go-test-timeout'])
+                    self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+                    self.assertEqual(value['runningTests'][0]['function'],'TestRoot')
+                    self.assertEqual(value['testFailures'],[]);self.assertEqual(value['repoFrames'],[])
+                    for secret in ['HOST-PRIVATE','nested','other','9m59s','10m0s',str(root)]:self.assertNotIn(secret,json.dumps(value))
+
+    def test_timeout_parallel_leaf_projection_rejects_unknown_root_malformed_lines_and_keeps_attempt_bound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            for leaf in ['TestHOST_PRIVATE/leaf (1s)','TestRoot/ (1s)','TestRoot/HOST PRIVATE (1s)',
+                         'TestRoot/HOST\tPRIVATE (1s)','TestRoot/HOST-PRIVATE (dynamic)',
+                         'TestRoot/HOST-PRIVATE (1s) HOST-PRIVATE']:
+                with self.subTest(leaf=leaf):
+                    output='panic: test timed out after 10m0s\nrunning tests:\n\t'+leaf+'\n'
+                    value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),b''),label='quality',candidate=candidate,
+                        private_root=root/'raw',root=source)
+                    self.assertTrue(value['unknown']);self.assertEqual(value['runningTests'],[])
+                    self.assertNotIn('HOST',json.dumps(value));self.assertNotIn('dynamic',json.dumps(value))
+            output='panic: test timed out after 10m0s\nrunning tests:\n'+'\tTestRoot/HOST-PRIVATE (1s)\n'*65
+            value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),b''),label='quality',candidate=candidate,
+                private_root=root/'raw',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+            self.assertNotIn('HOST-PRIVATE',json.dumps(value))
+
+    def test_priority_projection_keeps_late_make_stage_after_repeated_go_locations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            output=b'    fixture_test.go:5: HOST-PRIVATE-TAIL\n'*1000
+            errors=b'panic: test timed out after 10m0s\nrunning tests:\n\tTestRoot (1s)\nmake: *** [Makefile:2: test-race] Error HOST-PRIVATE\n'
+            value=protected.project_output(subprocess.CompletedProcess([],2,output,errors),label='quality',candidate=candidate,
+                private_root=root/'raw',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual(value['repoFrames'][0]['target'],'test-race')
+            self.assertEqual(value['observedMarkers'],['go-test-timeout'])
+            self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+            self.assertLessEqual(len(value['repoFrames']),8);self.assertNotIn('HOST-PRIVATE',json.dumps(value))
+
+    def test_priority_projection_shares_original_attempt_frame_identity_and_prefix_bounds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            filename=source/'fixture_test.go';filename.write_text(filename.read_text()+''.join(
+                'func TestStatic'+str(n)+'(t *testing.T) {}\n' for n in range(40)))
+            candidate=self.commit_fixture(source)
+            running='panic: test timed out after 10m0s\nrunning tests:\n'+''.join('\tTestStatic'+str(n)+' (1s)\n' for n in range(20))
+            failures=''.join('--- FAIL: TestStatic'+str(n)+' (0.01s)\n' for n in range(20,40))
+            value=protected.project_output(subprocess.CompletedProcess([],2,(running+failures).encode(),b''),label='quality',candidate=candidate,
+                private_root=root/'raw',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual(len(value['runningTests'])+len(value['testFailures']),32)
+            output=''.join('    fixture_test.go:'+str(n)+': HOST-PRIVATE\n' for n in range(1,10)).encode()
+            value=protected.project_output(subprocess.CompletedProcess([],2,output,b'make: *** [Makefile:2: test-race] Error HOST-PRIVATE\n'),
+                label='quality',candidate=candidate,private_root=root/'raw-frames',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual(len(value['repoFrames']),8)
+            self.assertEqual(value['repoFrames'][0]['target'],'test-race')
+            output=b'X'*(1024*1024)+b'\nmake: *** [Makefile:2: test-race] Error HOST-PRIVATE\n'
+            value=protected.project_output(subprocess.CompletedProcess([],2,output,b''),label='quality',candidate=candidate,
+                private_root=root/'raw-prefix',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual(value['repoFrames'],[])
 
     def test_go_assertion_location_uses_unique_frozen_basename_and_never_message_or_function_text(self):
         with tempfile.TemporaryDirectory() as directory:
