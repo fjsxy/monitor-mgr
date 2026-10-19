@@ -110,6 +110,26 @@ class Suite(KSMSuite):
    else:self.state(op,'SUCCEEDED');assert self.cr()['spec']['podResources']['requests']['cpu']=='200m'
    events=self.capture_proxy();writes=self.mutations(events,'PUT' if known else 'POST');assert len(writes)==1,events;return {'unknown':unknown,'operation':self.call('GET','/operations/'+op['operationId']),'mutationCount':len(writes),'uid':uid,'proxyEvents':events,'cr':cr}
   return self.run_more(case)
+ def residual_runtime(self,pod,lock):
+  """核P14残留fixture的实际运行身份，并保留原OCI与安全运行证明。"""
+  from image_provenance import ImageProofError,runtime_image_proof
+  from platform_cases import _copy_metadata
+  from execution import reference
+  from session import atomic_json
+  if not self.session:raise ImageProofError('IMAGE_RUNTIME_OFFICIAL_PROOF_MISSING')
+  descriptor=self.session.environment_descriptor;containers=pod.get('spec',{}).get('containers',[]);statuses=pod.get('status',{}).get('containerStatuses',[])
+  if len(containers)!=1 or containers[0].get('name')!='residual' or containers[0].get('image')!=lock['images']['python_fixture']['image']:raise ImageProofError('IMAGE_RUNTIME_REFERENCE_NOT_LOCKED')
+  if len(statuses)!=1:raise ImageProofError('IMAGE_RUNTIME_CONTAINER_ID_MISMATCH')
+  node=json.loads(self.k('get','node',pod['spec']['nodeName'],'-o','json',target=self.target).stdout)
+  def read_runtime(command):
+   result=self.run_captured(command,cwd=ROOT,env=os.environ,private_path=self.out/'.private'/('p14-runtime-'+uuid.uuid4().hex+'.log'),timeout=60)
+   if result.returncode:raise ImageProofError('IMAGE_RUNTIME_READ_FAILED')
+   return result.stdout
+  # 关键：index或manifest都不能单独证明运行配置；必须绑定原node/Pod/container、实际CRI config和原OCI字节链。
+  proof=runtime_image_proof(descriptor,self.target,pod,containers[0],statuses[0],node,read=read_runtime,lock=lock,output=self.out)
+  refs,_=_copy_metadata(self,descriptor,descriptor['officialContent']['python_fixture'])
+  path=self.out/'p14-runtime-image-proof.json';atomic_json(path,proof)
+  return proof,refs,reference(path,self.out)
  def run_more(self,case):
   if case in ['P13.unsent','P13.possibly-sent']:
    stage='beforeDispatch' if case.endswith('unsent') else 'afterSendMarker';i=self.create();self.gate('arm',{'stage':stage});o=self.publish(i,wait=False);barrier=self.barrier(stage);before=self.call('GET','/operations/'+o['operationId']+'/attempts')['attempts'];rebuild=self.rebuild(force=True);pending=self.state(o,'WAITING_CONFIRMATION' if case.endswith('unsent') else 'IDENTITY_UNCERTAIN');assert self.cr_absent();time.sleep(1.2);assert self.cr_absent()
@@ -149,13 +169,15 @@ class Suite(KSMSuite):
   if case.startswith('P14.'):
    i,pub=self.first();original=self.cr();uid=original['metadata']['uid'];proxy=None;orphan=None
    if case.endswith('pod-remains'):
+    lock=json.loads((ROOT/'scripts/acceptance/source-lock.json').read_text());python_image=lock['images']['python_fixture']['image']
     moved=self.targetns+'-moved';self.k('create','namespace',moved,target=self.target);self.extra_namespaces.append(moved)
     self.k('patch','kubestatemetrics',self.crname,'--type=merge','-p',json.dumps({'spec':{'targetNamespace':moved}}),target=self.target)
     # 固定Operator拒绝已应用targetNamespace迁移；外部fixture显式构造合法原CR UID→DP→RS→Pod跨namespace链。
-    fixture={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':self.crname+'-cross-owner','namespace':moved,'ownerReferences':[{'apiVersion':original['apiVersion'],'kind':original['kind'],'name':self.crname,'uid':uid,'controller':True,'blockOwnerDeletion':True}]},'spec':{'replicas':1,'selector':{'matchLabels':{'phase1.fixture/cross-owner':self.a.prefix}},'template':{'metadata':{'labels':{'phase1.fixture/cross-owner':self.a.prefix}},'spec':{'automountServiceAccountToken':False,'securityContext':{'runAsUser':10001,'runAsGroup':10001,'runAsNonRoot':True},'containers':[{'name':'residual','image':'python:3.13.2-alpine','imagePullPolicy':'IfNotPresent','command':['python','-c','import time; time.sleep(3600)'],'resources':{'requests':{'cpu':'1m','memory':'16Mi'},'limits':{'memory':'32Mi'}}}]}}}}
+    fixture={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':self.crname+'-cross-owner','namespace':moved,'ownerReferences':[{'apiVersion':original['apiVersion'],'kind':original['kind'],'name':self.crname,'uid':uid,'controller':True,'blockOwnerDeletion':True}]},'spec':{'replicas':1,'selector':{'matchLabels':{'phase1.fixture/cross-owner':self.a.prefix}},'template':{'metadata':{'labels':{'phase1.fixture/cross-owner':self.a.prefix}},'spec':{'automountServiceAccountToken':False,'securityContext':{'runAsUser':10001,'runAsGroup':10001,'runAsNonRoot':True},'containers':[{'name':'residual','image':python_image,'imagePullPolicy':'IfNotPresent','command':['python','-c','import time; time.sleep(3600)'],'resources':{'requests':{'cpu':'1m','memory':'16Mi'},'limits':{'memory':'32Mi'}}}]}}}}
     self.k('apply','-f','-',data=fixture,target=self.target);self.k('-n',moved,'rollout','status','deployment/'+fixture['metadata']['name'],'--timeout=100s',target=self.target)
-    pods=json.loads(self.k('-n',moved,'get','pods','-o','json',target=self.target).stdout)['items'];assert len(pods)==1 and pods[0]['status']['containerStatuses'][0]['imageID'].endswith('sha256:91f983b2a023903433f6227b6c6056cedda4a335f1348d4ffbede021ab11602b')
-    self.cross_namespace_fixture={'manifest':fixture,'podUID':pods[0]['metadata']['uid'],'runtimeImageID':pods[0]['status']['containerStatuses'][0]['imageID'],'boundary':'显式外部故障fixture，非Operator支持迁移声明'}
+    pods=json.loads(self.k('-n',moved,'get','pods','-o','json',target=self.target).stdout)['items'];assert len(pods)==1
+    runtime,refs,runtime_ref=self.residual_runtime(pods[0],lock)
+    self.cross_namespace_fixture={'manifest':fixture,'podUID':pods[0]['metadata']['uid'],'runtimeImageID':pods[0]['status']['containerStatuses'][0]['imageID'],'runtimeImageProof':runtime,'runtimeImageRef':runtime_ref,'evidenceRefs':refs,'boundary':'显式外部故障fixture，非Operator支持迁移声明'}
    if case.endswith('finalizer'):
     self.k('patch','kubestatemetrics',self.crname,'--type=merge','-p',json.dumps({'metadata':{'finalizers':['phase1.fixture/hold']}}),target=self.target)
    if case.endswith('pod-remains') or case.endswith('read-failure') or case.endswith('delete-response-drop'):
