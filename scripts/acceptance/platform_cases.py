@@ -263,7 +263,8 @@ def _topology(s, entry):
         _check(config.get('architecture') == arch and config.get('os') == 'linux' and
                config.get('config', {}).get('Labels', {}).get('org.opencontainers.image.revision') == revision,
                'PLATFORM_IMAGE_CONFIG_SOURCE_MISMATCH')
-        if proof.get('manifestDigest'):
+        # private链已在原私有路径核完；此处只检查确已公开复制的manifest，不能要求私有原件进入contents。
+        if proof.get('manifestDigest') and image != descriptor['monitorOpImage']:
             _check(contents.get(proof['manifestDigest'], {}).get('config', {}).get('digest') == proof['configDigest'],
                    'PLATFORM_IMAGE_CONFIG_BINDING_MISMATCH')
         refs.extend(copied)

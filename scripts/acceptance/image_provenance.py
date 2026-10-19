@@ -13,6 +13,19 @@ class ImageProofError(RuntimeError):
     """固定错误码避免异常夹带私有配置。"""
 
 
+# 公开诊断只接受已审字面量；下游读取器抛出的任意异常值不能成为errorCode。
+RUNTIME_ERROR_CODES = frozenset('''
+IMAGE_OCI_DIGEST_INVALID IMAGE_OCI_CONTENT_DIGEST_MISMATCH IMAGE_METADATA_MISSING IMAGE_METADATA_MEMBER_INVALID
+IMAGE_ACTUAL_CONFIG_PLATFORM_MISMATCH IMAGE_ACTUAL_CONFIG_SOURCE_MISMATCH IMAGE_OCI_PLATFORM_AMBIGUOUS
+IMAGE_OCI_CONFIG_BINDING_MISMATCH IMAGE_OCI_DESCRIPTOR_MISSING IMAGE_HOST_SOURCE_PROOF_MISMATCH
+IMAGE_HOST_CONFIG_MISSING IMAGE_HOST_CONFIG_CHANGED IMAGE_HOST_OCI_BINDING_MISMATCH IMAGE_RUNTIME_NODE_UID_MISMATCH
+IMAGE_RUNTIME_NODE_PLATFORM_MISMATCH IMAGE_RUNTIME_NODE_ID_MISMATCH IMAGE_RUNTIME_REFERENCE_NOT_LOCKED
+IMAGE_RUNTIME_POD_NOT_READY IMAGE_RUNTIME_CONTAINER_ID_MISMATCH IMAGE_RUNTIME_CONTAINER_IDENTITY_MISMATCH
+IMAGE_RUNTIME_IMAGE_REF_MISMATCH IMAGE_RUNTIME_OFFICIAL_PROOF_MISSING IMAGE_RUNTIME_OFFICIAL_LOCK_MISMATCH
+IMAGE_RUNTIME_CONFIG_MISMATCH IMAGE_RUNTIME_OFFICIAL_CHAIN_MISMATCH IMAGE_RUNTIME_READ_FAILED
+'''.split())
+
+
 def read_oci_graph(read, root_digest, *, expected_config, expected_source, platform, destination=None, require_manifest=False):
     """核实际内容index/manifest→原config；read只读原node字节，不能由digest声明构造元数据。"""
     originals = {}
@@ -81,22 +94,30 @@ def source_config_bytes(descriptor, image):
             proof.get('originalContentBytesVerified') is not True):
         raise ImageProofError('IMAGE_HOST_SOURCE_PROOF_MISMATCH')
     root = pathlib.Path(descriptor['privateRoot']).absolute()
-    refs = [ref for ref in proof.get('evidenceRefs', []) if 'sha256:' + ref.get('sha256', '') == proof['configDigest']]
-    if len(refs) != 1:raise ImageProofError('IMAGE_HOST_CONFIG_MISSING')
-    path = pathlib.Path(refs[0]['path'])
-    if not path.is_absolute() or not path.is_relative_to(root):raise ImageProofError('IMAGE_HOST_CONFIG_MISSING')
-    current = root
-    for part in path.relative_to(root).parts:
-        if part in ('.', '..'):raise ImageProofError('IMAGE_HOST_CONFIG_MISSING')
-        current = current / part
-        if current.is_symlink():raise ImageProofError('IMAGE_HOST_CONFIG_MISSING')
-    raw = path.read_bytes()
-    if 'sha256:' + hashlib.sha256(raw).hexdigest() != proof['configDigest']:
-        raise ImageProofError('IMAGE_HOST_CONFIG_CHANGED')
+    def original(digest):
+        refs = [ref for ref in proof.get('evidenceRefs', []) if 'sha256:' + ref.get('sha256', '') == digest]
+        if len(refs) != 1:raise ImageProofError('IMAGE_HOST_CONFIG_MISSING')
+        path = pathlib.Path(refs[0]['path'])
+        if not path.is_absolute() or not path.is_relative_to(root):raise ImageProofError('IMAGE_HOST_CONFIG_MISSING')
+        current = root
+        for part in path.relative_to(root).parts:
+            if part in ('.', '..'):raise ImageProofError('IMAGE_HOST_CONFIG_MISSING')
+            current = current / part
+            if current.is_symlink():raise ImageProofError('IMAGE_HOST_CONFIG_MISSING')
+        raw = path.read_bytes()
+        if 'sha256:' + hashlib.sha256(raw).hexdigest() != digest:raise ImageProofError('IMAGE_HOST_CONFIG_CHANGED')
+        return raw
+    raw = original(proof['configDigest'])
     config = json.loads(raw)
     if (config.get('os', '') + '/' + config.get('architecture', '') != descriptor['platform'] or
             config.get('config', {}).get('Labels', {}).get('org.opencontainers.image.revision') != revision):
         raise ImageProofError('IMAGE_HOST_SOURCE_PROOF_MISMATCH')
+    if proof.get('manifestDigest') or proof.get('indexDigest'):
+        # 私有host有OCI时也核原index/manifest→config；仅私有读，不复制原JSON到公开闭包。
+        graph = read_oci_graph(original, proof.get('indexDigest') or proof['manifestDigest'],
+            expected_config=proof['configDigest'], expected_source=revision, platform=descriptor['platform'], require_manifest=True)
+        if graph['manifestDigest'] != proof.get('manifestDigest') or graph['indexDigest'] != proof.get('indexDigest'):
+            raise ImageProofError('IMAGE_HOST_OCI_BINDING_MISMATCH')
     return raw
 
 
@@ -107,9 +128,19 @@ def runtime_image_proof(descriptor, role, pod, container, status, node_object, *
         return match[1] if match else None
     def uid(value):
         return value if isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', value) else None
+    def uid_hash(value):
+        return hashlib.sha256(value.encode()).hexdigest() if isinstance(value, str) and value else None
+    def publish_uid(field, value):
+        # 原身份确认后仍只公开严格UUID；非UUID协议夹具/任意token保留hash，不反射原值。
+        observed[field + 'Verified'] = True
+        if re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', value):observed[field] = value
+    raw_pod_uid = pod.get('metadata', {}).get('uid');raw_node_uid = node_object.get('metadata', {}).get('uid')
+    pod_uid = uid(raw_pod_uid);node_uid = uid(raw_node_uid)
     image = container.get('image');reference_hash = hashlib.sha256(str(image).encode()).hexdigest()
     observed = dict(schemaVersion=1, kind='runtime-image-identity', productGate=False, verified=False, stage='pod',
-        podUID=uid(pod.get('metadata', {}).get('uid')), nodeUID=uid(node_object.get('metadata', {}).get('uid')),
+        podUIDSHA256=uid_hash(raw_pod_uid), nodeUIDSHA256=uid_hash(raw_node_uid),
+        podUIDMissing=not isinstance(raw_pod_uid, str) or not raw_pod_uid,
+        nodeUIDMissing=not isinstance(raw_node_uid, str) or not raw_node_uid,
         imageReferenceSHA256=reference_hash, imageID=digest(status.get('imageID')))
     path = None
     if output is not None:
@@ -126,7 +157,7 @@ def runtime_image_proof(descriptor, role, pod, container, status, node_object, *
         nodes = [n for n in target['containers'] if n['name'] == node_name]
         topology = [n for n in target['nodeTopology'] if n['name'] == node_name]
         require(len(nodes) == len(topology) == 1 and node_object.get('metadata', {}).get('name') == node_name and
-                observed['nodeUID'] == topology[0]['uid'], 'IMAGE_RUNTIME_NODE_UID_MISMATCH')
+                node_uid is not None and node_uid == topology[0]['uid'], 'IMAGE_RUNTIME_NODE_UID_MISMATCH')
         info = node_object.get('status', {}).get('nodeInfo', {})
         require(info.get('operatingSystem', '') + '/' + info.get('architecture', '') == descriptor['platform'],
                 'IMAGE_RUNTIME_NODE_PLATFORM_MISMATCH')
@@ -134,6 +165,7 @@ def runtime_image_proof(descriptor, role, pod, container, status, node_object, *
         require(bool(re.fullmatch('[0-9a-f]{64}', node_id)), 'IMAGE_RUNTIME_NODE_ID_MISMATCH')
         observed.update(nodeId=node_id, stage='node');checkpoint()
         require(read(['docker', 'inspect', '--format', '{{.Id}}', node_id]).strip() == node_id.encode(), 'IMAGE_RUNTIME_NODE_ID_MISMATCH')
+        publish_uid('nodeUID', node_uid)
         official = [value for value in lock['images'].values() if image in (value.get('image'), value.get('tag'))]
         local = {descriptor.get('image'), descriptor.get('monitorOpImage'), *descriptor.get('fixtureImages', {}).values()}
         require(len(official) == 1 or image in local, 'IMAGE_RUNTIME_REFERENCE_NOT_LOCKED')
@@ -141,14 +173,15 @@ def runtime_image_proof(descriptor, role, pod, container, status, node_object, *
                 any(c.get('type') == 'Ready' and c.get('status') == 'True' for c in pod.get('status', {}).get('conditions', [])),
                 'IMAGE_RUNTIME_POD_NOT_READY')
         cid = re.fullmatch('containerd://([0-9a-f]{64})', status.get('containerID', ''))
-        require(cid is not None and observed['podUID'] is not None, 'IMAGE_RUNTIME_CONTAINER_ID_MISMATCH')
+        require(cid is not None and pod_uid is not None, 'IMAGE_RUNTIME_CONTAINER_ID_MISMATCH')
         observed.update(containerID=cid[1], image=image, stage='cri');checkpoint()
         actual = json.loads(read(['docker', 'exec', node_id, 'crictl', 'inspect', cid[1]]));actual_status = actual['status']
         actual_config = actual['info']['config']['image']['image']
         observed.update(actualConfigDigest=digest(actual_config), actualImageRef=digest(actual_status.get('imageRef')));checkpoint()
         require(actual_status.get('id') == cid[1] and actual_status.get('metadata', {}).get('name') == container['name'] and
-                actual_status.get('labels', {}).get('io.kubernetes.pod.uid') == observed['podUID'] and
+                actual_status.get('labels', {}).get('io.kubernetes.pod.uid') == pod_uid and
                 actual_status.get('state') == 'CONTAINER_RUNNING', 'IMAGE_RUNTIME_CONTAINER_IDENTITY_MISMATCH')
+        publish_uid('podUID', pod_uid)
         require(observed['imageID'] is not None and observed['imageID'] == observed['actualImageRef'], 'IMAGE_RUNTIME_IMAGE_REF_MISMATCH')
         read_content = lambda key: read(['docker', 'exec', node_id, 'ctr', '--namespace', 'k8s.io', 'content', 'get', key])
         if official:
@@ -178,10 +211,12 @@ def runtime_image_proof(descriptor, role, pod, container, status, node_object, *
             originalContentBytesVerified=True);checkpoint()
         return dict(observed)
     except Exception as error:
-        observed['errorCode'] = error.args[0] if isinstance(error, ImageProofError) else 'IMAGE_RUNTIME_READ_FAILED'
+        code = error.args[0] if (isinstance(error, ImageProofError) and len(error.args) == 1 and
+            type(error.args[0]) is str and error.args[0] in RUNTIME_ERROR_CODES) else 'IMAGE_RUNTIME_READ_FAILED'
+        observed['errorCode'] = code
         checkpoint()
-        if isinstance(error, ImageProofError):raise
-        raise ImageProofError('IMAGE_RUNTIME_READ_FAILED') from None
+        if isinstance(error, ImageProofError) and error.args == (code,):raise
+        raise ImageProofError(code) from error
 
 
 def read_docker_archive(path, *, image, expected_source, platform, inspect, destination):

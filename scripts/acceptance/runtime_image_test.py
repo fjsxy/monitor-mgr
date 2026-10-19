@@ -72,6 +72,14 @@ class RuntimeFixture:
         self.actual[cid*64]=dict(status=dict(id=cid*64,metadata=dict(name='main'),state='CONTAINER_RUNNING',imageRef='repository@'+digest,labels={'io.kubernetes.pod.uid':name+'-pod-uid'}),info=dict(config=dict(image=dict(image=proof['configDigest']))))
         return pod
 
+    def operator_host_oci(self, kind='manifest'):
+        proof=self.d['imageProofs'][self.d['monitorOpImage']]
+        values,digest,child,parent=graph(proof['source']);proof.update(manifestDigest=child,indexDigest=parent if kind=='index' else None)
+        for name,key in [('operator-manifest',child),('operator-index',parent)] if kind=='index' else [('operator-manifest',child)]:
+            path=self.private/(name+'.raw.json');path.write_bytes(values[key])
+            proof['evidenceRefs'].append(dict(path=str(path),sha256=key[7:]))
+        return proof
+
     def read(self,argv):
         self.calls.append(argv)
         if argv[:2]==['docker','inspect']:return (self.actual_node_id+'\n').encode()
@@ -186,8 +194,79 @@ class RuntimeImageProtocol(unittest.TestCase):
             self.assertTrue(proof['pods'][0]['actualRuntimeConfigVerified'])
 
     def test_original_t01_legacy_operator_manifest_requires_actual_config_not_host_digest_alias(self):
+        self.check_t01()
+
+    def test_t01_private_operator_host_oci_manifest_and_index_stay_private_and_bind_actual_runtime(self):
+        for kind in ['manifest','index']:
+            with self.subTest(kind=kind):self.check_t01(kind)
+
+    def test_private_operator_host_oci_rejects_wrong_digest_bytes_and_config_binding(self):
+        for mode in ['digest','bytes','config-binding']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as tmp:
+                f=RuntimeFixture(pathlib.Path(tmp));proof=f.operator_host_oci()
+                path=pathlib.Path(proof['evidenceRefs'][-1]['path'])
+                if mode=='digest':proof['manifestDigest']='sha256:'+'f'*64
+                elif mode=='bytes':path.write_bytes(path.read_bytes()+b' ')
+                else:
+                    value=json.loads(path.read_bytes());value['config']['digest']='sha256:'+'f'*64
+                    data=json.dumps(value).encode();path.write_bytes(data);proof['manifestDigest']='sha256:'+hashlib.sha256(data).hexdigest();proof['evidenceRefs'][-1]['sha256']=proof['manifestDigest'][7:]
+                with self.assertRaises(image_provenance.ImageProofError):image_provenance.source_config_bytes(f.d,f.d['monitorOpImage'])
+
+    def test_runtime_unvalidated_or_non_uuid_identity_is_hashed_without_private_token(self):
+        for mode in ['node-replaced','pod-replaced','node-confirmed','pod-confirmed','node-format','pod-format','missing']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as tmp:
+                f=RuntimeFixture(pathlib.Path(tmp));pod=f.pods[0];container=pod['spec']['containers'][0];status=pod['status']['containerStatuses'][0]
+                actual=f.actual[status['containerID'].split('://')[1]];marker='PRIVATE_SECRET' if not mode.endswith('format') else '../PRIVATE_SECRET'
+                if mode.startswith('node'):
+                    f.node['metadata']['uid']=marker
+                    if mode=='node-confirmed':f.nodes[0]['uid']=marker
+                elif mode.startswith('pod'):
+                    pod['metadata']['uid']=marker
+                    if mode=='pod-confirmed':actual['status']['labels']['io.kubernetes.pod.uid']=marker
+                else:pod['metadata'].pop('uid')
+                if mode.endswith('confirmed'):
+                    value=image_provenance.runtime_image_proof(f.d,'control',pod,container,status,f.node,read=f.read,lock=f.lock,output=f.root/'out')
+                    self.assertTrue(value['verified'])
+                else:
+                    with self.assertRaises(image_provenance.ImageProofError):image_provenance.runtime_image_proof(f.d,'control',pod,container,status,f.node,read=f.read,lock=f.lock,output=f.root/'out')
+                path=next((f.root/'out/runtime-image-identities').glob('*.json'));text=path.read_text();value=json.loads(text)
+                self.assertNotIn('PRIVATE_SECRET',text)
+                if mode=='missing':self.assertTrue(value['podUIDMissing'])
+                else:
+                    field='nodeUID' if mode.startswith('node') else 'podUID'
+                    self.assertNotIn(field,value);self.assertEqual(value[field+'SHA256'],hashlib.sha256(marker.encode()).hexdigest())
+
+    def test_runtime_known_uuid_is_only_public_after_original_identity_confirmation(self):
+        import session
+        with tempfile.TemporaryDirectory() as tmp:
+            f=RuntimeFixture(pathlib.Path(tmp));pod=f.pods[0];container=pod['spec']['containers'][0];status=pod['status']['containerStatuses'][0]
+            node_uid='00000000-0000-4000-8000-000000000001';pod_uid='00000000-0000-4000-8000-000000000002'
+            f.node['metadata']['uid']=node_uid;f.nodes[0]['uid']=node_uid;pod['metadata']['uid']=pod_uid
+            f.actual[status['containerID'].split('://')[1]]['status']['labels']['io.kubernetes.pod.uid']=pod_uid
+            snapshots=[];atomic=session.atomic_json
+            def record(path,value):snapshots.append((copy.deepcopy(value),copy.deepcopy(f.calls)));atomic(path,value)
+            with patch.object(session,'atomic_json',side_effect=record):
+                value=image_provenance.runtime_image_proof(f.d,'control',pod,container,status,f.node,read=f.read,lock=f.lock,output=f.root/'out')
+            self.assertEqual(value['podUID'],pod_uid);self.assertEqual(value['nodeUID'],node_uid)
+            self.assertNotIn('podUID',snapshots[0][0]);self.assertNotIn('nodeUID',snapshots[0][0])
+            for observation,calls in snapshots:
+                if 'nodeUID' in observation:self.assertTrue(any(c[:2]==['docker','inspect'] for c in calls))
+                if 'podUID' in observation:self.assertTrue(any('crictl' in c and 'inspect' in c for c in calls))
+
+    def test_runtime_unknown_image_error_value_is_never_public(self):
+        for args in [('PRIVATE_SECRET',),({'PRIVATE_SECRET':'untrusted'},),('IMAGE_RUNTIME_NODE_ID_MISMATCH','PRIVATE_SECRET'),('IMAGE_RUNTIME_READ_FAILED',)]:
+            with self.subTest(args=args),tempfile.TemporaryDirectory() as tmp:
+                f=RuntimeFixture(pathlib.Path(tmp));pod=f.pods[0];container=pod['spec']['containers'][0];status=pod['status']['containerStatuses'][0]
+                def fail(argv):raise image_provenance.ImageProofError(*args)
+                with self.assertRaises(image_provenance.ImageProofError):
+                    image_provenance.runtime_image_proof(f.d,'control',pod,container,status,f.node,read=fail,lock=f.lock,output=f.root/'out')
+                text=next((f.root/'out/runtime-image-identities').glob('*.json')).read_text()
+                self.assertNotIn('PRIVATE_SECRET',text);self.assertEqual(json.loads(text)['errorCode'],'IMAGE_RUNTIME_READ_FAILED')
+
+    def check_t01(self, host_oci=None):
         with tempfile.TemporaryDirectory() as tmp:
             f=RuntimeFixture(pathlib.Path(tmp));s=types.SimpleNamespace(out=f.root/'out',a=types.SimpleNamespace(source=f.source,environment_descriptor=f.d));s.out.mkdir()
+            if host_oci:f.operator_host_oci(host_oci)
             crd_names=['kubestatemetrics.monitoring.fjsxy.github.io','prometheusagents.monitoring.coreos.com','servicemonitors.monitoring.coreos.com','podmonitors.monitoring.coreos.com','probes.monitoring.coreos.com','scrapeconfigs.monitoring.coreos.com']
             spec={'group':'fixture'};spec_hash=hashlib.sha256(json.dumps(spec,sort_keys=True,separators=(',',':')).encode()).hexdigest()
             f.target['crds']=[dict(name=n,uid=n+'-uid',specSHA256=spec_hash) for n in crd_names]
