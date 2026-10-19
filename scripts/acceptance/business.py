@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """原业务 suites 的单例调用边界；父批次负责精确索引，子进程隔离全局fixture覆盖。"""
 import argparse
+import hashlib
 import http.cookiejar
 import importlib
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import time
 import traceback
 
 from execution import reference
+import exporter
+import gate
 from session import atomic_json, stamp
 
 
@@ -82,18 +87,76 @@ def arguments(session, entry):
     return argparse.Namespace(**args)
 
 
-def _refs(root):
-    """只返回批准的原业务证据；原进程输出/私有fixture不进入公开闭包。"""
-    values = []
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or ".private" in path.relative_to(root).parts or path.name in ["results.json", "receipt.json"]:
-            continue
-        if path.suffix not in [".json", ".jsonl", ".png", ".log", ".txt"]:
-            continue
-        # 固定浏览器producer统一用playwright.json；不能把同原件收集成另一种semantic kind。
-        kind = "browser-report" if path.name == "playwright.json" else "screenshot" if path.suffix == ".png" else "safe-summary" if path.suffix in [".log", ".txt"] else "go-events" if path.suffix == ".jsonl" else "safe-json"
-        values.append(reference(path, root, kind))
-    return values
+def _reference_values(value):
+    if isinstance(value, dict):
+        if "path" in value and "sha256" in value:
+            yield value
+        else:
+            for child in value.values():
+                yield from _reference_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _reference_values(child)
+
+
+def _default_kind(path):
+    """缺省类型与ExecutionSession.store一致，不按producer文件名猜特殊类型。"""
+    suffix = Path(path).suffix
+    return ("screenshot" if suffix in [".png", ".jpg", ".webp"] else
+            "safe-summary" if suffix in [".log", ".txt", ".md"] else
+            "go-events" if suffix == ".jsonl" else "safe-json")
+
+
+def _refs(root, declarations=(), canaries=()):
+    """显式typed声明先核原bytes；generic只补未声明原件，不能另造semantic kind。"""
+    encoded = tuple(v.encode() if isinstance(v, str) else v for v in canaries)
+    reader = exporter.DiagnosticEvidence(root, encoded, {})
+    declared = list(_reference_values(declarations))
+    # 关键：先验证显式kind，再处理合法的path/hash缺省引用；声明冲突不能靠排序覆盖。
+    for value in sorted(declared, key=lambda ref: "kind" not in ref):
+        path = value.get("path")
+        exporter._public_path(path)
+        kind = value.get("kind", reader.files.get(path, {}).get("kind", _default_kind(path)))
+        reader.read(dict(path=path, sha256=value["sha256"], kind=kind,
+                         visibility=value.get("visibility", "public")))
+    values = dict(reader.files)
+    # fwalk给出真实目录fd；guard先于open，末端O_NOFOLLOW，私有目录不读。
+    for directory, directories, names, fd in os.fwalk(root, follow_symlinks=False):
+        directories[:] = [name for name in directories if name != ".private"]
+        for name in sorted(names):
+            path = Path(directory) / name
+            if name in ["results.json", "receipt.json"] or path.suffix not in [".json", ".jsonl", ".png", ".log", ".txt"]:
+                continue
+            relative = str(path.relative_to(root))
+            exporter._public_path(relative)
+            if relative in values:
+                continue
+            try:
+                child = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+                with os.fdopen(child, "rb") as stream:
+                    gate.require(stat.S_ISREG(os.fstat(stream.fileno()).st_mode), "invalid-artifact-type")
+                    data = stream.read()
+            except OSError:
+                raise gate.GateError("missing-or-symlink-artifact") from None
+            kind = _default_kind(path)
+            exporter._safe(relative, data, kind, "public", encoded)
+            values[relative] = dict(path=relative, sha256=hashlib.sha256(data).hexdigest(),
+                                    visibility="public", kind=kind)
+    return [values[path] for path in sorted(values)]
+
+
+def _canonical_refs(value, references):
+    """只替换已完整验证的suite根声明；productImage的child根引用不进入此映射。"""
+    by_path = {ref["path"]: ref for ref in references}
+    def replace(child):
+        if isinstance(child, dict):
+            if "path" in child and "sha256" in child:
+                actual = by_path[child["path"]]
+                gate.require(actual["sha256"] == child["sha256"], "changed-artifact")
+                return dict(actual)
+            return {key: replace(item) for key, item in child.items()}
+        return [replace(item) for item in child] if isinstance(child, list) else child
+    return replace(value)
 
 
 def _browser_report(suite, entry):
@@ -214,8 +277,20 @@ def run_case(session, entry):
                     original["cleanup"] = dict(success=False, failures=[dict(errorCode="case-cleanup-exception")])
                 original["traces"] = suite.traces
                 session.register_secrets(*getattr(suite, "projection_markers", []))
-                evidence_refs = _refs(suite.out)
-                original["evidenceRefs"] = evidence_refs
+                try:
+                    declarations = {key: original[key] for key in ["evidence", "browserEventRef"] if key in original}
+                    evidence_refs = _refs(suite.out, declarations, getattr(session, "canaries", ()))
+                    original.update(_canonical_refs(declarations, evidence_refs))
+                    original["evidenceRefs"] = evidence_refs
+                except (gate.GateError, OSError) as failure:
+                    # 关键：证据拒绝仍走原shutdown/cleanup；失败声明不进入公开receipt。
+                    if error is None:
+                        error = failure
+                        original.update(capture_failure(session, failure))
+                    original["outcome"] = "failed"
+                    original["evidenceCollectionFailed"] = True
+                    original.pop("evidence", None); original.pop("browserEventRef", None)
+                    original["evidenceRefs"] = []
                 # 先归一到child根，再封存实际原件，父wrapper保持这些原件字节不变。
                 def rebase(value):
                     if isinstance(value, dict):
