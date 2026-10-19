@@ -14,16 +14,39 @@ from transport import ProcessFailure
 
 
 class PrepareProtocolTest(unittest.TestCase):
-    def volume_preparation(self,directory,failure=None,foreground_gc=False):
+    def volume_preparation(self,directory,failure=None,foreground_gc=False,runtime=None):
         """完成Job的真实响应形状；执行器只模拟API边界，验证原UID条件删除。"""
         events=[];calls=[];objects={};deleted=[];removed=set();rawproof=b'{"uid":10001,"journalMode":"wal","synchronous":2,"lockBlocked":true,"reopenValue":21,"keyMode":"0600"}\n'
-        image='fixture:source';digest='sha256:'+'a'*64;source='b'*40;name='mm21-volume-preflight'
+        image='fixture:source';source='b'*40;name='mm21-volume-preflight';runtime={} if runtime is None else runtime
+        config=json.dumps({'os':'linux','architecture':'amd64','config':{'Labels':{'org.opencontainers.image.revision':source}}}).encode()
+        digest='sha256:'+hashlib.sha256(config).hexdigest()
+        manifest=json.dumps({'schemaVersion':2,'mediaType':'application/vnd.docker.distribution.manifest.v2+json',
+                             'config':{'digest':digest,'size':len(config)},'layers':[]}).encode()
+        manifest_digest='sha256:'+hashlib.sha256(manifest).hexdigest()
+        runtime.setdefault('content',{digest:config,manifest_digest:manifest})
+        runtime.setdefault('imageID','fixture@'+digest)
+        container_id='c'*64
         pod={'apiVersion':'v1','kind':'Pod','metadata':{'name':name+'-pod','namespace':'mm-phase1-operators','uid':'original-pod','resourceVersion':'8',
              'ownerReferences':[{'uid':'original-job','kind':'Job','name':name,'controller':True}]},
-             'spec':{'containers':[{'name':'probe','image':image}]},'status':{'phase':'Succeeded','containerStatuses':[
-             {'name':'probe','imageID':'fixture@'+digest,'containerID':'containerd://original-container','state':{'terminated':{'exitCode':0}}}]}}
+             'spec':{'nodeName':'original-node','containers':[{'name':'probe','image':image}]},'status':{'phase':'Succeeded','containerStatuses':[
+             {'name':'probe','imageID':runtime['imageID'],'containerID':'containerd://'+container_id,'state':{'terminated':{'exitCode':0}}}]}}
+        runtime.setdefault('actual',{'status':{'id':container_id,'metadata':{'name':'probe'},'state':'CONTAINER_EXITED','exitCode':0,
+                    'imageRef':runtime['imageID'],'labels':{'io.kubernetes.pod.uid':'original-pod'}},
+                    'info':{'config':{'image':{'image':digest}}}})
+        runtime.update(pod=pod,configDigest=digest,manifestDigest=manifest_digest)
         def execute(argv,**kwargs):
-            calls.append(argv);args=argv[5:];output=b''
+            calls.append(argv);output=b''
+            if argv[:2]==['docker','exec']:
+                self.assertEqual(argv[2],'d'*64)
+                if argv[3:5]==['crictl','inspect']:
+                    self.assertEqual(argv[5],container_id)
+                    output=json.dumps(runtime['actual']).encode()
+                else:
+                    self.assertEqual(argv[3:8],['ctr','--namespace','k8s.io','content','get'])
+                    output=runtime['content'].get(argv[8])
+                    if output is None:return subprocess.CompletedProcess(argv,1,b'',b'PRIVATE missing content')
+                return subprocess.CompletedProcess(argv,0,output,b'')
+            args=argv[5:]
             if args[0]=='apply':
                 obj=json.loads(kwargs['input']);kind=obj['kind'];obj['metadata'].update(uid='original-job' if kind=='Job' else 'original-pvc',resourceVersion='7')
                 objects['jobs' if kind=='Job' else 'persistentvolumeclaims']=obj;output=json.dumps(obj).encode()
@@ -47,9 +70,141 @@ class PrepareProtocolTest(unittest.TestCase):
             else:self.assertEqual(args[2],'wait')
             return subprocess.CompletedProcess(argv,0,output,b'')
         request={'runId':'protocol-volume','source':source,'kubectl':'kubectl','privateRoot':directory,
-                 'fixtureImages':{'environment':image},'imageProofs':{image:{'configDigest':digest,'manifestDigest':digest}},
-                 'targets':{'control':{'context':'kind-mm21-control','kubeconfig':directory+'/control.kubeconfig'}}}
+                 'platform':'linux/amd64','fixtureImages':{'environment':image},
+                 'imageProofs':{image:{'configDigest':digest,'manifestDigest':None,'indexDigest':None,'source':source,
+                                      'platform':'linux/amd64','originalContentBytesVerified':True}},
+                 'targets':{'control':{'context':'kind-mm21-control','kubeconfig':directory+'/control.kubeconfig',
+                                       'containers':[{'name':'original-node','id':'d'*64}]}}}
         return _Preparation(request,execute,events.append),calls,events,deleted,rawproof
+
+    def test_volume_legacy_archive_accepts_import_manifest_only_after_actual_config_and_content_binding(self):
+        """legacy原config与导入manifest不同；通过实际容器和node原bytes证明同一个config。"""
+        with tempfile.TemporaryDirectory() as directory:
+            runtime={}
+            preparation,calls,events,deleted,_=self.volume_preparation(directory,runtime=runtime)
+            image=preparation.d['fixtureImages']['environment']
+            runtime['pod']['status']['containerStatuses'][0]['imageID']='fixture@'+runtime['manifestDigest']
+            runtime['actual']['status']['imageRef']='fixture@'+runtime['manifestDigest']
+            preparation.volume('control')
+            expected=preparation.d['imageProofs'][image]
+            self.assertIsNone(expected['manifestDigest'])
+            self.assertIsNone(expected['indexDigest'])
+            self.assertNotEqual(runtime['manifestDigest'],expected['configDigest'])
+            binding=preparation.d['targets']['control']['volumeProofEvidence']['runtimeBinding']
+            self.assertTrue(binding['actualRuntimeConfigVerified'])
+            self.assertTrue(binding['originalContentBytesVerified'])
+            self.assertEqual(binding['configDigest'],expected['configDigest'])
+            self.assertEqual(binding['manifestDigest'],runtime['manifestDigest'])
+            self.assertEqual(deleted,['jobs','pods'])
+
+    def test_volume_runtime_reads_only_recorded_node_container_uid(self):
+        """node同名替代不能借旧身份；docker exec须绑定本轮已记录container UID。"""
+        with tempfile.TemporaryDirectory() as directory:
+            preparation,calls,_,_,_=self.volume_preparation(directory)
+            preparation.volume('control')
+            runtime_reads=[a for a in calls if a[:2]==['docker','exec']]
+            self.assertTrue(runtime_reads)
+            self.assertTrue(all(a[2]=='d'*64 for a in runtime_reads))
+
+    def test_volume_runtime_index_selects_one_actual_platform_child_without_rewriting_host_proof(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime={};preparation,_,_,_,_=self.volume_preparation(directory,runtime=runtime)
+            child=runtime['manifestDigest']
+            index=json.dumps({'schemaVersion':2,'manifests':[{'digest':child,'size':len(runtime['content'][child]),
+                              'platform':{'os':'linux','architecture':'amd64'}}]}).encode()
+            digest='sha256:'+hashlib.sha256(index).hexdigest();runtime['content'][digest]=index
+            runtime['pod']['status']['containerStatuses'][0]['imageID']='fixture@'+digest
+            runtime['actual']['status']['imageRef']='fixture@'+digest
+            preparation.volume('control')
+            binding=preparation.d['targets']['control']['volumeProofEvidence']['runtimeBinding']
+            self.assertEqual((binding['indexDigest'],binding['manifestDigest']),(digest,child))
+            expected=preparation.d['imageProofs'][preparation.d['fixtureImages']['environment']]
+            self.assertIsNone(expected['indexDigest'])
+            self.assertIsNone(expected['manifestDigest'])
+
+    def test_volume_runtime_rejects_unbound_container_or_content_before_cleanup(self):
+        modes=['container-uid','pod-uid','probe-name','running','exit-code','actual-config','image-ref',
+               'unknown-digest','config-bytes','manifest-bytes','manifest-config','index-platform','index-ambiguous',
+               'index-child-size','index-invalid-shape','actual-invalid-shape','config-platform','config-source']
+        for mode in modes:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                runtime={};preparation,_,events,deleted,_=self.volume_preparation(directory,runtime=runtime)
+                pod_status=runtime['pod']['status']['containerStatuses'][0];actual=runtime['actual']
+                def image_ref(digest):
+                    pod_status['imageID']='fixture@'+digest;actual['status']['imageRef']='fixture@'+digest
+                if mode=='container-uid':actual['status']['id']='e'*64
+                elif mode=='pod-uid':actual['status']['labels']['io.kubernetes.pod.uid']='replacement-pod'
+                elif mode=='probe-name':actual['status']['metadata']['name']='another-container'
+                elif mode=='running':actual['status']['state']='CONTAINER_RUNNING'
+                elif mode=='exit-code':actual['status']['exitCode']=1
+                elif mode=='actual-config':actual['info']['config']['image']['image']='sha256:'+'e'*64
+                elif mode=='image-ref':actual['status']['imageRef']='fixture@sha256:'+'e'*64
+                elif mode=='unknown-digest':image_ref('sha256:'+'e'*64)
+                elif mode=='config-bytes':runtime['content'][runtime['configDigest']]+=b' '
+                elif mode=='manifest-bytes':
+                    image_ref(runtime['manifestDigest']);runtime['content'][runtime['manifestDigest']]+=b' '
+                elif mode=='manifest-config':
+                    obj=json.loads(runtime['content'][runtime['manifestDigest']]);obj['config']['digest']='sha256:'+'e'*64
+                    raw=json.dumps(obj).encode();digest='sha256:'+hashlib.sha256(raw).hexdigest()
+                    runtime['content'][digest]=raw;image_ref(digest)
+                elif mode.startswith('index-'):
+                    child={'digest':runtime['manifestDigest'],'size':len(runtime['content'][runtime['manifestDigest']]),
+                           'platform':{'os':'linux','architecture':'amd64'}}
+                    if mode=='index-platform':child['platform']['architecture']='arm64'
+                    if mode=='index-child-size':child['size']+=1
+                    children=[child,child] if mode=='index-ambiguous' else [child]
+                    if mode=='index-invalid-shape':children={'untrusted':'PRIVATE'}
+                    raw=json.dumps({'schemaVersion':2,'manifests':children}).encode();digest='sha256:'+hashlib.sha256(raw).hexdigest()
+                    runtime['content'][digest]=raw;image_ref(digest)
+                elif mode=='actual-invalid-shape':actual['status']['labels']=None
+                elif mode.startswith('config-'):
+                    obj=json.loads(runtime['content'][runtime['configDigest']])
+                    if mode=='config-platform':obj['architecture']='arm64'
+                    else:obj['config']['Labels']['org.opencontainers.image.revision']='e'*40
+                    raw=json.dumps(obj).encode();digest='sha256:'+hashlib.sha256(raw).hexdigest()
+                    runtime['content'][digest]=raw;image_ref(digest)
+                    actual['info']['config']['image']['image']=digest
+                    preparation.d['imageProofs'][preparation.d['fixtureImages']['environment']]['configDigest']=digest
+                with self.assertRaises(PrepareError):preparation.volume('control')
+                self.assertEqual(deleted,[])
+                self.assertNotIn('volumeProofEvidence',preparation.d['targets']['control'])
+                self.assertFalse(any(e['event']=='prepare_volume_runtime_checkpoint' for e in events))
+
+    def test_volume_original_job_pod_capability_and_success_assertions_remain_required(self):
+        for mode in ['phase','exit-code','probe-image','container-id','job-owner','capability']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                runtime={};preparation,calls,_,deleted,_=self.volume_preparation(directory,runtime=runtime)
+                pod=runtime['pod']
+                if mode=='phase':pod['status']['phase']='Failed'
+                elif mode=='exit-code':pod['status']['containerStatuses'][0]['state']['terminated']['exitCode']=1
+                elif mode=='probe-image':pod['spec']['containers'][0]['image']='another:source'
+                elif mode=='container-id':pod['status']['containerStatuses'][0].pop('containerID')
+                elif mode=='job-owner':pod['metadata']['ownerReferences'][0]['uid']='another-job'
+                else:
+                    execute=preparation.execute
+                    def invalid_logs(argv,**kwargs):
+                        result=execute(argv,**kwargs)
+                        return subprocess.CompletedProcess(argv,0,b'{"uid":0}',b'') if 'logs' in argv else result
+                    preparation.execute=invalid_logs
+                with self.assertRaises(PrepareError):preparation.volume('control')
+                self.assertEqual(deleted,[])
+                self.assertFalse(any(a[:2]==['docker','exec'] for a in calls))
+
+    def test_volume_runtime_read_failure_or_timeout_never_deletes_or_checkpoints(self):
+        for mode in ['forbidden','timeout']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                preparation,_,events,deleted,_=self.volume_preparation(directory)
+                execute=preparation.execute
+                def failed_read(argv,**kwargs):
+                    if argv[:2]==['docker','exec']:
+                        if mode=='timeout':raise ProcessFailure('PRIVATE timeout')
+                        return subprocess.CompletedProcess(argv,1,b'',b'PRIVATE forbidden')
+                    return execute(argv,**kwargs)
+                preparation.execute=failed_read
+                with self.assertRaises((PrepareError,ProcessFailure)):preparation.volume('control')
+                self.assertEqual(deleted,[])
+                self.assertNotIn('volumeProofEvidence',preparation.d['targets']['control'])
+                self.assertFalse(any(e['event']=='prepare_volume_runtime_checkpoint' for e in events))
 
     def test_volume_probe_preserves_original_proof_then_normally_deletes_original_job_and_pod(self):
         for gc in [False,True]:

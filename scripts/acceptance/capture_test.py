@@ -21,7 +21,7 @@ class CaptureProtocolTest(unittest.TestCase):
         source=root/'source';source.mkdir()
         (source/'test_fixture.py').write_text('import unittest\nclass Fixture(unittest.TestCase):\n def test_bad(self):\n  raise ValueError("HOST-PRIVATE-MESSAGE")\n')
         (source/'fixture.py').write_text('def fail(error):\n raise error\n')
-        (source/'fixture_test.go').write_text('// 中文来源注释\npackage fixture\nimport "testing"\nfunc TestRoot(t *testing.T) {}\n')
+        (source/'fixture_test.go').write_text('// 中文来源注释\npackage fixture\nimport "testing"\nfunc TestRoot(t *testing.T) {\n t.Fatal("HOST-PRIVATE-MESSAGE")\n}\n')
         self.commit_fixture(source)
         return source
 
@@ -30,6 +30,56 @@ class CaptureProtocolTest(unittest.TestCase):
                      '-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','-qm','test: 静态来源夹具']]:
             subprocess.run(['git',*args],cwd=source,capture_output=True,timeout=5,check=True)
         return subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+
+    def test_go_assertion_location_uses_unique_frozen_basename_and_never_message_or_function_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            result=subprocess.CompletedProcess([],1,
+                b'    fixture_test.go:5: HOST-PRIVATE-MESSAGE/subcase/dynamic-function\n--- FAIL: TestRoot (0.01s)\n',b'')
+            value=protected.project_output(result,label='quality',candidate=candidate,private_root=root/'raw',root=source)
+            self.assertFalse(value['unknown'])
+            self.assertEqual(value['repoFrames'],[dict(file='fixture_test.go',line=5,function='<go-source>',
+                sourceBlobSHA256=hashlib.sha256((source/'fixture_test.go').read_bytes()).hexdigest())])
+            self.assertEqual([v['testId'] for v in value['testFailures']],['fixture_test.go::TestRoot'])
+            self.assertNotIn('HOST-PRIVATE',json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+
+    def test_go_locations_reject_ambiguous_modified_untracked_symlink_invalid_line_and_dynamic_paths(self):
+        for mode in ['ambiguous','modified','untracked','symlink','line','zero','absolute','slash','backslash','long']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+                candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+                filename=source/'fixture_test.go';name=filename.name;line=5;message='HOST-PRIVATE-MESSAGE'
+                if mode=='ambiguous':
+                    (source/'other').mkdir();(source/'other/fixture_test.go').write_text('package fixture\n// HOST-PRIVATE\n')
+                    candidate=self.commit_fixture(source)
+                elif mode=='modified':filename.write_text(filename.read_text()+'// HOST-PRIVATE\n')
+                elif mode=='untracked':name='untracked_test.go';(source/name).write_text('package fixture\n// HOST-PRIVATE\n')
+                elif mode=='symlink':
+                    target=root/'HOST-PRIVATE.go';target.write_bytes(filename.read_bytes());filename.unlink();filename.symlink_to(target)
+                elif mode=='line':line=9999
+                elif mode=='zero':line=0
+                elif mode=='absolute':name=str(filename)
+                elif mode=='slash':name='HOST-PRIVATE/fixture_test.go'
+                elif mode=='backslash':name='HOST-PRIVATE\\fixture_test.go'
+                elif mode=='long':message*=300
+                output=('    '+name+':'+str(line)+': '+message+'\n--- FAIL: TestRoot (0.01s)\n').encode()
+                value=protected.project_output(subprocess.CompletedProcess([],1,output,b''),label='quality',candidate=candidate,
+                                               private_root=root/'raw',root=source)
+                self.assertTrue(value['unknown']);self.assertEqual(value['repoFrames'],[])
+                self.assertNotIn('HOST-PRIVATE',json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+
+    def test_go_locations_share_existing_frame_and_attempt_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            filename=source/'fixture_test.go';filename.write_text(filename.read_text()+'// 中文额外静态行\n'*10)
+            candidate=self.commit_fixture(source)
+            for numbers,count in [(range(1,10),8),([5]*65,1)]:
+                output=''.join('    fixture_test.go:'+str(n)+': HOST-PRIVATE\n' for n in numbers).encode()
+                value=protected.project_output(subprocess.CompletedProcess([],1,output,b''),label='quality',candidate=candidate,
+                                               private_root=root/'raw',root=source)
+                self.assertTrue(value['unknown']);self.assertEqual(len(value['repoFrames']),count)
+                self.assertNotIn('HOST-PRIVATE',json.dumps(value))
 
     def test_captured_failure_ids_and_frames_are_verified_against_frozen_source(self):
         with tempfile.TemporaryDirectory() as directory:

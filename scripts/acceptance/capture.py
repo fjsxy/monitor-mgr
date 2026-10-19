@@ -109,6 +109,16 @@ class _FrozenSources:
             return dict(file=name, line=line, function=function, sourceBlobSHA256=digest)
         except Exception:self.unknown = True;return None
 
+    def go_frame(self, basename, line):
+        """Go testing只报告basename时须唯一绑定冻结blob；函数未知，不从输出猜函数或复制message。"""
+        try:
+            matches = [name for name in self.paths if name.endswith('_test.go') and pathlib.PurePosixPath(name).name == basename]
+            if len(matches) != 1:raise ValueError('source-unavailable')
+            name = matches[0];data, digest = self.load(name)
+            if not 1 <= line <= len(data.splitlines()):raise ValueError('source-unavailable')
+            return dict(file=name, line=line, function='<go-source>', sourceBlobSHA256=digest)
+        except Exception:self.unknown = True;return None
+
     def test(self, method, identity=None):
         matches = []
         for name in sorted(self.paths):
@@ -150,22 +160,27 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
         limit = 1024 * 1024;attempts = 0
         source.unknown = len(result.stdout) > limit or len(result.stderr) > limit
         for line in (result.stdout[:limit] + b'\n' + result.stderr[:limit]).decode(errors='replace').splitlines():
-            if len(line) > 2048:continue
+            if len(line) > 2048:
+                if '_test.go:' in line:source.unknown = True
+                continue
             item = None
             unit = re.fullmatch(r'(?:FAIL|ERROR): (test_[A-Za-z0-9_]+) \(([A-Za-z0-9_.]+)\)', line)
             go = re.fullmatch(r'--- FAIL: (Test[A-Za-z0-9_]+) \([0-9.]+s\)', line)
             frame = re.fullmatch(r'\s*File "([^"]+)", line ([0-9]+), in [^\r\n]+', line)
-            if not (unit or go or frame):
-                if line.startswith(('FAIL: ', 'ERROR: ', '--- FAIL: ')) or line.lstrip().startswith('File "'):
+            # 关键：仅消费Go行的静态basename/行号；冒号后的原断言、子例和动态路径一律不投影。
+            go_location = re.match(r'[ \t]+([A-Za-z_][A-Za-z0-9_]*_test\.go):([0-9]+):', line)
+            if not (unit or go or frame or go_location):
+                if (line.startswith(('FAIL: ', 'ERROR: ', '--- FAIL: ')) or line.lstrip().startswith('File "') or
+                        re.match(r'[ \t]+\S.*_test\.go:[0-9]+:', line)):
                     source.unknown = True
                 continue
-            if unit or go or frame:
+            if unit or go or frame or go_location:
                 attempts += 1
                 if attempts > 64:source.unknown = True;break
             if unit:item = source.test(unit[1], unit[2])
             elif go:item = source.test(go[1])
-            elif frame:
-                item = source.frame(frame[1], int(frame[2]))
+            elif frame or go_location:
+                item = source.go_frame(go_location[1], int(go_location[2])) if go_location else source.frame(frame[1], int(frame[2]))
                 if item and item not in value['repoFrames']:
                     if len(value['repoFrames']) < 8:value['repoFrames'].append(item)
                     else:source.unknown = True
