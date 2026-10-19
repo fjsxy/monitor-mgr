@@ -8,8 +8,133 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 from gate_test import CANDIDATE, HERE, dump, fixture, ref
+import exporter
+import gate
+import registry
+from protocol_cases_test import validator_protocol_fixture
+
+
+class ProtocolDiagnosticExporterTests(unittest.TestCase):
+    def fixture(self, root, mutate=None):
+        """八个明确validator协议原件保留case相对引用，索引仍为完整104键。"""
+        run = root / 'run'
+        results = []
+        for entry in registry.entries('LOCAL_FULL', True):
+            item = {k: entry[k] for k in ['variantId', 'layer']}
+            item['outcome'] = 'not_run'
+            if entry['executionBoundary'] == 'kubernetes-protocol':
+                case = run / 'cases' / ('K.' + entry['variantId'])
+                case.mkdir(parents=True)
+                proof = validator_protocol_fixture(case, entry['variantId'])
+                if mutate and entry['variantId'] == 'REG21-LEDGER-009.uid-replaced':
+                    mutate(case, proof)
+                dump(case / 'protocol-proof.json', proof)
+                original = {k: proof[k] for k in ['runId', 'testedCommit', 'testedTree', 'runnerCommit',
+                    'candidateCommit', 'dirty', 'source', 'manifestHash']}
+                original.update({k: entry[k] for k in ['variantId', 'layer', 'purpose', 'steps', 'expected',
+                                                      'contractFingerprint', 'testSelectors']})
+                original.update(profile='LOCAL_FULL', outcome='passed', executionBoundary='validator-test',
+                    cleanup={'success': True}, kubernetesProtocolRef=ref(case / 'protocol-proof.json', case),
+                    evidenceRefs=[ref(case / 'protocol-proof.json', case)])
+                dump(case / 'receipt.json', original)
+                record = {**original, 'originalEvidenceBase': str(case.relative_to(run)),
+                    'originalReceipt': ref(case / 'receipt.json', run, 'receipt'),
+                    'kubernetesProtocolRef': ref(case / 'protocol-proof.json', run),
+                    'evidenceRefs': [ref(case / 'protocol-proof.json', run)]}
+                path = run / 'receipts' / ('K.' + entry['variantId'] + '.json')
+                dump(path, record)
+                item.update(outcome='passed', receipt=ref(path, run, 'receipt'))
+            results.append(item)
+        index = {'schemaVersion': 1, 'runId': 'validator-protocol', 'profile': 'LOCAL_FULL',
+                 'candidateCommit': '1' * 40, 'testedCommit': '1' * 40, 'runnerCommit': '1' * 40,
+                 'testedTree': '2' * 40, 'dirty': False, 'manifestHash': registry.MANIFEST_HASH,
+                 'source': {'commit': '1' * 40, 'tree': '2' * 40, 'dirty': False},
+                 'supplemental': True, 'state': 'failed', 'productGate': False,
+                 'executionBoundary': 'validator-test', 'results': results,
+                 'expectedKeys': [{k: e[k] for k in ['variantId', 'layer']} for e in results],
+                 'environment': {'runtimeOS': 'darwin', 'runtimeArch': 'arm64', 'targets': [
+                     {'name': 'control', 'clusterUID': 'validator-control', 'nodeCount': 3},
+                     {'name': 'data', 'clusterUID': 'validator-data', 'nodeCount': 1}]}}
+        path = run / 'index.json'
+        dump(path, index)
+        return path
+
+    def invoke(self, path, destination, canaries=()):
+        return exporter.export(path, destination, '1' * 40, 'LOCAL_FULL', supplemental=True,
+                               validator_test=True, diagnostic=True, canaries=canaries)
+
+    def test_typed_eight_closure_keeps_original_bytes_and_incomplete_104(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            path = self.fixture(root)
+            original = path.read_bytes()
+            destination = root / 'bundle'
+            value = self.invoke(path, destination)
+            self.assertIs(value['productGate'], False)
+            self.assertEqual((destination / 'index.json').read_bytes(), original)
+            summary = json.loads((destination / 'diagnostic-summary.json').read_bytes())
+            self.assertEqual(len(summary['expectedKeys']), 104)
+            self.assertEqual(len(summary['protocolClosures']), 8)
+            self.assertTrue(all(v['complete'] for v in summary['protocolClosures']))
+            self.assertEqual(summary['excludedRefs'], [])
+            for entry in registry.entries('LOCAL_FULL', True):
+                if entry['executionBoundary'] != 'kubernetes-protocol':
+                    continue
+                relative = pathlib.Path('cases') / ('K.' + entry['variantId'])
+                proof = json.loads((destination / relative / 'protocol-proof.json').read_bytes())
+                gate.kubernetes_protocol(proof, entry, gate.RelativeEvidence(gate.Evidence(destination), str(relative)),
+                    {'validator-control'}, 'arm64', '1' * 40, '2' * 40, validator_test=True)
+                self.assertEqual((destination / relative / 'checkpoint.json').read_bytes(),
+                                 (path.parent / relative / 'checkpoint.json').read_bytes())
+
+    def test_nested_missing_private_canary_path_and_credentials_remain_explicit_gaps(self):
+        canary = 'synthetic-nested-export-canary-509b'
+        for mode, code in [('missing', 'missing-or-symlink-artifact'),
+                           ('private', 'private-or-unapproved-artifact'), ('canary', 'sensitive-canary'),
+                           ('escape', 'path-escape'), ('symlink', 'missing-or-symlink-artifact'),
+                           ('credentials', 'private-or-unapproved-artifact')]:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                def mutate(case, proof):
+                    target = case / 'checkpoint.json'
+                    if mode == 'missing':
+                        target.unlink()
+                    elif mode == 'escape':
+                        proof['checkpointRef']['path'] = '../outside.json'
+                    elif mode == 'symlink':
+                        original = target.read_bytes()
+                        target.unlink()
+                        outside = root / 'outside.json'
+                        outside.write_bytes(original)
+                        target.symlink_to(outside)
+                    else:
+                        if mode == 'private':
+                            target = case / '.private' / 'guard.json'
+                        payload = {'canary': canary} if mode == 'canary' else (
+                            {'apiVersion': 'v1', 'kind': 'Config', 'users': [{'user': {'token': 'synthetic'}}]}
+                            if mode == 'credentials' else {'private': 'must-not-be-opened'})
+                        dump(target, payload)
+                        proof['checkpointRef'] = ref(target, case)
+                path = self.fixture(root, mutate)
+                destination = root / 'bundle'
+                real_open = gate.os.open
+                def guarded_open(path, *args, **kwargs):
+                    if str(path) in ['.private', 'raw', 'private']:
+                        raise AssertionError('private-directory-opened')
+                    return real_open(path, *args, **kwargs)
+                with mock.patch.object(gate.os, 'open', guarded_open):
+                    self.invoke(path, destination, [canary])
+                summary = json.loads((destination / 'diagnostic-summary.json').read_bytes())
+                self.assertIs(summary['productGate'], False)
+                self.assertIn(code, {v['code'] for v in summary['excludedRefs']})
+                self.assertFalse(next(v for v in summary['protocolClosures']
+                                      if v['variantId'] == 'REG21-LEDGER-009.uid-replaced')['complete'])
+                self.assertFalse((destination / 'cases/K.REG21-LEDGER-009.uid-replaced/.private').exists())
+                self.assertTrue(all(canary.encode() not in p.read_bytes()
+                                    for p in destination.rglob('*') if p.is_file()))
 
 
 class ExporterTests(unittest.TestCase):

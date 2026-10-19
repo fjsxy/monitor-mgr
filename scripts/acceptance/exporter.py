@@ -19,6 +19,37 @@ PUBLIC_KINDS = {'receipt', 'go-events', 'protocol-events', 'browser-report', 'sa
                 'safe-json', 'screenshot', 'image-manifest', 'image-config', 'hash', 'source-commit'}
 
 
+def _public_path(path):
+    """读文件前拒绝私有目录及越界；系统可信根以上的路径不在此相对路径检查内。"""
+    gate.require(isinstance(path, str) and not path.startswith('/') and '\\' not in path and
+                 all(part not in ['', '.', '..'] for part in path.split('/')), 'path-escape')
+    lowered = path.lower()
+    gate.require(not any(part in ['private', '.private', 'raw', 'private-source', 'private-checkout', '.git',
+        'kubeconfig', 'kubeconfigs', 'credentials', 'cookies', 'session', 'node_modules']
+        for part in lowered.split('/')), 'private-or-unapproved-artifact')
+    gate.require(not re.search(r'(?:\.raw|\.db|\.sqlite\d*|[-.]wal|[-.]shm|\.key|\.pem|\.har|\.tar|\.tgz|\.zip|\.gz)$',
+                               lowered), 'private-or-unapproved-artifact')
+
+
+class DiagnosticEvidence(gate.Evidence):
+    """typed gate 每次读原件之前过路径/类型门，读后按原bytes安全扫描，才加入公开文件集。"""
+    def __init__(self, root, canaries, files):
+        super().__init__(root)
+        self.canaries, self.public_files = canaries, files
+
+    def read(self, reference):
+        gate.require(isinstance(reference, dict) and reference.get('visibility') == 'public' and
+                     reference.get('kind') in PUBLIC_KINDS, 'private-or-unapproved-artifact')
+        path = reference.get('path')
+        _public_path(path)
+        gate.require(not any(value and value in path.encode() for value in self.canaries), 'sensitive-canary')
+        data = super().read(reference)
+        _safe(path, data, reference['kind'], reference['visibility'], self.canaries)
+        gate.require(path not in self.public_files or self.public_files[path] == data, 'export-path-collision')
+        self.public_files[path] = data
+        return data
+
+
 def _credential_object(value):
     """识别可直接使用的认证材料，而非仅依赖文件扩展名。"""
     if isinstance(value, dict):
@@ -40,13 +71,7 @@ def _safe(path, data, kind, visibility, canaries):
     gate.require(not any(value and (value in data or value in path.encode()) for value in canaries), 'sensitive-canary')
     gate.require(not re.search(rb'-----BEGIN [A-Z ]*PRIVATE KEY-----', data) and
                  not data.startswith(b'SQLite format 3\x00'), 'private-or-unapproved-artifact')
-    lowered = path.lower()
-    segments = lowered.split('/')
-    gate.require(not any(part in ['private', 'private-source', 'private-checkout', '.git',
-        'kubeconfig', 'kubeconfigs', 'credentials', 'cookies', 'session', 'node_modules'] for part in segments),
-        'private-or-unapproved-artifact')
-    gate.require(not re.search(r'(?:\.db|\.sqlite\d*|[-.]wal|[-.]shm|\.key|\.pem|\.har|\.tar|\.tgz|\.zip|\.gz)$',
-                               lowered), 'private-or-unapproved-artifact')
+    _public_path(path)
     suffix = pathlib.PurePosixPath(path).suffix
     if kind == 'screenshot':
         allowed = suffix in ['.png', '.jpg', '.jpeg', '.webp'] and (
@@ -140,7 +165,14 @@ def diagnostic_export(index_path, destination, candidate, profile, supplemental=
     except gate.GateError as error:
         gate_code = error.code
     files = {path.name: raw}
+    reader = DiagnosticEvidence(path.parent, encoded, files)
     excluded, results = [], []
+    protocol_entries = {entry['variantId']: entry for entry in registry.entries(profile, supplemental)
+                        if entry['executionBoundary'] == 'kubernetes-protocol'}
+    protocol_boundary = 'validator-test' if validator_test else 'kubernetes-protocol'
+    def typed_protocol(value):
+        return isinstance(value, dict) and value.get('variantId') in protocol_entries and \
+               value.get('executionBoundary') == protocol_boundary
     seen = set()
     def collect(value):
         if isinstance(value, dict):
@@ -163,7 +195,10 @@ def diagnostic_export(index_path, destination, candidate, profile, supplemental=
                                 if line.strip():
                                     collect(gate.json_bytes(line))
                         else:
-                            collect(gate.json_bytes(data))
+                            parsed = gate.json_bytes(data)
+                            # 协议原件中的refs相对case根；不能在此当作run根下的任意JSON路径展开。
+                            if not typed_protocol(parsed):
+                                collect(parsed)
                 except (gate.GateError, ValueError, TypeError, KeyError) as error:
                     excluded.append(dict(pathSHA256=hashlib.sha256(identity[0].encode()).hexdigest(),
                         sha256=identity[1] if re.fullmatch('[0-9a-f]{64}', identity[1]) else None,
@@ -175,6 +210,37 @@ def diagnostic_export(index_path, destination, candidate, profile, supplemental=
             for child in value:
                 collect(child)
     collect(index)
+    protocol_closures = []
+    for item in index['results']:
+        if not isinstance(item, dict) or item.get('variantId') not in protocol_entries or item.get('layer') != 'K':
+            continue
+        if not item.get('receipt'):
+            continue
+        entry = protocol_entries[item['variantId']]
+        record_ref = item['receipt']
+        identity = str(record_ref.get('path')) if isinstance(record_ref, dict) else ''
+        result = dict(variantId=entry['variantId'], complete=False)
+        try:
+            record = reader.json(record_ref)
+            gate.require(isinstance(record, dict), 'invalid-original')
+            base = 'cases/K.' + entry['variantId']
+            gate.require(record.get('executionBoundary') == protocol_boundary and
+                         record.get('originalEvidenceBase') == base, 'wrong-protocol-identity')
+            gate._source(record, candidate, index.get('testedTree'))
+            reader.closure(record)
+            gate._original(record, entry, reader, candidate, index.get('testedTree'))
+            proof = reader.json(record.get('kubernetesProtocolRef'))
+            gate.require(isinstance(proof, dict) and proof.get('runId') == index.get('runId'), 'wrong-protocol-identity')
+            # 关键：仅登记的八协议使用既有typed gate收集case及恢复原件；不合成、改写或全目录复制。
+            gate.kubernetes_protocol(proof, entry, gate.RelativeEvidence(reader, base),
+                {target['clusterUID'] for target in index.get('environment', {}).get('targets', [])},
+                index.get('environment', {}).get('runtimeArch'), candidate, index.get('testedTree'), validator_test)
+            result['complete'] = True
+        except (gate.GateError, ValueError, TypeError, KeyError) as error:
+            code = error.code if isinstance(error, gate.GateError) else 'invalid-reference'
+            result['code'] = code
+            excluded.append(dict(pathSHA256=hashlib.sha256(identity.encode()).hexdigest(), sha256=None, code=code))
+        protocol_closures.append(result)
     for item in index['results']:
         if not isinstance(item, dict):
             continue
@@ -192,7 +258,7 @@ def diagnostic_export(index_path, destination, candidate, profile, supplemental=
     summary = dict(schemaVersion=1, diagnosticOnly=True, gatePassed=False, productGate=False,
         originalIndexSHA256=hashlib.sha256(raw).hexdigest(), candidateCommit=candidate, profile=profile,
         supplemental=supplemental, gateCode=gate_code, expectedKeys=expected, results=results,
-        excludedRefs=excluded, copiedFiles=len(files))
+        excludedRefs=excluded, protocolClosures=protocol_closures, copiedFiles=len(files))
     summary_bytes = (json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2) + '\n').encode()
     _safe('diagnostic-summary.json', summary_bytes, 'safe-summary', 'public', encoded)
     gate.require('diagnostic-summary.json' not in files, 'export-path-collision')
