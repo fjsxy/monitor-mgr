@@ -30,8 +30,14 @@ def outside_instance(s,ksm):
  actual=s.get('kubestatemetrics',external['metadata']['name']);assert actual['metadata']['uid']==created['metadata']['uid']
  discovered=s.call('GET','/clusters/'+s.cluster['id']+'/instances')['instances'];readonly=next(v for v in discovered if v['uid']==actual['metadata']['uid'] and v['readOnly']);assert not readonly.get('currentVersionId');return readonly
 
+def agent_fixture_name(prefix,case,index):
+ """测试身份绑定完整run/case/index摘要；不截断用户名称，也不依赖把runId改短。"""
+ # 关键：单shard CR须为固定Operator的revision标签留出预算，128位摘要同时隔离不同fixture身份。
+ identity=json.dumps([prefix,case,index],ensure_ascii=False,separators=(',',':')).encode()
+ return 'agent-'+hashlib.sha256(identity).hexdigest()[:32]
+
 def prepare(s,case,index):
- s.target='control';s.targetns=s.a.prefix+'-browser-'+str(index);s.crname=s.a.prefix+'-agent-'+str(index)
+ s.target='control';s.targetns=s.a.prefix+'-browser-'+str(index);s.crname=agent_fixture_name(s.a.prefix,case,index)
  s.fixture(s.targetns);proxy=s.use_proxy() if case=='U05.primary' else None;s.cluster=s.register('control',proxy.config if proxy else None)
  fixture={'baseURL':s.base,'adminUsername':'admin','adminPassword':s.password,'clusterId':s.cluster['id'],'clusterName':s.cluster['name'],'namespace':s.targetns,'runId':s.a.prefix}
  evidence={};managed_uids=set()
@@ -107,4 +113,7 @@ def run_browser(s,case,index):
   evidence['i64Browser']=execute(s,'REG19-HTTP-I64-001',fixture)
   record={'variantId':'REG19-HTTP-I64-001','kind':'supplementary','executionScope':'真实Pod浏览器子步骤；Q协议收据独立保存','testedCommit':s.a.source,'runnerCommit':s.source['commit'],'source':s.source,'profile':s.a.profile,'layer':'B','outcome':'passed','evidence':evidence['i64Browser'],'fullRegressionRequiresQReceipt':True,'finishedAt':stamp()}
   (s.out/'REG19-HTTP-I64-001.browser.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n')
+  evidence['nameBoundaryBrowser']=execute(s,'REG21-AGENT-NAME-001',fixture)
+  record={'variantId':'REG21-AGENT-NAME-001','kind':'supplementary','executionScope':'U05新增真实Pod浏览器子步骤；不增加中央正式键','testedCommit':s.a.source,'runnerCommit':s.source['commit'],'source':s.source,'profile':s.a.profile,'layer':'B','outcome':'passed','evidence':evidence['nameBoundaryBrowser'],'finishedAt':stamp()}
+  (s.out/'REG21-AGENT-NAME-001.browser.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n')
  return evidence

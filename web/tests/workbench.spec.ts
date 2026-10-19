@@ -68,6 +68,60 @@ function configuration(name: string, agent = false) {
   return { component: "Prometheus Agent", agent: { name, namespace: fixture!.namespace, desiredState: "Running", shards: 1, resources, storage: { mode: "PVC", capacity: "1Gi", whenScaled: "Retain", whenDeleted: "Retain" }, serviceAccountName: "prometheus-agent", associations: { serviceMonitor: rule, podMonitor: rule, probe: rule, scrapeConfig: rule }, remoteWrite: [{ url: "https://receiver.example.invalid/api/v1/write", auth: { mode: "None" } }] } };
 }
 
+// REG21-AGENT-NAME-001独立报告；只在实际U05平台Pod准备完成后运行，不以Host编译代替浏览器通过。
+test("REG21-AGENT-NAME-001 固定Operator名称预算与非法值阻止", async ({ page, baseURL }, info) => {
+  await prepare(page, baseURL!, info);
+  await page.getByRole("button", { name: "添加", exact: true }).click();
+  const modal = page.getByRole("dialog", { name: "添加观测实例" });
+  await modal.getByLabel("类型", { exact: true }).selectOption("collector");
+  await modal.getByRole("button", { name: "配置实例", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "实例详情" });
+  const input = drawer.getByLabel("名称", { exact: true });
+  const shards = drawer.getByLabel("Agent shards", { exact: true });
+  const name = `n${crypto.randomUUID().replaceAll("-", "")}${"a".repeat(8)}`;
+  expect(name.length).toBe(41);
+  await expect(input).toHaveAttribute("maxlength", "41");
+  await expect(drawer).toContainText("单 shard 最长41字符");
+  await input.fill(name + "x");
+  await expect(input).toHaveValue(name);
+  await shards.fill("2");
+  await expect(input).toHaveAttribute("maxlength", "33");
+  // 已输入名称在收紧shards后必须保留原值并判非法，不能静默改名。
+  await expect(input).toHaveValue(name);
+  expect(await input.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(false);
+  await input.fill(name.slice(0, 33));
+  expect(await input.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(true);
+  await shards.fill("11");
+  await expect(input).toHaveAttribute("maxlength", "32");
+  expect(await input.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(false);
+  await input.fill(name.slice(0, 32));
+  expect(await input.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(true);
+  const rejected = [];
+  for (const length of [42, 44]) {
+    const response = await page.request.post(`/api/v1/clusters/${fixture!.clusterId}/instances`, {
+      headers: headers(baseURL!), data: configuration("z".repeat(length), true),
+    });
+    expect(response.status()).toBe(422);
+    expect((await response.json()).fieldErrors["agent.name"]).toBeTruthy();
+    rejected.push({ length, status: response.status() });
+  }
+  await shards.fill("1");
+  await input.fill(name);
+  await drawer.getByLabel("Agent namespace", { exact: true }).selectOption(fixture!.namespace);
+  await drawer.getByLabel("ServiceAccount", { exact: true }).selectOption("prometheus-agent");
+  await drawer.getByLabel("remoteWrite 1 URL", { exact: true }).fill("https://receiver.example.invalid/api/v1/write");
+  const saved = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname === `/api/v1/clusters/${fixture!.clusterId}/instances`);
+  await drawer.getByRole("button", { name: "保存草稿", exact: true }).click();
+  const response = await saved;
+  expect(response.status()).toBe(201);
+  const instance = await response.json();
+  const draft = await (await page.request.get(`/api/v1/instances/${instance.id}/draft`)).json();
+  expect(draft.agent.name).toBe(name);
+  expect(draft.yaml).toContain(name);
+  await info.attach("agent-name-boundary.json", { body: Buffer.from(JSON.stringify({ singleMax: 41, twoShardMax: 33, elevenShardMax: 32, rejected, savedNameLength: draft.agent.name.length, instanceId: instance.id })), contentType: "application/json" });
+  await info.attach("agent-name-boundary.png", { body: await page.screenshot(), contentType: "image/png" });
+});
+
 test("U04.primary 服务端搜索分页、独立统计与显式活动排序", async ({ page, baseURL }, info) => {
   test.setTimeout(120000);
   await prepare(page, baseURL!, info);

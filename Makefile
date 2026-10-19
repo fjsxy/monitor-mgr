@@ -66,6 +66,15 @@ e2e-ksm-b: ## KSM真实平台Pod浏览器验收；凭据和trace不进入收据
 agent-seed-check: ## 共享组件/旧预览迁移与脱敏回归，不替代Agent真实验收
 	$(GO) test ./internal/platform -count=1 -run 'Test(Shared|P04|F04Encrypted|F03KSM)'
 
+.PHONY: agent-name-check agent-name-race-check agent-name-q-receipt
+agent-name-check: ## 名称revision预算的真实HTTP/Kitex与U05夹具Host回归，不替代Pod B
+	$(GO) test ./internal/platform -count=1 -run '^TestAgentRevisionNameBudget'
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/acceptance/workbench_name_test.py
+agent-name-race-check: ## 仅相关名称边界/旧版本worker的uncached race
+	$(GO) test -race ./internal/platform -count=1 -run '^TestAgentRevisionNameBudget'
+agent-name-q-receipt: ## 独立名称边界Q报告；E2E_ARGS显式指定全新output，不增加中央键
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/acceptance/agent_name.py $(E2E_ARGS)
+
 e2e-agent-q: ## Agent快速层，仍经过真实HTTP/Kitex/SQLite
 	$(GO) test ./internal/platform -count=1 -run 'Test(Agent|F01Agent|F03Agent|R03Agent|Shared)'
 e2e-agent: ## Agent逐例真实Pod验收；E2E_ARGS必须显式环境、context、来源、API锁

@@ -120,7 +120,7 @@ func decodeStoredConfiguration(component string, raw []byte) (configuration, err
 }
 func decodeVersionConfiguration(component string, v *rpc.PublicationVersion) (configuration, error) {
 	if component == AgentComponent {
-		return decodeAgent(v.Agent)
+		return decodeAgentWithNamePolicy(v.Agent, false)
 	}
 	return decodeKSM(v.Ksm)
 }

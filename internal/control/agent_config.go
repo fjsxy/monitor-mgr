@@ -134,6 +134,11 @@ func transportValue(v reflect.Value) any {
 	}
 }
 func decodeAgent(r *rpc.AgentConfiguration) (*AgentConfig, error) {
+	return decodeAgentWithNamePolicy(r, true)
+}
+
+// 冻结版本仍核原配置约束；新命名预算由各新写入入口另行检查，避免阻断历史删除。
+func decodeAgentWithNamePolicy(r *rpc.AgentConfiguration, newWrite bool) (*AgentConfig, error) {
 	if r == nil || r.Resources == nil || r.Storage == nil || r.Associations == nil || r.Associations.ServiceMonitor == nil || r.Associations.PodMonitor == nil || r.Associations.Probe == nil || r.Associations.ScrapeConfig == nil {
 		return nil, fieldError("agent", "必须提供完整类型化配置")
 	}
@@ -145,7 +150,12 @@ func decodeAgent(r *rpc.AgentConfiguration) (*AgentConfig, error) {
 	if json.Unmarshal(raw, &c) != nil {
 		return nil, fieldError("agent", "配置格式错误")
 	}
-	if e = c.validate(); e != nil {
+	if newWrite {
+		e = c.validate()
+	} else {
+		e = c.validateLegacy()
+	}
+	if e != nil {
 		return nil, e
 	}
 	return &c, nil
@@ -181,9 +191,26 @@ func (c *AgentConfig) warnings(cr map[string]any) []string {
 
 var prometheusDurationRE = regexp.MustCompile(`^(0|([0-9]+y)?([0-9]+w)?([0-9]+d)?([0-9]+h)?([0-9]+m)?([0-9]+s)?([0-9]+ms)?)$`)
 
+// validateRevisionName只约束新写入；历史来源和只读YAML仍保留原名，不截断用户身份。
+func (c *AgentConfig) validateRevisionName() error {
+	// 关键：固定Operator的ST名会再拼接连接符和最长10位hash，完整revision还会作为63字符Pod标签。
+	if len(agentStatefulName(c.Name, c.Shards-1))+1+10 > 63 {
+		return fieldError("agent.name", "名称过长，无法容纳所选shards的controller-revision-hash；单shard最多41字符")
+	}
+	return nil
+}
+
 func (c *AgentConfig) validate() error {
+	if e := c.validateLegacy(); e != nil {
+		return e
+	}
+	return c.validateRevisionName()
+}
+
+// validateLegacy保留既有DNS/PVC/Pod/shards及所有结构约束，不重算或改写历史版本。
+func (c *AgentConfig) validateLegacy() error {
 	if len(validation.IsDNS1123Label(c.Name)) > 0 || len("prom-agent-"+c.Name+"-db") > 63 {
-		return fieldError("agent.name", "名称须满足Agent派生资源DNS label约束，单shard最多49字符")
+		return fieldError("agent.name", "名称须满足Agent派生资源DNS label及PVC模板约束")
 	}
 	if len(validation.IsDNS1123Label(c.Namespace)) > 0 {
 		return fieldError("agent.namespace", "请选择合法既有namespace")

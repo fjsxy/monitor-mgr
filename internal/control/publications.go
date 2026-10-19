@@ -54,6 +54,10 @@ func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, v
 				return e
 			}
 		}
+		// 冻结有效spec中的实际shards也须满足预算，不能只核旧配置mapper中的数值。
+		if e := cfg.validateRevisionName(); e != nil {
+			return e
+		}
 		return t.agentDependencies(ctx, cl, cfg, create)
 	}
 	cfg, ok := value.(*KSMConfig)
@@ -137,6 +141,11 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	}
 	if rev != r.DraftRevision {
 		return nil, Error("CONFLICT", "草稿修订已变化")
+	}
+	if agent, ok := cfg.(*AgentConfig); ok {
+		if e = agent.validateRevisionName(); e != nil {
+			return nil, e
+		}
 	}
 	if e = validateFixedSpec(ctx, s.DB, i, cfg.spec()); e != nil {
 		return nil, e
@@ -351,6 +360,11 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	cfg, rev, e := readDraft(ctx, tx, i.Id)
 	if e != nil {
 		return nil, e
+	}
+	if agent, ok := cfg.(*AgentConfig); ok {
+		if e = agent.validateRevisionName(); e != nil {
+			return nil, e
+		}
 	}
 	if i.Component == AgentComponent && rev != observedDraftRevision {
 		return nil, Error("CONFLICT", "存储预检期间草稿已变化，请重新预览")

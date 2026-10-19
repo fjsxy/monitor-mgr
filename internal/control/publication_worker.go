@@ -110,6 +110,13 @@ func (s *Store) executePublication(life context.Context, id string) {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
+	// 关键：旧queued/冻结版本也必须在目标写入前满足新预算；历史只读及删除不改名、不共用此拒绝。
+	if agent, ok := cfg.(*AgentConfig); ok {
+		if e = agent.validateRevisionName(); e != nil {
+			s.finishExecution(life, o, "FAILED", e, nil)
+			return
+		}
+	}
 	frozen, e := frozenVersionSpec(life, s.DB, o.GetVersionId(), i.Id)
 	if e != nil {
 		s.finishExecution(life, o, "FAILED", e, nil)

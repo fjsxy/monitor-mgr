@@ -989,6 +989,8 @@ function AgentForm({
   const namespaceOptions = [
     ...new Set([...namespaces, ...(value.namespace ? [value.namespace] : [])]),
   ];
+  // 关键：ST完整revision会写入63字符标签，必须为连接符与最长10位hash预留11字符。
+  const nameMaxLength = 41 - (value.shards > 1 ? `-shard-${value.shards - 1}`.length : 0);
   return (
     <fieldset className="ksm-fields" disabled={disabled}>
       <div className="field-grid">
@@ -998,14 +1000,14 @@ function AgentForm({
             aria-label="名称"
             required
             disabled={fixed}
-            maxLength={Math.min(49,63-11-(value.shards>1?`-shard-${value.shards-1}`.length:0)-2)}
+            maxLength={nameMaxLength}
             pattern="[a-z0-9](([a-z0-9]|-)*[a-z0-9])?"
             placeholder="例如 metrics-agent"
             value={value.name}
             onChange={(event) => patch({ name: event.target.value })}
           />
           <span className="help">
-            直接作为 CR name；小写英文、数字和连字符。名称长度须容纳所选 shards 的派生资源，单 shard 最长49字符。
+            直接作为 CR name；小写英文、数字和连字符。单 shard 最长41字符；当前所选 shards 最长{nameMaxLength}字符，已为controller-revision-hash预留连接符与10位hash。
           </span>
         </label>
         <label>
