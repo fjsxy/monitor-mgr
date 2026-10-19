@@ -296,4 +296,3 @@ class RuntimeImageProtocol(unittest.TestCase):
             self.assertTrue(proof['targets']['control']['controllers'][0]['runtimeProof']['actualRuntimeConfigVerified'])
             operator_config=f.d['imageProofs'][f.d['monitorOpImage']]['configDigest']
             self.assertFalse((s.out/'platform-provenance'/(operator_config[7:]+'.json')).exists(),'私有Operator config只私有回读，不能公开复制')
-
