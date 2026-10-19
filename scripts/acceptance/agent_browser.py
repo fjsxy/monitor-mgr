@@ -1,9 +1,10 @@
 """Agent真实浏览器编排：调用方持共享API锁，每例新平台/目标fixture，私有参数finally销毁。"""
-import base64,hashlib,json,os,pathlib,re,subprocess,tempfile
+import base64,hashlib,json,os,pathlib,re,tempfile
+from transport import process as subprocess
 
 def run_browser(s,case):
  root=pathlib.Path(__file__).resolve().parents[2];out=s.out/'browser'/case;out.mkdir(parents=True,exist_ok=True);os.chmod(out,0o700)
- fixture={'baseURL':s.base,'adminUsername':'admin','adminPassword':s.password,'clusterId':s.cluster['id'],'kubeconfigPath':s.a.control_pod_config,'kubectlKubeconfigPath':s.a.control_config,'kubeContext':s.a.control_context,'kubectl':s.a.kubectl,'namespace':s.targetns,'serviceAccountName':'prometheus-agent','remoteWriteURL':'http://receiver.example.invalid/write','secretName':'agent-auth','secretKeys':{k:k for k in ['username','password','credentials','ca','cert','key']},'runId':s.a.prefix}
+ fixture={'baseURL':s.base,'adminUsername':'admin','adminPassword':s.password,'clusterId':s.cluster['id'],'kubeconfigPath':s.a.control_pod_config,'kubectlKubeconfigPath':s.a.control_config,'kubeContext':s.a.control_context,'kubectl':getattr(s.session,'browser_kubectl',s.a.kubectl),'namespace':s.targetns,'serviceAccountName':'prometheus-agent','remoteWriteURL':'http://receiver.example.invalid/write','secretName':'agent-auth','secretKeys':{k:k for k in ['username','password','credentials','ca','cert','key']},'runId':s.a.prefix}
  # grep匹配包含文件名的full title，不能把用例ID错误锚定在整个title开头。
  command=['npm','--prefix','web','run','test:e2e','--','tests/agent.spec.ts','--grep',r'(?:^|\s)'+re.escape(case)+' ','--output',str(out/'artifacts')];report=out/'playwright.json'
  with tempfile.TemporaryDirectory(prefix='mm18-private-browser-') as private:

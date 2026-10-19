@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """#17：独占平台Pod和真实目标API；原UID、可能已发边界与清理图分别取证。"""
-import argparse,contextlib,copy,fcntl,hashlib,http.cookiejar,json,os,pathlib,platform,secrets,subprocess,sys,time,traceback,urllib.error,urllib.request,uuid
+import argparse,contextlib,copy,fcntl,hashlib,http.cookiejar,json,os,pathlib,platform,secrets,sys,time,traceback,urllib.error,urllib.request,uuid
+from transport import process as subprocess
 from ksm import Suite as KSMSuite,manifest,source_state,stamp,fingerprint,ROOT
 from ksm_q import run_q
 KCASES=['T05.primary','T08.primary','I04.primary','I05.primary','C06.same-uid','C07.primary','K01.primary','P07.primary','P10.primary','P11.primary','P12.new-uid','P12.missing','P13.unsent','P13.possibly-sent','P14.finalizer','P14.pod-remains','P14.read-failure','P14.delete-response-drop']
@@ -25,7 +26,12 @@ class Suite(KSMSuite):
  def first(self):
   i=self.create();o=self.publish(i);self.runtime(i);return i,o
  def gate(self,action,body=None):
-  req=urllib.request.Request(self.gatebase+'/'+action,data=None if body is None else json.dumps(body).encode(),method='GET' if action=='state' else 'POST',headers={'Content-Type':'application/json'});return json.load(urllib.request.urlopen(req,timeout=4))
+  # 关键：先持久 release 意图，再观察真实屏障响应，不能把重启后的404解释成未派发。
+  if self.session:self.session.fixture_gate_intent(self,action,body)
+  req=urllib.request.Request(self.gatebase+'/'+action,data=None if body is None else json.dumps(body).encode(),method='GET' if action=='state' else 'POST',headers={'Content-Type':'application/json'})
+  with urllib.request.urlopen(req,timeout=4) as response:value=json.load(response)
+  if self.session:self.session.fixture_gate_response(self,action,body,value)
+  return value
  def barrier(self,stage):
   until=time.monotonic()+10
   while time.monotonic()<until:
@@ -34,7 +40,7 @@ class Suite(KSMSuite):
    time.sleep(.05)
   raise AssertionError('应用持久屏障未命中 '+stage)
  def connect_gate(self):
-  self.gateport=self.port+400;self.gatebase='http://127.0.0.1:'+str(self.gateport);self.gateforward=subprocess.Popen([self.a.kubectl,'--kubeconfig',self.a.control_config,'-n',self.ns,'port-forward','pod/'+self.pod,str(self.gateport)+':19091'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+  self.gateport=self.port+400;self.gatebase='http://127.0.0.1:'+str(self.gateport);self.gateforward=subprocess.Popen([self.a.kubectl,'--kubeconfig',self.a.control_config,'--context',self.a.control_context,'-n',self.ns,'port-forward','pod/'+self.pod,str(self.gateport)+':19091'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
   until=time.monotonic()+10
   while time.monotonic()<until:
    try:self.gate('state');return
@@ -51,7 +57,7 @@ class Suite(KSMSuite):
   if force:self.k('-n',self.ns,'delete','pod',self.pod,'--grace-period=0','--force',check=False)
   self.k('-n',self.ns,'wait','--for=delete','pods','-l','app=monitor-mgr','--timeout=50s')
   self.k('-n',self.ns,'scale','deployment/monitor-mgr','--replicas=1');self.k('-n',self.ns,'rollout','status','deployment/monitor-mgr','--timeout=100s')
-  pod=json.loads(self.k('-n',self.ns,'get','pods','-l','app=monitor-mgr','-o','json').stdout)['items'][0];self.pod=pod['metadata']['name'];self.connect()
+  pod=json.loads(self.k('-n',self.ns,'get','pods','-l','app=monitor-mgr','-o','json').stdout)['items'][0];self.pod=pod['metadata']['name'];self.platform_pod_uid=pod['metadata']['uid'];self.connect()
   if self.case in FIXTURE_CASES:self.connect_gate()
   assert pod['metadata']['uid']!=self.initial_uid;return {'oldPodUID':self.initial_uid,'newPodUID':pod['metadata']['uid'],'imageID':pod['status']['containerStatuses'][0]['imageID']}
  def capture_proxy(self):return [json.loads(x) for x in self.proxy.events().splitlines() if x.strip()]
@@ -130,7 +136,7 @@ class Suite(KSMSuite):
    try:urllib.request.urlopen(self.base+'/readyz',timeout=1);raise AssertionError('退出仍ready')
    except urllib.error.HTTPError as e:assert e.code==503
    self.k('-n',self.ns,'wait','--for=delete','pod/'+self.pod,'--timeout=35s');elapsed=time.monotonic()-start;assert elapsed>=9 and elapsed<30,elapsed
-   self.stop_forward();self.k('-n',self.ns,'rollout','status','deployment/monitor-mgr','--timeout=100s');pod=json.loads(self.k('-n',self.ns,'get','pods','-l','app=monitor-mgr','-o','json').stdout)['items'][0];self.pod=pod['metadata']['name'];self.connect();self.connect_gate();a=self.state(sent,'IDENTITY_UNCERTAIN');b=self.state(unsent,'WAITING_CONFIRMATION');assert self.cr_absent() and self.cr_absent(self.crname+'-queued');return {'shutdownSeconds':elapsed,'admissionStatuses':observed,'possiblySent':a,'provenUnsent':b,'podUID':pod['metadata']['uid'],'noReplay':True}
+   self.stop_forward();self.k('-n',self.ns,'rollout','status','deployment/monitor-mgr','--timeout=100s');pod=json.loads(self.k('-n',self.ns,'get','pods','-l','app=monitor-mgr','-o','json').stdout)['items'][0];self.pod=pod['metadata']['name'];self.platform_pod_uid=pod['metadata']['uid'];self.connect();self.connect_gate();a=self.state(sent,'IDENTITY_UNCERTAIN');b=self.state(unsent,'WAITING_CONFIRMATION');assert self.cr_absent() and self.cr_absent(self.crname+'-queued');return {'shutdownSeconds':elapsed,'admissionStatuses':observed,'possiblySent':a,'provenUnsent':b,'podUID':pod['metadata']['uid'],'noReplay':True}
   if case.startswith('P12.'):
    i,o=self.first();original=self.cr();uid=original['metadata']['uid'];preview=self.call('POST','/instances/'+i['id']+'/deletion-previews',{});self.k('delete','kubestatemetrics',self.crname,'--wait=true','--timeout=90s',target=self.target)
    if case.endswith('new-uid'):
@@ -190,6 +196,8 @@ class Suite(KSMSuite):
    proxy.paused();self.call('PATCH','/accounts/'+b['id'],{'enabled':False});proxy.control('release',{'ruleId':proxy.control('state')['rule']['id']});done=self.state(sent,'SUCCEEDED');assert self.cr(self.crname+'-sent')['metadata']['uid']==self.call('GET','/instances/'+other['id'])['uid'];return {'beforeSendBlocked':blocked,'afterSendConfirmed':done,'events':self.capture_proxy()}
   raise AssertionError(case)
  def cleanup(self):
+  # 关键：统一运行只按 Session 原 UID ledger 清理，不能先执行旧诊断恢复或前缀认领。
+  if self.session:return self.session.cleanup_case(self)
   # 仅验收fixture负责最终残留清理；KSM外部漂移到本run另一namespace也必须回收CR。
   if getattr(self,'targetns',None):
    raw=self.k('get','kubestatemetrics','-o','json',target=self.target,check=False)
@@ -202,13 +210,13 @@ class Suite(KSMSuite):
  def run(self):
   product=self.a.image;product_meta=copy.deepcopy(self.image_metadata)
   for index,case in enumerate(self.a.cases or KCASES):
-   self.case=case;self.extra_namespaces=[];self.cross_namespace_fixture=None;self.traces=[];self.cookies=http.cookiejar.CookieJar();record={**self.contract[case],'testedCommit':self.a.source,'testedTree':subprocess.check_output(['git','rev-parse',self.a.source+'^{tree}'],cwd=ROOT,text=True).strip(),'runnerCommit':self.source['commit'],'source':self.source,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':'arm64','environment':self.environment,'productImage':product_meta,'outcome':'failed','startedAt':stamp()};error=None
+   self.case=case;self.extra_namespaces=[];self.cross_namespace_fixture=None;self.traces=[];self.cookies=http.cookiejar.CookieJar();record={**self.contract[case],'testedCommit':self.a.source,'testedTree':subprocess.check_output(['git','rev-parse',self.a.source+'^{tree}'],cwd=ROOT,text=True).strip(),'runnerCommit':self.source['commit'],'source':self.source,'profile':self.a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(self.contract[case]),'testSelector':case,'command':[sys.executable,*sys.argv],'processLocation':'host-driver/platform-pod','hostOS':platform.system(),'hostArch':platform.machine(),'runtimeOS':'linux','runtimeArch':self.runtime_arch,'environment':self.environment,'productImage':product_meta,'outcome':'failed','startedAt':stamp()};error=None
    try:
     actual_image=self.a.fixture_image if case in FIXTURE_CASES else product;assert actual_image,'此子例需要独占应用持久屏障fixture镜像'
-    meta=json.loads(subprocess.check_output(['docker','image','inspect',actual_image],text=True))[0];assert meta['Config']['Labels']['org.opencontainers.image.revision']==self.a.source
+    meta=self.image_proof(actual_image)
     self.a.image=actual_image;record['platform']=self.deploy(case,index);self.a.image=product;record['platform']['baseProductImage']=product
-    expected=meta.get('Descriptor',{}).get('digest') or meta['Id'];assert record['platform']['imageID'].endswith(expected),'实际Pod镜像与冻结输入不符'
-    if case in FIXTURE_CASES:record['applicationFixture']={'image':actual_image,'configID':meta['Id'],'manifest':meta.get('Descriptor',{}).get('digest'),'source':self.a.source,'seam':'Config.OperationBoundary only; HTTP业务仍经真实Kitex'};self.connect_gate()
+    expected=meta.get('manifestDigest') or meta['configDigest'];assert record['platform']['imageID'].endswith(expected),'实际Pod镜像与冻结输入不符'
+    if case in FIXTURE_CASES:record['applicationFixture']={**meta,'image':actual_image,'seam':'Config.OperationBoundary only; HTTP业务仍经真实Kitex'};self.connect_gate()
     self.prepare_target(index);record['evidence']=self.run_case(case);record['outcome']='passed'
    except Exception as e:
     self.a.image=product;record['error']=str(e);record['traceback']=traceback.format_exc();error=e
@@ -227,13 +235,13 @@ class Suite(KSMSuite):
    if error:raise error
 
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--data-config');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--fixture-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-lifecycle');p.add_argument('--port',type=int,default=18720);p.add_argument('--layer',choices=['Q','K'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');p.add_argument('--lane-lock',default='/tmp/monitor-mgr-implementation/environment/real-api-lane.lock');a=p.parse_args();registry=QCASES if a.layer=='Q' else KCASES
+ p=argparse.ArgumentParser();p.add_argument('--kubectl');p.add_argument('--control-config');p.add_argument('--control-context');p.add_argument('--data-config');p.add_argument('--data-context');p.add_argument('--control-pod-config');p.add_argument('--data-pod-config');p.add_argument('--image');p.add_argument('--fixture-image');p.add_argument('--source');p.add_argument('--output');p.add_argument('--prefix',default='mm-phase1-lifecycle');p.add_argument('--port',type=int,default=18720);p.add_argument('--layer',choices=['Q','K'],default='K');p.add_argument('--profile',choices=['LOCAL_FULL','CI_FAST','CI_SMOKE'],default='LOCAL_FULL');p.add_argument('--allow-dirty-runner',action='store_true');p.add_argument('--list',action='store_true');p.add_argument('--cases',nargs='*');p.add_argument('--lane-lock',default='/tmp/monitor-mgr-implementation/environment/real-api-lane.lock');a=p.parse_args();registry=QCASES if a.layer=='Q' else KCASES
  if a.list:print(json.dumps([{'id':id,'layer':manifest()[id]['layer'],'testSelector':QCASES.get(id,id),'profiles':manifest()[id]['profiles']} for id in list(QCASES)+KCASES],ensure_ascii=False,indent=2));raise SystemExit(0)
  if not a.output:p.error('必须显式output')
  if a.cases and any(id not in registry for id in a.cases):p.error('子例未知或层级不符')
  if any(a.profile not in manifest()[id]['profiles'] for id in (a.cases or registry)):p.error('子例不属于所选profile')
  if a.layer=='Q':raise SystemExit(run_q(a,QCASES,manifest(),ROOT,source_state(),stamp))
- for field in ['kubectl','control_config','data_config','control_pod_config','data_pod_config','image','source']:
+ for field in ['kubectl','control_config','data_config','control_context','data_context','control_pod_config','data_pod_config','image','source']:
   if not getattr(a,field):p.error('K必须显式'+field)
  if a.profile!='LOCAL_FULL':p.error('本运行环境为双集群LOCAL_FULL；Linux CI由最终CI在其环境实际运行')
  # 关键：覆盖整批及finally，共用API的Agent/KSM inventory不得互相污染。

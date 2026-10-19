@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """#19工作台逐稳定子例入口；Q经真实HTTP/Kitex，K/B只在显式独占API lane下运行。"""
-import argparse,datetime,fcntl,hashlib,json,os,pathlib,platform,re,subprocess,sys
+import argparse,datetime,fcntl,hashlib,json,os,pathlib,platform,re,sys
+from transport import process as subprocess
 
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 QCASES={

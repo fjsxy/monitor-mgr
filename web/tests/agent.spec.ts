@@ -181,7 +181,7 @@ async function prepare(page: Page, baseURL: string, info: TestInfo) {
     await page.getByLabel("选择已注册集群").click();
     await page
       .locator(".cluster-options")
-      .getByRole("button")
+      .getByRole("option")
       .filter({ has: page.getByText(cluster.name, { exact: true }) })
       .click();
   }
