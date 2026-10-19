@@ -90,7 +90,8 @@ def _refs(root):
             continue
         if path.suffix not in [".json", ".jsonl", ".png", ".log", ".txt"]:
             continue
-        kind = "screenshot" if path.suffix == ".png" else "safe-summary" if path.suffix in [".log", ".txt"] else "go-events" if path.suffix == ".jsonl" else "safe-json"
+        # 固定浏览器producer统一用playwright.json；不能把同原件收集成另一种semantic kind。
+        kind = "browser-report" if path.name == "playwright.json" else "screenshot" if path.suffix == ".png" else "safe-summary" if path.suffix in [".log", ".txt"] else "go-events" if path.suffix == ".jsonl" else "safe-json"
         values.append(reference(path, root, kind))
     return values
 

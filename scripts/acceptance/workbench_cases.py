@@ -4,7 +4,9 @@ from transport import process as subprocess
 from agent import Suite as AgentSuite
 from ksm_proxy import Proxy
 from workbench import registry,fingerprint,stamp
+from image_provenance import runtime_image_proof
 ROOT=pathlib.Path(__file__).resolve().parents[2]
+LOCK=json.loads((pathlib.Path(__file__).with_name('source-lock.json')).read_text())
 
 class Suite(AgentSuite):
  def __init__(self,a):
@@ -46,24 +48,28 @@ class Suite(AgentSuite):
  def ksm_proof(self,item):
   target=item['target'];ns=item['namespace'];cr=self.get('kubestatemetrics',item['name'],target=target)
   assert cr['metadata']['uid']==item['uid']
-  pods=[p for p in self.get('pods','-n',ns,target=target)['items'] if not p['metadata'].get('deletionTimestamp')]
-  index='sha256:11da79c0e80e9cc755f84a3fc0cd0269be57148aad2587059abe3296e84b67e9';proof=[]
+  assert self.descriptor and self.descriptor['sourceLock']==LOCK,'需要固定环境来源证明'
+  # 只沿原CR→workload→ReplicaSet/Pod UID选择；namespace中其它Pod不能被认作本实例运行证明。
+  workloads=[]
+  for kind in ['deployments','statefulsets']:
+   workloads.extend(w for w in self.get(kind,'-n',ns,target=target)['items'] if any(o.get('controller') and o.get('uid')==item['uid'] and o.get('kind')==cr['kind'] for o in w['metadata'].get('ownerReferences',[])))
+  assert workloads,'原CR尚无可确认workload'
+  pods=[]
+  for pod in self.get('pods','-n',ns,target=target)['items']:
+   if pod['metadata'].get('deletionTimestamp'):continue
+   owner=next((o for o in pod['metadata'].get('ownerReferences',[]) if o.get('controller')),None)
+   if owner and owner.get('kind')=='ReplicaSet':
+    rs=self.get('replicaset',owner['name'],'-n',ns,target=target);assert rs['metadata']['uid']==owner['uid'],'ReplicaSet原UID变化'
+    owners=rs['metadata'].get('ownerReferences',[])
+   else:owners=[owner] if owner else []
+   if any(o.get('controller') and o.get('uid') in {w['metadata']['uid'] for w in workloads} for o in owners):pods.append(pod)
+  proof=[]
   for pod in pods:
    container=next(c for c in pod['spec']['containers'] if 'kube-state-metrics' in c['image']);status=next(c for c in pod['status']['containerStatuses'] if c['name']==container['name'])
    node=pod['spec']['nodeName'];assert node in {n['name'] for n in self.environment[target]['nodes']}
-   def content(digest):
-    raw=subprocess.check_output(['docker','exec',node,'ctr','-n','k8s.io','content','get',digest],stderr=subprocess.PIPE)
-    assert 'sha256:'+hashlib.sha256(raw).hexdigest()==digest,'节点OCI内容摘要不符'
-    return json.loads(raw)
-   # 关键：同一个官方 index 按实际目标架构选择 child，不能沿用 Host arm64 摘要。
-   assert container['image']=='registry.k8s.io/kube-state-metrics/kube-state-metrics@'+index
-   original=content(index);children=[m for m in original['manifests'] if m['platform']['os']=='linux' and m['platform']['architecture']==self.runtime_arch];assert len(children)==1;expected=children[0]['digest']
-   manifest=content(expected);config_id=manifest['config']['digest'];config=content(config_id)
-   assert config['os']=='linux' and config['architecture']==self.runtime_arch
-   cid=status['containerID'].removeprefix('containerd://');actual=json.loads(subprocess.check_output(['docker','exec',node,'crictl','inspect',cid],stderr=subprocess.PIPE))
-   assert actual['status']['id']==cid and actual['status']['metadata']['name']==container['name'] and actual['status']['labels']['io.kubernetes.pod.uid']==pod['metadata']['uid'] and actual['info']['config']['image']['image']==config_id
-   assert status['imageID'].rsplit('@',1)[-1].split('://',1)[-1] in {index,expected,config_id},'实际Pod镜像不在官方内容链'
-   proof.append({'podUID':pod['metadata']['uid'],'name':pod['metadata']['name'],'containerID':cid,'node':node,'image':container['image'],'imageID':status['imageID'],'indexDigest':index,'runtimeManifestDigest':expected,'configDigest':config_id,'contentBytesSHA256Verified':True,'os':'linux','architecture':self.runtime_arch})
+   actual=runtime_image_proof(self.descriptor,target,pod,container,status,self.get('node',node,target=target),
+    read=lambda argv:subprocess.check_output(argv,stderr=subprocess.PIPE),lock=LOCK,output=self.out)
+   proof.append(dict(actual,name=pod['metadata']['name'],node=node,runtimeManifestDigest=actual['manifestDigest'],contentBytesSHA256Verified=True,os='linux',architecture=self.runtime_arch))
   assert proof;return {'crUID':item['uid'],'generation':cr['metadata']['generation'],'status':cr.get('status',{}),'pods':proof}
  def use_proxy(self,target='control'):
   proxy=Proxy(self,target);self.restorers.append(proxy.close);self.proxies.append(proxy);return proxy

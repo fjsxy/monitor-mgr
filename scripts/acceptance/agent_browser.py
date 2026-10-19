@@ -46,5 +46,5 @@ def run_browser(s,case):
  for cr in ksms:
   if cr['spec'].get('targetNamespace')==s.targetns:
    s.ksms.append((s.target,cr['metadata']['name'],cr['metadata']['uid']))
- refs=[{'path':str(p.relative_to(s.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(out.rglob('*')) if p.is_file()]
+ refs=[{'path':str(p.relative_to(s.out)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),**({'kind':'browser-report','visibility':'public'} if p==report else {})} for p in sorted(out.rglob('*')) if p.is_file()]
  return {'selector':case,'supplementalVariants':['REG18-PATTERN-011'] if case=='U02.primary' else [],'browserAnnotations':tests[0].get('annotations',[]),'report':str(report.relative_to(s.out)),'command':command,'exitCode':result.returncode,'trace':'off','evidenceRefs':refs,'platformPodUID':s.initial_uid}
