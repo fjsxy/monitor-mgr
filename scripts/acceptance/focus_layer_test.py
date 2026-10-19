@@ -114,7 +114,10 @@ class FocusLayer(unittest.TestCase):
                          'cleanup': {'success': True}, 'evidenceRefs': []}
                 atomic_json(Path(ctx.request['output']) / 'receipt.json', value)
                 return value
-            with patch.object(entrypoint.subprocess, 'check_output', side_effect=git), \
+            # 关键：这里只声明合成LOCAL_FULL的host输入；不能借运行Host的平台或修改真实profile guard。
+            with patch.object(entrypoint.sys, 'platform', 'darwin'), \
+                 patch.object(entrypoint.platform, 'machine', return_value='arm64'), \
+                 patch.object(entrypoint.subprocess, 'check_output', side_effect=git), \
                  patch.object(prepare, 'verify_environment', return_value=environment), \
                  patch.object(entrypoint, 'run_business_child', side_effect=child), \
                  patch.object(protocol_cases, 'run_case', side_effect=protocol), \
@@ -138,6 +141,43 @@ class FocusLayer(unittest.TestCase):
             with self.assertRaises(gate.GateError) as failure:
                 gate.validate(output / 'index.json', candidate, 'LOCAL_FULL', True)
             self.assertEqual(failure.exception.code, 'incomplete-run')
+
+    def test_real_mismatched_host_rejects_before_environment_or_business_dispatch(self):
+        """REG21-FOCUS-LAYER-002：真实host不符仍拒绝，不能把合成声明扩散到正式入口。"""
+        for host, machine, arch in [('linux', 'x86_64', 'amd64'), ('linux', 'aarch64', 'arm64'),
+                                    ('darwin', 'x86_64', 'amd64')]:
+            with self.subTest(host=host, machine=machine), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); output = root / 'rejected'; tree = '3' * 40
+                commit = b'tree ' + tree.encode() + b'\n\nHost mismatch synthetic commit\n'
+                candidate = hashlib.sha1(b'commit ' + str(len(commit)).encode() + b'\0' + commit).hexdigest()
+                def git(argv, **kwargs):
+                    if argv == ['git', 'rev-parse', 'HEAD']: return candidate
+                    if argv == ['git', 'rev-parse', 'HEAD^{tree}']: return tree
+                    if argv == ['git', 'status', '--porcelain']: return ''
+                    if argv == ['git', 'cat-file', 'commit', candidate]: return commit
+                    raise AssertionError('Host只允许已声明的Git边界')
+                # 关键：保留真实host guard；任何后续环境、业务或外部进程动作都使本回归失败。
+                with patch.object(entrypoint.sys, 'platform', host), \
+                     patch.object(entrypoint.platform, 'machine', return_value=machine), \
+                     patch.object(entrypoint.subprocess, 'check_output', side_effect=git), \
+                     patch.object(prepare, 'verify_environment', side_effect=AssertionError('host拒绝前不能读目标环境')) as verify, \
+                     patch.object(entrypoint, 'run_business_child', side_effect=AssertionError('host拒绝不能派发业务')) as child, \
+                     patch.object(protocol_cases, 'run_case', side_effect=AssertionError('host拒绝不能派发协议case')) as protocol, \
+                     patch('transport.ProcessRunner.run', side_effect=AssertionError('host拒绝不能派发外部进程')) as process:
+                    code, stdout, errors = cli('run', '--profile', 'LOCAL_FULL', '--supplemental',
+                        '--candidate', candidate, '--run-id', 'host-profile-rejection', '--output', str(output),
+                        '--api-lane', str(root / 'host-lane'), '--focus', *[v for v, _ in REMAINING],
+                        '--focus-layer', 'K', 'B')
+                    verify.assert_not_called(); child.assert_not_called()
+                    protocol.assert_not_called(); process.assert_not_called()
+                self.assertEqual(code, 1, errors)
+                final = json.loads((output / 'index.json').read_text())
+                self.assertEqual(final['environment'], {'runtimeOS': host, 'runtimeArch': arch, 'targets': []})
+                self.assertEqual(final['failure'], {'type': 'ValueError', 'stage': 'source_verification'})
+                self.assertEqual(len(final['expectedKeys']), 104)
+                self.assertEqual(Counter(v['outcome'] for v in final['results']), {'environment_failed': 1, 'not_run': 103})
+                self.assertEqual(final['state'], 'failed'); self.assertTrue(final['cleanup']['success'])
+                self.assertFalse(json.loads(stdout)['productGate'])
 
 
 if __name__ == '__main__':
