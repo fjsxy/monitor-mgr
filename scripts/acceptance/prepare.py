@@ -10,7 +10,7 @@ import re
 import time
 import uuid
 
-from image_provenance import ImageProofError, read_docker_archive
+from image_provenance import ImageProofError, read_docker_archive, read_oci_graph
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 LOCK = json.loads((pathlib.Path(__file__).with_name('source-lock.json')).read_text())
@@ -295,13 +295,17 @@ class _Preparation:
         target['nodeImageProofs'] = []
         self.d.setdefault('officialContent', {})
         for node in target['containers']:
+            if not re.fullmatch(r'[0-9a-f]{64}', node.get('id', '')):
+                raise PrepareError('PREPARE_LOCAL_CRI_IMAGE_MISMATCH')
             for image in local_images:
-                cri = _json(self.command(['docker', 'exec', node['name'], 'crictl', 'inspecti', image], 'verify-local-cri-image'))
+                cri = _json(self.command(['docker', 'exec', node['id'], 'crictl', 'inspecti', image], 'verify-local-cri-image'))
                 status = cri.get('status', {})
                 if status.get('id') != self.d['imageProofs'][image]['configDigest']:
                     raise PrepareError('PREPARE_LOCAL_CRI_IMAGE_MISMATCH')
+                graph = self.local_image_content(node, image, status) if image != self.d['monitorOpImage'] else {}
                 target['nodeImageProofs'].append({'node': node['name'], 'nodeId': node['id'], 'image': image,
-                    'configDigest': status['id'], 'repoDigests': status.get('repoDigests', [])})
+                    'configDigest': status['id'], 'repoDigests': status.get('repoDigests', []),
+                    **{k: graph[k] for k in ['manifestDigest', 'indexDigest', 'originalContentBytesVerified'] if k in graph}})
             for name in ('ksm', 'prometheus', 'promop', 'reloader', 'provisioner', 'python_fixture'):
                 locked = LOCK['images'][name]
                 # 关键：由 node containerd 拉取原官方 index，而非重写单架构 manifest 后伪装原 digest。
@@ -327,6 +331,40 @@ class _Preparation:
                     'configDigest': content['configDigest'], 'manifestDigest': content['manifestDigest'],
                     'indexDigest': locked['indexDigest'], 'repoDigests': status.get('repoDigests', []), 'repoTags': status.get('repoTags', []),
                     'originalContentBytesVerified': True})
+
+    def local_image_content(self, node, image, status):
+        """legacy host archive不含OCI时，从原node实际导入内容补全公开镜像证明。"""
+        expected = self.d['imageProofs'][image]
+        approved = {self.d['image'], *self.d['fixtureImages'].values()}
+        if (image not in approved or not re.fullmatch(r'[0-9a-f]{64}', node.get('id', '')) or
+                status.get('id') != expected.get('configDigest') or
+                expected.get('source') != self.d['source'] or expected.get('platform') != self.d['platform'] or
+                expected.get('originalContentBytesVerified') is not True):
+            raise PrepareError('PREPARE_LOCAL_CRI_IMAGE_MISMATCH')
+        candidates = status.get('repoDigests', [])
+        if not isinstance(candidates, list) or any(not isinstance(v, str) or not re.fullmatch(r'(?:[^\s@]+@)?sha256:[0-9a-f]{64}', v) for v in candidates):
+            raise PrepareError('PREPARE_LOCAL_CRI_IMAGE_MISMATCH')
+        digests = {v.rsplit('@', 1)[-1] for v in candidates}
+        if len(digests) != 1:
+            raise PrepareError('PREPARE_LOCAL_CRI_IMAGE_MISMATCH')
+        # 关键：repoDigest只是发现线索；原node64ID的每段bytes必须回到host已核config/source/arch。
+        destination = self.private / 'local-oci' / uuid.uuid4().hex if expected.get('manifestDigest') is None else None
+        try:
+            graph = read_oci_graph(lambda digest: _bytes(self.command(
+                ['docker', 'exec', node['id'], 'ctr', '--namespace', 'k8s.io', 'content', 'get', digest],
+                'verify-local-original-content', timeout=30).stdout), next(iter(digests)),
+                expected_config=expected['configDigest'], expected_source=self.d['source'], platform=self.d['platform'],
+                destination=destination, require_manifest=True)
+        except ImageProofError:
+            raise PrepareError('PREPARE_LOCAL_CRI_IMAGE_MISMATCH') from None
+        if expected.get('manifestDigest') is not None:
+            # 后node不得覆盖首个已验证proof；不同manifest即停止，gate不能只认最后一个node。
+            if graph['manifestDigest'] != expected['manifestDigest']:
+                raise PrepareError('PREPARE_LOCAL_CRI_IMAGE_MISMATCH')
+        else:
+            archive_refs = [v for v in expected['evidenceRefs'] if pathlib.Path(v['path']).name != 'config.raw.json']
+            expected.update({**graph, 'evidenceRefs': archive_refs + graph['evidenceRefs']})
+        return graph
 
     def official_content(self, node, name):
         """原 index→本架构 child→config 三段内容逐字节 hash，原件只保存公开官方元数据。"""
@@ -595,49 +633,16 @@ class _Preparation:
         observed_digest = digest(status.get('imageID'))
         if observed_digest is None or observed_digest != digest(actual_status.get('imageRef')):
             raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
-        def content(value):
-            if not isinstance(value, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
-                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
-            raw = _bytes(self.command(['docker', 'exec', node['id'], 'ctr', '--namespace', 'k8s.io', 'content', 'get', value],
-                                      'verify-volume-original-content', timeout=30).stdout)
-            if 'sha256:' + hashlib.sha256(raw).hexdigest() != value:
-                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
-            try:
-                obj = json.loads(raw)
-            except (ValueError, TypeError):
-                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED') from None
-            if not isinstance(obj, dict):
-                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
-            return obj, len(raw)
-        config, config_size = content(config_digest)
-        os_name, architecture = self.d['platform'].split('/')
-        if (config.get('os') != os_name or config.get('architecture') != architecture or
-                mapping(mapping(config.get('config')).get('Labels')).get('org.opencontainers.image.revision') != self.d['source']):
-            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
-        manifest_digest = index_digest = None
-        if observed_digest != config_digest:
-            # 关键：导入可能生成新 manifest/index；只接受逐段原 bytes/hash 回到冻结 config 的实际链。
-            manifest, _ = content(observed_digest)
-            manifest_digest = observed_digest
-            if 'manifests' in manifest:
-                index_digest = observed_digest
-                if not isinstance(manifest['manifests'], list):
-                    raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
-                selected = [item for item in manifest['manifests'] if mapping(mapping(item).get('platform', {})).get('os') == os_name
-                            and item['platform'].get('architecture') == architecture]
-                if manifest.get('schemaVersion') != 2 or len(selected) != 1:
-                    raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
-                manifest_digest = selected[0].get('digest')
-                manifest, manifest_size = content(manifest_digest)
-                if selected[0].get('size') != manifest_size:
-                    raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
-            if (manifest.get('schemaVersion') != 2 or not isinstance(manifest.get('layers'), list) or
-                    mapping(manifest.get('config')).get('digest') != config_digest or
-                    manifest['config'].get('size') != config_size):
-                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        try:
+            graph = read_oci_graph(lambda value: _bytes(self.command(
+                ['docker', 'exec', node['id'], 'ctr', '--namespace', 'k8s.io', 'content', 'get', value],
+                'verify-volume-original-content', timeout=30).stdout), observed_digest,
+                expected_config=config_digest, expected_source=self.d['source'], platform=self.d['platform'])
+        except ImageProofError:
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED') from None
         # 原 CRI/config 输出由调用者 ProcessRunner 私有捕获；公开收据不引用完整 Pod/CRI/config。
         return {'actualRuntimeConfigVerified': True, 'originalContentBytesVerified': True,
-                'configDigest': config_digest, 'manifestDigest': manifest_digest, 'indexDigest': index_digest,
+                'configDigest': config_digest, 'manifestDigest': graph['manifestDigest'], 'indexDigest': graph['indexDigest'],
                 'nodeId': node['id'], 'containerID': status['containerID'], 'source': self.d['source'], 'platform': self.d['platform']}
 
     def volume(self, role):

@@ -8,7 +8,7 @@ import tarfile
 import tempfile
 import unittest
 
-from image_provenance import ImageProofError, read_docker_archive
+from image_provenance import ImageProofError, read_docker_archive, read_oci_graph
 
 
 def archive(path, source):
@@ -24,6 +24,45 @@ def archive(path, source):
 
 
 class ImageProofProtocolTest(unittest.TestCase):
+    def node_graph(self, source='a'*40, architecture='amd64'):
+        config=json.dumps({'os':'linux','architecture':architecture,'config':{'Labels':{'org.opencontainers.image.revision':source}}}).encode()
+        digest='sha256:'+hashlib.sha256(config).hexdigest()
+        manifest=json.dumps({'schemaVersion':2,'config':{'digest':digest,'size':len(config)},'layers':[]}).encode()
+        child='sha256:'+hashlib.sha256(manifest).hexdigest()
+        index=json.dumps({'schemaVersion':2,'manifests':[{'digest':child,'size':len(manifest),'platform':{'os':'linux','architecture':architecture}}]}).encode()
+        parent='sha256:'+hashlib.sha256(index).hexdigest()
+        return {digest:config,child:manifest,parent:index},digest,child,parent
+
+    def test_original_node_index_and_child_bytes_bind_frozen_config(self):
+        content,digest,child,parent=self.node_graph()
+        with tempfile.TemporaryDirectory() as tmp:
+            proof=read_oci_graph(content.__getitem__,parent,expected_config=digest,expected_source='a'*40,
+                                 platform='linux/amd64',destination=pathlib.Path(tmp)/'graph',require_manifest=True)
+            self.assertEqual((proof['indexDigest'],proof['manifestDigest'],proof['configDigest']),(parent,child,digest))
+            for ref in proof['evidenceRefs']:
+                path=pathlib.Path(ref['path']);self.assertEqual('sha256:'+hashlib.sha256(path.read_bytes()).hexdigest(),
+                    {'oci-root.raw.json':parent,'oci-manifest.raw.json':child,'config.raw.json':digest}[path.name])
+                self.assertEqual(path.stat().st_mode&0o777,0o600)
+
+    def test_node_graph_rejects_unknown_wrong_config_source_platform_bytes_and_ambiguous_index(self):
+        for mode in ['bytes','missing','config-binding','source','platform','ambiguous','missing-platform','config-only']:
+            with self.subTest(mode=mode):
+                content,digest,child,parent=self.node_graph(source='b'*40 if mode=='source' else 'a'*40,
+                                                           architecture='arm64' if mode=='platform' else 'amd64')
+                root=parent
+                if mode=='bytes':content[child]+=b' '
+                elif mode=='missing':content.pop(child)
+                elif mode=='config-binding':
+                    obj=json.loads(content[child]);obj['config']['digest']='sha256:'+'e'*64
+                    raw=json.dumps(obj).encode();root='sha256:'+hashlib.sha256(raw).hexdigest();content[root]=raw
+                elif mode in ['ambiguous','missing-platform']:
+                    obj=json.loads(content[parent]);obj['manifests']=obj['manifests']*2 if mode=='ambiguous' else []
+                    raw=json.dumps(obj).encode();root='sha256:'+hashlib.sha256(raw).hexdigest();content[root]=raw
+                elif mode=='config-only':root=digest
+                with self.assertRaises(ImageProofError):
+                    read_oci_graph(lambda key:content.get(key,b''),root,expected_config=digest,expected_source='a'*40,
+                                   platform='linux/amd64',require_manifest=True)
+
     def test_old_actual_config_cannot_borrow_new_inspect_revision(self):
         with tempfile.TemporaryDirectory() as directory:
             directory = pathlib.Path(directory)
