@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """实际执行接缝的Host边界检查，不产生产品K/B通过。"""
 import json
+import contextlib
+import copy
 import hashlib
 import io
 import http.server
@@ -14,6 +16,7 @@ import time
 from types import SimpleNamespace
 import unittest
 import urllib.request
+from unittest.mock import patch
 
 from execution import ExecutionSession, go_events
 
@@ -253,6 +256,140 @@ class ExecutionBoundary(unittest.TestCase):
                 self.assertNotIn('resourceVersion',entry)
             finally:
                 session.shutdown();session.close()
+
+
+class PublicationCleanupBoundary(unittest.TestCase):
+    @contextlib.contextmanager
+    def publication_fixture(self, roles=('sent','queued'), *, invalid=None, guard=None, foreign=False):
+        """Host内存HTTP/Kube接缝；复用真实账本/恢复guard，不连接集群或平台。"""
+        from ledger import Ledger
+        from kube_transport import KubeTransport
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);events=[];state={'running':True}
+            session=ExecutionSession(root/'run',expected=[],run_id='host-publications',profile='validator-test',
+                candidate='fixture',protocol_fixture=True,lane=str(root/'host-only-lane'))
+            session.ledger=Ledger(root/'run/ledger.json',run_id='host-publications',candidate='fixture',targets={'control':'original-cluster'})
+            session.ledger.case='K:T08.primary'
+            tokens={}
+            for role in [*roles,*(['foreign'] if foreign else [])]:
+                token=session.ledger.intent('control','product-publish',dict(apiVersion='fixture/v1',kind='Fixture',namespace='',name=role),
+                    case='K:another-case' if role=='foreign' else session.ledger.case)
+                session.ledger.mark(token,'accepted',originRef='operation-'+role)
+                tokens[role]=token;session.publications[role]=[token];session.instances[role]={}
+                session.fixture_gates.append(dict(case=session.ledger.case,action='arrived',
+                    stage='afterSendMarker' if role=='sent' else 'beforeDispatch',operationId='operation-'+role,
+                    namespace='original-namespace',deploymentUID='original-deployment',podUID='original-pod'))
+            if guard=='missing-barrier':session.fixture_gates=[]
+            if guard=='released':session.fixture_gates.append(dict(case=session.ledger.case,action='release-intent',stage='afterSendMarker'))
+            def execute(*args,**kwargs):raise AssertionError('Host fixture cannot execute external client')
+            session.kube=KubeTransport(ledger=session.ledger,execute=execute,targets={'control':{
+                'clusterUID':'original-cluster','context':'host-only','kubeconfig':'host-only'}},kubectl='must-not-execute')
+            def get_obj(target,identity):
+                events.append(('target-read',identity['name']))
+                return {'metadata':{'uid':'unowned'}} if guard=='object-present' else None
+            session.kube.get_obj=get_obj
+            recover=session.kube.recover_case
+            def recover_case(case):
+                events.append(('recover',case));return recover(case)
+            session.kube.recover_case=recover_case
+            mark=session.ledger.mark
+            def marked(token,stage,**fields):
+                mark(token,stage,**fields);events.append(('mark',token,stage))
+            session.ledger.mark=marked
+            def call(method,path):
+                assert method=='GET'
+                kind='instance' if path.startswith('/instances/') else 'attempts' if path.endswith('/attempts') else 'operation'
+                role=path.split('/')[2].removeprefix('operation-')
+                events.append(('read',role,kind))
+                if role=='foreign':raise AssertionError('another case must not be queried')
+                if not state['running']:raise ConnectionError('controlled writer already stopped')
+                if role.startswith('queued') and invalid=='network-'+kind:raise ConnectionError('controlled read failure')
+                if kind=='instance':return {'id':role}
+                if kind=='operation':return {'state':'IDENTITY_UNCERTAIN' if role=='sent' else 'QUEUED' if invalid=='nonterminal' else 'WAITING_CONFIRMATION'}
+                attempts=[{'possiblySent':role=='sent'}]
+                if role.startswith('queued'):
+                    if invalid=='empty-attempts':attempts=[]
+                    if invalid=='one-possibly-sent':attempts.append({'possiblySent':True})
+                    if invalid=='missing-marker':attempts=[{}]
+                return {'attempts':attempts}
+            def k(*args):
+                events.append(('kube',*args))
+                if args[:2]==('get','deployment'):
+                    value={'metadata':{'uid':'replacement' if guard=='deployment-replacement' else 'original-deployment'}}
+                elif args[:2]==('get','replicasets'):
+                    value={'items':[{'metadata':{'uid':'original-rs','ownerReferences':[{'uid':'original-deployment','controller':True}]}}]}
+                elif args[:2]==('get','pods'):
+                    pod={'metadata':{'uid':'original-pod','ownerReferences':[{'uid':'foreign-rs' if guard=='pod-owner' else 'original-rs','controller':True}]}}
+                    value={'items':[pod] if state['running'] or guard=='pod-remains' else []}
+                elif args[0]=='scale':
+                    events.append(('writer-stop',));state['running']=False;value={}
+                elif args[0]=='wait':value={}
+                else:raise AssertionError('unexpected controlled Kube request')
+                return subprocess.CompletedProcess(args,0,json.dumps(value).encode(),b'')
+            suite=SimpleNamespace(case='T08.primary',ns='original-namespace',call=call,k=k)
+            try:yield session,suite,tokens,events
+            finally:session.shutdown();session.close()
+
+    def test_all_unsent_proofs_are_durable_before_first_shared_writer_stop(self):
+        """C7原sent-first顺序可重现；次序不得决定queued能否读取原证明。"""
+        for roles in [('sent','queued','queued-second'),('queued','sent','queued-second')]:
+            with self.subTest(roles=roles),self.publication_fixture(roles) as (session,suite,tokens,events):
+                result=session.cleanup_case(suite)
+                self.assertTrue(result['success'],result['failures'])
+                stop=events.index(('writer-stop',))
+                self.assertTrue(all(index<stop for index,event in enumerate(events) if event[0]=='read'))
+                for role,token in tokens.items():
+                    if role=='sent':continue
+                    self.assertEqual(session.ledger.entries[token]['stage'],'confirmed_unsent')
+                    self.assertLess(events.index(('mark',token,'confirmed_unsent')),stop)
+                    for kind in ['operation','attempts']:self.assertLess(events.index(('read',role,kind)),stop)
+                sent=session.ledger.entries[tokens['sent']]
+                self.assertEqual(sent['stage'],'accepted');self.assertNotIn('uid',sent)
+                proof=session.ledger.data['writerCurrentAbsences'][tokens['sent']]
+                self.assertTrue(proof['originalIntentGapRetained']);self.assertFalse(proof['originalCreationUIDConfirmed'])
+                self.assertFalse(proof['neverSentClaimed']);self.assertTrue(proof['allCurrentWriterPodsExited'])
+                self.assertEqual(proof['observedReason'],'NotFound')
+
+    def test_incomplete_unsent_evidence_cannot_become_confirmed_unsent(self):
+        for invalid in ['nonterminal','empty-attempts','one-possibly-sent','missing-marker','network-operation','network-attempts']:
+            with self.subTest(invalid=invalid),self.publication_fixture(invalid=invalid) as (session,suite,tokens,events):
+                result=session.cleanup_case(suite)
+                self.assertFalse(result['success'])
+                self.assertIn({'id':tokens['queued'],'errorCode':'product_identity_unconfirmed'},result['failures'])
+                self.assertEqual(session.ledger.entries[tokens['queued']]['stage'],'accepted')
+                self.assertNotIn('uid',session.ledger.entries[tokens['queued']])
+                self.assertNotIn(tokens['queued'],session.ledger.data.get('writerCurrentAbsences',{}))
+                self.assertFalse(any(event[0]=='recover' for event in events))
+
+    def test_remaining_uncertainty_preserves_original_barrier_uid_and_absence_guards(self):
+        for guard in ['missing-barrier','released','deployment-replacement','pod-owner','pod-remains','object-present']:
+            with self.subTest(guard=guard),self.publication_fixture(('sent',),guard=guard) as (session,suite,tokens,events):
+                result=session.cleanup_case(suite)
+                self.assertFalse(result['success'])
+                self.assertEqual(session.ledger.entries[tokens['sent']]['stage'],'accepted')
+                self.assertNotIn('uid',session.ledger.entries[tokens['sent']])
+                self.assertFalse(session.ledger.data.get('writerCurrentAbsences'))
+                self.assertFalse(any(event[0]=='recover' for event in events))
+                if guard in ['missing-barrier','released','deployment-replacement','pod-owner']:
+                    self.assertNotIn(('writer-stop',),events)
+
+    def test_other_case_publications_and_instances_are_never_queried_or_rewritten(self):
+        with self.publication_fixture(foreign=True) as (session,suite,tokens,events):
+            original=copy.deepcopy(session.ledger.entries[tokens['foreign']])
+            result=session.cleanup_case(suite)
+            self.assertTrue(result['success'],result['failures'])
+            self.assertFalse(any(event[:2]==('read','foreign') for event in events))
+            self.assertEqual(original,session.ledger.entries[tokens['foreign']])
+
+    def test_proof_persistence_failure_stops_later_mutation_and_gc(self):
+        for boundary in ['unsent-mark','absence-flush']:
+            roles=('queued','sent') if boundary=='unsent-mark' else ('sent',)
+            with self.subTest(boundary=boundary),self.publication_fixture(roles) as (session,suite,tokens,events):
+                method='mark' if boundary=='unsent-mark' else 'flush'
+                with patch.object(session.ledger,method,side_effect=OSError('controlled persistence failure')):
+                    with self.assertRaises(OSError):session.cleanup_case(suite)
+                self.assertFalse(any(event[0]=='recover' for event in events))
+                if boundary=='unsent-mark':self.assertNotIn(('writer-stop',),events)
 
 
 if __name__=='__main__':

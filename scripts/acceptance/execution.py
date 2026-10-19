@@ -611,11 +611,14 @@ class ExecutionSession(BatchSession):
                 del suite.proxy
             # 公开平台确认尽量先读，无法确认的可能已发窗口保留gap而不按名字认领。
             for instance_id, expected in list(self.instances.items()):
-                if any(self.ledger.entries[t]["stage"] == "accepted" for t in self.publications.get(instance_id, [])):
+                if any(self.ledger.entries[t]["case"] == self.ledger.case and self.ledger.entries[t]["stage"] == "accepted"
+                       for t in self.publications.get(instance_id, [])):
                     try:
                         suite.call("GET", "/instances/" + instance_id)
                     except Exception:
                         failures.append(dict(errorCode="platform_original_uid_unconfirmed"))
+            unresolved = []
+            # 关键：先读完本case所有未发送证明；任何一项停共享writer后，平台HTTP都可能不可读。
             for instance_id, tokens in self.publications.items():
                 for token in tokens:
                     entry = self.ledger.entries[token]
@@ -626,15 +629,23 @@ class ExecutionSession(BatchSession):
                             operation = suite.call("GET", "/operations/" + operation_id)
                             attempts = suite.call("GET", "/operations/" + operation_id + "/attempts")["attempts"]
                             assert operation["state"] in ["FAILED", "CANCELLED", "CANCELED", "WAITING_CONFIRMATION"] and attempts and all(not a["possiblySent"] for a in attempts)
-                            self.ledger.mark(token, "confirmed_unsent")
                         except Exception:
-                            try:
-                                proof = self.stopped_writer_absence(suite, entry)
-                                writer_absences.append(proof)
-                                self.ledger.data.setdefault("writerCurrentAbsences", {})[token] = proof
-                                self.ledger.flush()
-                            except Exception:
-                                failures.append(dict(id=token, errorCode="product_identity_unconfirmed"))
+                            unresolved.append((token, entry))
+                        else:
+                            # 持久化失败必须停止后续mutation，不能当作读证明失败再去停writer。
+                            self.ledger.mark(token, "confirmed_unsent")
+            # 全部只读确认及其持久化完成后，剩余gap才使用原屏障/UID/NotFound严格路径。
+            for token, entry in unresolved:
+                if entry["stage"] not in ["intent", "accepted", "identity_unconfirmed"]:
+                    continue
+                try:
+                    proof = self.stopped_writer_absence(suite, entry)
+                except Exception:
+                    failures.append(dict(id=token, errorCode="product_identity_unconfirmed"))
+                else:
+                    self.ledger.data.setdefault("writerCurrentAbsences", {})[token] = proof
+                    self.ledger.flush()
+                    writer_absences.append(proof)
             if failures:
                 return dict(success=False, failures=failures, identityGaps=identity_gaps, mode="identity-preserved-no-blind-gc")
             result = self.kube.recover_case(self.ledger.case)
