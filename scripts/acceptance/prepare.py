@@ -559,6 +559,87 @@ class _Preparation:
                             'podUID': pod['metadata']['uid'], 'notFound': True, 'reloaderPodsDeleted': len(proof['reloaderNodes'])}
         self.ledger({'event': 'prepare_runtime_verified', 'runId': self.d['runId'], 'target': role, 'proof': proof})
 
+    def volume_runtime_container(self, role, pod, status, expected):
+        """本地构建镜像按实际容器和 node 原内容绑定 config，兼容 legacy archive 导入后的 manifest。"""
+        def mapping(value):
+            if not isinstance(value, dict):
+                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+            return value
+        target = self.d['targets'][role]
+        node = next((item for item in target['containers'] if item['name'] == pod['spec'].get('nodeName')), None)
+        container_id = re.fullmatch(r'containerd://([0-9a-f]{64})', status.get('containerID', ''))
+        if node is None or not re.fullmatch(r'[0-9a-f]{64}', node.get('id', '')) or container_id is None:
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        config_digest = expected.get('configDigest')
+        if (not isinstance(config_digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', config_digest) or
+                expected.get('source') != self.d['source'] or expected.get('platform') != self.d['platform'] or
+                expected.get('originalContentBytesVerified') is not True):
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        # 关键：inspecti 只能证明加载；必须核原 Pod 的实际容器身份、成功退出与创建时使用的 config。
+        actual = mapping(_json(self.command(['docker', 'exec', node['id'], 'crictl', 'inspect', container_id[1]],
+                                           'verify-volume-container-config', timeout=30)))
+        actual_status = mapping(actual.get('status'))
+        if (actual_status.get('id') != container_id[1] or
+                mapping(actual_status.get('labels')).get('io.kubernetes.pod.uid') != pod['metadata']['uid'] or
+                mapping(actual_status.get('metadata')).get('name') != 'probe'):
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        if actual_status.get('state') != 'CONTAINER_EXITED' or actual_status.get('exitCode') != 0:
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        if mapping(mapping(mapping(actual.get('info')).get('config')).get('image')).get('image') != config_digest:
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        def digest(value):
+            if not isinstance(value, str):
+                return None
+            match = re.fullmatch(r'(?:[^\s@]+@|[a-z][a-z0-9+.-]*://)?(sha256:[0-9a-f]{64})', value or '')
+            return match[1] if match else None
+        observed_digest = digest(status.get('imageID'))
+        if observed_digest is None or observed_digest != digest(actual_status.get('imageRef')):
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        def content(value):
+            if not isinstance(value, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
+                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+            raw = _bytes(self.command(['docker', 'exec', node['id'], 'ctr', '--namespace', 'k8s.io', 'content', 'get', value],
+                                      'verify-volume-original-content', timeout=30).stdout)
+            if 'sha256:' + hashlib.sha256(raw).hexdigest() != value:
+                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+            try:
+                obj = json.loads(raw)
+            except (ValueError, TypeError):
+                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED') from None
+            if not isinstance(obj, dict):
+                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+            return obj, len(raw)
+        config, config_size = content(config_digest)
+        os_name, architecture = self.d['platform'].split('/')
+        if (config.get('os') != os_name or config.get('architecture') != architecture or
+                mapping(mapping(config.get('config')).get('Labels')).get('org.opencontainers.image.revision') != self.d['source']):
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        manifest_digest = index_digest = None
+        if observed_digest != config_digest:
+            # 关键：导入可能生成新 manifest/index；只接受逐段原 bytes/hash 回到冻结 config 的实际链。
+            manifest, _ = content(observed_digest)
+            manifest_digest = observed_digest
+            if 'manifests' in manifest:
+                index_digest = observed_digest
+                if not isinstance(manifest['manifests'], list):
+                    raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+                selected = [item for item in manifest['manifests'] if mapping(mapping(item).get('platform', {})).get('os') == os_name
+                            and item['platform'].get('architecture') == architecture]
+                if manifest.get('schemaVersion') != 2 or len(selected) != 1:
+                    raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+                manifest_digest = selected[0].get('digest')
+                manifest, manifest_size = content(manifest_digest)
+                if selected[0].get('size') != manifest_size:
+                    raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+            if (manifest.get('schemaVersion') != 2 or not isinstance(manifest.get('layers'), list) or
+                    mapping(manifest.get('config')).get('digest') != config_digest or
+                    manifest['config'].get('size') != config_size):
+                raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        # 原 CRI/config 输出由调用者 ProcessRunner 私有捕获；公开收据不引用完整 Pod/CRI/config。
+        return {'actualRuntimeConfigVerified': True, 'originalContentBytesVerified': True,
+                'configDigest': config_digest, 'manifestDigest': manifest_digest, 'indexDigest': index_digest,
+                'nodeId': node['id'], 'containerID': status['containerID'], 'source': self.d['source'], 'platform': self.d['platform']}
+
     def volume(self, role):
         name = 'mm21-volume-preflight'
         self.apply(role, {'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim', 'metadata': {'name': name, 'namespace': NAMESPACE},
@@ -585,19 +666,22 @@ class _Preparation:
         status = next((item for item in pod.get('status', {}).get('containerStatuses', []) if item['name'] == 'probe'), {})
         image = self.d['fixtureImages']['environment']
         expected = self.d['imageProofs'][image]
-        if (pod.get('status', {}).get('phase') != 'Succeeded' or
-                status.get('state', {}).get('terminated', {}).get('exitCode') != 0 or
-                not any(c.get('name') == 'probe' and c.get('image') == image for c in pod['spec']['containers']) or
-                not status.get('containerID') or not any(status.get('imageID', '').endswith(expected[k])
-                    for k in ['configDigest', 'manifestDigest'] if expected.get(k))):
+        if pod.get('status', {}).get('phase') != 'Succeeded':
             raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        if status.get('state', {}).get('terminated', {}).get('exitCode') != 0:
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        if not any(c.get('name') == 'probe' and c.get('image') == image for c in pod['spec']['containers']):
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        if not status.get('containerID'):
+            raise PrepareError('PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED')
+        runtime_binding = self.volume_runtime_container(role, pod, status, expected)
         directory = self.private / 'volume-runtime'
         directory.mkdir(exist_ok=True, mode=0o700)
         path = directory / (role + '-result.json')
         raw = _bytes(logs.stdout)
         with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
             stream.write(raw); stream.flush(); os.fsync(stream.fileno())
-        evidence = dict(source=self.d['source'], image=image, jobUID=job['metadata']['uid'],
+        evidence = dict(source=self.d['source'], image=image, jobUID=job['metadata']['uid'], runtimeBinding=runtime_binding,
             pods=[dict(name=pod['metadata']['name'], uid=pod['metadata']['uid'], imageID=status['imageID'],
                        containerID=status['containerID'])], cleanup=dict(success=False),
             evidenceRefs=[dict(path=str(path), sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))])
