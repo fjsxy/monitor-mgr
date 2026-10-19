@@ -338,6 +338,68 @@ type unavailableRPC struct{}
 func (unavailableRPC) DialTimeout(string, string, time.Duration) (net.Conn, error) {
 	return nil, errors.New("controlled transport unavailable")
 }
+
+func TestT07CanceledStartDoesNotCreateResources(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	dir := filepath.Join(t.TempDir(), "cancelled-start")
+	if p, err := platform.Start(ctx, platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}); err == nil {
+		p.Close(context.Background())
+		t.Fatal("已取消启动仍成功")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("已取消启动仍创建持久目录", err)
+	}
+}
+
+type cancelingRPC struct{ cancel context.CancelFunc }
+
+func (d cancelingRPC) DialTimeout(string, string, time.Duration) (net.Conn, error) {
+	d.cancel()
+	return nil, errors.New("controlled startup cancellation")
+}
+
+func TestT07ProbeFailureOrInFlightCancellationReleasesResources(t *testing.T) {
+	for _, mode := range []string{"probe-failure", "cancel-during-probe"} {
+		t.Run(mode, func(t *testing.T) {
+			listeners := []net.Listener{}
+			for range 2 {
+				ln, err := net.Listen("tcp", "127.0.0.1:0")
+				if err != nil {
+					t.Fatal(err)
+				}
+				listeners = append(listeners, ln)
+				t.Cleanup(func() { ln.Close() })
+			}
+			cfg := platform.Config{DataDir: t.TempDir(), HTTPAddr: listeners[0].Addr().String(), RPCAddr: listeners[1].Addr().String(), RPCDialer: unavailableRPC{}}
+			for _, ln := range listeners {
+				ln.Close()
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			if mode == "cancel-during-probe" {
+				cfg.RPCDialer = cancelingRPC{cancel}
+			}
+			if p, err := platform.Start(ctx, cfg); err == nil {
+				p.Close(context.Background())
+				t.Fatal("真实RPC失败仍启动成功")
+			}
+			for _, addr := range []string{cfg.HTTPAddr, cfg.RPCAddr} {
+				ln, err := net.Listen("tcp", addr)
+				if err != nil {
+					t.Fatal("失败启动遗留listener", err)
+				}
+				ln.Close()
+			}
+			p, err := platform.Start(context.Background(), platform.Config{DataDir: cfg.DataDir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
+			if err != nil {
+				t.Fatal("失败启动未释放原目录writer", err)
+			}
+			p.Close(context.Background())
+		})
+	}
+}
+
 func TestT07ActualRPCProbeRequiredBeforeReady(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()

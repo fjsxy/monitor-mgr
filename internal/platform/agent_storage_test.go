@@ -601,6 +601,9 @@ func TestAgentStorageIndependentOwnerPolicy(t *testing.T) {
 			var mu sync.Mutex
 			removed, gone := false, false
 			claim := "prom-agent-owner-policy-db-prom-agent-owner-policy-0"
+			storageEntered, storageRelease := make(chan struct{}), make(chan struct{})
+			var storageBlocked, storageReleased sync.Once
+			defer storageReleased.Do(func() { close(storageRelease) })
 			f.mu.Lock()
 			f.hook = func(w http.ResponseWriter, r *http.Request) bool {
 				if r.Method == "DELETE" && strings.HasSuffix(r.URL.Path, "/prometheusagents/"+name) {
@@ -625,6 +628,12 @@ func TestAgentStorageIndependentOwnerPolicy(t *testing.T) {
 				cr := f.objects["monitoring/"+name]
 				zero := cr != nil && cr["spec"].(map[string]any)["replicas"] == float64(0)
 				f.mu.Unlock()
+				if variant == "scaled-retain-deleted-delete" && zero && r.URL.Path == "/api/v1/namespaces/monitoring/persistentvolumeclaims/"+claim {
+					storageBlocked.Do(func() {
+						close(storageEntered)
+						<-storageRelease
+					})
+				}
 				mu.Lock()
 				defer mu.Unlock()
 				replicas := 1
@@ -685,10 +694,50 @@ func TestAgentStorageIndependentOwnerPolicy(t *testing.T) {
 				dp := clusterCall(t, p, "POST", "/instances/"+id+"/deletion-previews", map[string]any{}, c, "", 200)
 				op = clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": current["currentVersionId"], "previewId": dp["previewId"]}, c, "delete", 202)
 			}
+			storageDeadline := time.Now().Add(12 * time.Second)
 			if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
 				t.Fatal("实例变更未完成")
 			}
-			result := clusterCall(t, p, "POST", "/operations/"+op["operationId"].(string)+"/refresh", nil, c, "", 200)
+			if variant == "scaled-retain-deleted-delete" {
+				select {
+				case <-storageEntered:
+				case <-time.After(3 * time.Second):
+					t.Fatal("未进入独立原PVC核验屏障")
+				}
+				pending := clusterCall(t, p, "POST", "/operations/"+op["operationId"].(string)+"/refresh", nil, c, "", 200)
+				volumes := pending["storageVolumes"].([]any)
+				if pending["state"] != "SUCCEEDED" || len(volumes) != 1 || volumes[0].(map[string]any)["retentionResult"] != "Pending" ||
+					volumes[0].(map[string]any)["expectedPolicy"] != "Retain" || volumes[0].(map[string]any)["uid"] != "owner-policy-pvc" {
+					t.Fatal("实例完成不能冒充独立卷已核实", pending)
+				}
+			}
+			storageReleased.Do(func() { close(storageRelease) })
+			// 关键：实例完成后卷只读flight仍可在途；沿原12s预算等实际原UID结果，不把单次refresh当完成。
+			awaitStorage := func(want string) map[string]any {
+				var current map[string]any
+				policy := "Delete"
+				if want == "Retained" {
+					policy = "Retain"
+				}
+				for time.Now().Before(storageDeadline) {
+					current = clusterCall(t, p, "POST", "/operations/"+op["operationId"].(string)+"/refresh", nil, c, "", 200)
+					volumes := current["storageVolumes"].([]any)
+					if current["storageResult"] == want && len(volumes) == 1 {
+						v := volumes[0].(map[string]any)
+						if v["uid"] == "owner-policy-pvc" && v["expectedPolicy"] == policy && v["retentionResult"] == want {
+							return current
+						}
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				t.Fatal("原UID独立存储核验未在原预算完成", current)
+				return nil
+			}
+			want := "Deleting"
+			if variant == "scaled-retain-deleted-delete" {
+				want = "Retained"
+			}
+			result := awaitStorage(want)
 			if variant == "scaled-retain-deleted-delete" {
 				if result["storageResult"] != "Retained" {
 					t.Fatal("保留ST的合法ownerRef阻塞当前保留结果", result)
@@ -707,7 +756,7 @@ func TestAgentStorageIndependentOwnerPolicy(t *testing.T) {
 				mu.Lock()
 				gone = true
 				mu.Unlock()
-				result = clusterCall(t, p, "POST", "/operations/"+op["operationId"].(string)+"/refresh", nil, c, "", 200)
+				result = awaitStorage("Deleted")
 				if result["storageResult"] != "Deleted" {
 					t.Fatal("原删除卷未独立核实", result)
 				}

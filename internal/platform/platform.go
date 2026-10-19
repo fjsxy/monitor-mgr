@@ -20,6 +20,7 @@ import (
 	"github.com/cloudwego/kitex/pkg/transmeta"
 	"github.com/cloudwego/kitex/server"
 	"github.com/cloudwego/kitex/transport"
+	"github.com/cloudwego/netpoll"
 	"github.com/fjsxy/monitor-mgr/internal/control"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
@@ -52,8 +53,31 @@ type Runtime struct {
 	closed  bool
 }
 
+// rpcStartupListener在原生netpoll启动边界交接所有权；不依赖全局hook或客户端是否可拨通。
+type rpcStartupListener struct {
+	netpoll.Listener
+	ready                chan struct{}
+	readyOnce, closeOnce sync.Once
+	closeErr             error
+}
+
+func (ln *rpcStartupListener) Fd() int {
+	fd := ln.Listener.Fd()
+	// 关键：固定netpoll在Serve持锁建立server时首次取Fd；收到ready后才允许Stop读取bootstrap状态。
+	ln.readyOnce.Do(func() { close(ln.ready) })
+	return fd
+}
+
+func (ln *rpcStartupListener) Close() error {
+	ln.closeOnce.Do(func() { ln.closeErr = ln.Listener.Close() })
+	return ln.closeErr
+}
+
 // Start 依次建立单 writer、监听器和真实 RPC，完成数据库/RPC 探测后才提供 HTTP。
 func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
+	if err = ctx.Err(); err != nil {
+		return nil, err
+	}
 	if cfg.ObservationInterval != nil && (*cfg.ObservationInterval < time.Second || *cfg.ObservationInterval > 20*time.Second || *cfg.ObservationInterval%time.Second != 0) {
 		return nil, errors.New("CR轮询间隔必须为1–20整秒")
 	}
@@ -91,6 +115,15 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 		store.Close()
 		return nil, err
 	}
+	nativeRPC, err := netpoll.ConvertListener(rpcLn)
+	if err != nil {
+		rpcLn.Close()
+		httpLn.Close()
+		store.Close()
+		return nil, err
+	}
+	startupLn := &rpcStartupListener{Listener: nativeRPC, ready: make(chan struct{})}
+	rpcLn = startupLn
 	p = &Runtime{cfg: cfg, store: store, ln: httpLn, rpcAddr: rpcLn.Addr().String()}
 	p.rpc = controlservice.NewServer(store, server.WithListener(rpcLn), server.WithExitWaitTime(time.Second), server.WithMetaHandler(transmeta.ServerTTHeaderHandler), server.WithEnableContextTimeout(true), server.WithMiddleware(func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, req, resp any) error {
@@ -112,7 +145,12 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 		}
 	}))
 	rpcErr := make(chan error, 1)
-	go func() { rpcErr <- p.rpc.Run() }()
+	rpcDone := make(chan struct{})
+	// 关键：返回nil会重写named p；goroutine只持不可变server值，不能读取可变返回槽。
+	go func(s server.Server) {
+		defer close(rpcDone)
+		rpcErr <- s.Run()
+	}(p.rpc)
 	clientOptions := []client.Option{client.WithHostPorts(p.rpcAddr), client.WithRPCTimeout(10 * time.Second), client.WithTransportProtocol(transport.TTHeader), client.WithMetaHandler(budgetClientMeta)}
 	if cfg.RPCDialer != nil {
 		clientOptions = append(clientOptions, client.WithDialer(cfg.RPCDialer))
@@ -148,9 +186,15 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	go p.http.Serve(httpLn)
 	return p, nil
 failed:
+	// 关键：取消或真实dial失败也不能提前Stop；bootstrap前退出由RunDone唤醒，否则等原生启动交接。
+	select {
+	case <-startupLn.ready:
+	case <-rpcDone:
+	}
 	p.rpc.Stop()
 	rpcLn.Close()
 	httpLn.Close()
+	<-rpcDone
 	store.Close()
 	return nil, err
 }
