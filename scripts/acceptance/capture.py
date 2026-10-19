@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """在公开 console 前捕获子进程原字节；公开信息仅有固定 ID、exit 与 hash。"""
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -11,6 +12,191 @@ import subprocess
 import sys
 import time
 import uuid
+
+from session import atomic_json
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+# 关键：只公开审阅过的PrepareError字面量；动态label/转入异常值保持unknown，不能按前缀放行。
+PREPARE_CODES = frozenset('''
+PREPARE_AGENT_CONTAINER_NOT_RUNNING PREPARE_AGENT_POD_OWNER_MISMATCH PREPARE_AGENT_PROBE_GC_INCOMPLETE
+PREPARE_AGENT_RELOADER_PATH_NOT_EXECUTED PREPARE_AGENT_STATEFULSET_NOT_CREATED PREPARE_AGENT_STATEFULSET_OWNER_MISMATCH
+PREPARE_APPLIED_UID_MISSING PREPARE_CANDIDATE_DIRTY_OR_WRONG PREPARE_CLUSTER_EXISTS PREPARE_CLUSTER_UID_CHANGED
+PREPARE_CONTAINER_CHECKPOINT_INVALID PREPARE_CONTAINER_ID_MISSING PREPARE_CONTROLLER_IMAGE_MISMATCH
+PREPARE_CONTROLLER_NOT_READY PREPARE_CONTROLLER_RUNTIME_DIGEST_MISMATCH PREPARE_CRD_NOT_ESTABLISHED
+PREPARE_CRI_IMAGE_OR_VERSION_TAG_MISMATCH PREPARE_DATA_NODE_IDENTITY_CHANGED PREPARE_DATA_NODE_NOT_SCHEDULABLE
+PREPARE_DATA_NODE_RESPONSE_INVALID PREPARE_DATA_NOT_SCHEDULABLE PREPARE_DEFAULT_STORAGE_AMBIGUOUS
+PREPARE_KUBECONFIG_EXISTS PREPARE_LOCAL_CRI_IMAGE_MISMATCH PREPARE_NODE_NOT_READY PREPARE_NODE_TOPOLOGY_MISMATCH
+PREPARE_OCI_AMD64_LOCK_MISMATCH PREPARE_OCI_ARM64_LOCK_MISMATCH PREPARE_OCI_CONTENT_BYTES_MISMATCH
+PREPARE_OCI_CONTENT_CHANGED PREPARE_OCI_PLATFORM_AMBIGUOUS PREPARE_OCI_PLATFORM_MISMATCH PREPARE_POD_API_ADDRESS_MISSING
+PREPARE_PRIVATE_CRD_CHANGED PREPARE_PRIVATE_DOCKERFILE_CHANGED PREPARE_PRIVATE_ROOT_INVALID
+PREPARE_PRIVATE_SOURCE_MISMATCH PREPARE_PRIVATE_SOURCE_REQUIRED PREPARE_PROBE_STILL_PRESENT PREPARE_PROBE_UID_CHANGED
+PREPARE_PROFILE_INVALID PREPARE_PUBLIC_BUNDLE_DIGEST_MISMATCH PREPARE_PVC_GATE_NOT_ENABLED PREPARE_RELOADER_NOT_EXECUTED
+PREPARE_RELOADER_VERSION_EXIT_FAILED PREPARE_RELOADER_VERSION_MISMATCH PREPARE_RESPONSE_INVALID
+PREPARE_RUNTIME_CONFIG_DIGEST_MISMATCH PREPARE_RUNTIME_CONTAINER_ID_MISSING PREPARE_RUNTIME_IMAGE_DIGEST_MISMATCH
+PREPARE_RUNTIME_IMAGE_REF_MISMATCH PREPARE_RUN_ID_INVALID PREPARE_SMOKE_HOST_MISMATCH PREPARE_SMOKE_REQUIRES_LINUX_AMD64
+PREPARE_SOURCE_INVALID PREPARE_TARGETS_INVALID PREPARE_TARGET_IDENTITY_INVALID PREPARE_TOOL_VERSION_MISMATCH
+PREPARE_VOLUME_CAPABILITY_FAILED PREPARE_VOLUME_POD_IDENTITY_MISSING PREPARE_VOLUME_RUNTIME_NOT_CONFIRMED
+RECOVER_CLUSTER_STILL_PRESENT RECOVER_CLUSTER_UID_CHANGED RECOVER_CLUSTER_UID_UNKNOWN
+RECOVER_CONTAINER_UID_CHANGED RECOVER_CONTAINER_UID_UNKNOWN RECOVER_TARGETS_INVALID
+'''.split())
+
+
+class _FrozenSources:
+    """仅查询当前HEAD的固定tracked blob；缓存按需读取，不执行测试或公开Git诊断原文。"""
+    def __init__(self, candidate, root, private_root):
+        self.root = pathlib.Path(root).resolve();self.private = pathlib.Path(private_root)
+        self.cache = {};self.unknown = False;self.deadline = time.monotonic() + 10
+        if not re.fullmatch('[a-f0-9]{40}', candidate or ''):
+            raise ValueError('source-unavailable')
+        self.candidate = candidate
+        if self.git('rev-parse', 'HEAD').decode().strip() != candidate:
+            raise ValueError('source-unavailable')
+        self.paths = set()
+        for item in self.git('ls-tree', '-rz', '--full-tree', candidate).split(b'\0'):
+            if not item:continue
+            metadata, name = item.split(b'\t', 1);mode, kind, _ = metadata.split()
+            name = name.decode()
+            if mode in (b'100644', b'100755') and kind == b'blob' and (name.endswith('.py') or name.endswith('_test.go')):
+                self.paths.add(name)
+
+    def git(self, *args):
+        # 关键：只读Git原字节先0600捕获；不用信号代理，避免覆盖主Session的stop处理器。
+        self.private.mkdir(parents=True, exist_ok=True, mode=0o700)
+        paths = [self.private / ('source-' + uuid.uuid4().hex + '.' + name + '.raw') for name in ('stdout', 'stderr')]
+        streams = [os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') for path in paths]
+        try:
+            remaining = self.deadline - time.monotonic()
+            if remaining <= 0:raise ValueError('source-unavailable')
+            result = subprocess.run(['git', '--no-optional-locks', *args], cwd=self.root, stdout=streams[0], stderr=streams[1],
+                timeout=min(5, remaining), env={'PATH': os.environ.get('PATH', ''), 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null'})
+        finally:
+            for stream in streams:stream.flush();os.fsync(stream.fileno());stream.close()
+        if result.returncode:raise ValueError('source-unavailable')
+        return paths[0].read_bytes()
+
+    def relative(self, filename):
+        try:
+            path = pathlib.Path(filename)
+            if not path.is_absolute():path = self.root / path
+            relative = path.relative_to(self.root)
+            if any(part in ('.', '..') for part in relative.parts):return None
+            current = self.root
+            for part in relative.parts:
+                current = current / part
+                if current.is_symlink():return None
+            name = relative.as_posix()
+            return name if name in self.paths and path.resolve().is_relative_to(self.root) else None
+        except (ValueError, OSError):return None
+
+    def load(self, name):
+        if name not in self.cache:
+            if self.relative(name) != name:raise ValueError('source-unavailable')
+            data = (self.root / name).read_bytes()
+            if len(data) > 2 * 1024 * 1024 or data != self.git('cat-file', 'blob', self.candidate + ':' + name):
+                raise ValueError('source-unavailable')
+            self.cache[name] = (data, hashlib.sha256(data).hexdigest())
+        return self.cache[name]
+
+    def frame(self, filename, line):
+        try:
+            name = self.relative(filename)
+            if not name or not name.endswith('.py'):raise ValueError('source-unavailable')
+            data, digest = self.load(name)
+            if not 1 <= line <= len(data.splitlines()):raise ValueError('source-unavailable')
+            functions = [node for node in ast.walk(ast.parse(data)) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                         and node.lineno <= line <= node.end_lineno]
+            function = min(functions, key=lambda node: node.end_lineno - node.lineno).name if functions else '<module>'
+            return dict(file=name, line=line, function=function, sourceBlobSHA256=digest)
+        except Exception:self.unknown = True;return None
+
+    def test(self, method, identity=None):
+        matches = []
+        for name in sorted(self.paths):
+            try:
+                if identity is not None:
+                    parts = identity.split('.')
+                    if len(parts) < 3 or parts[-1] != method or pathlib.PurePosixPath(name).stem != parts[-3] or not name.endswith('.py'):continue
+                    data, digest = self.load(name)
+                    for cls in ast.walk(ast.parse(data)):
+                        if isinstance(cls, ast.ClassDef) and cls.name == parts[-2]:
+                            for node in cls.body:
+                                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == method:
+                                    matches.append(dict(testId=name + '::' + cls.name + '.' + node.name, file=name,
+                                        line=node.lineno, function=node.name, sourceBlobSHA256=digest))
+                elif name.endswith('_test.go'):
+                    if self.relative(name) != name:raise ValueError('source-unavailable')
+                    pattern = r'^func (' + re.escape(method) + r')\(\s*[A-Za-z_]\w*\s+\*testing\.T\s*\)'
+                    if not re.search(pattern, (self.root / name).read_text(), re.M):continue
+                    data, digest = self.load(name)
+                    found = re.search(pattern, data.decode(), re.M)
+                    matches.append(dict(testId=name + '::' + method, file=name,
+                        line=data.decode()[:found.start()].count('\n') + 1, function=method, sourceBlobSHA256=digest))
+            except Exception:self.unknown = True
+        if len(matches) != 1:self.unknown = True;return None
+        return matches[0]
+
+
+def project_output(result, *, label, candidate, private_root, root=ROOT):
+    """同一次原命令完成后仅识别源码已验证的失败标识；原message/assertdiff永不投影。"""
+    value = dict(schemaVersion=1, kind='process-diagnostic', productGate=False,
+        operation=label if label in ('quality', 'generated') else 'capture', exit=result.returncode,
+        state='completed' if result.returncode == 0 else 'failed', unknown=result.returncode != 0,
+        testFailures=[], repoFrames=[], raw={name: dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+            for name, data in [('stdout', result.stdout), ('stderr', result.stderr)]})
+    if result.returncode == 0:return value
+    try:
+        source = _FrozenSources(candidate, root, private_root)
+        # 只读有界前缀；完整原bytes/hash仍在上面的私有捕获摘要中，截断明确unknown。
+        limit = 1024 * 1024;attempts = 0
+        source.unknown = len(result.stdout) > limit or len(result.stderr) > limit
+        for line in (result.stdout[:limit] + b'\n' + result.stderr[:limit]).decode(errors='replace').splitlines():
+            if len(line) > 2048:continue
+            item = None
+            unit = re.fullmatch(r'(?:FAIL|ERROR): (test_[A-Za-z0-9_]+) \(([A-Za-z0-9_.]+)\)', line)
+            go = re.fullmatch(r'--- FAIL: (Test[A-Za-z0-9_]+) \([0-9.]+s\)', line)
+            frame = re.fullmatch(r'\s*File "([^"]+)", line ([0-9]+), in [^\r\n]+', line)
+            if not (unit or go or frame):
+                if line.startswith(('FAIL: ', 'ERROR: ', '--- FAIL: ')) or line.lstrip().startswith('File "'):
+                    source.unknown = True
+                continue
+            if unit or go or frame:
+                attempts += 1
+                if attempts > 64:source.unknown = True;break
+            if unit:item = source.test(unit[1], unit[2])
+            elif go:item = source.test(go[1])
+            elif frame:
+                item = source.frame(frame[1], int(frame[2]))
+                if item and item not in value['repoFrames']:
+                    if len(value['repoFrames']) < 8:value['repoFrames'].append(item)
+                    else:source.unknown = True
+                continue
+            if item and item not in value['testFailures']:
+                if len(value['testFailures']) < 32:value['testFailures'].append(item)
+                else:source.unknown = True
+        value['unknown'] = source.unknown or not (value['testFailures'] or value['repoFrames'])
+    except Exception:pass
+    return value
+
+
+def project_exception(error, *, candidate, private_root, root=ROOT, prepare_type=None):
+    """实际traceback只取冻结repo静态frame；固定PrepareError之外明确unknown，不反射动态类型。"""
+    value = dict(schemaVersion=1, kind='source-diagnostic', productGate=False, errorCode='unknown', repoFrames=[], unknown=True)
+    if prepare_type is not None and isinstance(error, prepare_type) and len(error.args) == 1:
+        code = error.args[0]
+        if type(code) is str and code in PREPARE_CODES:value['errorCode'] = code
+    try:
+        source = _FrozenSources(candidate, root, private_root);tb = error.__traceback__;attempts = 0
+        while tb is not None:
+            attempts += 1
+            if attempts > 64:source.unknown = True;break
+            item = source.frame(tb.tb_frame.f_code.co_filename, tb.tb_lineno)
+            if item and item not in value['repoFrames']:
+                if len(value['repoFrames']) < 8:value['repoFrames'].append(item)
+                else:source.unknown = True
+            tb = tb.tb_next
+        value['unknown'] = source.unknown or not value['repoFrames']
+    except Exception:pass
+    return value
 
 
 def capture(argv, *, private_root, label, cwd=None, env=None, timeout=None, publish=True):
@@ -84,13 +270,25 @@ def main():
     parser = argparse.ArgumentParser(description='受保护子进程输出捕获')
     parser.add_argument('--private-root', required=True)
     parser.add_argument('--label', required=True)
+    parser.add_argument('--public-report')
+    parser.add_argument('--candidate')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     if not command:
         parser.error('必须有明确命令')
     try:
+        if args.public_report and (not pathlib.Path(args.public_report).is_absolute() or pathlib.Path(args.public_report).is_symlink()):
+            raise ValueError('CAPTURE_REPORT_INVALID')
         result = capture(command, private_root=args.private_root, label=args.label)
+        if args.public_report:
+            try:
+                value = project_output(result, label=args.label, candidate=args.candidate, private_root=args.private_root)
+                atomic_json(args.public_report, value)
+            except Exception:
+                # 关键：诊断IO失败不能抹掉原失败；原命令成功时也不能伪装完整成功。
+                print(json.dumps({'id': 'capture-diagnostic', 'errorCode': 'diagnostic-write-failed'}), flush=True)
+                return (result.returncode if result.returncode >= 0 else 128 - result.returncode) or 125
         return result.returncode if result.returncode >= 0 else 128 - result.returncode
     except (ValueError, OSError):
         print(json.dumps({'id': 'capture', 'exit': 125}), flush=True)

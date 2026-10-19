@@ -34,6 +34,7 @@ jobs:
             "SAFE_OUTPUT=$RUNNER_TEMP/phase1-safe" "ENV_REQUEST=$RUNNER_TEMP/phase1-environment.json" \
             "TOOL_PREFIX=$RUNNER_TEMP/phase1-tools" "RAW_ROOT=$RUNNER_TEMP/phase1-raw" \
             "BOOTSTRAP_REPORT=$RUNNER_TEMP/phase1-bootstrap-public.json" \
+            "QUALITY_REPORT=$RUNNER_TEMP/phase1-quality-public.json" "GENERATED_REPORT=$RUNNER_TEMP/phase1-generated-public.json" \
             "GOCACHE=$RUNNER_TEMP/phase1-go-build" "GOMODCACHE=$RUNNER_TEMP/phase1-go-mod" >> "$GITHUB_ENV"
       - name: checkout 真实候选 C
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,8 +58,27 @@ jobs:
           include-hidden-files: false
       - name: 本地质量与生成一致性
         run: |
-          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label quality -- make check
-          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label generated -- make check-generated
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label quality --public-report "$QUALITY_REPORT" --candidate "$CANDIDATE" -- make check
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label generated --public-report "$GENERATED_REPORT" --candidate "$CANDIDATE" -- make check-generated
+      - name: 始终上传质量安全诊断
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-fast-quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase1-quality-public.json
+          # 前序未执行时不制造诊断；实际报告writer失败已由capture保持非0。
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: false
+      - name: 始终上传生成安全诊断
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-fast-generated-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase1-generated-public.json
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: false
       - name: 生成 FAST 私有环境请求
         id: request
         run: >-
