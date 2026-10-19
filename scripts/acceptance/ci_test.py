@@ -14,6 +14,21 @@ from fetch_source import fetch_source
 
 
 class CIProtocolTest(unittest.TestCase):
+    def test_quality_and_generated_capture_same_command_once_and_always_upload_only_safe_report(self):
+        workflow=yaml.safe_load((pathlib.Path(__file__).resolve().parents[2]/'.github/workflows/phase1.yml').read_text())
+        steps=workflow['jobs']['fast']['steps']
+        for label,variable,target in [('quality','QUALITY_REPORT','check'),('generated','GENERATED_REPORT','check-generated')]:
+            commands=[line.strip() for step in steps for line in step.get('run','').splitlines() if '--label '+label+' ' in line]
+            self.assertEqual(len(commands),1)
+            self.assertIn('--public-report "$'+variable+'"',commands[0]);self.assertIn('--candidate "$CANDIDATE"',commands[0])
+            self.assertTrue(commands[0].endswith('-- make '+target))
+            path='${{ runner.temp }}/phase1-'+label+'-public.json'
+            uploads=[step for step in steps if step.get('with',{}).get('path')==path]
+            self.assertEqual(len(uploads),1);self.assertEqual(uploads[0]['if'],'always()')
+            self.assertTrue(uploads[0]['uses'].startswith('actions/upload-artifact@'))
+            self.assertNotIn('*',path);self.assertNotIn('raw',path)
+            self.assertIn(variable+'=$RUNNER_TEMP/phase1-'+label+'-public.json',steps[0]['run'])
+
     def test_bootstrap_reports_are_uploaded_always_before_request_without_raw(self):
         workflow=yaml.safe_load((pathlib.Path(__file__).resolve().parents[2]/'.github/workflows/phase1.yml').read_text())
         for job in ['fast','smoke']:
@@ -56,8 +71,12 @@ class CIProtocolTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             command = [sys.executable, str(pathlib.Path(__file__).with_name('fetch_source.py')),
                        '--destination', str(pathlib.Path(root) / 'source'), '--private-root', str(pathlib.Path(root) / 'private')]
-            process = subprocess.run(command, env={'PATH': os.environ['PATH'], 'MONITOR_OP_SOURCE_REPOSITORY': 'synthetic/untrusted',
-                                     'MONITOR_OP_DEPLOY_KEY': 'SYNTHETIC-NOT-A-REAL-KEY'}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            environment = {'PATH': os.environ['PATH'], 'MONITOR_OP_SOURCE_REPOSITORY': 'synthetic/untrusted',
+                           'MONITOR_OP_DEPLOY_KEY': 'SYNTHETIC-NOT-A-REAL-KEY'}
+            # 关键：只补独立 Python 必需的库路径，不能把父环境凭据带入隔离测试。
+            if os.environ.get('LD_LIBRARY_PATH'):
+                environment['LD_LIBRARY_PATH'] = os.environ['LD_LIBRARY_PATH']
+            process = subprocess.run(command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.assertEqual(process.returncode, 1)
             self.assertNotIn(b'SYNTHETIC-NOT-A-REAL-KEY', process.stdout + process.stderr)
             self.assertEqual(list(pathlib.Path(root).iterdir()), [])
@@ -71,8 +90,11 @@ class CIProtocolTest(unittest.TestCase):
             git.chmod(0o755)
             command = [sys.executable, str(pathlib.Path(__file__).with_name('fetch_source.py')),
                        '--destination', str(root / 'source'), '--private-root', str(root / 'private')]
-            process = subprocess.run(command, env={'PATH': str(root / 'bin'), 'MONITOR_OP_SOURCE_REPOSITORY': 'fjsxy/monitor-in-hand',
-                                     'MONITOR_OP_DEPLOY_KEY': 'SYNTHETIC-NOT-A-REAL-KEY'}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            environment = {'PATH': str(root / 'bin'), 'MONITOR_OP_SOURCE_REPOSITORY': 'fjsxy/monitor-in-hand',
+                           'MONITOR_OP_DEPLOY_KEY': 'SYNTHETIC-NOT-A-REAL-KEY'}
+            if os.environ.get('LD_LIBRARY_PATH'):
+                environment['LD_LIBRARY_PATH'] = os.environ['LD_LIBRARY_PATH']
+            process = subprocess.run(command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.assertEqual(process.returncode, 1)
             self.assertNotIn(b'SYNTHETIC', process.stdout + process.stderr)
             self.assertFalse((root / 'private/monitor-op-deploy-key').exists())

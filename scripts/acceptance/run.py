@@ -10,6 +10,7 @@ import re
 import stat
 import subprocess
 import sys
+import traceback
 from types import SimpleNamespace
 import uuid
 
@@ -126,6 +127,26 @@ def run_batch(a):
                     raise ValueError("actual-case-failed")
     except BaseException as error:
         failure = error
+        private_captured = False
+        try:
+            # 关键：原异常只保存一次私有0600原件，不建立公开ref；二次IO失败不能覆盖原失败或cleanup。
+            atomic_json(session.private / 'run-exception.json', {
+                'exceptionType': type(error).__name__, 'traceback': ''.join(traceback.format_exception(error))})
+            private_captured = True
+        except Exception:
+            pass
+        diagnostic = dict(schemaVersion=1, kind='source-diagnostic', productGate=False,
+                          errorCode='unknown', repoFrames=[], unknown=True)
+        try:
+            from capture import project_exception
+            from prepare import PrepareError
+            diagnostic = project_exception(error, candidate=a.candidate, private_root=session.private / 'diagnostic-source',
+                                           root=ROOT, prepare_type=PrepareError)
+        except Exception:
+            pass
+        diagnostic['privateCaptureSucceeded'] = private_captured
+        if not private_captured:diagnostic['privateCaptureErrorCode'] = 'private-exception-capture-failed'
+        session.index['failureDiagnostic'] = diagnostic
         record = next(r for r in session.index["results"] if r["variantId"] == current["variantId"] and r["layer"] == current["layer"])
         if record["outcome"] == "not_run":
             session.result(current["variantId"], current["layer"], outcome="environment_failed",
