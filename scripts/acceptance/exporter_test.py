@@ -172,6 +172,30 @@ class ExporterTests(unittest.TestCase):
         self.assertEqual((self.destination / 'index.json').read_bytes(), self.index.read_bytes())
         return result
 
+    def test_completed_diagnostic_validates_with_same_pre_read_private_guard(self):
+        """完成态必须走完整首record校验，不能由failed索引早停掩盖先读private旁路。"""
+        for segment in ['.private', 'private', 'raw']:
+            with self.subTest(segment=segment):
+                self.run = self.root / ('completed-' + segment)
+                self.index = fixture(self.run)
+                target = self.run / segment / 'guard.json'
+                dump(target, {'synthetic': 'must-not-be-opened'})
+                self.add_evidence(target)
+                destination = self.root / ('bundle-' + segment)
+                actual_open = gate.os.open
+                def guarded_open(path, *args, **kwargs):
+                    if str(path) == segment:
+                        raise AssertionError('private-reference-opened-before-export-guard')
+                    return actual_open(path, *args, **kwargs)
+                with mock.patch.object(gate.os, 'open', guarded_open):
+                    result = exporter.export(self.index, destination, CANDIDATE, 'CI_FAST',
+                                              validator_test=True, diagnostic=True)
+                self.assertIs(result['gatePassed'], False)
+                summary = json.loads((destination / 'diagnostic-summary.json').read_bytes())
+                self.assertEqual(summary['gateCode'], 'private-or-unapproved-artifact')
+                self.assertIn('private-or-unapproved-artifact', {v['code'] for v in summary['excludedRefs']})
+                self.assertFalse((destination / segment).exists())
+
     def test_safe_bundle_revalidates_from_other_cwd(self):
         self.safe_positive()
 

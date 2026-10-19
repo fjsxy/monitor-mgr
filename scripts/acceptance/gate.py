@@ -478,10 +478,12 @@ def kubernetes_protocol(proof, entry, reader, cluster_uids, arch, candidate, tre
             'productGate': not validator_test}
 
 
-def inspect(index_path, candidate, profile, supplemental=False, validator_test=False):
+def inspect(index_path, candidate, profile, supplemental=False, validator_test=False, *, evidence=None):
     """验证完整run；返回已实读的证据闭包供安全exporter使用。"""
     path = pathlib.Path(index_path).absolute()
-    reader = Evidence(path.parent)
+    # 关键：安全出口可注入同根受限reader；其余调用保留默认读取与全部判定，不能借另一根换证据。
+    reader = Evidence(path.parent) if evidence is None else evidence
+    require(isinstance(reader, Evidence) and reader.root == path.parent.resolve(), 'wrong-evidence-root')
     require(not path.is_symlink(), 'missing-or-symlink-artifact')
     try:
         raw = path.read_bytes()

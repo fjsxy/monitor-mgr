@@ -159,13 +159,14 @@ def diagnostic_export(index_path, destination, candidate, profile, supplemental=
     gate.require(not destination.resolve().is_relative_to(reader.root), 'destination-inside-run')
     encoded = tuple(value.encode() if isinstance(value, str) else value for value in canaries)
     _safe(path.name, raw, 'receipt', 'public', encoded)
+    files = {path.name: raw}
+    reader = DiagnosticEvidence(path.parent, encoded, files)
     try:
-        gate.validate(path, candidate, profile, supplemental, validator_test)
+        # 关键：完成态前置检查与后续typed遍历共用受限reader，任何阶段都不能先读private再过滤。
+        gate.inspect(path, candidate, profile, supplemental, validator_test, evidence=reader)
         gate_code = 'diagnostic-requested'
     except gate.GateError as error:
         gate_code = error.code
-    files = {path.name: raw}
-    reader = DiagnosticEvidence(path.parent, encoded, files)
     excluded, results = [], []
     protocol_entries = {entry['variantId']: entry for entry in registry.entries(profile, supplemental)
                         if entry['executionBoundary'] == 'kubernetes-protocol'}
