@@ -1,0 +1,226 @@
+name: Phase1 验收
+
+# integration 只由同仓 PR head 事件触发，避免同次 push + synchronize 重复 Smoke。
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase1-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
+  RUN_ID: mm21-${{ github.run_id }}-${{ github.run_attempt }}
+  PYTHONDONTWRITEBYTECODE: '1'
+  GOTOOLCHAIN: local
+
+jobs:
+  fast:
+    name: CI_FAST 58 Q
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: 设置本 job 独立目录
+        run: |
+          printf '%s\n' "RUN_OUTPUT=$RUNNER_TEMP/phase1-run" "PRIVATE_ROOT=$RUNNER_TEMP/phase1-private" \
+            "SAFE_OUTPUT=$RUNNER_TEMP/phase1-safe" "ENV_REQUEST=$RUNNER_TEMP/phase1-environment.json" \
+            "TOOL_PREFIX=$RUNNER_TEMP/phase1-tools" "RAW_ROOT=$RUNNER_TEMP/phase1-raw" \
+            "BOOTSTRAP_REPORT=$RUNNER_TEMP/phase1-bootstrap-public.json" \
+            "QUALITY_REPORT=$RUNNER_TEMP/phase1-quality-public.json" "GENERATED_REPORT=$RUNNER_TEMP/phase1-generated-public.json" \
+            "GOCACHE=$RUNNER_TEMP/phase1-go-build" "GOMODCACHE=$RUNNER_TEMP/phase1-go-mod" >> "$GITHUB_ENV"
+      - name: checkout 真实候选 C
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.CANDIDATE }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: 安装固定官方工具
+        run: >-
+          python3 scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label bootstrap --
+          python3 scripts/acceptance/bootstrap_linux.py --prefix "$TOOL_PREFIX"
+          --record "$PRIVATE_ROOT/bootstrap.json" --public-report "$BOOTSTRAP_REPORT"
+      - name: 始终上传 FAST bootstrap 安全诊断
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-fast-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase1-bootstrap-public.json
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: false
+      - name: 本地质量与生成一致性
+        run: |
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label quality --public-report "$QUALITY_REPORT" --candidate "$CANDIDATE" -- make check
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label generated --public-report "$GENERATED_REPORT" --candidate "$CANDIDATE" -- make check-generated
+      - name: 始终上传质量安全诊断
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-fast-quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase1-quality-public.json
+          # 前序未执行时不制造诊断；实际报告writer失败已由capture保持非0。
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: false
+      - name: 始终上传生成安全诊断
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-fast-generated-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase1-generated-public.json
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: false
+      - name: 生成 FAST 私有环境请求
+        id: request
+        run: >-
+          python scripts/acceptance/ci.py --profile CI_FAST --run-id "$RUN_ID"
+          --candidate "$CANDIDATE" --private-root "$PRIVATE_ROOT" --destination "$ENV_REQUEST"
+      - name: 实际执行固定 58 Q
+        id: run
+        run: >-
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label fast-run --
+          python scripts/acceptance/run.py run --profile CI_FAST --run-id "$RUN_ID"
+          --output "$RUN_OUTPUT" --candidate "$CANDIDATE" --environment-json "$ENV_REQUEST"
+      - name: 逐键核验本次原件
+        if: always() && steps.request.outcome == 'success'
+        run: >-
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label fast-validate --
+          python scripts/acceptance/run.py validate-results --index "$RUN_OUTPUT/index.json"
+          --profile CI_FAST --candidate "$CANDIDATE"
+      - name: 导出严格白名单
+        if: always() && steps.request.outcome == 'success'
+        run: |
+          if python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label fast-export -- \
+            python scripts/acceptance/run.py export --index "$RUN_OUTPUT/index.json" \
+            --profile CI_FAST --candidate "$CANDIDATE" --destination "$SAFE_OUTPUT"; then
+            exit 0
+          fi
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label fast-diagnostic -- \
+            python scripts/acceptance/run.py export --index "$RUN_OUTPUT/index.json" \
+            --profile CI_FAST --candidate "$CANDIDATE" --destination "$SAFE_OUTPUT" --diagnostic
+          exit 1
+      - name: 上传 FAST 安全证据
+        if: always() && steps.request.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-fast-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.SAFE_OUTPUT }}/
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: true
+
+  smoke:
+    name: CI_SMOKE 17 Linux amd64
+    # 关键：fork/untrusted 分支不接触私有 deploy key，不使用 pull_request_target。
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.head.ref == 'codex/phase1-implementation') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/phase1-implementation'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: 设置本 job 独立目录
+        run: |
+          printf '%s\n' "RUN_OUTPUT=$RUNNER_TEMP/phase1-run" "PRIVATE_ROOT=$RUNNER_TEMP/phase1-private" \
+            "SAFE_OUTPUT=$RUNNER_TEMP/phase1-safe" "ENV_REQUEST=$RUNNER_TEMP/phase1-environment.json" \
+            "TOOL_PREFIX=$RUNNER_TEMP/phase1-tools" "RAW_ROOT=$RUNNER_TEMP/phase1-raw" \
+            "BOOTSTRAP_REPORT=$RUNNER_TEMP/phase1-bootstrap-public.json" \
+            "GOCACHE=$RUNNER_TEMP/phase1-go-build" "GOMODCACHE=$RUNNER_TEMP/phase1-go-mod" >> "$GITHUB_ENV"
+      - name: checkout 真实候选 C
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.CANDIDATE }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: 安装固定工具与 Chromium
+        run: >-
+          python3 scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label bootstrap --
+          python3 scripts/acceptance/bootstrap_linux.py --prefix "$TOOL_PREFIX"
+          --record "$PRIVATE_ROOT/bootstrap.json" --public-report "$BOOTSTRAP_REPORT" --browsers
+      - name: 始终上传 SMOKE bootstrap 安全诊断
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-smoke-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase1-bootstrap-public.json
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: false
+      - name: 仅本步骤读取专用只读源密钥
+        env:
+          MONITOR_OP_DEPLOY_KEY: ${{ secrets.MONITOR_OP_DEPLOY_KEY }}
+          MONITOR_OP_SOURCE_REPOSITORY: ${{ secrets.MONITOR_OP_SOURCE_REPOSITORY }}
+        run: >-
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label private-source --
+          python scripts/acceptance/fetch_source.py --destination "$PRIVATE_ROOT/monitor-op"
+          --private-root "$PRIVATE_ROOT/source-access"
+      - name: 生成单 control 集群请求
+        id: request
+        run: >-
+          python scripts/acceptance/ci.py --profile CI_SMOKE --run-id "$RUN_ID"
+          --candidate "$CANDIDATE" --private-root "$PRIVATE_ROOT" --destination "$ENV_REQUEST"
+          --monitor-op-source "$PRIVATE_ROOT/monitor-op"
+      - name: 唯一 Session 准备并执行固定 17 键
+        id: run
+        run: >-
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label smoke-run --
+          python scripts/acceptance/run.py run --profile CI_SMOKE --run-id "$RUN_ID"
+          --output "$RUN_OUTPUT" --candidate "$CANDIDATE" --environment-json "$ENV_REQUEST"
+      - name: 逐键核验本次原件
+        if: always() && steps.request.outcome == 'success'
+        run: >-
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label smoke-validate --
+          python scripts/acceptance/run.py validate-results --index "$RUN_OUTPUT/index.json"
+          --profile CI_SMOKE --candidate "$CANDIDATE"
+      - name: 清理前导出严格白名单
+        if: always() && steps.request.outcome == 'success'
+        run: |
+          if python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label smoke-export -- \
+            python scripts/acceptance/run.py export --index "$RUN_OUTPUT/index.json" \
+            --profile CI_SMOKE --candidate "$CANDIDATE" --destination "$SAFE_OUTPUT"; then
+            exit 0
+          fi
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label smoke-diagnostic -- \
+            python scripts/acceptance/run.py export --index "$RUN_OUTPUT/index.json" \
+            --profile CI_SMOKE --candidate "$CANDIDATE" --destination "$SAFE_OUTPUT" --diagnostic
+          exit 1
+      - name: 清理前上传 SMOKE 安全证据
+        if: always() && steps.request.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.SAFE_OUTPUT }}/
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: true
+      - name: 独立恢复 child 顺序清理 owned cluster
+        if: always() && steps.request.outcome == 'success'
+        run: |
+          RECOVERY_ENV="$ENV_REQUEST"
+          if test -f "$RUN_OUTPUT/.private/environment.json"; then
+            RECOVERY_ENV="$RUN_OUTPUT/.private/environment.json"
+          fi
+          python scripts/acceptance/capture.py --private-root "$RAW_ROOT" --label smoke-environment-cleanup -- \
+            python scripts/acceptance/run.py recover --output "$RUN_OUTPUT" --environment-json "$RECOVERY_ENV" \
+            --candidate "$CANDIDATE" --recovery-output "$RUNNER_TEMP/phase1-recovery" --environment-only
+      - name: 上传独立环境清理安全收据
+        if: always() && steps.request.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phase1-smoke-cleanup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase1-recovery/public/environment-cleanup.json
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: false

@@ -1,0 +1,18 @@
+# E2E 用例与 Issue 评论
+
+每个 Issue 的用例正文保存在 `issue-<编号>.md`，按“用例编号、验证目的、验证步骤、预期结果、所属 Issue 编号”五列维护。实施前完整发布正文为对应 Issue 评论并回读；正文更新后发布新修订，评论链接记录在本页。实际运行收据单独保存，不把计划文件改成通过证明。
+
+#14、#15 的本次表格为新增约束后的标准化补录；此前实施前计划及真实运行来源保留。#16 在继续新增实现前补齐新格式。#17–#21 的表格预先保存并发布，后续领取时再次核对是否与本地一致。
+
+重复命令从 `make help` 查找。首次前端操作运行 `make web-install`；真实浏览器使用 `make web-e2e BASE_URL=<测试地址>`；真实集群验收使用 `make e2e-clusters PYTHON=<已具备PyYAML的解释器> E2E_ARGS='<脚本要求的显式参数>'`。凭据只通过受限文件路径提供，运行脚本的 `--help` 查看参数。
+
+| Issue | 本地用例 | 标准化评论 |
+| --- | --- | --- |
+| #14 | [issue-14.md](issue-14.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/14#issuecomment-6249364562) |
+| #15 | [issue-15.md](issue-15.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/15#issuecomment-6249364906) |
+| #16 | [issue-16.md](issue-16.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/16#issuecomment-6249352132) |
+| #17 | [issue-17.md](issue-17.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/17#issuecomment-6250672039) |
+| #18 | [issue-18.md](issue-18.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/18#issuecomment-6252666518) |
+| #19 | [issue-19.md](issue-19.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/19#issuecomment-6254247315) |
+| #20 | [issue-20.md](issue-20.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/20#issuecomment-6253732817) |
+| #21 | [issue-21.md](issue-21.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254819921) |

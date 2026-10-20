@@ -1,0 +1,350 @@
+#!/usr/bin/env python3
+"""真实子进程验证公开 console 出口，不使用真实认证材料。"""
+import json
+import os
+import pathlib
+import signal
+import time
+import subprocess
+import sys
+import tempfile
+import unittest
+import hashlib
+import importlib.util
+
+import capture as protected
+from prepare import PrepareError
+
+
+class CaptureProtocolTest(unittest.TestCase):
+    def frozen_fixture(self, root):
+        source=root/'source';source.mkdir()
+        (source/'test_fixture.py').write_text('import unittest\nclass Fixture(unittest.TestCase):\n def test_bad(self):\n  raise ValueError("HOST-PRIVATE-MESSAGE")\n')
+        (source/'fixture.py').write_text('def fail(error):\n raise error\n')
+        (source/'fixture_test.go').write_text('// 中文来源注释\npackage fixture\nimport "testing"\nfunc TestRoot(t *testing.T) {\n t.Fatal("HOST-PRIVATE-MESSAGE")\n}\n')
+        (source/'Makefile').write_text('test-race: ## 质量夹具\n\tgo test -race ./...\nvet:\n\tgo vet ./...\ngenerate:\n\tbash scripts/generate-rpc.sh\n')
+        self.commit_fixture(source)
+        return source
+
+    def commit_fixture(self, source):
+        for args in [['init','-q'],['add','.'],['-c','user.name=HostFixture','-c','user.email=fixture@example.invalid',
+                     '-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','-qm','test: 静态来源夹具']]:
+            subprocess.run(['git',*args],cwd=source,capture_output=True,timeout=5,check=True)
+        return subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+
+    def test_make_recipe_and_timeout_projection_host_fixture_never_replays_remote_failure(self):
+        """受控输出只验证安全诊断投影，不代表恢复原CI错误或实际timeout。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            result=subprocess.CompletedProcess([],2,b'panic: test timed out after 10m0s\nrunning tests:\n\tTestRoot (9m59s)\n',
+                b'make: *** [Makefile:2: test-race] Error HOST-PRIVATE-TAIL\n')
+            value=protected.project_output(result,label='quality',candidate=candidate,private_root=root/'raw',root=source)
+            self.assertFalse(value['unknown']);self.assertIs(value['productGate'],False);self.assertEqual(value['exit'],2)
+            self.assertEqual(value['observedMarkers'],['go-test-timeout'])
+            self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+            self.assertEqual(value['testFailures'],[])
+            self.assertEqual(value['repoFrames'],[dict(file='Makefile',line=2,function='<make-recipe>',target='test-race',
+                sourceBlobSHA256=hashlib.sha256((source/'Makefile').read_bytes()).hexdigest())])
+            for secret in ['HOST-PRIVATE','10m0s','9m59s',str(root)]:self.assertNotIn(secret,json.dumps(value))
+
+    def test_make_projection_rejects_unbound_rules_lines_and_private_dynamic_output(self):
+        for mode in ['fake-target','wrong-target','rule-line','zero','past-end','dirty','symlink','duplicate','dynamic-file','long-tail']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root);filename=source/'Makefile'
+                candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+                name='Makefile';line=2;target='test-race';tail='HOST-PRIVATE-TAIL'
+                if mode=='fake-target':target='test-race-HOST-PRIVATE'
+                elif mode=='wrong-target':target='vet'
+                elif mode=='rule-line':line=1
+                elif mode=='zero':line=0
+                elif mode=='past-end':line=9999
+                elif mode=='dirty':filename.write_text(filename.read_text()+'# changed\n')
+                elif mode=='symlink':
+                    external=root/'HOST-PRIVATE';external.write_bytes(filename.read_bytes());filename.unlink();filename.symlink_to(external)
+                elif mode=='duplicate':
+                    filename.write_text(filename.read_text()+'test-race:\n\tgo test ./...\n');candidate=self.commit_fixture(source)
+                elif mode=='dynamic-file':name=str(filename)
+                elif mode=='long-tail':tail*=300
+                output=('make[2]: *** ['+name+':'+str(line)+': '+target+'] Error '+tail+'\n--- FAIL: TestRoot (0.01s)\n').encode()
+                value=protected.project_output(subprocess.CompletedProcess([],2,b'',output),label='quality',candidate=candidate,
+                    private_root=root/'raw',root=source)
+                self.assertTrue(value['unknown']);self.assertEqual(value['repoFrames'],[])
+                self.assertNotIn('HOST-PRIVATE',json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+
+    def test_timeout_only_projects_source_verified_running_roots_and_fixed_marker(self):
+        for mode in ['subcase','unknown-root','message','stack','stream-boundary','long']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+                candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+                output='panic: test timed out after 10m0s\nrunning tests:\n\tTestRoot (1s)\n';errors=b''
+                if mode=='subcase':output+='\tTestRoot/HOST-PRIVATE (1s)\n'
+                elif mode=='unknown-root':output+='\tTestHOST_PRIVATE (1s)\n'
+                elif mode=='message':output='panic: test timed out after HOST-PRIVATE\nrunning tests:\n\tTestRoot (1s)\n'
+                elif mode=='stack':output='panic: test timed out after 10m0s\nrunning tests:\n\tTestRoot (1s)\n\ngoroutine 7 [HOST-PRIVATE]:\n\tTestHOST_PRIVATE (1s)\n'
+                elif mode=='stream-boundary':output='panic: test timed out after 10m0s\nrunning tests:';errors=b'\tTestRoot (1s)\n'
+                elif mode=='long':output+='\tTestRoot/'+'HOST-PRIVATE'*300+' (1s)\n'
+                value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),errors),label='quality',candidate=candidate,
+                    private_root=root/'raw',root=source)
+                expected=['fixture_test.go::TestRoot'] if mode in ['subcase','unknown-root','stack','long'] else []
+                self.assertEqual([v['testId'] for v in value['runningTests']],expected)
+                self.assertEqual(value['observedMarkers'],[] if mode=='message' else ['go-test-timeout'])
+                self.assertEqual(value['unknown'],mode not in ['subcase','stack'])
+                for secret in ['HOST-PRIVATE','HOST_PRIVATE','10m0s',str(root)]:self.assertNotIn(secret,json.dumps(value))
+
+    def test_timeout_parallel_leaf_only_host_projection_verifies_root_and_discards_nested_private_suffix(self):
+        """模拟Go标准runningList的parallel叶子；仅诊断投影Host回归，不是原CI timeout复现。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            for suffixes in [['/HOST-PRIVATE'],['/HOST-PRIVATE/nested(value)/x:y'],['/HOST-PRIVATE','/other/HOST-PRIVATE','']]:
+                with self.subTest(suffixes=suffixes):
+                    output='panic: test timed out after 10m0s\nrunning tests:\n'+''.join('\tTestRoot'+suffix+' (9m59s)\n' for suffix in suffixes)
+                    value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),b''),label='quality',candidate=candidate,
+                        private_root=root/'raw',root=source)
+                    self.assertFalse(value['unknown']);self.assertEqual(value['observedMarkers'],['go-test-timeout'])
+                    self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+                    self.assertEqual(value['runningTests'][0]['function'],'TestRoot')
+                    self.assertEqual(value['testFailures'],[]);self.assertEqual(value['repoFrames'],[])
+                    for secret in ['HOST-PRIVATE','nested','other','9m59s','10m0s',str(root)]:self.assertNotIn(secret,json.dumps(value))
+
+    def test_timeout_parallel_leaf_projection_rejects_unknown_root_malformed_lines_and_keeps_attempt_bound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            for leaf in ['TestHOST_PRIVATE/leaf (1s)','TestRoot/ (1s)','TestRoot/HOST PRIVATE (1s)',
+                         'TestRoot/HOST\tPRIVATE (1s)','TestRoot/HOST-PRIVATE (dynamic)',
+                         'TestRoot/HOST-PRIVATE (1s) HOST-PRIVATE']:
+                with self.subTest(leaf=leaf):
+                    output='panic: test timed out after 10m0s\nrunning tests:\n\t'+leaf+'\n'
+                    value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),b''),label='quality',candidate=candidate,
+                        private_root=root/'raw',root=source)
+                    self.assertTrue(value['unknown']);self.assertEqual(value['runningTests'],[])
+                    self.assertNotIn('HOST',json.dumps(value));self.assertNotIn('dynamic',json.dumps(value))
+            output='panic: test timed out after 10m0s\nrunning tests:\n'+'\tTestRoot/HOST-PRIVATE (1s)\n'*65
+            value=protected.project_output(subprocess.CompletedProcess([],2,output.encode(),b''),label='quality',candidate=candidate,
+                private_root=root/'raw',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+            self.assertNotIn('HOST-PRIVATE',json.dumps(value))
+
+    def test_priority_projection_keeps_late_make_stage_after_repeated_go_locations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            output=b'    fixture_test.go:5: HOST-PRIVATE-TAIL\n'*1000
+            errors=b'panic: test timed out after 10m0s\nrunning tests:\n\tTestRoot (1s)\nmake: *** [Makefile:2: test-race] Error HOST-PRIVATE\n'
+            value=protected.project_output(subprocess.CompletedProcess([],2,output,errors),label='quality',candidate=candidate,
+                private_root=root/'raw',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual(value['repoFrames'][0]['target'],'test-race')
+            self.assertEqual(value['observedMarkers'],['go-test-timeout'])
+            self.assertEqual([v['testId'] for v in value['runningTests']],['fixture_test.go::TestRoot'])
+            self.assertLessEqual(len(value['repoFrames']),8);self.assertNotIn('HOST-PRIVATE',json.dumps(value))
+
+    def test_priority_projection_shares_original_attempt_frame_identity_and_prefix_bounds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            filename=source/'fixture_test.go';filename.write_text(filename.read_text()+''.join(
+                'func TestStatic'+str(n)+'(t *testing.T) {}\n' for n in range(40)))
+            candidate=self.commit_fixture(source)
+            running='panic: test timed out after 10m0s\nrunning tests:\n'+''.join('\tTestStatic'+str(n)+' (1s)\n' for n in range(20))
+            failures=''.join('--- FAIL: TestStatic'+str(n)+' (0.01s)\n' for n in range(20,40))
+            value=protected.project_output(subprocess.CompletedProcess([],2,(running+failures).encode(),b''),label='quality',candidate=candidate,
+                private_root=root/'raw',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual(len(value['runningTests'])+len(value['testFailures']),32)
+            output=''.join('    fixture_test.go:'+str(n)+': HOST-PRIVATE\n' for n in range(1,10)).encode()
+            value=protected.project_output(subprocess.CompletedProcess([],2,output,b'make: *** [Makefile:2: test-race] Error HOST-PRIVATE\n'),
+                label='quality',candidate=candidate,private_root=root/'raw-frames',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual(len(value['repoFrames']),8)
+            self.assertEqual(value['repoFrames'][0]['target'],'test-race')
+            output=b'X'*(1024*1024)+b'\nmake: *** [Makefile:2: test-race] Error HOST-PRIVATE\n'
+            value=protected.project_output(subprocess.CompletedProcess([],2,output,b''),label='quality',candidate=candidate,
+                private_root=root/'raw-prefix',root=source)
+            self.assertTrue(value['unknown']);self.assertEqual(value['repoFrames'],[])
+
+    def test_go_assertion_location_uses_unique_frozen_basename_and_never_message_or_function_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            result=subprocess.CompletedProcess([],1,
+                b'    fixture_test.go:5: HOST-PRIVATE-MESSAGE/subcase/dynamic-function\n--- FAIL: TestRoot (0.01s)\n',b'')
+            value=protected.project_output(result,label='quality',candidate=candidate,private_root=root/'raw',root=source)
+            self.assertFalse(value['unknown'])
+            self.assertEqual(value['repoFrames'],[dict(file='fixture_test.go',line=5,function='<go-source>',
+                sourceBlobSHA256=hashlib.sha256((source/'fixture_test.go').read_bytes()).hexdigest())])
+            self.assertEqual([v['testId'] for v in value['testFailures']],['fixture_test.go::TestRoot'])
+            self.assertNotIn('HOST-PRIVATE',json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+
+    def test_go_locations_reject_ambiguous_modified_untracked_symlink_invalid_line_and_dynamic_paths(self):
+        for mode in ['ambiguous','modified','untracked','symlink','line','zero','absolute','slash','backslash','long']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+                candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+                filename=source/'fixture_test.go';name=filename.name;line=5;message='HOST-PRIVATE-MESSAGE'
+                if mode=='ambiguous':
+                    (source/'other').mkdir();(source/'other/fixture_test.go').write_text('package fixture\n// HOST-PRIVATE\n')
+                    candidate=self.commit_fixture(source)
+                elif mode=='modified':filename.write_text(filename.read_text()+'// HOST-PRIVATE\n')
+                elif mode=='untracked':name='untracked_test.go';(source/name).write_text('package fixture\n// HOST-PRIVATE\n')
+                elif mode=='symlink':
+                    target=root/'HOST-PRIVATE.go';target.write_bytes(filename.read_bytes());filename.unlink();filename.symlink_to(target)
+                elif mode=='line':line=9999
+                elif mode=='zero':line=0
+                elif mode=='absolute':name=str(filename)
+                elif mode=='slash':name='HOST-PRIVATE/fixture_test.go'
+                elif mode=='backslash':name='HOST-PRIVATE\\fixture_test.go'
+                elif mode=='long':message*=300
+                output=('    '+name+':'+str(line)+': '+message+'\n--- FAIL: TestRoot (0.01s)\n').encode()
+                value=protected.project_output(subprocess.CompletedProcess([],1,output,b''),label='quality',candidate=candidate,
+                                               private_root=root/'raw',root=source)
+                self.assertTrue(value['unknown']);self.assertEqual(value['repoFrames'],[])
+                self.assertNotIn('HOST-PRIVATE',json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+
+    def test_go_locations_share_existing_frame_and_attempt_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            filename=source/'fixture_test.go';filename.write_text(filename.read_text()+'// 中文额外静态行\n'*10)
+            candidate=self.commit_fixture(source)
+            for numbers,count in [(range(1,10),8),([5]*65,1)]:
+                output=''.join('    fixture_test.go:'+str(n)+': HOST-PRIVATE\n' for n in numbers).encode()
+                value=protected.project_output(subprocess.CompletedProcess([],1,output,b''),label='quality',candidate=candidate,
+                                               private_root=root/'raw',root=source)
+                self.assertTrue(value['unknown']);self.assertEqual(len(value['repoFrames']),count)
+                self.assertNotIn('HOST-PRIVATE',json.dumps(value))
+
+    def test_captured_failure_ids_and_frames_are_verified_against_frozen_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            result=protected.capture([sys.executable,'-m','unittest','-v','test_fixture.Fixture.test_bad'],
+                private_root=str(root/'original'),label='fixture-unit',cwd=source,publish=False)
+            self.assertEqual(result.returncode,1)
+            result.stdout+=b'--- FAIL: TestRoot (0.01s)\n--- FAIL: TestRoot/HOST-PRIVATE-SUBCASE (0.01s)\n'
+            result.stderr+=b'FAIL: test_bad (test_fixture.Fixture.test_bad) (value="HOST-PRIVATE-SUBCASE")\n'
+            value=protected.project_output(result,label='quality',candidate=candidate,private_root=root/'source-raw',root=source)
+            self.assertTrue(value['unknown'], '被忽略的带参数子例不能被已识别根ID掩盖')
+            self.assertEqual({v['testId'] for v in value['testFailures']},{'test_fixture.py::Fixture.test_bad','fixture_test.go::TestRoot'})
+            go=next(v for v in value['testFailures'] if v['function']=='TestRoot');self.assertEqual(go['line'],4)
+            frame=next(v for v in value['repoFrames'] if v['file']=='test_fixture.py')
+            self.assertEqual(frame['function'],'test_bad');self.assertEqual(frame['line'],4)
+            self.assertEqual(frame['sourceBlobSHA256'],hashlib.sha256((source/'test_fixture.py').read_bytes()).hexdigest())
+            public=json.dumps(value);self.assertNotIn('HOST-PRIVATE',public);self.assertNotIn(str(root),public)
+            self.assertTrue(all(set(v)=={'file','line','function','sourceBlobSHA256'} for v in value['repoFrames']))
+
+    def test_projection_rejects_modified_untracked_external_symlink_ambiguous_and_subtest_inputs(self):
+        for mode in ['modified','untracked','external','symlink','line','ambiguous','subtest','wrong-candidate']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+                candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+                filename=source/'test_fixture.py';identity='test_fixture.Fixture.test_bad';line=4
+                if mode=='modified':filename.write_text(filename.read_text()+'# changed\n')
+                if mode=='untracked':filename=source/'test_other.py';filename.write_text('HOST-PRIVATE');identity='test_other.Fixture.test_bad'
+                if mode=='external':filename=root/'HOST-PRIVATE.py';filename.write_text('private');identity='external.Fixture.test_bad'
+                if mode=='symlink':
+                    target=root/'HOST-PRIVATE.py';target.write_text('private');filename.unlink();filename.symlink_to(target)
+                if mode=='line':line=99999
+                if mode=='ambiguous':
+                    (source/'other').mkdir();(source/'other/test_fixture.py').write_bytes(filename.read_bytes());candidate=self.commit_fixture(source)
+                if mode=='wrong-candidate':candidate='0'*40
+                text=('FAIL: test_bad ('+identity+')\n') if mode!='line' else ''
+                if mode=='subtest':text='FAIL: test_bad (test_fixture.Fixture.test_bad) (secret="HOST-PRIVATE")\n--- FAIL: TestRoot/HOST-PRIVATE (0.01s)\n'
+                if mode not in ['ambiguous','subtest']:text+='  File "'+str(filename)+'", line '+str(line)+', in HOST_PRIVATE_DYNAMIC_FUNCTION\n'
+                result=subprocess.CompletedProcess([],1,b'',text.encode())
+                value=protected.project_output(result,label='quality',candidate=candidate,private_root=root/'raw',root=source)
+                self.assertTrue(value['unknown']);self.assertEqual(value['testFailures'],[]);self.assertEqual(value['repoFrames'],[])
+                self.assertNotIn('HOST-PRIVATE',json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+
+    def test_exception_projection_uses_static_frames_and_exact_prepare_code_membership(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve();source=self.frozen_fixture(root)
+            candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True,timeout=5).strip()
+            spec=importlib.util.spec_from_file_location('host_frame_fixture',source/'fixture.py')
+            module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+            for error,code in [(PrepareError('PREPARE_RESPONSE_INVALID'),'PREPARE_RESPONSE_INVALID'),
+                               (PrepareError('PREPARE_HOST_PRIVATE_CANARY'),'unknown'),
+                               (type('HOST_PRIVATE_DYNAMIC_CLASS',(Exception,),{})('HOST_PRIVATE_MESSAGE'),'unknown')]:
+                try:module.fail(error)
+                except BaseException as caught:
+                    value=protected.project_exception(caught,candidate=candidate,private_root=root/'raw',root=source,prepare_type=PrepareError)
+                self.assertEqual(value['errorCode'],code)
+                self.assertEqual([v['function'] for v in value['repoFrames']],['fail'])
+                self.assertNotIn('HOST_PRIVATE',json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+
+    def test_public_report_write_failure_never_overwrites_original_failed_exit(self):
+        for code in [0,7]:
+            with self.subTest(code=code),tempfile.TemporaryDirectory() as directory:
+                root=pathlib.Path(directory);blocked=root/'blocked';blocked.write_text('not-directory')
+                result=subprocess.run([sys.executable,str(pathlib.Path(__file__).with_name('capture.py')),
+                    '--private-root',str(root/'raw'),'--label','quality','--public-report',str(blocked/'report.json'),
+                    '--candidate','0'*40,'--',sys.executable,'-c','import sys;sys.exit('+str(code)+')'],capture_output=True)
+                self.assertEqual(result.returncode,code or 125)
+                self.assertNotIn(str(root).encode(),result.stdout+result.stderr)
+                self.assertIn(b'diagnostic-write-failed',result.stdout)
+
+    def test_optional_public_report_keeps_actual_exit_private_bytes_and_single_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory);marker=root/'once';report=root/'public.json';canary='HOST-PRIVATE-OUTPUT-CANARY'
+            script='import pathlib,sys;p=pathlib.Path('+repr(str(marker))+');p.write_text(p.read_text()+"x" if p.exists() else "x");print('+repr(canary)+');sys.exit(7)'
+            command=[sys.executable,str(pathlib.Path(__file__).with_name('capture.py')),'--private-root',str(root/'raw'),
+                     '--label','quality','--public-report',str(report),'--candidate','0'*40,'--',sys.executable,'-c',script]
+            result=subprocess.run(command,capture_output=True)
+            self.assertEqual(result.returncode,7)
+            value=json.loads(report.read_bytes());self.assertIs(value['productGate'],False)
+            self.assertEqual(value['exit'],7);self.assertEqual(value['state'],'failed');self.assertTrue(value['unknown'])
+            self.assertEqual(marker.read_text(),'x');self.assertEqual(value['testFailures'],[]);self.assertEqual(value['repoFrames'],[])
+            self.assertNotIn(canary,report.read_text());self.assertNotIn(str(root),report.read_text())
+            self.assertEqual(value['raw']['stdout'],dict(bytes=len((canary+'\n').encode()),sha256=hashlib.sha256((canary+'\n').encode()).hexdigest()))
+            self.assertTrue(all(p.stat().st_mode&0o777==0o600 for p in (root/'raw').glob('*.raw')))
+            self.assertEqual(report.stat().st_mode&0o777,0o600)
+
+    def test_nonzero_child_keeps_private_bytes_and_safe_console(self):
+        canary = 'SYNTHETIC-AUTH-CANARY-21'
+        with tempfile.TemporaryDirectory() as root:
+            command = [sys.executable, str(pathlib.Path(__file__).with_name('capture.py')),
+                       '--private-root', root, '--label', 'protocol-canary', '--', sys.executable,
+                       '-c', "import sys;print('SYNTHETIC-AUTH-CANARY-21');sys.stderr.write('SYNTHETIC-AUTH-CANARY-21');sys.exit(7)"]
+            process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertEqual(process.returncode, 7)
+            self.assertNotIn(canary.encode(), process.stdout + process.stderr)
+            summary = json.loads(process.stdout)
+            self.assertEqual(summary['exit'], 7)
+            self.assertEqual(summary['id'], 'protocol-canary')
+            logs = list(pathlib.Path(root).glob('*.raw'))
+            self.assertEqual(len(logs), 2)
+            for log in logs:
+                self.assertIn(canary, log.read_text())
+                self.assertEqual(log.stat().st_mode & 0o777, 0o600)
+
+    def test_repeated_signals_do_not_interrupt_child_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            child = root / 'child.py'
+            child.write_text("import signal,time,pathlib,sys\np=pathlib.Path(sys.argv[1])\ndef stop(n,f):\n with (p/'signals').open('a') as s:s.write(str(n)+'\\n')\n (p/'cleaning').touch()\nsignal.signal(signal.SIGTERM,stop)\nsignal.signal(signal.SIGINT,stop)\n(p/'ready').touch()\nwhile not (p/'finish').exists():time.sleep(.01)\nsys.exit(3)\n")
+            command = [sys.executable, str(pathlib.Path(__file__).with_name('capture.py')),
+                       '--private-root', str(root / 'raw'), '--label', 'protocol-signal', '--', sys.executable, str(child), str(root)]
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                end = time.monotonic() + 5
+                while not (root / 'ready').exists() and time.monotonic() < end: time.sleep(.01)
+                self.assertTrue((root / 'ready').exists())
+                process.send_signal(signal.SIGTERM)
+                while not (root / 'cleaning').exists() and time.monotonic() < end: time.sleep(.01)
+                self.assertTrue((root / 'cleaning').exists())
+                process.send_signal(signal.SIGINT)
+                time.sleep(.1)
+                process.send_signal(signal.SIGTERM)
+                time.sleep(.1)
+                (root / 'finish').touch()
+                output, errors = process.communicate(timeout=5)
+                self.assertEqual(process.returncode, 3)
+                self.assertEqual(len((root / 'signals').read_text().splitlines()), 1)
+                receipt = json.loads(next((root / 'raw').glob('*.json')).read_text())
+                self.assertEqual(len(receipt['signals']), 3)
+            finally:
+                (root / 'finish').touch()
+                if process.poll() is None:
+                    process.terminate()
+                    process.communicate(timeout=5)
+
+
+if __name__ == '__main__':
+    unittest.main()

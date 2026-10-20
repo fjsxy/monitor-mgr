@@ -1,0 +1,1267 @@
+{
+  "status": "implementation_plan_not_executed",
+  "generatedAt": "2026-10-18T20:13:41.966866+00:00",
+  "candidateCommit": null,
+  "sources": [
+    {
+      "name": "固定207五列",
+      "gitCommit": "7e1dc001306ab98180579f7762597ab54cd03464",
+      "path": "docs/e2e/issue-21.md",
+      "sha256": "777c70c61f851f38ae45dff58cc46cd5d8beefb0e957cba00e17b4f36a414ceb",
+      "chars": 38046,
+      "utf8Bytes": 72312,
+      "gitBlob": "3faf7ed66fbf233296c02d3348e2a599751b95a1"
+    },
+    {
+      "name": "继承#17最终REG",
+      "gitCommit": "7e1dc001306ab98180579f7762597ab54cd03464",
+      "path": "docs/e2e/issue-17.md",
+      "sha256": "c8ceeb4e074e3235ee6d15733c8ff3e4af8e5e9dfdc81df7c2c93d6570feb390",
+      "chars": 5537,
+      "utf8Bytes": 11835,
+      "gitBlob": "958dd1ba28edc622ebfade66552185007d9b6cd7"
+    },
+    {
+      "name": "继承#18最终REG",
+      "gitCommit": "7e1dc001306ab98180579f7762597ab54cd03464",
+      "path": "docs/e2e/issue-18.md",
+      "sha256": "f9a21582cad87b443744d37722859c4d1ec0f2f09bd3a2894e762050dd7bcf79",
+      "chars": 25885,
+      "utf8Bytes": 45667,
+      "gitBlob": "680ea9a451db47941e3585e974cb19d9a091a63b"
+    },
+    {
+      "name": "继承#19冻结评审修复REG revision2",
+      "gitCommit": "cb79fc517c0fdc2957cbb627eeabe0bbf7227c0b",
+      "path": "docs/e2e/issue-19.md",
+      "sha256": "c711fdcf31670bcc967e4584f774353ff4f4cdd65215c8f0993c595531f245c5",
+      "chars": 6421,
+      "utf8Bytes": 13295,
+      "gitBlob": "f79904479e6f0c72833440c2391eb6ddc1a2f105"
+    },
+    {
+      "name": "继承#20最终REG",
+      "gitCommit": "21eb65c81c042990fe2c42928bad82e1d4223fe2",
+      "path": "docs/e2e/issue-20.md",
+      "sha256": "a5baa88ccafc40bed8122843a9fcb21f113339699518206c30046704e371da53",
+      "chars": 10532,
+      "utf8Bytes": 19844,
+      "gitBlob": "f0a4c76856b4d2712562902374d4e822523bedfd"
+    },
+    {
+      "name": "REG21协议/validator草案23",
+      "gitCommit": null,
+      "path": "issue-21-supplemental-reg-plan.md",
+      "sha256": "55207d0cd9840537edd9953dcc7bfc8c0b89a40dbeb5e653cbf2b92a52e9bc37",
+      "chars": 5435,
+      "utf8Bytes": 10009,
+      "gitBlob": null
+    },
+    {
+      "name": "REG21出口草案6",
+      "gitCommit": null,
+      "path": "issue-21-ci-output-boundary-preflight.md",
+      "sha256": "ae46f68af3d1bc8c52db164e153c0162d0a29934b88a592171c698b29bb6f188",
+      "chars": 2113,
+      "utf8Bytes": 4365,
+      "gitBlob": null
+    }
+  ],
+  "sourceManifestSha256": "a3e71ae6cbe5828a04cd9fe0cc425274f05ad042ecab53a62d20db1def7d93f8",
+  "fixed": {
+    "uniqueVariants": 207,
+    "profileKeys": {
+      "LOCAL_FULL": 207,
+      "CI_FAST": 58,
+      "CI_SMOKE": 17
+    },
+    "totalProfileKeys": 282,
+    "profiles": {
+      "LOCAL_FULL": [
+        "T01.primary",
+        "T02.primary",
+        "T03.primary",
+        "T04.loopback",
+        "T04.wrong-ca",
+        "T04.wrong-name",
+        "T05.primary",
+        "T06.primary",
+        "T07.db",
+        "T07.rpc",
+        "T07.listener",
+        "T07.target-offline",
+        "T08.primary",
+        "I01.primary",
+        "I02.default-expiry",
+        "I02.configured-expiry",
+        "I02.cookie",
+        "I03.primary",
+        "I04.primary",
+        "I05.primary",
+        "I06.primary",
+        "I07.reset",
+        "I07.disable",
+        "I07.role-change",
+        "I07.last-admin-disable",
+        "I07.last-admin-demote",
+        "I07.disabled-owner",
+        "C01.client-cert",
+        "C01.token",
+        "C02.primary",
+        "C03.missing",
+        "C03.forbidden",
+        "C03.anonymous",
+        "C03.error",
+        "C04.ksm-crd",
+        "C04.agent-crd",
+        "C05.primary",
+        "C06.bad-candidate",
+        "C06.same-uid",
+        "C07.primary",
+        "C08.primary",
+        "C09.http",
+        "C09.skip-tls",
+        "C09.external-ca",
+        "C09.external-cert",
+        "C09.token-file",
+        "C09.exec",
+        "C09.auth-provider",
+        "C09.proxy",
+        "K01.primary",
+        "K02.primary",
+        "K03.primary",
+        "K04.primary",
+        "K05.primary",
+        "K06.node",
+        "K06.cluster",
+        "K06.unscheduled",
+        "K07.default-all",
+        "K07.default-allow",
+        "K07.default-deny",
+        "K07.include-all",
+        "K07.include-allow",
+        "K07.include-deny",
+        "K08.all",
+        "K08.union",
+        "K08.dynamic-pattern",
+        "K08.zero",
+        "K09.primary",
+        "K10.name",
+        "K10.collision",
+        "K10.fixed-target",
+        "K10.unsupported",
+        "A01.primary",
+        "A02.primary",
+        "A03.primary",
+        "A04.primary",
+        "A05.primary",
+        "A06.primary",
+        "A07.retain",
+        "A07.delete",
+        "A08.retain",
+        "A08.delete",
+        "A09.retain",
+        "A09.delete",
+        "A10.initial-capacity",
+        "A10.fixed-capacity",
+        "A10.fixed-mode",
+        "A10.fixed-identity",
+        "A10.new-instance",
+        "A11.servicemonitor-none-own",
+        "A11.servicemonitor-none-all",
+        "A11.servicemonitor-none-labels",
+        "A11.servicemonitor-all-own",
+        "A11.servicemonitor-all-all",
+        "A11.servicemonitor-all-labels",
+        "A11.servicemonitor-labels-own",
+        "A11.servicemonitor-labels-all",
+        "A11.servicemonitor-labels-labels",
+        "A11.podmonitor-none-own",
+        "A11.podmonitor-none-all",
+        "A11.podmonitor-none-labels",
+        "A11.podmonitor-all-own",
+        "A11.podmonitor-all-all",
+        "A11.podmonitor-all-labels",
+        "A11.podmonitor-labels-own",
+        "A11.podmonitor-labels-all",
+        "A11.podmonitor-labels-labels",
+        "A11.probe-none-own",
+        "A11.probe-none-all",
+        "A11.probe-none-labels",
+        "A11.probe-all-own",
+        "A11.probe-all-all",
+        "A11.probe-all-labels",
+        "A11.probe-labels-own",
+        "A11.probe-labels-all",
+        "A11.probe-labels-labels",
+        "A11.scrapeconfig-none-own",
+        "A11.scrapeconfig-none-all",
+        "A11.scrapeconfig-none-labels",
+        "A11.scrapeconfig-all-own",
+        "A11.scrapeconfig-all-all",
+        "A11.scrapeconfig-all-labels",
+        "A11.scrapeconfig-labels-own",
+        "A11.scrapeconfig-labels-all",
+        "A11.scrapeconfig-labels-labels",
+        "A12.http-none",
+        "A12.https-basic",
+        "A12.https-bearer",
+        "A12.tls-ca",
+        "A12.tls-client",
+        "A12.multiple",
+        "A13.missing-secret",
+        "A13.missing-key",
+        "A13.forbidden-secret",
+        "A13.missing-sa",
+        "A13.insufficient-sa",
+        "P01.primary",
+        "P02.primary",
+        "P03.same",
+        "P03.different-content",
+        "P03.another-active",
+        "P04.draft-race",
+        "P04.draft-after-preview",
+        "P04.target-after-preview",
+        "P05.supported-drift",
+        "P05.extra-spec",
+        "P06.status-only",
+        "P06.rv-only",
+        "P06.default-equivalent",
+        "P06.spec-change",
+        "P07.primary",
+        "P08.cancel-wins",
+        "P08.dispatch-wins",
+        "P09.response-drop",
+        "P09.deadline",
+        "P10.primary",
+        "P11.primary",
+        "P12.new-uid",
+        "P12.missing",
+        "P13.unsent",
+        "P13.possibly-sent",
+        "P14.policy-pending",
+        "P14.finalizer",
+        "P14.pod-remains",
+        "P14.read-failure",
+        "P14.delete-response-drop",
+        "R01.intervals",
+        "R01.freshness",
+        "R01.early-error",
+        "R02.primary",
+        "R03.missing-status",
+        "R03.incomplete-status",
+        "R03.ksm-suspended",
+        "R03.ksm-disabled",
+        "R03.ksm-no-match",
+        "R03.agent-zero",
+        "R03.agent-paused",
+        "R03.deleted",
+        "R04.primary",
+        "R05.page",
+        "R05.item",
+        "R06.primary",
+        "R07.pvc",
+        "R07.pod",
+        "R07.association",
+        "R08.primary",
+        "U01.primary",
+        "U02.primary",
+        "U03.primary",
+        "U04.primary",
+        "U05.primary",
+        "U06.primary",
+        "F01.absent",
+        "F01.empty-object",
+        "F01.empty-list",
+        "F01.unknown-mode",
+        "F02.primary",
+        "F03.quantity",
+        "F03.regexp",
+        "F03.selector",
+        "F03.url",
+        "F03.tls-pair",
+        "F03.unknown-field",
+        "F04.success",
+        "F04.failure",
+        "F05.before-commit",
+        "F05.after-commit"
+      ],
+      "CI_FAST": [
+        "T07.db",
+        "T07.rpc",
+        "T07.listener",
+        "T07.target-offline",
+        "I02.default-expiry",
+        "I02.configured-expiry",
+        "I02.cookie",
+        "I06.primary",
+        "C03.missing",
+        "C03.forbidden",
+        "C03.anonymous",
+        "C03.error",
+        "C09.http",
+        "C09.skip-tls",
+        "C09.external-ca",
+        "C09.external-cert",
+        "C09.token-file",
+        "C09.exec",
+        "C09.auth-provider",
+        "C09.proxy",
+        "K10.name",
+        "K10.collision",
+        "K10.fixed-target",
+        "K10.unsupported",
+        "P04.draft-race",
+        "P04.draft-after-preview",
+        "P04.target-after-preview",
+        "P08.cancel-wins",
+        "P08.dispatch-wins",
+        "R01.intervals",
+        "R01.freshness",
+        "R01.early-error",
+        "R03.missing-status",
+        "R03.incomplete-status",
+        "R03.ksm-suspended",
+        "R03.ksm-disabled",
+        "R03.ksm-no-match",
+        "R03.agent-zero",
+        "R03.agent-paused",
+        "R03.deleted",
+        "R05.page",
+        "R05.item",
+        "R06.primary",
+        "F01.absent",
+        "F01.empty-object",
+        "F01.empty-list",
+        "F01.unknown-mode",
+        "F02.primary",
+        "F03.quantity",
+        "F03.regexp",
+        "F03.selector",
+        "F03.url",
+        "F03.tls-pair",
+        "F03.unknown-field",
+        "F04.success",
+        "F04.failure",
+        "F05.before-commit",
+        "F05.after-commit"
+      ],
+      "CI_SMOKE": [
+        "T01.primary",
+        "T02.primary",
+        "T05.primary",
+        "I01.primary",
+        "C01.client-cert",
+        "C01.token",
+        "K01.primary",
+        "K02.primary",
+        "A01.primary",
+        "A04.primary",
+        "P01.primary",
+        "P02.primary",
+        "P03.same",
+        "P03.different-content",
+        "P03.another-active",
+        "U01.primary",
+        "U06.primary"
+      ]
+    }
+  },
+  "supplemental": {
+    "uniqueIDs": 100,
+    "layerKeys": 104,
+    "layerCounts": {
+      "Q": 82,
+      "K": 17,
+      "B": 5
+    },
+    "byFinalSourceOwner": {
+      "17": {
+        "uniqueREG": 7,
+        "layerKeys": 7,
+        "Q": 7,
+        "K": 0,
+        "B": 0
+      },
+      "18": {
+        "uniqueREG": 29,
+        "layerKeys": 32,
+        "Q": 28,
+        "K": 2,
+        "B": 2
+      },
+      "19": {
+        "uniqueREG": 14,
+        "layerKeys": 15,
+        "Q": 12,
+        "K": 0,
+        "B": 3
+      },
+      "20": {
+        "uniqueREG": 21,
+        "layerKeys": 21,
+        "Q": 14,
+        "K": 7,
+        "B": 0
+      },
+      "21": {
+        "uniqueREG": 29,
+        "layerKeys": 29,
+        "Q": 21,
+        "K": 8,
+        "B": 0
+      }
+    },
+    "duplicateIDsRemoved": [],
+    "multiLayerIDs": {
+      "REG18-SOURCE-007": [
+        "B",
+        "Q"
+      ],
+      "REG18-PROJECTION-013.url-parse-error": [
+        "K",
+        "Q"
+      ],
+      "REG18-PROJECTION-013.proxy-parse-error": [
+        "K",
+        "Q"
+      ],
+      "REG19-HTTP-I64-001": [
+        "B",
+        "Q"
+      ]
+    },
+    "keys": [
+      {
+        "owner": 17,
+        "variantId": "REG17-ACTIVITY-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 17,
+        "variantId": "REG17-DELETE-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 17,
+        "variantId": "REG17-DELETE-002",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 17,
+        "variantId": "REG17-DELETE-003",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 17,
+        "variantId": "REG17-IDEMPOTENCY-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 17,
+        "variantId": "REG17-SHUTDOWN-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 17,
+        "variantId": "REG17-VERSION-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-004",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-004.none-short-circuit",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-004.old-rs",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-004.override",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-004.single-dash-namespace",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-004.single-dash-selector",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-005",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-010.boolean-arity",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-010.duplicate-scope",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-010.env-expansion",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-010.known-scope-space",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-010.positional",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-CAP-010.terminator",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-FIXED-008",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-HEADERS-009",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-PATTERN-011",
+        "layer": "B",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-PROJECTION-013.proxy-parse-error",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-PROJECTION-013.proxy-parse-error",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-PROJECTION-013.url-parse-error",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-PROJECTION-013.url-parse-error",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SELECTOR-012.exists-empty",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SELECTOR-012.exists-nil",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SELECTOR-012.in",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SELECTOR-012.not-exists-empty",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SELECTOR-012.not-exists-nil",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SELECTOR-012.not-in",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SHARED-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SHARED-002",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SHARED-003",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SOURCE-007",
+        "layer": "B",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-SOURCE-007",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 18,
+        "variantId": "REG18-VALID-006",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-ACTIVITY-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-AGENT-DELETE-OP-001",
+        "layer": "B",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-AGENT-HISTORY-OP-001",
+        "layer": "B",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-CONTINUE-REPLAY-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-CREDENTIAL-REPLAY-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-HTTP-CAPABILITIES-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-HTTP-CONTINUE-CREDENTIAL-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-HTTP-CONTINUE-DELETE-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-HTTP-CONTINUE-PUBLISH-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-HTTP-DELETE-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-HTTP-I64-001",
+        "layer": "B",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-HTTP-I64-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-SOURCE-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-STORAGE-SCOPE-001",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 19,
+        "variantId": "REG19-STORAGE-SCOPE-002",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-001.dispatch-race",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-001.forbidden",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-001.new-name",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-001.orphan",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-001.owned-retain-shard",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-001.owned-retain-suspend",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-001.timeout",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-002.transfer",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-002.unregister",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-003.policy-accept",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-003.policy-dispatch",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-003.pvc-uid-accept",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-003.pvc-uid-dispatch",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-003.same-st-pod-roll",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-003.st-uid-accept",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-003.st-uid-dispatch",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-003.status-rv",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-004.delete-with-st-owner",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-004.scaled-retain-deleted-delete",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-005.pending-shard",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 20,
+        "variantId": "REG20-STORAGE-005.pending-suspend",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-EXPORT-012.canary",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-EXPORT-012.console",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-EXPORT-012.image-tar",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-EXPORT-012.kubeconfig",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-EXPORT-012.private-source",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-EXPORT-012.raw-db",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-LEDGER-009.uid-replaced",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-LEDGER-010.read-failure",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-RECOVER-008.kill-then-recover",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-RESULT-005.setup-failure",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-RESULT-006.cleanup-failure",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-RESULT-007.after-first",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-RESULT-007.before-first",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-SIGNAL-001.lock-wait",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-SIGNAL-002.term-after-setup",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-SIGNAL-003.keyboard-interrupt",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-SIGNAL-004.repeat-during-cleanup",
+        "layer": "K",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.changed-artifact",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.cleanup-failure",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.contract-mismatch",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.duplicate-key",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.missing-artifact",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.missing-key",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.path-escape",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.skipped",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.unknown-key",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.wrong-image-source",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.wrong-profile",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      },
+      {
+        "owner": 21,
+        "variantId": "REG21-VALIDATOR-011.wrong-source",
+        "layer": "Q",
+        "profile": "LOCAL_FULL",
+        "status": "planned_not_executed"
+      }
+    ],
+    "includedInFixed282": false
+  },
+  "combinedPlannedExecutionKeys": 386,
+  "fiveColumnCaseRows": 307,
+  "allOriginalStepsExpectedPreserved": false,
+  "passingKeysEstablished": 0,
+  "publication": {
+    "file": "docs/e2e/issue-21.md",
+    "characters": 63558,
+    "utf8Bytes": 119764,
+    "limitCharacters": 65536,
+    "remainingCharacters": 1978,
+    "withinGitHubCommentLimit": true,
+    "sha256": "d0fc2cbb4be212d8575f4bad9617c85a4db6d304b07c90d10c66d7605767af71",
+    "status": "full_comment_published_exact_readback",
+    "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254819921",
+    "commentId": 6254819921,
+    "readbackAt": "2026-10-18T20:34:02.743542+00:00"
+  },
+  "layerSources": [
+    "#17冻结regressions-fe9bcc2/results.json仅用于核既定层级，不继承passed状态",
+    "7e1:scripts/acceptance/agent.py REGCASES/PROJECTION_KCASES与agent_browser补充B",
+    "7e1:scripts/acceptance/workbench.py REGCASES与workbench_browser HTTP-I64 B",
+    "21eb:scripts/acceptance/agent_storage.py QREG/KREG",
+    "REG21五列明确Q/K，EXPORT六项Q",
+    "19冻结cb79 review.py registry Q9/B2，历史实测不继承，21同C重新运行"
+  ],
+  "sourceRevisionNote": {
+    "priorV1SHA256": "7fda822885e5641e0d9f4469f5bfea93c365cbbc9ca612ae529b86fd7a0acac6",
+    "reviewPlanURL": "https://github.com/fjsxy/monitor-mgr/issues/19#issuecomment-6254247315",
+    "reviewPlanSHA256": "c711fdcf31670bcc967e4584f774353ff4f4cdd65215c8f0993c595531f245c5",
+    "newInputCount": 11,
+    "rootReadback": "issue-19-review-plan-revision2-root-readback.json",
+    "passingKeys": 0,
+    "priorV2SHA256": "6782db7b07776ba45858666748a3e3bc937bbad10d31b6316aadff397fe0371a",
+    "inheritedRowsRefreshed": 14,
+    "note": "19冻结来源cb79已交付且原生21阻塞清零；全文发布/回读后实现，旧通过不继承",
+    "priorV3SHA256": "f370b2df12a71c1ebce35bb3eb26542a335703b4e80d133b651cb6cf4046318a",
+    "reviewPlanFinalSource": "cb79fc517c0fdc2957cbb627eeabe0bbf7227c0b",
+    "sourceBindingRevision": "wrong-source逐个验证wrapper与originalReceipt实际身份维度，不改变104layer或282固定键"
+  },
+  "implementationBase": "21f9fdf42b720cb9684b612083c28193ba7713ff",
+  "publicationHistory": [
+    {
+      "file": "docs/e2e/issue-21.md",
+      "characters": 63284,
+      "utf8Bytes": 119278,
+      "limitCharacters": 65536,
+      "remainingCharacters": 2252,
+      "withinGitHubCommentLimit": true,
+      "sha256": "d6ea2e144e1b5d1ed155830c58bcb14b2a5c6c5d0cc50c3d19ef3d73b0f0244d",
+      "status": "full_comment_published_exact_readback",
+      "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254616231",
+      "commentId": 6254616231,
+      "readbackAt": "2026-10-18T20:14:06.702821+00:00"
+    },
+    {
+      "file": "docs/e2e/issue-21.md",
+      "characters": 63381,
+      "utf8Bytes": 119469,
+      "limitCharacters": 65536,
+      "remainingCharacters": 2155,
+      "withinGitHubCommentLimit": true,
+      "sha256": "521f8a5925d548020209aad84241c2a3e53030d4217daf3f16711c22cc2963cd",
+      "status": "full_comment_published_exact_readback",
+      "url": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254725361",
+      "commentId": 6254725361,
+      "readbackAt": "2026-10-18T20:24:47.498316+00:00"
+    }
+  ],
+  "originalRowsPreservationScope": {
+    "fixed207": true,
+    "inheritedIssues17Through20": true,
+    "REG21ExceptWrongSource": true,
+    "amendedVariantId": "REG21-VALIDATOR-011.wrong-source",
+    "reason": "实施前评审要求逐一验证原始收据来源，不将新wrapper视为原件身份；307行并非全部逐字等历史外部草案",
+    "REG21ExceptAmendedVariants": true,
+    "amendedVariantIds": [
+      "REG21-VALIDATOR-011.wrong-source",
+      "REG21-VALIDATOR-011.wrong-profile"
+    ]
+  },
+  "approvedPlanAmendments": [
+    {
+      "variantId": "REG21-VALIDATOR-011.wrong-source",
+      "originalSource": "issue-21-supplemental-reg-plan.md",
+      "originalSourceSHA256": "55207d0cd9840537edd9953dcc7bfc8c0b89a40dbeb5e653cbf2b92a52e9bc37",
+      "changedOnly": "REG21 wrong-source步骤及决定性预期；固定207与继承17–20行不变",
+      "planSHA256": "521f8a5925d548020209aad84241c2a3e53030d4217daf3f16711c22cc2963cd",
+      "commentURL": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254725361",
+      "fullReadback": true
+    },
+    {
+      "variantIds": [
+        "REG21-VALIDATOR-011.wrong-source",
+        "REG21-VALIDATOR-011.wrong-profile"
+      ],
+      "changedOnly": "候选Git原对象tree绑定及正式/fixture执行域失败闭合输入；固定207与继承17–20均不变",
+      "planSHA256": "d0fc2cbb4be212d8575f4bad9617c85a4db6d304b07c90d10c66d7605767af71",
+      "commentURL": "https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254819921",
+      "fullReadback": true
+    }
+  ]
+}
