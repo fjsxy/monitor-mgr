@@ -399,13 +399,14 @@ def browser(s):
     pod=s.get('pods','-n',s.ns,'-l','app=monitor-mgr',target='control')['items'][0];s.pod=pod['metadata']['name'];s.platform_pod_uid=pod['metadata']['uid'];s.cookies=cookies;s.connect()
     fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,largeId=i['id'],largeName=i['name'])));os.chmod(fixture,0o600)
     s.by('真实 Chromium 完成表单保存、精确大 revision、YAML/diff、发布、工作台与删除')
-    out=s.out/'playwright';env=dict(os.environ,BASE_URL=s.base,PHASE1_E2E_FIXTURE=str(fixture))
+    out=s.out/'playwright';report_path=s.out/'playwright.json';env=dict(os.environ,BASE_URL=s.base,PHASE1_E2E_FIXTURE=str(fixture),PLAYWRIGHT_JSON_OUTPUT_FILE=str(report_path))
     r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)
-    report=json.loads(r.stdout);assert r.returncode==0 and report['stats']['expected']==1 and not report['stats']['unexpected'] and not report['stats']['skipped']
+    report=json.loads(report_path.read_text()) if report_path.is_file() else {}
     # 仅截图和数字结果公开；原 Playwright 输出含本地 fixture 路径，保留在私有目录。
     for path in out.rglob('*.png'):
         import shutil
         destination=s.env.public/'browser';destination.mkdir(exist_ok=True);shutil.copyfile(path,destination/path.name)
+    assert r.returncode==0 and report.get('stats',{}).get('expected')==1 and not report['stats']['unexpected'] and not report['stats']['skipped'],'真实浏览器主流程失败'
     draft=s.call('GET','/instances/'+i['id']+'/draft');assert draft['revision']=='9007199254740994'
     current=s.call('GET','/instances/'+i['id']);assert current['lifecycle']=='DELETED'
 

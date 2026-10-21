@@ -52,7 +52,7 @@ def main():
         raise InterruptedError('收到停止信号')
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     try:
-        environment.prepare_clusters();environment.build();environment.operators();summary['environment']='ready'
+        environment.build();environment.prepare_clusters();environment.load_images();environment.operators();summary['environment']='ready'
         with tempfile.TemporaryDirectory(prefix='mm-e2e-') as temporary:
             address=str(Path(temporary)/'scheduler.sock')
             with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
@@ -85,14 +85,18 @@ def main():
                                     log=scenario.k('logs','deployment/monitor-mgr','-n',scenario.ns,check=False).stdout
                                     path=environment.private/(id+'-platform.log');path.write_bytes(log);os.chmod(path,0o600)
                             except Exception:result['diagnosticFailure']=True
-                            failures=scenario.cleanup();result['cleanup']=failures
+                            try:failures=scenario.cleanup()
+                            except Exception:
+                                failures=['cleanup-exception'];path=environment.private/(id+'-cleanup-failure.txt');path.write_text(traceback.format_exc());os.chmod(path,0o600)
+                            result['cleanup']=failures
                             if failures:result['outcome']='failed'
                             result['requests']=scenario.traces
                             private_json(environment.public/'results.json',summary)
                             emit(dict(type='result',id=id,outcome=result['outcome']))
                             print(id+' '+result['outcome'],flush=True)
-                raw=json.loads(report.read_text());specs=validate_specs(raw,required,candidate,source())
+                raw=json.loads(report.read_text());specs=[s for suite in raw for s in suite.get('SpecReports',[]) if s.get('LeafNodeType')=='It']
                 summary['ginkgo']=[dict(id=s['LeafNodeText'].split(' ')[0],state=s['State'],attempts=s['NumAttempts']) for s in specs]
+                validate_specs(raw,required,candidate,source())
                 summary['passed']=child.returncode==0 and all(r['outcome']=='passed' for r in results.values())
     except Exception as error:
         summary['errorType']=type(error).__name__

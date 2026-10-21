@@ -116,12 +116,30 @@ class Environment:
         self.operator_source = source
         dockerfile = (source / 'Dockerfile').read_text()
         assert hashlib.sha256(dockerfile.encode()).hexdigest() == LOCK['monitorOp']['dockerfileSHA256']
-        dockerfile = dockerfile.replace('FROM golang:1.22.12-alpine AS builder', 'FROM ' + LOCK['images']['monitorop_go']['image'] + ' AS builder').replace('FROM gcr.io/distroless/static:nonroot', 'FROM ' + LOCK['images']['monitorop_runtime']['image'])
-        path = self.private / 'operator.Dockerfile'; path.write_text(dockerfile)
-        build = ['docker', 'build', '--platform', self.platform, '--provenance=false', '--sbom=false']
-        print('构建同候选平台和锁定 Operator 镜像', flush=True)
-        self.command([*build, '--build-arg', 'SOURCE_SHA=' + self.candidate, '-t', self.image, ROOT], 'build-platform', timeout=1200)
-        self.command([*build, '-f', path, '-t', self.operator_image, source], 'build-operator', timeout=1200)
+        # 使用 Docker 官方支持的本地 OCI build context，绕过 daemon 的远端 metadata 阻塞。
+        from image_inputs import pinned_layout
+        contexts={}
+        for name in ('platform_node','platform_go','monitorop_go'):
+            print('校验锁定 OCI 构建输入：'+name,flush=True)
+            spec=LOCK['images'][name]
+            cache=ROOT/'.scratch/oci-inputs'/(name+'-'+spec['indexDigest'][7:19]+'-'+self.platform.split('/')[1])
+            contexts[name]=pinned_layout(spec,self.platform.split('/')[1],cache)
+        platform_file=(ROOT/'Dockerfile').read_text()
+        for name in ('platform_node','platform_go'):
+            assert 'FROM '+LOCK['images'][name]['image'] in platform_file
+            platform_file=platform_file.replace('FROM '+LOCK['images'][name]['image'],'FROM '+name)
+        platform_path=self.private/'platform.Dockerfile';platform_path.write_text(platform_file)
+        dockerfile=dockerfile.replace('FROM golang:1.22.12-alpine AS builder','FROM monitorop_go AS builder').replace('FROM gcr.io/distroless/static:nonroot','FROM '+LOCK['images']['monitorop_runtime']['image'])
+        path=self.private/'operator.Dockerfile';path.write_text(dockerfile)
+        build=['docker','build','--platform',self.platform,'--provenance=false','--sbom=false']
+        print('构建同候选平台和锁定 Operator 镜像',flush=True)
+        self.command([*build,'--build-context','platform_node='+contexts['platform_node'],'--build-context','platform_go='+contexts['platform_go'],'-f',platform_path,'--build-arg','SOURCE_SHA='+self.candidate,'-t',self.image,ROOT],'build-platform',timeout=1200)
+        self.command([*build,'--build-context','monitorop_go='+contexts['monitorop_go'],'-f',path,'-t',self.operator_image,source],'build-operator',timeout=1200)
+        proof=json.loads(self.command(['docker','image','inspect',self.image],'platform-image-source').stdout)[0]
+        assert proof['Config']['Labels']['org.opencontainers.image.revision']==self.candidate and proof['Architecture']==self.platform.split('/')[1]
+        private_json(self.public/'images.json',dict(candidate=self.candidate,platformImage=self.image,configDigest=proof['Id'],platform=self.platform,operatorSource=LOCK['monitorOp']['source']))
+
+    def load_images(self):
         for role in self.targets:
             self.command(['kind', 'load', 'docker-image', '--name', self.targets[role]['name'], self.image, self.operator_image], 'load-local-images-' + role, timeout=600)
             # 每个节点保留锁定的官方 index 和版本标签；Pod 实际使用同一固定镜像。
@@ -137,7 +155,10 @@ class Environment:
         assert hashlib.sha256(bundle.read_bytes()).hexdigest() == LOCK['prometheusOperator']['bundleSHA256']
         crd = self.operator_source / 'config/crd/bases/monitoring.fjsxy.github.io_kubestatemetrics.yaml'
         assert hashlib.sha256(crd.read_bytes()).hexdigest() == LOCK['monitorOp']['crdSHA256']
-        objects = list(yaml.safe_load_all(bundle.read_text()))
+        # 官方 CRD schema 中的裸 '=' 具有 YAML 1.1 value tag；仅为该标准 tag 补字符串构造。
+        class BundleLoader(yaml.SafeLoader): pass
+        BundleLoader.add_constructor('tag:yaml.org,2002:value', yaml.SafeLoader.construct_scalar)
+        objects = list(yaml.load_all(bundle.read_text(), Loader=BundleLoader))
         namespace = 'mm-operators'; name = 'monitor-mgr-monitor-op'
         for obj in objects:
             if not obj: continue
