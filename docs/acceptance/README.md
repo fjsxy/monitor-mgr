@@ -1,5 +1,7 @@
 # 一期 UT / E2E
 
+2026-10-21 的完整本地执行已通过18 UT与10 E2E，详见[实施结果](../e2e/issue-21-consolidation-results.md)；远端 GitHub Actions 未触发。
+
 当前固定清单为 [cases.json](cases.json)：18 个 UT、10 个 E2E。详细目的、必要步骤、保留/合并/放弃的旧覆盖映射见 [test-plan.md](test-plan.md)；CI 跑什么以及选取理由见 [ci-cases.md](ci-cases.md)。
 
 ```sh
@@ -16,7 +18,7 @@ make e2e PYTHON=<Python> E2E_ARGS='--monitor-op-source <本地源码目录> --ru
 python scripts/e2e.py --cleanup /tmp/mm-example # 进程中断后，独立核验原身份再清理
 ```
 
-每个 Ginkgo It 通过私有 Unix socket 调度 Python；每阶段为中文 By，必要断言失败则整例失败。10例全部通过、环境与清理成功才通过门禁；缺失/失败/skip/重复/重试/来源不符均拒绝。报告分别记录成功、失败、未执行和环境失败。
+每个 Ginkgo It 通过私有 Unix socket 调度 Python；每阶段为中文 By，必要断言失败则整例失败。10例全部通过、环境与清理成功才通过门禁；缺失/失败/skip/重复/Ginkgo 用例重试/来源不符均拒绝。报告分别记录成功、失败、未执行和环境失败。Ginkgo 用例重试与用例内主动验证的业务 retry 分开计数，后者必须符合冻结版本与新 attempt 的契约。
 
 默认输出 `.scratch/e2e/<runId>/public/` 中的 `results.json`、`cleanup.json` 与截图；UT 输出 `.scratch/ut-results.json`。同 run 的 `.private/` 仅本地保留原始进程/平台日志、Ginkgo/Playwright 原报告、kubeconfig、私有 Operator checkout 与认证材料。CI 只上传 public 与安全 UT 摘要。绝不上传整个输出根目录。
 

@@ -1,6 +1,6 @@
 # 一期测试精简清单：18 个 UT + 10 个 E2E
 
-状态：已确认，2026-10-21；正在据此实施。当前入口为 `make ut` / `make e2e`，固定目录为 [cases.json](cases.json)，CI 执行清单见 [ci-cases.md](ci-cases.md)。实际结果另存，清单不代表运行通过。
+状态：已实施，2026-10-21；同一候选提交完整通过18 UT与10 E2E，见[实际结果](../e2e/issue-21-consolidation-results.md)。当前入口为 `make ut` / `make e2e`，固定目录为 [cases.json](cases.json)，CI 执行清单见 [ci-cases.md](ci-cases.md)。实际结果另存，清单不代表运行通过。
 
 ## 先确定执行什么
 
