@@ -169,7 +169,7 @@
       },
       {
         "name": "ffmpeg",
-        "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1013/ffmpeg-linux.zip",
+        "url": "https://cdn.playwright.dev/builds/ffmpeg/1013/ffmpeg-linux.zip",
         "headStatus": 200,
         "officialSha256": null
       }
