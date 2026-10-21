@@ -93,8 +93,8 @@
       "id": "UT-12",
       "type": "ut",
       "purpose": "预览与删除保护",
-      "steps": "修改 preview 绑定的 UID、配置或 namespace 影响；仅改 status/RV 作正控；构造同名新 UID、跨 namespace owner、CR 已消失但旧 Pod 尚在。",
-      "expected": "真正影响变化需重新预览；status/RV 等价变化允许用当前 RV 继续；不操作替代 UID 或无关对象；仍有原工作负载时不报删除完成。",
+      "steps": "修改 preview 绑定的 UID、配置或 namespace 影响；在 Worker 读取后、条件写入前用屏障只改 status/RV，并分别改变 spec、UID、当前权限或凭据 revision；持续制造 RV 冲突；构造同名新 UID、跨 namespace owner、CR 已消失但旧 Pod 尚在。",
+      "expected": "纯 status/RV 冲突可重新读取后在原 attempt 内完成（最多 3 次条件写）；spec/UID/权限/凭据变化或持续冲突停止；不确定响应绝不重放；真正影响变化需重新预览；仍有原工作负载时不报删除完成。",
       "issues": "#17"
     },
     {

@@ -1,14 +1,15 @@
-// 发布执行使用应用生命周期；持久化派发资格后仅发送一次写请求，运行就绪另行观察。
+// 发布执行使用应用生命周期；只有明确拒绝的等价 RV 冲突可有界重读，未知结果禁止重放。
 package control
 
 import (
 	"context"
 	"database/sql"
 	"errors"
-	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"log/slog"
 	"net/http/httptrace"
 	"time"
+
+	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 )
 
 func (s *Store) launchPublications(ctx context.Context) {
@@ -142,87 +143,112 @@ func (s *Store) executePublication(life context.Context, id string) {
 		return
 	}
 	defer t.Close()
-	if e = validateFixedSpec(life, s.DB, i, frozen); e != nil {
-		s.finishExecution(life, o, "FAILED", e, nil)
-		return
-	}
-	if e = t.publicationDependencies(life, cl, cfg, i.Uid == "", frozen); e != nil {
-		s.finishExecution(life, o, "FAILED", e, nil)
-		return
-	}
-	cr, e := t.readComponent(life, i)
-	if e != nil {
-		s.finishExecution(life, o, "FAILED", e, nil)
-		return
-	}
-	r := &rpc.PublishRequest{Id: i.Id, PreviewId: previewID, DraftRevision: v.SourceDraftRevision, OverwriteDrift: overwrite}
-	if e = s.validatePublicationSpec(i, frozen, v.SourceDraftRevision, b, r, cr); e != nil {
-		s.finishExecution(life, o, "FAILED", e, nil)
-		return
-	}
-	storageSnapshot, e := s.readAgentStorageTransition(life, i, t, cr, frozen, false)
-	if e != nil {
-		s.finishExecution(life, o, "FAILED", e, nil)
-		return
-	}
-	if e = s.validateAgentStorageImpact(i, b.storage, storageSnapshot); e != nil {
-		s.finishExecution(life, o, "FAILED", e, nil)
-		return
-	}
-	// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
-	body := publicationDocument(cfg, cr, frozen)
-	method, path := "POST", componentFor(i.Component).collectionPath(instanceCRNamespace(i))
-	if i.Uid != "" {
-		method = "PUT"
-		path = componentFor(i.Component).objectPath(i)
-		if objectString(objectMap(body, "metadata"), "resourceVersion") == "" {
-			s.finishExecution(life, o, "FAILED", Error("CONFLICT", "目标 RV 缺失，拒绝无条件更新"), nil)
-			return
-		}
-	}
-	releaseDispatch, e := s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision, storageSnapshot)
-	if e != nil {
-		if apiCode(e) != "ALREADY_FINISHED" {
+	// 同一受理 attempt 最多三次条件写；每次重读都重新验证 UID、spec、依赖与存储影响。
+	var rejectedRV string
+	for write := 0; write < 3; write++ {
+		if e = validateFixedSpec(life, s.DB, i, frozen); e != nil {
 			s.finishExecution(life, o, "FAILED", e, nil)
-		}
-		return
-	}
-	defer releaseDispatch()
-	if s.OperationBoundary != nil {
-		if s.OperationBoundary("afterSendMarker", id) != nil {
 			return
 		}
-	}
-	slog.Info("目标API写请求", "operationId", id, "instanceId", i.Id, "clusterId", i.ClusterId, "method", method, "path", path)
-	// 请求已写入transport后允许撤权；响应仍独立核实，不把原账号失权当成回滚。
-	dispatchContext := httptrace.WithClientTrace(life, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { releaseDispatch() }})
-	outcome := t.Mutate(dispatchContext, method, path, body)
-	releaseDispatch()
-	written, e := outcome.Object, outcome.Err
-	if e != nil {
-		state := "RESULT_UNCERTAIN"
-		if outcome.Rejected {
-			state = "FAILED"
+		if e = t.publicationDependencies(life, cl, cfg, i.Uid == "", frozen); e != nil {
+			s.finishExecution(life, o, "FAILED", e, nil)
+			return
 		}
-		if state == "RESULT_UNCERTAIN" && i.Uid == "" {
-			state = "IDENTITY_UNCERTAIN"
+		cr, e := t.readComponent(life, i)
+		if e != nil {
+			s.finishExecution(life, o, "FAILED", e, nil)
+			return
 		}
-		s.finishExecution(life, o, state, e, nil)
+		r := &rpc.PublishRequest{Id: i.Id, PreviewId: previewID, DraftRevision: v.SourceDraftRevision, OverwriteDrift: overwrite}
+		if e = s.validatePublicationSpec(i, frozen, v.SourceDraftRevision, b, r, cr); e != nil {
+			s.finishExecution(life, o, "FAILED", e, nil)
+			return
+		}
+		// 明确拒绝后必须观察到新的 RV；同一 RV 的业务冲突不能靠重复 PUT 消解。
+		if write > 0 && objectString(objectMap(cr, "metadata"), "resourceVersion") == rejectedRV {
+			s.finishExecution(life, o, "FAILED", Error("TARGET_CONFLICT", "目标资源版本冲突未消解，请重新核验"), nil)
+			return
+		}
+		storageSnapshot, e := s.readAgentStorageTransition(life, i, t, cr, frozen, false)
+		if e != nil {
+			s.finishExecution(life, o, "FAILED", e, nil)
+			return
+		}
+		if e = s.validateAgentStorageImpact(i, b.storage, storageSnapshot); e != nil {
+			s.finishExecution(life, o, "FAILED", e, nil)
+			return
+		}
+		// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
+		body := publicationDocument(cfg, cr, frozen)
+		method, path := "POST", componentFor(i.Component).collectionPath(instanceCRNamespace(i))
+		if i.Uid != "" {
+			method = "PUT"
+			path = componentFor(i.Component).objectPath(i)
+			if objectString(objectMap(body, "metadata"), "resourceVersion") == "" {
+				s.finishExecution(life, o, "FAILED", Error("CONFLICT", "目标 RV 缺失，拒绝无条件更新"), nil)
+				return
+			}
+		}
+		var releaseDispatch func()
+		if write == 0 {
+			releaseDispatch, e = s.markLifecycleDispatch(life, o, a.GetActorId(), cl.CredentialRevision, storageSnapshot)
+		} else {
+			releaseDispatch, e = s.markPublicationConflictRetry(life, o, a.GetActorId(), cl.CredentialRevision)
+		}
+		if e != nil {
+			if apiCode(e) != "ALREADY_FINISHED" {
+				s.finishExecution(life, o, "FAILED", e, nil)
+			}
+			return
+		}
+		defer releaseDispatch()
+		if s.OperationBoundary != nil {
+			if s.OperationBoundary("afterSendMarker", id) != nil {
+				return
+			}
+		}
+		slog.Info("目标API写请求", "operationId", id, "instanceId", i.Id, "clusterId", i.ClusterId, "method", method, "path", path)
+		// 请求已写入transport后允许撤权；响应仍独立核实，不把原账号失权当成回滚。
+		dispatchContext := httptrace.WithClientTrace(life, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { releaseDispatch() }})
+		outcome := t.Mutate(dispatchContext, method, path, body)
+		releaseDispatch()
+		written, e := outcome.Object, outcome.Err
+		// 关键：HTTP 409 明确证明这次 PUT 未生效；仅已有 UID 的更新可重读原基线，绝不重试 POST、超时或丢响应。
+		if e != nil && outcome.Rejected && outcome.HTTPStatus == 409 && method == "PUT" && write < 2 {
+			rejectedRV = objectString(objectMap(body, "metadata"), "resourceVersion")
+			if s.OperationBoundary != nil {
+				if s.OperationBoundary("afterRejectedConflict", id) != nil {
+					return
+				}
+			}
+			continue
+		}
+		if e != nil {
+			state := "RESULT_UNCERTAIN"
+			if outcome.Rejected {
+				state = "FAILED"
+			}
+			if state == "RESULT_UNCERTAIN" && i.Uid == "" {
+				state = "IDENTITY_UNCERTAIN"
+			}
+			s.finishExecution(life, o, state, e, nil)
+			return
+		}
+		uid := objectString(objectMap(written, "metadata"), "uid")
+		if uid == "" || (i.Uid != "" && uid != i.Uid) || componentFor(i.Component).normalizeSpec(objectMap(written, "spec")) != componentFor(i.Component).normalizeSpec(frozen) {
+			state := "RESULT_UNCERTAIN"
+			if i.Uid == "" {
+				state = "IDENTITY_UNCERTAIN"
+			}
+			s.finishExecution(life, o, state, Error("CONFLICT", "写入响应不足以确认原身份与配置"), nil)
+			return
+		}
+		s.finishExecution(life, o, "SUCCEEDED", nil, written)
+		// 写入与运行分别表达；立即读取不将受理或意图当成已就绪。
+		s.refreshObserved(life, i.Id, t)
+		s.verifyAgentStorageTasks(life, id)
 		return
 	}
-	uid := objectString(objectMap(written, "metadata"), "uid")
-	if uid == "" || (i.Uid != "" && uid != i.Uid) || componentFor(i.Component).normalizeSpec(objectMap(written, "spec")) != componentFor(i.Component).normalizeSpec(frozen) {
-		state := "RESULT_UNCERTAIN"
-		if i.Uid == "" {
-			state = "IDENTITY_UNCERTAIN"
-		}
-		s.finishExecution(life, o, state, Error("CONFLICT", "写入响应不足以确认原身份与配置"), nil)
-		return
-	}
-	s.finishExecution(life, o, "SUCCEEDED", nil, written)
-	// 写入与运行分别表达；立即读取不将受理或意图当成已就绪。
-	s.refreshObserved(life, i.Id, t)
-	s.verifyAgentStorageTasks(life, id)
 }
 
 // finishExecution 以实际 attempt 身份保存结果，退出时不能把未完成网络读取误报为失败。

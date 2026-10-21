@@ -86,6 +86,7 @@ var _ = ginkgo.It("UT-12 预览与删除保护", func() {
 	t := ginkgo.GinkgoT()
 	checkTestDeletionPreviewBindsTargetAndImpact(t)
 	checkTestP05DriftOverwritePreservesMetadataAndP06Equivalent(t)
+	checkPublicationStatusConflict(t)
 	checkTestP14ForegroundDeletionKeepsUIDGraphProtection(t)
 	checkTestDeletionCrossNamespaceOwnerUIDRemainsProtected(t)
 	checkTestDeletion404AfterPreflightKeepsSeenPodProtected(t)

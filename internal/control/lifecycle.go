@@ -4,9 +4,10 @@ package control
 import (
 	"context"
 	"database/sql"
-	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"sync"
 	"time"
+
+	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 )
 
 // lifecycleSchema 追加在组件共享迁移之后；已发布版本的语句保持不可变。
@@ -213,6 +214,16 @@ func (s *Store) ContinueLifecycle(ctx context.Context, c *rpc.RequestContext, r 
 
 // markLifecycleDispatch 与撤权、转移、凭据切换共用读写保护，持久资格提交就是可能已发送边界。
 func (s *Store) markLifecycleDispatch(ctx context.Context, o *rpc.Operation, actor string, credentialRevision int64, snapshots ...*agentStorageSnapshot) (func(), error) {
+	return s.authorizeLifecycleDispatch(ctx, o, actor, credentialRevision, false, snapshots...)
+}
+
+// markPublicationConflictRetry 只供明确被 API 拒绝的 PUT 使用，保留同一 attempt 的 possibly_sent 标记。
+func (s *Store) markPublicationConflictRetry(ctx context.Context, o *rpc.Operation, actor string, credentialRevision int64) (func(), error) {
+	return s.authorizeLifecycleDispatch(ctx, o, actor, credentialRevision, true)
+}
+
+// authorizeLifecycleDispatch 在每次发送前与撤权串行核验；重读不能延续已失效的授权或凭据。
+func (s *Store) authorizeLifecycleDispatch(ctx context.Context, o *rpc.Operation, actor string, credentialRevision int64, conflictRetry bool, snapshots ...*agentStorageSnapshot) (func(), error) {
 	if s.stopping.Load() {
 		return nil, Error("UNAVAILABLE", "平台退出中，未取得派发资格")
 	}
@@ -243,6 +254,9 @@ func (s *Store) markLifecycleDispatch(ctx context.Context, o *rpc.Operation, act
 		if err != nil {
 			return fail(err)
 		}
+		if conflictRetry && instance.Uid == "" {
+			return fail(Error("CONFLICT", "首次创建不能自动重试"))
+		}
 		// 关键：真正取得派发资格时再次读取固定基线，旧预览和在途草稿不能绕过容量约束。
 		if err = validateFixedSpec(ctx, tx, instance, frozen); err != nil {
 			return fail(err)
@@ -256,7 +270,14 @@ func (s *Store) markLifecycleDispatch(ctx context.Context, o *rpc.Operation, act
 		return fail(Error("ALREADY_FINISHED", "当前尝试已变化"))
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
-	result, e := tx.ExecContext(ctx, `UPDATE operations SET state='DISPATCHED',message='已取得派发资格，结果尚未确认',updated_at=? WHERE id=? AND state='CHECKING'`, now, o.OperationId)
+	expectedState := "CHECKING"
+	if conflictRetry {
+		if o.Action != "PUBLISH" {
+			return fail(Error("CONFLICT", "只有发布更新允许处理明确的 RV 冲突"))
+		}
+		expectedState = "DISPATCHED"
+	}
+	result, e := tx.ExecContext(ctx, `UPDATE operations SET state='DISPATCHED',message='已取得派发资格，结果尚未确认',updated_at=? WHERE id=? AND state=?`, now, o.OperationId, expectedState)
 	if e != nil {
 		return fail(e)
 	}
