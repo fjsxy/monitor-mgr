@@ -45,7 +45,7 @@
       "id": "UT-06",
       "type": "ut",
       "purpose": "Agent selector 与发送配置",
-      "steps": "对公共规则验证 object=None/All/Labels × namespace=Own/All/Labels 的 9 个样本；检查 Exists/DoesNotExist 与 nil/空数组；映射 None、BasicAuth、Bearer、多 remoteWrite 和 TLS Secret 引用。",
+      "steps": "对公共规则验证 object=None/All/Labels × namespace=Own/All/Labels 的 9 个样本，并用受控只读 adapter 检查实际匹配集合；检查 Exists/DoesNotExist 与 nil/空数组；映射 None、BasicAuth、Bearer、多 remoteWrite 和 TLS Secret 引用。",
       "expected": "省略、{}、标签条件互不混淆；合法空值精确保留；错误表达式、URL 或不成对 cert/key 被拒绝；发送配置只引用同 namespace 的 Secret。",
       "issues": "#18"
     },
@@ -125,7 +125,7 @@
       "id": "UT-16",
       "type": "ut",
       "purpose": "数据库、主密钥与敏感读模型",
-      "steps": "用一个最旧支持库和当前库分别升级/重开；注入备份失败、DDL 失败、缺失/错误 master.key；在凭据和错误中放敏感哨兵。",
+      "steps": "用最旧支持的 v1 库和当前库分别升级/重开，另保留一个带冻结发布历史的 v5 样本（其迁移分支不能由空旧库代表）；注入备份失败、DDL 失败、缺失/错误 master.key；在凭据和错误中放敏感哨兵。",
       "expected": "已有库和原会话可恢复；失败不替换空库、不自动生成替代密钥；数据库损坏时不启动为 Ready；备份权限正确；凭据不以明文出现在库、响应或日志，敏感配置变化仍可被指纹识别。",
       "issues": "#14、#15、#17"
     },
@@ -181,7 +181,7 @@
       "id": "E2E-05",
       "type": "e2e",
       "purpose": "Agent 分片与 PVC 完整生命周期",
-      "steps": "使用两个新 Agent：whenScaled=Retain/whenDeleted=Delete，以及反向配置；分别执行 shards 2→1→0→1，再删除；另发布一个 emptyDir 实例；尝试原实例扩容量或换 storage mode。",
+      "steps": "使用两个新 Agent：whenScaled=Retain/whenDeleted=Delete，以及反向配置；分别执行 shards 2→1→0→1，再删除；另发布一个 emptyDir 实例；尝试原实例扩容量或换 storage mode。 删除已保留的原 PVC，再以同名新 UID 重建并刷新原操作，核对历史仍绑定原 UID。",
       "expected": "每一步回读实际 StatefulSet 策略与原 PVC UID；缩容/挂起/删除的保留和删除结果分别正确；emptyDir 无 PVC；固定容量/模式不原地变更；同名替代卷不接管。",
       "issues": "#20"
     },

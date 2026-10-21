@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import time
@@ -34,7 +35,7 @@ class Environment:
         self.public = self.root / 'public'; self.public.mkdir()
         self.run_id, self.candidate = run_id, candidate
         self.processes = ProcessRunner(self.private / 'processes')
-        self.targets = {}; self.resources = []; self.source = operator_source
+        self.targets = {}; self.resources = []; self.source = operator_source; self.official_configs={};self.operator_proofs=[]
         arch = 'arm64' if platform.machine() in ('aarch64', 'arm64') else 'amd64'
         self.platform = 'linux/' + arch
         self.image = 'monitor-mgr:e2e-' + candidate[:12]
@@ -53,27 +54,46 @@ class Environment:
     def k(self, role, *args, data=None, check=True):
         target = self.targets[role]
         command = ['kubectl', '--kubeconfig', target['kubeconfig'], '--context', target['context'], *args]
+        mutation=data is not None and any(v in args for v in ('create','apply'))
+        if mutation and '-o' not in args and not any(str(v).startswith('--output') for v in args):command+=['-o','json']
         encoded = None if data is None else json.dumps(data).encode()
         result = self.processes.run(command, label='kubectl-' + role + '-' + str(args[0]), input=encoded, timeout=240)
         if check and result.returncode:
             raise RuntimeError('kubectl-' + role + '-' + str(args[:2]) + ': exit=' + str(result.returncode))
-        # 关键：只有自己 create/apply 的对象可加入账本；不从名称前缀认领既有对象。
-        if data is not None and result.returncode == 0 and any(v in args for v in ('create', 'apply')):
-            objects = data.get('items', []) if data.get('kind') == 'List' else [data]
+        # 关键：原 UID 取自本次 create/apply 响应；后续同名 GET 不能成为认领依据。
+        if mutation and result.returncode==0:
+            response=json.loads(result.stdout)
+            objects=response.get('items',[]) if response.get('kind')=='List' else [response]
             for obj in objects:
-                if obj.get('kind') and obj.get('metadata', {}).get('name'):
-                    namespace = obj['metadata'].get('namespace', '')
-                    read = ['get', obj['kind'], obj['metadata']['name'], '-o', 'json']
-                    if namespace: read += ['-n', namespace]
-                    actual = json.loads(self.k(role, *read).stdout)
-                    item = dict(target=role, kind=obj['kind'], name=obj['metadata']['name'], namespace=namespace,
-                                uid=actual['metadata']['uid'], runId=self.run_id)
-                    if not any(v['uid'] == item['uid'] for v in self.resources): self.resources.append(item)
+                metadata=obj.get('metadata',{})
+                if obj.get('kind') and metadata.get('uid'):
+                    item=dict(target=role,kind=obj['kind'],name=metadata['name'],namespace=metadata.get('namespace',''),uid=metadata['uid'],runId=self.run_id)
+                    if not any(v['uid']==item['uid'] for v in self.resources):self.resources.append(item)
             self.checkpoint()
         return result
 
     def get(self, role, *args):
         return json.loads(self.k(role, 'get', *args, '-o', 'json').stdout)
+
+    def verify_container(self,pod,container,expected_config):
+        # 关键：绑定真实 Pod UID、容器 ID 与 CRI 实际 config，不能仅凭镜像 tag 或部署 annotation 宣称同源。
+        node=pod['spec']['nodeName'];assert node in {n['metadata']['name'] for t in self.targets.values() for n in t['nodes']}
+        status=next(c for c in pod['status']['containerStatuses'] if c['name']==container)
+        cid=status['containerID'].removeprefix('containerd://');assert re.fullmatch('[0-9a-f]{64}',cid)
+        inspected=json.loads(self.command(['docker','exec',node,'crictl','inspect',cid],'verify-running-container').stdout)
+        assert inspected['status']['labels']['io.kubernetes.pod.uid']==pod['metadata']['uid']
+        assert inspected['info']['config']['image']['image']==expected_config
+        return dict(podUID=pod['metadata']['uid'],containerID=cid,node=node,configDigest=expected_config,imageID=status['imageID'])
+
+    def runtime_config(self,name,node):
+        spec=LOCK['images'][name]
+        def content(digest):
+            raw=self.command(['docker','exec',node,'ctr','-n','k8s.io','content','get',digest],'verify-locked-runtime-content').stdout
+            assert 'sha256:'+hashlib.sha256(raw).hexdigest()==digest;return json.loads(raw)
+        index=content(spec['indexDigest']);arch=self.platform.split('/')[1]
+        candidates=[m for m in index['manifests'] if m.get('platform',{}).get('os')=='linux' and m.get('platform',{}).get('architecture')==arch]
+        assert len(candidates)==1
+        return content(candidates[0]['digest'])['config']['digest']
 
     def prepare_clusters(self):
         # 关键：独立 kubeconfig 参数阻止 kind 写入用户默认 context。
@@ -130,6 +150,7 @@ class Environment:
             platform_file=platform_file.replace('FROM '+LOCK['images'][name]['image'],'FROM '+name)
         platform_path=self.private/'platform.Dockerfile';platform_path.write_text(platform_file)
         dockerfile=dockerfile.replace('FROM golang:1.22.12-alpine AS builder','FROM monitorop_go AS builder').replace('FROM gcr.io/distroless/static:nonroot','FROM '+LOCK['images']['monitorop_runtime']['image'])
+        dockerfile+='\nLABEL org.opencontainers.image.revision="'+LOCK['monitorOp']['source']+'"\n'
         path=self.private/'operator.Dockerfile';path.write_text(dockerfile)
         build=['docker','build','--platform',self.platform,'--provenance=false','--sbom=false']
         print('构建同候选平台和锁定 Operator 镜像',flush=True)
@@ -137,7 +158,10 @@ class Environment:
         self.command([*build,'--build-context','monitorop_go='+contexts['monitorop_go'],'-f',path,'-t',self.operator_image,source],'build-operator',timeout=1200)
         proof=json.loads(self.command(['docker','image','inspect',self.image],'platform-image-source').stdout)[0]
         assert proof['Config']['Labels']['org.opencontainers.image.revision']==self.candidate and proof['Architecture']==self.platform.split('/')[1]
-        private_json(self.public/'images.json',dict(candidate=self.candidate,platformImage=self.image,configDigest=proof['Id'],platform=self.platform,operatorSource=LOCK['monitorOp']['source']))
+        self.platform_config=proof['Id']
+        operator=json.loads(self.command(['docker','image','inspect',self.operator_image],'operator-image-source').stdout)[0]
+        assert operator['Config']['Labels']['org.opencontainers.image.revision']==LOCK['monitorOp']['source'];self.operator_config=operator['Id']
+        private_json(self.public/'images.json',dict(candidate=self.candidate,platformImage=self.image,configDigest=self.platform_config,platform=self.platform,operatorSource=LOCK['monitorOp']['source'],operatorConfigDigest=self.operator_config))
 
     def load_images(self):
         for role in self.targets:
@@ -148,6 +172,7 @@ class Environment:
                     image = LOCK['images'][name]
                     self.command(['docker', 'exec', node['metadata']['name'], 'ctr', '-n', 'k8s.io', 'images', 'pull', '--platform', self.platform, image['image']], 'pull-' + name, timeout=600)
                     self.command(['docker', 'exec', node['metadata']['name'], 'ctr', '-n', 'k8s.io', 'images', 'tag', '--force', image['image'], image['tag']], 'tag-' + name)
+                    if name not in self.official_configs:self.official_configs[name]=self.runtime_config(name,node['metadata']['name'])
 
     def operators(self):
         bundle = self.private / 'bundle.yaml'
@@ -184,6 +209,15 @@ class Environment:
             self.k(role, 'wait', '--for=condition=Established', 'crd/kubestatemetrics.monitoring.fjsxy.github.io', '--timeout=60s')
             self.k(role,'set','image','deployment/local-path-provisioner','-n','local-path-storage','local-path-provisioner='+LOCK['images']['provisioner']['image'])
             self.k(role,'rollout','status','deployment/local-path-provisioner','-n','local-path-storage','--timeout=120s')
+            for deployment,config in [('prometheus-operator',self.official_configs['promop']),(name,self.operator_config)]:
+                dep=self.get(role,'deployment',deployment,'-n',namespace)
+                selector=','.join(k+'='+v for k,v in sorted(dep['spec']['selector']['matchLabels'].items()))
+                pods=[p for p in self.get(role,'pods','-n',namespace,'-l',selector)['items'] if not p['metadata'].get('deletionTimestamp')]
+                assert len(pods)==1
+                proof=self.verify_container(pods[0],dep['spec']['template']['spec']['containers'][0]['name'],config)
+                self.operator_proofs.append(dict(target=role,deployment=deployment,**proof))
+        report=json.loads((self.public/'images.json').read_text());report.update(lockedRuntimeConfigs=self.official_configs,operators=self.operator_proofs);private_json(self.public/'images.json',report)
+
 
     def cleanup_clusters(self):
         failures = []

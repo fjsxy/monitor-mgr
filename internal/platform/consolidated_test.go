@@ -129,6 +129,7 @@ var _ = ginkgo.It("UT-15 请求预算与并发", func() {
 var _ = ginkgo.It("UT-16 数据库主密钥与敏感投影", func() {
 	t := ginkgo.GinkgoT()
 	checkTestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL(t)
+	checkLegacyPublicationMigration(t)
 	checkTestT07DatabaseCorruptionNeverStartsReady(t)
 	checkTestClusterSecretsRecoverOnlyWithOriginalKeyAndPreserveSession(t)
 	checkTestF04EncryptedSchema3WrongKeyDoesNotMigrate(t)

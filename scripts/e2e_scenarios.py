@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import socket
 import time
 import urllib.request
 import uuid
@@ -34,7 +35,7 @@ class Scenario(LifecycleSuite, AgentSuite):
         ClusterSuite.__init__(self, a)
         self.component = 'ksm'; self.target = 'control'; self.case = f'E2E-{index:02d}'
         self.traces=[]; self.resources=[]; self.namespace_uids={}; self.ksms=[]; self.restorers=[]; self.proxies=[]
-        self.extra_namespaces=[]; self.created_crs=[]; self.owned_crs={}; self.clusters={}; self.step='环境准备'
+        self.extra_namespaces=[]; self.created_crs=[]; self.owned_crs={}; self.clusters={};self.platform_proofs=[]; self.step='环境准备'
         self.environment = {role: {'nodes': [{'name': n['metadata']['name']} for n in t['nodes']]} for role,t in environment.targets.items()}
         # 证书夹具只在私有目录生成；Secret 内容只用于内存比较。
         cert = environment.private / 'receiver.crt'; key = environment.private / 'receiver.key'
@@ -47,11 +48,18 @@ class Scenario(LifecycleSuite, AgentSuite):
         self.step=text; self.emit(dict(type='step', text=text)); print(self.case+' '+text, flush=True)
 
     def k(self, *args, data=None, target='control', check=True):
+        # 旧实现库的 namespace 命令也收敛到带 run 标签的原创建响应。
+        direct_namespace=len(args)>=3 and args[0]=='create' and args[1] in ('namespace','ns')
+        if direct_namespace:
+            data={'apiVersion':'v1','kind':'Namespace','metadata':{'name':args[2]}};args=('create','-f','-','-o','json')
         if data is not None and any(v in args for v in ('create','apply')):
             data=copy.deepcopy(data)
             for obj in data.get('items',[]) if data.get('kind')=='List' else [data]:
                 obj.setdefault('metadata',{}).setdefault('labels',{})[RUN_LABEL]=self.env.run_id
-        return self.env.k(target,*args,data=data,check=check)
+        result=self.env.k(target,*args,data=data,check=check)
+        if direct_namespace and result.returncode==0:
+            metadata=json.loads(result.stdout)['metadata'];self.namespace_uids[(target,metadata['name'])]=metadata['uid']
+        return result
 
     def get(self,*args,target=None): return json.loads(self.k('get',*args,'-o','json',target=target or self.target).stdout)
     def call(self,*args,**kwargs): return AgentSuite.call(self,*args,**kwargs)
@@ -59,10 +67,25 @@ class Scenario(LifecycleSuite, AgentSuite):
 
     def connect(self):
         # Pod 重建必须沿用原 Cookie；Session 持久化是 E2E-01 的被测行为。
-        return ClusterSuite.connect(self)
+        ClusterSuite.connect(self)
+        pod=self.get('pod',self.pod,'-n',self.ns,target='control')
+        self.platform_proofs.append(self.env.verify_container(pod,'platform',self.env.platform_config))
+        marker=('Forwarding from 127.0.0.1:'+str(self.port)+' -> 8080').encode()
+        assert self.forward.poll() is None and marker in self.forward.private_stdout_path.read_bytes(),'不能借用其他进程的 HTTP endpoint'
 
     def deploy(self):
-        self.ns=self.a.prefix+'-platform'; self.port=self.a.port; self.namespace(self.ns,'control')
+        self.ns=self.a.prefix+'-platform'
+        # 为平台和故障代理选择空闲端口组，避免并行 run 争用固定宿主机端口。
+        while True:
+            port=20000+secrets.randbelow(33000);reserved=[]
+            try:
+                for value in (port,port+200):
+                    listener=socket.socket();reserved.append(listener);listener.bind(('127.0.0.1',value))
+                self.port=port;break
+            except OSError:pass
+            finally:
+                for listener in reserved:listener.close()
+        self.namespace(self.ns,'control')
         t=self.env.targets['control']
         self.env.command(['helm','upgrade','--install','platform',ROOT/'charts/monitor-mgr','--kubeconfig',t['kubeconfig'],'--kube-context',t['context'],'--namespace',self.ns,
                           '--set-string','image='+self.env.image,'--set-string','imagePullPolicy=Never','--set-string','source='+self.env.candidate,'--set-string','runId='+self.env.run_id,'--wait','--timeout','3m'], 'helm-platform',timeout=210)
@@ -74,6 +97,16 @@ class Scenario(LifecycleSuite, AgentSuite):
         self.owner=self.call('GET','/session')['account']['id']
         assert pod['spec']['containers'][0]['image']==self.env.image
         assert pod['metadata']['annotations']['monitor-mgr-source']==self.env.candidate
+
+    def user(self,suffix):
+        username='owner-'+suffix;temporary=secrets.token_urlsafe(20);password=secrets.token_urlsafe(20)
+        account=self.call('POST','/accounts',{'username':username,'password':temporary,'role':'USER'},status=201)
+        opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        with self.using(opener):
+            self.call('POST','/sessions',{'username':username,'password':temporary},status=201)
+            self.call('POST','/session/password',{'currentPassword':temporary,'newPassword':password})
+            self.call('POST','/sessions',{'username':username,'password':password},status=201)
+        return account,opener
 
     def register(self, role, config=None):
         if role in self.clusters: return self.clusters[role]
@@ -97,13 +130,19 @@ class Scenario(LifecycleSuite, AgentSuite):
         result=KSMSuite.publish(self,i,**kwargs)
         # 原 UID 优先来自平台已确认的实例，未知创建结果只能使用代理保存的原 API 响应。
         current=self.call('GET','/instances/'+i['id']);uid=current.get('uid')
-        if uid:self.track_cr(uid)
+        if uid:self.track_cr(uid,name=current['name'],namespace=current.get('targetNamespace',self.targetns) if self.component=='agent' else '')
         return result
     def track_cr(self, uid, name=None, namespace=None, component=None, target=None):
         kind='prometheusagent' if (component or self.component)=='agent' else 'kubestatemetrics'
         self.owned_crs[(target or self.target,kind,namespace if namespace is not None else (self.targetns if kind=='prometheusagent' else ''),name or self.crname)]=uid
     def cr(self,*args,**kwargs): return (AgentSuite.cr if self.component=='agent' else KSMSuite.cr)(self,*args,**kwargs)
-    def runtime(self,*args,**kwargs): return (AgentSuite.runtime if self.component=='agent' else KSMSuite.runtime)(self,*args,**kwargs)
+    def runtime(self,*args,**kwargs):
+        result=(AgentSuite.runtime if self.component=='agent' else KSMSuite.runtime)(self,*args,**kwargs)
+        if self.component=='ksm' and result['summary']=='Available':
+            for pod in self.workloads():
+                if pod['kind']=='Pod' and not pod['metadata'].get('deletionTimestamp'):
+                    self.env.verify_container(pod,pod['spec']['containers'][0]['name'],self.env.official_configs['ksm'])
+        return result
     def setup_proxy(self):
         proxy=Proxy(self,self.target);self.proxies.append(proxy);self.proxy=proxy
         done=self.operation(self.accept(proxy.config,path='/clusters/'+self.cluster['id']+'/credentials'));assert done['state']=='SUCCEEDED';return proxy
@@ -208,22 +247,24 @@ def clusters(s):
     assert s.operation(s.accept(bad,path='/clusters/'+control['id']+'/credentials'))['state']=='FAILED'
     assert s.call('GET','/clusters/'+control['id'])['credentialRevision']==old['credentialRevision']
     from ksm_cases import restricted_namespace
-    restricted_namespace(s)
+    allowed=restricted_namespace(s)
     assert s.operation(s.accept(s.config(),path='/clusters/'+control['id']+'/credentials'))['state']=='SUCCEEDED'
     s.by('成功切换凭据并转移归属，当前权限立即改变')
-    s.crname='anchor-'+uuid.uuid4().hex[:8];i=s.create();op=s.publish(i);s.runtime(i);uid=s.cr()['metadata']['uid']
+    i=allowed['instance'];op=allowed['successfulAuthorizedNamespace'];s.runtime(i);uid=s.cr()['metadata']['uid']
     a,clienta=s.user('a');b,clientb=s.user('b')
     for owner,previous in [(a,None),(b,clienta)]:
         s.call('POST','/clusters/'+control['id']+'/transfer',{'ownerId':owner['id']})
         if previous:
             with s.using(previous):s.call('GET','/instances/'+i['id']+'/draft',status=403)
     s.by('注销清空访问凭据而保留原 CR/版本；同 UID 重新启用不自动发布')
+    mutations_before=s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode())
     s.call('POST','/clusters/'+control['id']+'/unregister',{});assert s.cr()['metadata']['uid']==uid
     assert s.call('GET','/instances/'+i['id']+'/versions')['versions'][0]['versionId']==op['versionId']
     script="import json,sqlite3;c=sqlite3.connect('file:/data/platform.db?mode=ro',uri=True);print(json.dumps({'cleared':c.execute('select credential is null from clusters where id=?',("+repr(control['id'])+",)).fetchone()[0]}))"
     assert s.job('credential-cleared',script,True)['cleared']==1
     assert s.operation(s.accept(s.config(),owner=s.owner,path='/clusters/'+control['id']+'/reactivate'))['state']=='SUCCEEDED'
     assert s.cr()['metadata']['uid']==uid
+    assert s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode())==mutations_before
 
 
 def ksm(s):
@@ -256,13 +297,14 @@ def ksm(s):
     s.k('create','-f','-',data=obj,target='data');outside=s.get('kubestatemetrics',obj['metadata']['name'],target='data');s.track_cr(outside['metadata']['uid'],name=obj['metadata']['name'])
     found=next(v for v in s.call('GET','/clusters/'+s.cluster['id']+'/instances')['instances'] if v['uid']==outside['metadata']['uid']);assert found['readOnly']
     s.call('DELETE','/instances/'+found['id'],status=403)
+    s.call('PUT','/instances/'+found['id']+'/draft',{'expectedDraftRevision':1,'ksm':s.cfg()},status=403)
     s.call('POST','/instances/'+found['id']+'/publications',{'draftRevision':1,'previewId':'forged','overwriteDrift':False},status=403)
 
 
 def agent(s):
     s.prepare(target='data',component='agent');s.by('在 data 发布默认 Agent，核对实际 StatefulSet/Pod/PVC 与 None/Own')
     i=s.create();s.publish(i);s.runtime(i);spec=s.cr()['spec']
-    assert all(k+'Selector' not in spec for k in ('serviceMonitor','podMonitor','probe','scrapeConfig'))
+    assert all(spec.get(k+'Selector') is None and spec.get(k+'NamespaceSelector') is None for k in ('serviceMonitor','podMonitor','probe','scrapeConfig'))
     s.by('一次配置四类真实采集 CR，各自采用代表规则并动态增删匹配')
     cfg=s.cfg();foreign=s.targetns+'-other';s.namespace(foreign,'data');s.k('label','namespace',foreign,'mm18-scope=yes',target='data')
     kinds=[('ServiceMonitor','All','Own'),('PodMonitor','Labels','All'),('Probe','All','Labels'),('ScrapeConfig','Labels','Own')]
@@ -283,7 +325,7 @@ def agent(s):
     s.by('Operator 生成真实认证/TLS 配置；Secret 缺 key 时阻止发布')
     generated=wait(lambda:s.generated_config(),lambda value:len(value.get('remote_write',[]))==3,message='Agent 发送配置未生成')
     assert len(generated['remote_write'])==3
-    assert generated['remote_write'][1]['basic_auth']['username']==s.secret_values['username']
+    assert generated['remote_write'][1]['basic_auth']['username']==s.secret_values['username'] and generated['remote_write'][1]['basic_auth']['password']==s.secret_values['password']
     assert generated['remote_write'][2]['authorization']['credentials']==s.secret_values['credentials']
     assert generated['remote_write'][2]['tls_config'].get('cert_file') and generated['remote_write'][2]['tls_config'].get('key_file')
     s.k('patch','secret','agent-auth','-n',s.targetns,'--type=json','-p','[{"op":"remove","path":"/data/credentials"}]',target='data')
@@ -312,6 +354,16 @@ def storage(s):
         _,op=delete_agent(s,i);volume_result(s,op,'Retained' if deleted=='Retain' else 'Deleted')
         current={v['metadata']['uid'] for v in s.get('pvc','-n',s.targetns)['items']}
         assert (restored['volumes'][0]['uid'] in current)==(deleted=='Retain')
+        if deleted=='Retain':
+            s.by('替代同名 Retain PVC 后，历史操作仍绑定原 UID，不认领新卷')
+            volume=restored['volumes'][0];actual=s.get('pvc',volume['name'],'-n',s.targetns)
+            s.delete_uid(s.target,'/api/v1/namespaces/'+s.targetns+'/persistentvolumeclaims/'+volume['name'],volume['uid'])
+            s.k('wait','--for=delete','pvc/'+volume['name'],'-n',s.targetns,'--timeout=60s',target=s.target)
+            replacement={'apiVersion':'v1','kind':'PersistentVolumeClaim','metadata':{'name':volume['name'],'namespace':s.targetns},'spec':{'accessModes':['ReadWriteOnce'],'storageClassName':actual['spec']['storageClassName'],'resources':{'requests':{'storage':'1Gi'}}}}
+            response=s.k('create','-f','-',data=replacement,target=s.target);new_uid=json.loads(response.stdout)['metadata']['uid'];assert new_uid!=volume['uid']
+            historical=s.call('POST','/operations/'+op['operationId']+'/refresh',{});identities={v['uid'] for v in historical['storageVolumes']}
+            assert volume['uid'] in identities and new_uid not in identities
+            assert s.get('pvc',volume['name'],'-n',s.targetns)['metadata']['uid']==new_uid
     s.by('独立 emptyDir 实例运行与删除均无 WAL PVC')
     s.prepare('-empty','data','agent');cfg=s.cfg();cfg['storage']={'mode':'emptyDir','whenScaled':'Retain','whenDeleted':'Retain'}
     i=s.create(cfg);s.publish(i);owned_graph(s,i,1,1,'emptyDir');assert not s.get('pvc','-n',s.targetns)['items'];delete_agent(s,i)
@@ -320,7 +372,8 @@ def storage(s):
 def versions(s):
     s.prepare();s.by('发布 v1 后编辑草稿 v2，同幂等键不产生第二个版本或写入')
     i=s.create();p=s.preview(i);key='publish-once';op=s.publish(i,preview=p,key=key);uid=s.cr()['metadata']['uid']
-    again=s.publish(i,preview=p,key=key);assert again['operationId']==op['operationId'];assert len(s.call('GET','/instances/'+i['id']+'/versions')['versions'])==1
+    writes_before=s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode())
+    again=s.publish(i,preview=p,key=key);assert s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode())==writes_before;assert again['operationId']==op['operationId'];assert len(s.call('GET','/instances/'+i['id']+'/versions')['versions'])==1
     cfg=s.cfg();cfg['resources']['requestCPU']='222m';s.save(i,cfg)
     old=s.call('GET','/instances/'+i['id']+'/versions/'+op['versionId']);assert old['ksm']['resources']['requestCPU']=='100m'
     s.by('外部 spec 漂移必须明确覆盖，foreign annotation 和 status 保留')
@@ -342,7 +395,7 @@ def faults(s):
         failed=s.call('GET','/instances/'+i['id']);healthy=s.call('GET','/instances/'+j['id'])
         if any(v.get('stale') and v.get('error') for v in failed.get('sources',[])):break
         time.sleep(1)
-    assert any(v.get('error') and v.get('historical') for v in failed['sources']);assert healthy['runtime']['summary']=='Available';assert failed['runtime']['summary']!='Deleted'
+    assert any(v.get('stale') and v.get('error') and v.get('historical') for v in failed['sources']);assert healthy['runtime']['summary']=='Available';assert failed['runtime']['summary']!='Deleted'
     s.by('恢复真实 API 后重新观察；制造单个真实 Pod 未 Ready')
     proxy.control('reset',{});wait(lambda:s.call('POST','/instances/'+i['id']+'/refresh',{}),lambda v:v['summary']=='Available',message='data恢复失败')
     pods=[p for p in s.workloads() if p['kind']=='Pod' and not p['metadata'].get('deletionTimestamp')];assert len(pods)==2
@@ -361,9 +414,12 @@ def recovery(s):
     s.call('POST','/operations/'+op['operationId']+'/refresh',{});s.state(op,'SUCCEEDED',timeout=60)
     assert len(s.mutations(s.capture_proxy(),'PUT'))==before
     s.by('首次创建丢响应且没有原 UID，禁止按同名对象补认或重建')
-    s.crname='unknown-'+uuid.uuid4().hex[:8];unknown=s.create();proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics','drop_after_upstream');o=s.publish(unknown,wait=False);s.state(o,'IDENTITY_UNCERTAIN')
+    s.crname='unknown-'+uuid.uuid4().hex[:8];unknown=s.create()
+    # 关键：先登记明确的创建身份，代理才会在丢响应前保存原 API UID；不能事后按名字补认。
+    proxy.control('register-create',{'intentId':uuid.uuid4().hex,'identity':{'apiVersion':'monitoring.fjsxy.github.io/v1alpha1','kind':'KubeStateMetrics','namespace':'','name':s.crname}})
+    proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics','drop_after_upstream');o=s.publish(unknown,wait=False);s.state(o,'IDENTITY_UNCERTAIN')
     events=s.capture_proxy();created=[e for e in events if e['stage']=='original_create_response' and e['path'].endswith('/kubestatemetrics')];assert len(created)==1
-    s.track_cr(created[0]['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['uid'];s.rebuild();s.action(o,'retry',409);assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
+    s.track_cr(created[0]['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
     s.by('确定失败后显式 retry，保留原冻结版本并产生新 attempt')
     proxy.control('reset',{});s.crname='retry-'+uuid.uuid4().hex[:8];retry=s.create();p=s.preview(retry)
     writepath='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics';proxy.control('faults',{'readMode':'none','rejectWritePath':writepath})
@@ -372,12 +428,15 @@ def recovery(s):
 
 
 def deletion(s):
-    s.prepare();s.by('原 CR finalizer 阻塞真实 Foreground 删除；移除后等待原图完全消失')
+    s.prepare();unrelated=s.a.prefix+'-unrelated';s.namespace(unrelated)
+    kept={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'keep','namespace':unrelated},'data':{'marker':'owned-fixture'}}
+    kept_uid=json.loads(s.k('create','-f','-',data=kept).stdout)['metadata']['uid']
+    s.by('原 CR finalizer 阻塞真实 Foreground 删除；移除后等待原图完全消失')
     i=s.create();s.publish(i);s.runtime(i);original=s.cr();uid=original['metadata']['uid']
     finalizers=original['metadata'].get('finalizers',[])+['phase1.fixture/hold']
     s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'add','path':'/metadata/finalizers','value':finalizers}]))
     op=s.delete(i,False);s.state(op,'DELETION_BLOCKED','DELETION_VERIFYING');assert s.call('GET','/operations/'+op['operationId'])['state']!='SUCCEEDED'
-    s.call('POST','/clusters/'+s.cluster['id']+'/unregister',{},status=409)
+    s.call('POST','/clusters/'+s.cluster['id']+'/unregister',{},status=409);s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner},status=409)
     cr=s.cr();s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'test','path':'/metadata/resourceVersion','value':cr['metadata']['resourceVersion']},{'op':'replace','path':'/metadata/finalizers','value':[f for f in cr['metadata'].get('finalizers',[]) if f!='phase1.fixture/hold']}]))
     wait(lambda:s.call('POST','/operations/'+op['operationId']+'/refresh',{}),lambda value:value['state']=='SUCCEEDED',message='前台删除原图未结束')
     assert not s.workloads() and s.k('get','kubestatemetrics',s.crname,check=False).returncode!=0
@@ -387,7 +446,8 @@ def deletion(s):
     wait(lambda:s.k('get','kubestatemetrics',s.crname,check=False).returncode,lambda v:v!=0,message='旧CR未删除')
     obj={k:old[k] for k in ('apiVersion','kind','spec')};obj['metadata']={'name':s.crname};s.k('create','-f','-',data=obj);newuid=s.cr()['metadata']['uid'];assert uid!=newuid;s.track_cr(newuid)
     s.call('POST','/instances/'+i['id']+'/deletions',{'versionId':p['versionId'],'previewId':p['previewId']},status=409);assert s.cr()['metadata']['uid']==newuid
-    unrelated=s.a.prefix+'-unrelated';s.namespace(unrelated);assert s.get('namespace',unrelated)['metadata']['uid']==s.namespace_uids[('control',unrelated)]
+    assert s.get('namespace',unrelated)['metadata']['uid']==s.namespace_uids[('control',unrelated)]
+    preserved=s.get('configmap','keep','-n',unrelated);assert preserved['metadata']['uid']==kept_uid and preserved['data']==kept['data']
 
 
 def browser(s):

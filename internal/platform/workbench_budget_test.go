@@ -159,16 +159,13 @@ func (h wireTimeoutMeta) WriteMeta(ctx context.Context, msg remote.Message) (con
 // R06：请求方缺失/异常/零或夸大metadata也不能把服务端总预算扩大到10秒以上。
 // 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
 func checkTestR06WorkbenchServerBudgetMaximum(t ginkgo.GinkgoTInterface) {
-	// 接下来R06：请求方缺失/异常/零或夸大metadata也不能把服务端总预算扩大到10秒以上。
-	ginkgo.By("R06：请求方缺失/异常/零或夸大metadata也不能把服务端总预算扩大到10秒以上。")
-
-	for _, metadata := range []string{"missing"} {
+	// 接下来复用一个平台和目标适配器，对四类 metadata 走实际 Kitex 编解码。
+	p, c, id, f, _ := workbenchSourceFixture(t, func(cfg *platform.Config) { cfg.ObservationTicks = make(chan time.Time) })
+	f.mu.Lock()
+	f.readDelay = 4 * time.Second
+	f.mu.Unlock()
+	for _, metadata := range []string{"missing", "100000", "0", "invalid"} {
 		teststeps.Step(metadata, func() {
-			// 接下来仅用一个真实 RPC 核验 10 秒上限，避免四次相同等待。
-			p, c, id, f, _ := workbenchSourceFixture(t, func(cfg *platform.Config) { cfg.ObservationTicks = make(chan time.Time) })
-			f.mu.Lock()
-			f.readDelay = 4 * time.Second
-			f.mu.Unlock()
 			options := []client.Option{client.WithHostPorts(p.RPCAddress()), client.WithRPCTimeout(15 * time.Second)}
 			if metadata != "missing" {
 				options = append(options, client.WithTransportProtocol(transport.TTHeader), client.WithMetaHandler(wireTimeoutMeta{transmeta.ClientTTHeaderHandler, metadata}))
@@ -177,12 +174,19 @@ func checkTestR06WorkbenchServerBudgetMaximum(t ginkgo.GinkgoTInterface) {
 			if e != nil {
 				t.Fatal(e)
 			}
+			if _, e = cli.Probe(context.Background(), &rpc.RequestContext{RequestId: "metadata-" + metadata}); e != nil {
+				t.Fatal("metadata 编解码失败", metadata, e)
+			}
+			// 关键：服务端上限与继承预算已在纯边界断言；只保留一次完整 10 秒网络计时。
+			if metadata != "missing" {
+				return
+			}
 			token := c.Value
 			start := time.Now()
 			cli.RefreshInstance(context.Background(), &rpc.RequestContext{SessionToken: &token}, &rpc.InstanceID{Id: id})
 			elapsed := time.Since(start)
 			if elapsed < 9500*time.Millisecond || elapsed > 11500*time.Millisecond {
-				t.Fatalf("服务端没有按当前剩余预算限制为10秒: metadata=%s duration=%s", metadata, elapsed)
+				t.Fatalf("服务端总预算未限制为10秒：%s", elapsed)
 			}
 		})
 	}

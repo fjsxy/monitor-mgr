@@ -90,7 +90,7 @@ def main():
                                 failures=['cleanup-exception'];path=environment.private/(id+'-cleanup-failure.txt');path.write_text(traceback.format_exc());os.chmod(path,0o600)
                             result['cleanup']=failures
                             if failures:result['outcome']='failed'
-                            result['requests']=scenario.traces
+                            result['requests']=scenario.traces;result['platformContainers']=scenario.platform_proofs
                             private_json(environment.public/'results.json',summary)
                             emit(dict(type='result',id=id,outcome=result['outcome']))
                             print(id+' '+result['outcome'],flush=True)
