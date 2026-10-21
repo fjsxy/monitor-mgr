@@ -197,7 +197,8 @@ func checkTestI02OriginAndDirectRPCEnforceAuthorization(t ginkgo.GinkgoTInterfac
 	// 接下来分别通过 HTTP Origin 与直接 RPC 验证授权边界。
 	ginkgo.By("分别通过 HTTP Origin 与直接 RPC 验证授权边界")
 
-	var logs bytes.Buffer
+	// RPC 后台写日志时，断言快照也使用同一把锁，避免记录器自身产生 race。
+	var logs ksmLogBuffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	p, err := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", Logger: logger})
 	if err != nil {

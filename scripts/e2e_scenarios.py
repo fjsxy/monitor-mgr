@@ -257,7 +257,7 @@ def clusters(s):
         if previous:
             with s.using(previous):s.call('GET','/instances/'+i['id']+'/draft',status=403)
     s.by('注销清空访问凭据而保留原 CR/版本；同 UID 重新启用不自动发布')
-    mutations_before=s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode())
+    mutations_before=s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode());assert mutations_before==1
     s.call('POST','/clusters/'+control['id']+'/unregister',{});assert s.cr()['metadata']['uid']==uid
     assert s.call('GET','/instances/'+i['id']+'/versions')['versions'][0]['versionId']==op['versionId']
     script="import json,sqlite3;c=sqlite3.connect('file:/data/platform.db?mode=ro',uri=True);print(json.dumps({'cleared':c.execute('select credential is null from clusters where id=?',("+repr(control['id'])+",)).fetchone()[0]}))"
@@ -372,7 +372,7 @@ def storage(s):
 def versions(s):
     s.prepare();s.by('发布 v1 后编辑草稿 v2，同幂等键不产生第二个版本或写入')
     i=s.create();p=s.preview(i);key='publish-once';op=s.publish(i,preview=p,key=key);uid=s.cr()['metadata']['uid']
-    writes_before=s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode())
+    writes_before=s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode());assert writes_before==1
     again=s.publish(i,preview=p,key=key);assert s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode())==writes_before;assert again['operationId']==op['operationId'];assert len(s.call('GET','/instances/'+i['id']+'/versions')['versions'])==1
     cfg=s.cfg();cfg['resources']['requestCPU']='222m';s.save(i,cfg)
     old=s.call('GET','/instances/'+i['id']+'/versions/'+op['versionId']);assert old['ksm']['resources']['requestCPU']=='100m'
@@ -396,6 +396,7 @@ def faults(s):
         if any(v.get('stale') and v.get('error') for v in failed.get('sources',[])):break
         time.sleep(1)
     assert any(v.get('stale') and v.get('error') and v.get('historical') for v in failed['sources']);assert healthy['runtime']['summary']=='Available';assert failed['runtime']['summary']!='Deleted'
+    assert urllib.request.urlopen(s.base+'/readyz',timeout=2).status==200
     s.by('恢复真实 API 后重新观察；制造单个真实 Pod 未 Ready')
     proxy.control('reset',{});wait(lambda:s.call('POST','/instances/'+i['id']+'/refresh',{}),lambda v:v['summary']=='Available',message='data恢复失败')
     pods=[p for p in s.workloads() if p['kind']=='Pod' and not p['metadata'].get('deletionTimestamp')];assert len(pods)==2
@@ -419,7 +420,7 @@ def recovery(s):
     proxy.control('register-create',{'intentId':uuid.uuid4().hex,'identity':{'apiVersion':'monitoring.fjsxy.github.io/v1alpha1','kind':'KubeStateMetrics','namespace':'','name':s.crname}})
     proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics','drop_after_upstream');o=s.publish(unknown,wait=False);s.state(o,'IDENTITY_UNCERTAIN')
     events=s.capture_proxy();created=[e for e in events if e['stage']=='original_create_response' and e['path'].endswith('/kubestatemetrics')];assert len(created)==1
-    s.track_cr(created[0]['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
+    s.track_cr(created[0]['originalCreate']['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['originalCreate']['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
     s.by('确定失败后显式 retry，保留原冻结版本并产生新 attempt')
     proxy.control('reset',{});s.crname='retry-'+uuid.uuid4().hex[:8];retry=s.create();p=s.preview(retry)
     writepath='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics';proxy.control('faults',{'readMode':'none','rejectWritePath':writepath})
