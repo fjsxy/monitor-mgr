@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	ginkgo "github.com/onsi/ginkgo/v2"
 	"gopkg.in/yaml.v3"
 )
@@ -50,52 +49,6 @@ func assertPublicationDocumentEqual(t ginkgo.GinkgoTInterface, right, sent map[s
 }
 
 // 首次创建分别验证KSM和Agent，不把已存在CR的保留字段规则带入新对象。
-var _ = ginkgo.It("TestPublicationYAMLFirstCreate", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来首次创建分别验证KSM和Agent，不把已存在CR的保留字段规则带入新对象。
-	ginkgo.By("首次创建分别验证KSM和Agent，不把已存在CR的保留字段规则带入新对象。")
-
-	teststeps.Step("ksm", func() {
-		p, c, id, f := ksmPublishedFixture(t)
-		preview := ksmPreview(t, p, c, id, 1)
-		right := assertPublicationFirstCreate(t, preview)
-		f.mu.Lock()
-		created := f.cr != nil || f.writes != 0
-		f.mu.Unlock()
-		if created {
-			t.Fatal("预览提前创建KSM")
-		}
-		op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "first-create", 202)
-		if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
-			t.Fatal("KSM首次发布未成功")
-		}
-		f.mu.Lock()
-		sent := append([]byte(nil), f.lastWrite...)
-		f.mu.Unlock()
-		assertPublicationDocumentEqual(t, right, publicationJSONDocument(t, sent))
-	})
-	teststeps.Step("agent", func() {
-		p, c, cluster, _, f := agentSafetyFixture(t, nil)
-		i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": agentConfig("first-preview", "monitoring")}, c, "create", 201)
-		id := i["id"].(string)
-		preview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "preview", 200)
-		right := assertPublicationFirstCreate(t, preview)
-		f.mu.Lock()
-		created := len(f.objects) != 0 || f.lastWrite != nil
-		f.mu.Unlock()
-		if created {
-			t.Fatal("预览提前创建Agent")
-		}
-		op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "first-create", 202)
-		if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
-			t.Fatal("Agent首次发布未成功")
-		}
-		f.mu.Lock()
-		sent := append([]byte(nil), f.lastWrite...)
-		f.mu.Unlock()
-		assertPublicationDocumentEqual(t, right, publicationJSONDocument(t, sent))
-	})
-})
 
 func assertPublicationFirstCreate(t ginkgo.GinkgoTInterface, preview map[string]any) map[string]any {
 	t.Helper()

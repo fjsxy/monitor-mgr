@@ -1,61 +1,25 @@
-# 一期验收入口
+# 一期 UT / E2E
 
-新的[UT/E2E 精简清单](test-plan.md)拟收敛为 18 个 UT、10 个 E2E，正在评审。本轮只调整方案；本页以下内容与 [ci-cases.md](ci-cases.md) 仍描述当前实际入口。
-
-固定目录为 `phase1.json`：`LOCAL_FULL` 207 键、`CI_FAST` 58 键、`CI_SMOKE` 17 键，共 282 个 profile 执行键。`--supplemental` 单独选择 `LOCAL_FULL` 的 104 个补充层键，不替代固定用例。完整步骤与期望见 `../e2e/issue-21.md`。
-
-正式运行前，由独立集成得到唯一干净候选 C。checkout、runner、平台及应用屏障镜像均使用 C；修改任何代码后重新冻结候选并执行该候选完整门禁。原组件收据和 `--focus` 诊断不能包装成最终 C 通过。
-
-## 执行与证据
-
-重复操作使用 `make acceptance-list/run/validate/export/recover`，参数由 `E2E_ARGS` 显式传入。Python 使用锁定运行时及 PyYAML，Linux 安装入口为 `acceptance-bootstrap`，工具与镜像来源见 `scripts/acceptance/source-lock.json`。
+当前固定清单为 [cases.json](cases.json)：18 个 UT、10 个 E2E。详细目的、必要步骤、保留/合并/放弃的旧覆盖映射见 [test-plan.md](test-plan.md)；CI 跑什么以及选取理由见 [ci-cases.md](ci-cases.md)。
 
 ```sh
-make acceptance-list E2E_ARGS='--profile LOCAL_FULL'
-make acceptance-list E2E_ARGS='--profile LOCAL_FULL --supplemental'
-make acceptance-run E2E_ARGS='--profile LOCAL_FULL --candidate <C> --run-id <本次执行ID> --environment-json <私有环境请求绝对路径> --output <全新外置目录> --fail-fast'
-make acceptance-validate E2E_ARGS='--index <外置目录>/index.json --profile LOCAL_FULL --candidate <C>'
-make acceptance-export E2E_ARGS='--index <外置目录>/index.json --profile LOCAL_FULL --candidate <C> --destination <全新安全目录>'
+make ut PYTHON=<带 PyYAML 的 Python>
+make e2e PYTHON=<带 PyYAML 的 Python>
 ```
 
-环境请求为 0600 JSON，目录为 0700，包含 `profile/runId/candidate/source/platform/privateRoot/apiLane/kubectl/kind/targets`。新建环境设 `lifecycle=prepare`，另给固定且 clean 的 `monitorOpSource`；FULL 的 `targets` 明确列出 control/data 的 `name/kubeconfig/context`，SMOKE 仅 control，FAST 为空。所有 kubeconfig 路径必须在本次私有目录内，context 必须为 `kind-<name>`。FULL 使用 1cp+2worker control 与 1 可调度 cp data，SMOKE 使用 Linux amd64 的单 control 三节点。
+`make ut` 一次执行 Ginkgo/race/覆盖率（至少70%）、生成一致性、vet、前端类型检查和构建。只统计 `internal/control`、`internal/platform` 手写产品代码，不把生成代码/参数入口/测试夹具计入覆盖率。工具只保留 UT-18 的三组可信边界。
 
-`run.py` 是唯一准备和业务执行入口。Session 构造时先写完整 pending index，再等整批 `flock`，并持锁至全部 child、finally、独立恢复及收据完成；调用方不能再外包同一把锁。`prepare.py` 不提供独立集群写入口。FULL 通过后，独立 REG run 可使用其同 C 的 ready descriptor；`executionRunId` 属于本次执行，`environmentOwnerRunId` 保留最初 prepare owner，不能改写环境标签来消除差异。REG 命令另加 `--supplemental --parent-index <同C完整FULL index>`，先独立验证父收据，再派生已有 PATTERN/i64 浏览器子步骤，不重复计一次浏览器执行。
-
-每例原件、wrapper、实际测试事件和 OCI JSON 按 hash 绑定。验证器读取原 `candidate.commit` 对象，离线核 C→tree，再检查原收据来源、完整键、未 skip、实际 Pod/Service 身份及清理结果。八项 REG21 Kubernetes 协议用例核真实 API/UID/信号/恢复原件；其中合法尚无平台 Pod 的 setup-failure 不借其他 Pod 补身份。
-
-## 失败与恢复
-
-TERM/INT 停止新动作并执行一次 finally，重复信号不重入。KILL/timeout 原记录保持失败或无 finally；新的恢复收据不能把它改绿。恢复只消费原 UID、实际进程出生身份及私有故障基线，不按名字或前缀认领，不把 403 当 404，不强制回收 namespace 或泛清 finalizer。
+`make e2e` 要求 Docker、kind、kubectl、Helm、Go、Node/npm、Python/PyYAML、openssl、curl 与 lockfile 中的 Playwright Chromium 可用；源码必须为干净提交。自动生成 runId，创建独占 control(1cp+2worker) 和 data(1可调度cp)，为每例 Helm 部署独立平台/PVC。默认从主仓库同级 `monitor-op` 克隆锁定 SHA，不使用其未提交内容；也可指定来源：
 
 ```sh
-make acceptance-export E2E_ARGS='--index <外置目录>/index.json --profile LOCAL_FULL --candidate <C> --destination <全新诊断目录> --diagnostic'
-make acceptance-recover E2E_ARGS='--output <原外置目录> --environment-json <原私有descriptor> --candidate <C> --recovery-output <全新独立恢复目录>'
+make e2e PYTHON=<Python> E2E_ARGS='--monitor-op-source <本地源码目录> --run-id mm-example --output /tmp/mm-example'
+python scripts/e2e.py --cleanup /tmp/mm-example # 进程中断后，独立核验原身份再清理
 ```
 
-诊断导出始终 `productGate=false`，保留 failed/not_run/cleanup 结果及允许的闭合引用。独立恢复不修改原 index、ledger 或原件；创建 UID 缺失、替代 UID、读取失败、持久化失败均保留失败边界。环境清理另加 `--environment-only`，仅在安全证据已持久化并从新路径离线核验后，顺序清理原 owner 的目标集群。
+每个 Ginkgo It 通过私有 Unix socket 调度 Python；每阶段为中文 By，必要断言失败则整例失败。10例全部通过、环境与清理成功才通过门禁；缺失/失败/skip/重复/重试/来源不符均拒绝。报告分别记录成功、失败、未执行和环境失败。
 
-原 stdout/stderr、私有 Operator checkout、镜像 tar/层、数据库、kubeconfig、认证及 session 材料留在私有目录，不进入公开 console、cache 或 artifact。公开目录仅来自严格 exporter；远端 artifact 下载后再核原 digest 与离线完整性，不能上传整个 run 或 workspace。
+默认输出 `.scratch/e2e/<runId>/public/` 中的 `results.json`、`cleanup.json` 与截图；UT 输出 `.scratch/ut-results.json`。同 run 的 `.private/` 仅本地保留原始进程/平台日志、Ginkgo/Playwright 原报告、kubeconfig、私有 Operator checkout 与认证材料。CI 只上传 public 与安全 UT 摘要。绝不上传整个输出根目录。
 
-## Ginkgo 测试与 CI 清单
+集群使用独立 kubeconfig 和显式 context，kind 不写默认 context；清理核对原容器集合/cluster UID，逐集群顺序删除。用例内 Kubernetes DELETE 使用原 UID precondition，测试 finalizer 只删除自己添加的 token，不泛清 foreign finalizer。环境失败不能跳过当作通过。版本沿用 `scripts/acceptance/source-lock.json`。
 
-Go 场景使用 Ginkgo v2 的 `It`，参数和连续操作使用 `By`；原 `Test...` 字符串仅作为稳定 selector。`GinkgoT` 负责现有断言及资源清理。撤销角色后再禁用账号等共享状态步骤保留执行顺序；子步骤完成标识写入原生报告，未完成的输入不能得到通过事件。框架接口见 [Ginkgo 官方文档](https://onsi.github.io/ginkgo/)。
-
-产品 K/B 场景由 `tests/e2e` 的每个 Ginkgo `It` 通过私有 Unix socket 请求一个原 Python/Playwright 场景。父 Session 保留同一独占 lane、UID 账本、子进程身份和清理责任；业务断言与原始浏览器报告继续核验。Python 验收工具自测保持 unittest。
-
-```sh
-make test
-make test-race                    # 同次检查 race 与至少 70% 产品语句覆盖率
-make ginkgo-adapter-check         # Host 合成回调，不建立真实集群通过结果
-make ci-cases                    # 用例或 CI 入口变化后重新生成
-make ci-cases-check
-make publication-yaml-check       # 原聚焦目标已切换为 Ginkgo focus
-make acceptance-list E2E_ARGS='--profile LOCAL_FULL --focus-owner 16 --focus-layer K B'
-make e2e-ksm E2E_ARGS='--profile LOCAL_FULL --candidate <C> --run-id <本次执行ID> --environment-json <私有环境请求绝对路径> --output <全新外置目录>'
-```
-
-`e2e-clusters/ksm/agent/lifecycle/workbench/agent-storage` 与 `web-e2e` 的产品场景入口统一使用 `run.py run` 参数，旧的直接场景脚本参数不再传给这些 Make target。可用 `--focus-owner` 选择原所属 Issue、`--focus-layer` 选择层、`--focus` 选择稳定键；交集为空立即拒绝。聚焦运行仍保留完整 expected index，不能当成完整 profile 通过。普通 Go UT 不准备集群，显式 Host 诊断与 E2E 环境入口保持跳过。
-
-覆盖率口径为手写产品包 `internal/control` 与 `internal/platform` 的合计语句覆盖率；生成代码、命令参数入口和验收工具不计入 UT 覆盖率。各包的原生报告落在其 `.scratch/ginkgo-report.json`；Q 和 K/B 正式运行的原报告留在本次 `.private`，公开证据仅保留安全的 selector 事件及逐例状态。
-
-[CI 用例与选取标准](ci-cases.md) 逐项列出全部 Go 场景、工具自测、58 个 Q 键和 17 个 Smoke 键。文档一致性检查已接入 `make check`；真实执行结果单独记录，文档本身不代表 CI 或集群验收已通过。
+旧 `phase1.json`、历史 `issue-*.md` 结果与 `scripts/acceptance` 中未被新入口使用的 profile/export/recover 代码仅供历史追溯。旧 80/207、58 Q、17 Smoke 不再是当前 CI 的数量门槛；历史通过记录保持原 SHA 和原含义，不改写为新的 18+10 已通过。

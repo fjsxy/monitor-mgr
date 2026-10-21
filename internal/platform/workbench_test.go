@@ -13,8 +13,8 @@ import (
 )
 
 // REG19-ACTIVITY-001：真实入口上的活动顺序独立于墙钟，并跨原目录重启保留。
-var _ = ginkgo.It("TestWorkbenchActivitySequencePersists", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestWorkbenchActivitySequencePersists(t ginkgo.GinkgoTInterface) {
 	// 接下来REG19-ACTIVITY-001：真实入口上的活动顺序独立于墙钟，并跨原目录重启保留。
 	ginkgo.By("REG19-ACTIVITY-001：真实入口上的活动顺序独立于墙钟，并跨原目录重启保留。")
 
@@ -112,4 +112,4 @@ var _ = ginkgo.It("TestWorkbenchActivitySequencePersists", func() {
 		t.Fatal(e)
 	}
 	assertOrder(later)
-})
+}

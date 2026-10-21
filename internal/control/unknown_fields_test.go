@@ -11,8 +11,8 @@ import (
 )
 
 // 使用生成类型真实保留的未知 wire 字段，验证递归 guard 的容器边界及错误路径。
-var _ = ginkgo.It("TestUnknownFieldGuardContainersAndNil", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestUnknownFieldGuardContainersAndNil(t ginkgo.GinkgoTInterface) {
 	// 接下来使用生成类型真实保留的未知 wire 字段，验证递归 guard 的容器边界及错误路径。
 	ginkgo.By("使用生成类型真实保留的未知 wire 字段，验证递归 guard 的容器边界及错误路径。")
 
@@ -61,4 +61,4 @@ var _ = ginkgo.It("TestUnknownFieldGuardContainersAndNil", func() {
 			}
 		})
 	}
-})
+}

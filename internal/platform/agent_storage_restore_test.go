@@ -13,8 +13,7 @@ import (
 )
 
 // REG20-STORAGE-005：只经公开入口产生Delete责任，原UID未独立核销前不允许重新挂载。
-var _ = ginkgo.It("TestAgentStoragePendingDeleteBlocksRestore", func() {
-	t := ginkgo.GinkgoT()
+func checkTestAgentStoragePendingDeleteBlocksRestore(t ginkgo.GinkgoTInterface) {
 	// 接下来REG20-STORAGE-005：只经公开入口产生Delete责任，原UID未独立核销前不允许重新挂载。
 	ginkgo.By("REG20-STORAGE-005：只经公开入口产生Delete责任，原UID未独立核销前不允许重新挂载。")
 
@@ -201,4 +200,4 @@ var _ = ginkgo.It("TestAgentStoragePendingDeleteBlocksRestore", func() {
 			}
 		})
 	}
-})
+}

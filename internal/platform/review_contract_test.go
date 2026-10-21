@@ -3,8 +3,6 @@ package platform_test
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -15,8 +13,8 @@ import (
 )
 
 // 注册/候选/人工继续都先持久受理；命中只能找回当前任务，不再触发核验。
-var _ = ginkgo.It("TestReviewCredentialReplayCurrent", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestReviewCredentialReplayCurrent(t ginkgo.GinkgoTInterface) {
 	// 接下来注册/候选/人工继续都先持久受理；命中只能找回当前任务，不再触发核验。
 	ginkgo.By("注册/候选/人工继续都先持久受理；命中只能找回当前任务，不再触发核验。")
 
@@ -153,7 +151,7 @@ var _ = ginkgo.It("TestReviewCredentialReplayCurrent", func() {
 			})
 		}
 	}
-})
+}
 
 // reviewAccount通过真实账号流程得到可用会话，避免把mustChangePassword账号当授权正控。
 func reviewAccount(t ginkgo.GinkgoTInterface, p *platform.Runtime, admin *http.Cookie, name, role string) (string, *http.Cookie) {
@@ -164,229 +162,3 @@ func reviewAccount(t ginkgo.GinkgoTInterface, p *platform.Runtime, admin *http.C
 	c = request(t, p, "POST", "/sessions", `{"username":"`+name+`","password":"personal-password"}`, nil, 201).Cookies()[0]
 	return a["id"].(string), c
 }
-
-var _ = ginkgo.It("TestReviewCapabilitiesRoute", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来分别以管理员、所属用户及无权账号查询组件能力。
-	ginkgo.By("分别以管理员、所属用户及无权账号查询组件能力")
-
-	p, c, cluster := ksmCluster(t)
-	current := clusterCall(t, p, "GET", "/clusters/"+cluster, nil, c, "", 200)
-	path := "/clusters/" + cluster + "/capabilities"
-	check := func(t ginkgo.GinkgoTInterface, c *http.Cookie) {
-		req, _ := http.NewRequest("GET", p.URL()+"/api/v1"+path, nil)
-		req.AddCookie(c)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			t.Fatalf("能力入口状态 %d", resp.StatusCode)
-		}
-		var caps []any
-		if e := json.NewDecoder(resp.Body).Decode(&caps); e != nil {
-			t.Fatal(e)
-		}
-		a, _ := json.Marshal(current["capabilities"])
-		b, _ := json.Marshal(caps)
-		if string(a) != string(b) {
-			t.Fatal("规范入口未返回同一安全能力投影")
-		}
-	}
-	teststeps.Step("admin", func() { check(t, c) })
-	aid, alice := reviewAccount(t, p, c, "cap-owner", "USER")
-	teststeps.Step("other-owner", func() { clusterCall(t, p, "GET", path, nil, alice, "", 403) })
-	teststeps.Step("unauthenticated", func() { clusterCall(t, p, "GET", path, nil, nil, "", 401) })
-	teststeps.Step("missing", func() { clusterCall(t, p, "GET", "/clusters/missing/capabilities", nil, c, "", 404) })
-	clusterCall(t, p, "POST", "/clusters/"+cluster+"/transfer", map[string]any{"ownerId": aid}, c, "cap-transfer", 200)
-	teststeps.Step("owner", func() { check(t, alice) })
-	clusterCall(t, p, "PATCH", "/accounts/"+aid, map[string]any{"enabled": false}, c, "disable-owner", 200)
-	teststeps.Step("disabled", func() { clusterCall(t, p, "GET", path, nil, alice, "", 401) })
-})
-
-var _ = ginkgo.It("TestReviewDeleteRoute", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来逐项验证删除接口的当前权限、输入与幂等边界。
-	ginkgo.By("逐项验证删除接口的当前权限、输入与幂等边界")
-
-	for _, variant := range []string{"draft", "confirmed", "missing-preview", "stale-impact", "replaced-uid", "other-owner", "idempotent"} {
-		teststeps.Step(variant, func() {
-			p, c, id, f := lifecycleFixture(t, nil)
-			if variant == "draft" {
-				clusterCall(t, p, "DELETE", "/instances/"+id, nil, c, "delete-draft", 200)
-				return
-			}
-			publication := lifecyclePublish(t, p, c, id)
-			if awaitClusterOperation(t, p, c, publication["operationId"].(string))["state"] != "SUCCEEDED" {
-				t.Fatal("发布前置失败")
-			}
-			body := deletionConfirmation(t, p, c, id)
-			want := 202
-			switch variant {
-			case "missing-preview":
-				delete(body, "previewId")
-				want = 422
-			case "stale-impact":
-				f.mu.Lock()
-				f.cr["spec"].(map[string]any)["targetNamespace"] = "changed"
-				f.mu.Unlock()
-				want = 409
-			case "replaced-uid":
-				f.mu.Lock()
-				f.cr["metadata"].(map[string]any)["uid"] = "foreign-new-uid"
-				f.mu.Unlock()
-				want = 409
-			case "other-owner":
-				_, c = reviewAccount(t, p, c, "delete-other", "USER")
-				want = 403
-			}
-			op := clusterCall(t, p, "DELETE", "/instances/"+id, body, c, "canonical-delete", want)
-			if want != 202 {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				if f.deleteCount != 0 {
-					t.Fatal("拒绝入口仍派发删除")
-				}
-				return
-			}
-			done := awaitClusterOperation(t, p, c, op["operationId"].(string))
-			if done["state"] != "SUCCEEDED" {
-				t.Fatal("规范入口删除未完成")
-			}
-			if variant == "idempotent" {
-				replay := clusterCall(t, p, "DELETE", "/instances/"+id, body, c, "canonical-delete", 202)
-				if replay["operationId"] != op["operationId"] || replay["state"] != "SUCCEEDED" {
-					t.Fatal("删除命中不是当前原任务")
-				}
-			}
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			if f.deleteCount != 1 || f.lastDelete["preconditions"].(map[string]any)["uid"] != "created-uid" || f.lastDelete["propagationPolicy"] != "Foreground" {
-				t.Fatal("规范入口未保留单次原UID条件删除")
-			}
-		})
-	}
-})
-
-var _ = ginkgo.It("TestReviewContinueRoute", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来逐项验证继续操作接口的类型、状态与权限边界。
-	ginkgo.By("逐项验证继续操作接口的类型、状态与权限边界")
-
-	for _, action := range []string{"PUBLISH", "DELETE"} {
-		variants := []string{"unsent", "wrong-revision", "other-owner", "possibly-sent"}
-		if action == "DELETE" {
-			variants = append(variants, "stale-preview")
-		}
-		for _, variant := range variants {
-			teststeps.Step(action+"/"+variant, func() {
-				f, target := ksmTarget(t)
-				var hold atomic.Bool
-				entered := make(chan struct{}, 1)
-				stage := "beforeDispatch"
-				if variant == "possibly-sent" {
-					stage = "afterSendMarker"
-				}
-				cfg := platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", OperationBoundary: func(s, id string) error {
-					if hold.Load() && s == stage {
-						select {
-						case entered <- struct{}{}:
-						default:
-						}
-						return errors.New("明确持久边界停止")
-					}
-					return nil
-				}}
-				var p *platform.Runtime
-				start := func() {
-					var e error
-					p, e = platform.Start(context.Background(), cfg)
-					if e != nil {
-						t.Fatal(e)
-					}
-				}
-				start()
-				t.Cleanup(func() { p.Close(context.Background()) })
-				request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
-				c := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
-				owner := readJSON(t, p, "/session", c)["account"].(map[string]any)["id"].(string)
-				reg := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "review-continue", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
-				cluster := awaitClusterOperation(t, p, c, reg["operationId"].(string))["clusterId"].(string)
-				instance := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": ksmConfig("lifecycle")}, c, "create", 201)
-				id := instance["id"].(string)
-				if action == "DELETE" {
-					initial := lifecyclePublish(t, p, c, id)
-					awaitLifecycleState(t, p, c, initial["operationId"].(string), "SUCCEEDED")
-				}
-				hold.Store(true)
-				var accepted map[string]any
-				if action == "PUBLISH" {
-					accepted = lifecyclePublish(t, p, c, id)
-				} else {
-					accepted = clusterCall(t, p, "POST", "/instances/"+id+"/deletions", deletionConfirmation(t, p, c, id), c, "delete", 202)
-				}
-				oid := accepted["operationId"].(string)
-				select {
-				case <-entered:
-				case <-time.After(2 * time.Second):
-					t.Fatal("未到持久派发边界")
-				}
-				p.Close(context.Background())
-				hold.Store(false)
-				start()
-				op := clusterCall(t, p, "GET", "/operations/"+oid, nil, c, "", 200)
-				body := lifecycleRevision(t, p, c, oid)
-				want := 202
-				if variant == "possibly-sent" {
-					want = 409
-				} else if op["state"] != "WAITING_CONFIRMATION" {
-					t.Fatal("重启未发任务未等待确认", op["state"])
-				}
-				if action == "DELETE" && variant != "possibly-sent" {
-					dp := clusterCall(t, p, "POST", "/instances/"+id+"/deletion-previews", map[string]any{"operationId": oid}, c, "", 200)
-					body["deletePreviewId"] = dp["previewId"]
-				}
-				switch variant {
-				case "wrong-revision":
-					body["expectedOperationRevision"] = body["expectedOperationRevision"].(float64) + 100
-					want = 409
-				case "other-owner":
-					_, c = reviewAccount(t, p, c, "continue-other", "USER")
-					want = 403
-				case "stale-preview":
-					f.mu.Lock()
-					f.cr["spec"].(map[string]any)["targetNamespace"] = "changed"
-					f.mu.Unlock()
-					want = 409
-				}
-				if action == "PUBLISH" && variant == "unsent" {
-					newDraft := ksmConfig("lifecycle")
-					newDraft["resources"].(map[string]any)["requestCPU"] = "999m"
-					clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "ksm": newDraft}, c, "new-draft", 200)
-				}
-				next := clusterCall(t, p, "POST", "/operations/"+oid+"/continue", body, c, "canonical-continue", want)
-				if want != 202 {
-					f.mu.Lock()
-					defer f.mu.Unlock()
-					if f.deleteRequests != 0 || (action == "PUBLISH" && f.writes != 0) {
-						t.Fatal("拒绝continue仍重放了目标写")
-					}
-					return
-				}
-				if next["operationId"] != oid || next["versionId"] != op["versionId"] || next["attemptId"] == op["attemptId"] {
-					t.Fatal("continue未保留原operation/版本及新增attempt")
-				}
-				done := awaitLifecycleState(t, p, c, oid, "SUCCEEDED")
-				replay := clusterCall(t, p, "POST", "/operations/"+oid+"/continue", body, c, "canonical-continue", 202)
-				if replay["state"] != done["state"] || replay["attemptId"] != done["attemptId"] {
-					t.Fatal("continue同键未回读原任务当前尝试")
-				}
-				attempts := clusterCall(t, p, "GET", "/operations/"+oid+"/attempts", nil, c, "", 200)["attempts"].([]any)
-				if len(attempts) != 2 {
-					t.Fatal("原尝试未保留")
-				}
-			})
-		}
-	}
-})

@@ -13,8 +13,8 @@ import (
 )
 
 // REG19-HTTP-I64-001：HTTP不安全修订以字符串精确往返，真实RPC保留i64。
-var _ = ginkgo.It("TestWorkbenchHTTPInt64RoundTrip", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestWorkbenchHTTPInt64RoundTrip(t ginkgo.GinkgoTInterface) {
 	// 接下来REG19-HTTP-I64-001：HTTP不安全修订以字符串精确往返，真实RPC保留i64。
 	ginkgo.By("REG19-HTTP-I64-001：HTTP不安全修订以字符串精确往返，真实RPC保留i64。")
 
@@ -84,4 +84,4 @@ var _ = ginkgo.It("TestWorkbenchHTTPInt64RoundTrip", func() {
 		body["expectedDraftRevision"] = invalid
 		clusterCall(t, p, "PUT", "/instances/"+id+"/draft", body, c, "invalid", 400)
 	}
-})
+}

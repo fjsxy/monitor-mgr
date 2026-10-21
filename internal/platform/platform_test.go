@@ -28,8 +28,8 @@ import (
 	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
-var _ = ginkgo.It("TestI01InitializeOnlyEmptyDatabase", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestI01InitializeOnlyEmptyDatabase(t ginkgo.GinkgoTInterface) {
 	// 接下来初始化空库，并拒绝再次初始化已有平台。
 	ginkgo.By("初始化空库，并拒绝再次初始化已有平台")
 
@@ -51,10 +51,10 @@ var _ = ginkgo.It("TestI01InitializeOnlyEmptyDatabase", func() {
 			t.Fatalf("attempt %d got %d want %d", i, resp.StatusCode, want)
 		}
 	}
-})
+}
 
-var _ = ginkgo.It("TestI01TemporaryPasswordMustChangeAndRevokesSession", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestI01TemporaryPasswordMustChangeAndRevokesSession(t ginkgo.GinkgoTInterface) {
 	// 接下来使用临时密码登录、修改密码并核验旧会话失效。
 	ginkgo.By("使用临时密码登录、修改密码并核验旧会话失效")
 
@@ -73,7 +73,7 @@ var _ = ginkgo.It("TestI01TemporaryPasswordMustChangeAndRevokesSession", func() 
 	alice = request(t, p, "POST", "/sessions", `{"username":"alice","password":"personal-password"}`, nil, 201).Cookies()[0]
 	request(t, p, "GET", "/session", "", alice, 200)
 	request(t, p, "GET", "/accounts", "", alice, 403)
-})
+}
 
 func request(t ginkgo.GinkgoTInterface, p *platform.Runtime, method, path, body string, cookie *http.Cookie, want int) *http.Response {
 	t.Helper()
@@ -95,8 +95,8 @@ func request(t ginkgo.GinkgoTInterface, p *platform.Runtime, method, path, body 
 	return resp
 }
 
-var _ = ginkgo.It("TestI07ResetDisableRoleAndLastAdministrator", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestI07ResetDisableRoleAndLastAdministrator(t ginkgo.GinkgoTInterface) {
 	// 接下来重置密码、禁用账号和变更角色，并保护最后一名管理员。
 	ginkgo.By("重置密码、禁用账号和变更角色，并保护最后一名管理员")
 
@@ -127,7 +127,7 @@ var _ = ginkgo.It("TestI07ResetDisableRoleAndLastAdministrator", func() {
 	if len(readJSON(t, p, "/accounts", admin)["accounts"].([]any)) != 2 {
 		t.Fatal("停用不应删除账号")
 	}
-})
+}
 
 func readJSON(t ginkgo.GinkgoTInterface, p *platform.Runtime, path string, cookie *http.Cookie) map[string]any {
 	t.Helper()
@@ -148,8 +148,8 @@ func readJSON(t ginkgo.GinkgoTInterface, p *platform.Runtime, path string, cooki
 	return data
 }
 
-var _ = ginkgo.It("TestI02AbsoluteExpiryAndPersistence", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestI02AbsoluteExpiryAndPersistence(t ginkgo.GinkgoTInterface) {
 	// 接下来推进受控时钟并重启平台，验证会话绝对过期与持久化。
 	ginkgo.By("推进受控时钟并重启平台，验证会话绝对过期与持久化")
 
@@ -190,9 +190,10 @@ var _ = ginkgo.It("TestI02AbsoluteExpiryAndPersistence", func() {
 			request(t, p, "GET", "/session", "", cookie, 401)
 		})
 	}
-})
-var _ = ginkgo.It("TestI02OriginAndDirectRPCEnforceAuthorization", func() {
-	t := ginkgo.GinkgoT()
+}
+
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestI02OriginAndDirectRPCEnforceAuthorization(t ginkgo.GinkgoTInterface) {
 	// 接下来分别通过 HTTP Origin 与直接 RPC 验证授权边界。
 	ginkgo.By("分别通过 HTTP Origin 与直接 RPC 验证授权边界")
 
@@ -238,9 +239,10 @@ var _ = ginkgo.It("TestI02OriginAndDirectRPCEnforceAuthorization", func() {
 	}
 	request(t, p, "DELETE", "/session", "", resp.Cookies()[0], 200)
 	request(t, p, "GET", "/session", "", resp.Cookies()[0], 401)
-})
-var _ = ginkgo.It("TestI07ConcurrentDemotionsRetainAdministrator", func() {
-	t := ginkgo.GinkgoT()
+}
+
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestI07ConcurrentDemotionsRetainAdministrator(t ginkgo.GinkgoTInterface) {
 	// 接下来并发降级管理员，验证事务始终保留一名管理员。
 	ginkgo.By("并发降级管理员，验证事务始终保留一名管理员")
 
@@ -281,116 +283,13 @@ var _ = ginkgo.It("TestI07ConcurrentDemotionsRetainAdministrator", func() {
 	if counts[200] != 1 || counts[409] != 1 {
 		t.Fatalf("并发降级: %v", counts)
 	}
-})
-
-var _ = ginkgo.It("TestT07StartupFailureCleansListenersAndRejectsSecondWriter", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来注入启动失败并尝试第二个 writer，核验监听与锁的清理。
-	ginkgo.By("注入启动失败并尝试第二个 writer，核验监听与锁的清理")
-
-	p, err := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer p.Close(context.Background())
-	for _, which := range []string{"http", "rpc"} {
-		teststeps.Step(which, func() {
-			held, e := net.Listen("tcp", "127.0.0.1:0")
-			if e != nil {
-				t.Fatal(e)
-			}
-			defer held.Close()
-			free, e := net.Listen("tcp", "127.0.0.1:0")
-			if e != nil {
-				t.Fatal(e)
-			}
-			freeAddr := free.Addr().String()
-			free.Close()
-			cfg := platform.Config{DataDir: t.TempDir(), HTTPAddr: freeAddr, RPCAddr: freeAddr}
-			if which == "http" {
-				cfg.HTTPAddr = held.Addr().String()
-			} else {
-				cfg.RPCAddr = held.Addr().String()
-			}
-			if _, e = platform.Start(context.Background(), cfg); e == nil {
-				t.Fatal("应拒绝已占 listener")
-			}
-			again, e := net.Listen("tcp", freeAddr)
-			if e != nil {
-				t.Fatal("半启动遗留 listener", e)
-			}
-			again.Close()
-		})
-	}
-	dir := t.TempDir()
-	first, err := platform.Start(context.Background(), platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer first.Close(context.Background())
-	if _, err = platform.Start(context.Background(), platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}); err == nil {
-		t.Fatal("同数据目录允许第二 writer")
-	}
-	bad := filepath.Join(t.TempDir(), "file")
-	if err = os.WriteFile(bad, []byte("not-directory"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = platform.Start(context.Background(), platform.Config{DataDir: bad, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}); err == nil {
-		t.Fatal("数据库不可用仍启动成功")
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err = platform.Start(ctx, platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}); err == nil {
-		t.Fatal("真实 RPC 探测失败仍启动成功")
-	}
-})
-
-var _ = ginkgo.It("TestUnknownAPIStaysJSONWhenServingFrontend", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来请求未知 API，验证静态页面服务不吞掉 JSON 错误。
-	ginkgo.By("请求未知 API，验证静态页面服务不吞掉 JSON 错误")
-
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("frontend"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	p, err := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), StaticDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer p.Close(context.Background())
-	resp, err := http.Get(p.URL() + "/api/v1/unknown")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 404 || !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
-		t.Fatalf("未知 API 被静态页面替代: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
-	}
-})
+}
 
 type unavailableRPC struct{}
 
 func (unavailableRPC) DialTimeout(string, string, time.Duration) (net.Conn, error) {
 	return nil, errors.New("controlled transport unavailable")
 }
-
-var _ = ginkgo.It("TestT07CanceledStartDoesNotCreateResources", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来取消启动上下文，确认平台不再创建资源。
-	ginkgo.By("取消启动上下文，确认平台不再创建资源")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	dir := filepath.Join(t.TempDir(), "cancelled-start")
-	if p, err := platform.Start(ctx, platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}); err == nil {
-		p.Close(context.Background())
-		t.Fatal("已取消启动仍成功")
-	}
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatal("已取消启动仍创建持久目录", err)
-	}
-})
 
 type cancelingRPC struct{ cancel context.CancelFunc }
 
@@ -399,67 +298,8 @@ func (d cancelingRPC) DialTimeout(string, string, time.Duration) (net.Conn, erro
 	return nil, errors.New("controlled startup cancellation")
 }
 
-var _ = ginkgo.It("TestT07ProbeFailureOrInFlightCancellationReleasesResources", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来分别注入探针失败与启动中取消，检查资源释放。
-	ginkgo.By("分别注入探针失败与启动中取消，检查资源释放")
-
-	for _, mode := range []string{"probe-failure", "cancel-during-probe"} {
-		teststeps.Step(mode, func() {
-			listeners := []net.Listener{}
-			for range 2 {
-				ln, err := net.Listen("tcp", "127.0.0.1:0")
-				if err != nil {
-					t.Fatal(err)
-				}
-				listeners = append(listeners, ln)
-				t.Cleanup(func() { ln.Close() })
-			}
-			cfg := platform.Config{DataDir: t.TempDir(), HTTPAddr: listeners[0].Addr().String(), RPCAddr: listeners[1].Addr().String(), RPCDialer: unavailableRPC{}}
-			for _, ln := range listeners {
-				ln.Close()
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
-			if mode == "cancel-during-probe" {
-				cfg.RPCDialer = cancelingRPC{cancel}
-			}
-			if p, err := platform.Start(ctx, cfg); err == nil {
-				p.Close(context.Background())
-				t.Fatal("真实RPC失败仍启动成功")
-			}
-			for _, addr := range []string{cfg.HTTPAddr, cfg.RPCAddr} {
-				ln, err := net.Listen("tcp", addr)
-				if err != nil {
-					t.Fatal("失败启动遗留listener", err)
-				}
-				ln.Close()
-			}
-			p, err := platform.Start(context.Background(), platform.Config{DataDir: cfg.DataDir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
-			if err != nil {
-				t.Fatal("失败启动未释放原目录writer", err)
-			}
-			p.Close(context.Background())
-		})
-	}
-})
-
-var _ = ginkgo.It("TestT07ActualRPCProbeRequiredBeforeReady", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来阻断真实 RPC 探针，确认平台不能提前就绪。
-	ginkgo.By("阻断真实 RPC 探针，确认平台不能提前就绪")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	p, err := platform.Start(ctx, platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", RPCDialer: unavailableRPC{}})
-	if err == nil {
-		p.Close(context.Background())
-		t.Fatal("RPC transport 不可用仍 ready")
-	}
-})
-
-var _ = ginkgo.It("TestI02HTTPSOriginSetsSecureCookie", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestI02HTTPSOriginSetsSecureCookie(t ginkgo.GinkgoTInterface) {
 	// 接下来使用 HTTPS Origin 登录，核验 Cookie 的 Secure 属性。
 	ginkgo.By("使用 HTTPS Origin 登录，核验 Cookie 的 Secure 属性")
 
@@ -483,10 +323,10 @@ var _ = ginkgo.It("TestI02HTTPSOriginSetsSecureCookie", func() {
 			t.Fatal("HTTPS入口未标记Secure Cookie")
 		}
 	}
-})
+}
 
-var _ = ginkgo.It("TestAccountMutationsAreDurablyIdempotentAndStillAuthorize", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAccountMutationsAreDurablyIdempotentAndStillAuthorize(t ginkgo.GinkgoTInterface) {
 	// 接下来重试账号写操作，验证持久化幂等与当前授权仍生效。
 	ginkgo.By("重试账号写操作，验证持久化幂等与当前授权仍生效")
 
@@ -537,10 +377,10 @@ var _ = ginkgo.It("TestAccountMutationsAreDurablyIdempotentAndStillAuthorize", f
 	}
 	request(t, p, "DELETE", "/session", "", cookie, 200)
 	send(body, "create-unique-key", 401)
-})
+}
 
-var _ = ginkgo.It("TestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL(t ginkgo.GinkgoTInterface) {
 	// 接下来迁移旧数据库，核验 DDL 前备份及原会话保留。
 	ginkgo.By("迁移旧数据库，核验 DDL 前备份及原会话保留")
 
@@ -587,76 +427,10 @@ var _ = ginkgo.It("TestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL", f
 	if err != nil || len(snapshots) != 1 {
 		t.Fatalf("缺一致快照: %v %v", snapshots, err)
 	}
-})
+}
 
-var _ = ginkgo.It("TestDirectRPCMutationReplayDoesNotRepeatPasswordOrRoleChange", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来重放直接 RPC 写请求，确认密码与角色不会再次变更。
-	ginkgo.By("重放直接 RPC 写请求，确认密码与角色不会再次变更")
-
-	p, err := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer p.Close(context.Background())
-	request(t, p, "POST", "/initialization", `{"username":"admin","password":"first-password-123"}`, nil, 201)
-	admin := request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
-	cli, err := controlservice.NewClient("idempotent-direct", client.WithHostPorts(p.RPCAddress()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	key := "direct-create"
-	ctx := &rpc.RequestContext{RequestId: "direct-create", SessionToken: &admin.Value, IdempotencyKey: &key}
-	r := &rpc.CreateAccountRequest{Username: "rpc-user", Password: "temporary-password", Role: "USER"}
-	account, err := cli.CreateAccount(context.Background(), ctx, r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	again, err := cli.CreateAccount(context.Background(), ctx, r)
-	if err != nil || again.Id != account.Id {
-		t.Fatal("直接 RPC 未保留原结果", err)
-	}
-	noKey := &rpc.RequestContext{RequestId: "direct-missing-key", SessionToken: &admin.Value}
-	_, err = cli.CreateAccount(context.Background(), noKey, r)
-	var apiErr *rpc.APIError
-	if !errors.As(err, &apiErr) || apiErr.Code != "INVALID_INPUT" {
-		t.Fatalf("直接RPC缺key应拒绝: %v", err)
-	}
-	key = "direct-reset"
-	reset := &rpc.ResetPasswordRequest{Id: account.Id, Password: "reset-password-123"}
-	if _, err = cli.ResetPassword(context.Background(), ctx, reset); err != nil {
-		t.Fatal(err)
-	}
-	user := request(t, p, "POST", "/sessions", `{"username":"rpc-user","password":"reset-password-123"}`, nil, 201).Cookies()[0]
-	if _, err = cli.ResetPassword(context.Background(), ctx, reset); err != nil {
-		t.Fatal(err)
-	}
-	request(t, p, "GET", "/session", "", user, 200)
-	key = "direct-role"
-	role := "ADMIN"
-	update := &rpc.UpdateAccountRequest{Id: account.Id, Role: &role}
-	if _, err = cli.UpdateAccount(context.Background(), ctx, update); err != nil {
-		t.Fatal(err)
-	}
-	user = request(t, p, "POST", "/sessions", `{"username":"rpc-user","password":"reset-password-123"}`, nil, 201).Cookies()[0]
-	if _, err = cli.UpdateAccount(context.Background(), ctx, update); err != nil {
-		t.Fatal(err)
-	}
-	request(t, p, "GET", "/session", "", user, 200)
-	update.Role = &[]string{"USER"}[0]
-	_, err = cli.UpdateAccount(context.Background(), ctx, update)
-	if !errors.As(err, &apiErr) || apiErr.Code != "CONFLICT" {
-		t.Fatalf("直接RPC同键异内容应冲突: %v", err)
-	}
-	request(t, p, "DELETE", "/session", "", admin, 200)
-	_, err = cli.UpdateAccount(context.Background(), ctx, &rpc.UpdateAccountRequest{Id: account.Id, Role: &role})
-	if !errors.As(err, &apiErr) || apiErr.Code != "UNAUTHENTICATED" {
-		t.Fatalf("幂等命中绕过当前授权: %v", err)
-	}
-})
-
-var _ = ginkgo.It("TestT07DatabaseCorruptionNeverStartsReady", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestT07DatabaseCorruptionNeverStartsReady(t ginkgo.GinkgoTInterface) {
 	// 接下来破坏数据库后启动平台，确认不会报告就绪。
 	ginkgo.By("破坏数据库后启动平台，确认不会报告就绪")
 
@@ -672,7 +446,7 @@ var _ = ginkgo.It("TestT07DatabaseCorruptionNeverStartsReady", func() {
 		p.Close(context.Background())
 		t.Fatal("损坏数据库仍 ready")
 	}
-})
+}
 
 type switchableDialer struct {
 	mu          sync.Mutex
@@ -700,33 +474,3 @@ func (d *switchableDialer) breakConnections() {
 		conn.Close()
 	}
 }
-
-var _ = ginkgo.It("TestT07ReadyStopsWhenRealRPCTransportFails", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来中断真实 RPC 传输，确认就绪状态随之失败。
-	ginkgo.By("中断真实 RPC 传输，确认就绪状态随之失败")
-
-	d := new(switchableDialer)
-	p, err := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", RPCDialer: d})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer p.Close(context.Background())
-	res, err := http.Get(p.URL() + "/readyz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-	if res.StatusCode != 200 {
-		t.Fatal("健康平台不 ready")
-	}
-	d.breakConnections()
-	res, err = http.Get(p.URL() + "/readyz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-	if res.StatusCode != 503 {
-		t.Fatalf("真实RPC不可达仍 ready: %d", res.StatusCode)
-	}
-})

@@ -74,8 +74,8 @@ func assertProjectionSafe(t ginkgo.GinkgoTInterface, area string, value any, mar
 }
 
 // PROJECTION013经真实HTTP→生成Kitex→SQLite及TLS目标检验失败关闭；DB检查属于已批准的秘密不落盘边界。
-var _ = ginkgo.It("TestAgentMalformedURLReadProjection", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentMalformedURLReadProjection(t ginkgo.GinkgoTInterface) {
 	// 接下来PROJECTION013经真实HTTP→生成Kitex→SQLite及TLS目标检验失败关闭；DB检查属于已批准的秘密不落盘边界。
 	ginkgo.By("PROJECTION013经真实HTTP→生成Kitex→SQLite及TLS目标检验失败关闭；DB检查属于已批准的秘密不落盘边界。")
 
@@ -370,7 +370,7 @@ var _ = ginkgo.It("TestAgentMalformedURLReadProjection", func() {
 			projectionSchema7Restart(t, dir, id, outsideID, cookie, legacy, rawManaged, legacyRuntime, markers, logger)
 		})
 	}
-})
+}
 
 // projectionSchema7Restart 用真实旧cache验证数据迁移、失败原子性和离线首次HTTP/RPC响应。
 func projectionSchema7Restart(t ginkgo.GinkgoTInterface, dir, id, outside string, cookie *http.Cookie, legacy, rawManaged, legacyRuntime []byte, markers []string, logger *slog.Logger) {

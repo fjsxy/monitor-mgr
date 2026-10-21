@@ -35,3 +35,8 @@ func (h rpcBudgetMeta) WriteMeta(ctx context.Context, msg remote.Message) (conte
 }
 
 var budgetClientMeta remote.MetaHandler = rpcBudgetMeta{MetaHandler: transmeta.ClientTTHeaderHandler}
+
+// boundedRPCContext 不信任客户端 timeout metadata；服务端独立限制最多 10 秒。
+func boundedRPCContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, 10*time.Second)
+}

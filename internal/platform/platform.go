@@ -128,7 +128,7 @@ func Start(ctx context.Context, cfg Config) (p *Runtime, err error) {
 	p.rpc = controlservice.NewServer(store, server.WithListener(rpcLn), server.WithExitWaitTime(time.Second), server.WithMetaHandler(transmeta.ServerTTHeaderHandler), server.WithEnableContextTimeout(true), server.WithMiddleware(func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, req, resp any) error {
 			// 关键：无超时元信息的直接RPC也最多10秒；已传入的更短预算继续收窄。
-			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			ctx, cancel := boundedRPCContext(ctx)
 			defer cancel()
 			if !store.Accepting() {
 				// 关键：通过生成Result的声明异常返回业务拒绝，不能把退出包装成transport错误。

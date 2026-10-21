@@ -12,8 +12,8 @@ import (
 )
 
 // P14.policy-pending：真实HTTP/Kitex读取实际ST采用状态，不能仅凭CR策略打开删除预览。
-var _ = ginkgo.It("TestAgentStorageDeletePreviewRequiresAdoptedPolicy", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageDeletePreviewRequiresAdoptedPolicy(t ginkgo.GinkgoTInterface) {
 	// 接下来P14.policy-pending：真实HTTP/Kitex读取实际ST采用状态，不能仅凭CR策略打开删除预览。
 	ginkgo.By("P14.policy-pending：真实HTTP/Kitex读取实际ST采用状态，不能仅凭CR策略打开删除预览。")
 
@@ -69,11 +69,11 @@ var _ = ginkgo.It("TestAgentStorageDeletePreviewRequiresAdoptedPolicy", func() {
 	if !exists {
 		t.Fatal("预览产生删除副作用")
 	}
-})
+}
 
 // 不完整的辅助列表必须保存读取错误，不能把缺items当成已经没有卷。
-var _ = ginkgo.It("TestAgentStorageIncompleteListRemainsUnknown", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageIncompleteListRemainsUnknown(t ginkgo.GinkgoTInterface) {
 	// 接下来不完整的辅助列表必须保存读取错误，不能把缺items当成已经没有卷。
 	ginkgo.By("不完整的辅助列表必须保存读取错误，不能把缺items当成已经没有卷。")
 
@@ -107,11 +107,11 @@ var _ = ginkgo.It("TestAgentStorageIncompleteListRemainsUnknown", func() {
 		}
 	}
 	t.Fatal("PVC来源未保留独立错误")
-})
+}
 
 // A06：首次emptyDir不依赖StorageClass，也不能把PVC模板或保留策略写入CR。
-var _ = ginkgo.It("TestAgentStorageEmptyDirDoesNotRequirePVCClass", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageEmptyDirDoesNotRequirePVCClass(t ginkgo.GinkgoTInterface) {
 	// 接下来A06：首次emptyDir不依赖StorageClass，也不能把PVC模板或保留策略写入CR。
 	ginkgo.By("A06：首次emptyDir不依赖StorageClass，也不能把PVC模板或保留策略写入CR。")
 
@@ -147,11 +147,11 @@ var _ = ginkgo.It("TestAgentStorageEmptyDirDoesNotRequirePVCClass", func() {
 	}
 	changed := agentConfig("ephemeral-agent", "monitoring")
 	clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": changed}, c, "change-mode", 409)
-})
+}
 
 // REG20-STORAGE-001.orphan：孤卷没有ownerRef也不能被新Agent确定名称自动挂载。
-var _ = ginkgo.It("TestAgentStorageNewInstanceRejectsOrphanClaim", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageNewInstanceRejectsOrphanClaim(t ginkgo.GinkgoTInterface) {
 	// 接下来REG20-STORAGE-001.orphan：孤卷没有ownerRef也不能被新Agent确定名称自动挂载。
 	ginkgo.By("REG20-STORAGE-001.orphan：孤卷没有ownerRef也不能被新Agent确定名称自动挂载。")
 
@@ -176,11 +176,11 @@ var _ = ginkgo.It("TestAgentStorageNewInstanceRejectsOrphanClaim", func() {
 	if created {
 		t.Fatal("碰撞后仍创建候选Agent")
 	}
-})
+}
 
 // R03.agent-zero：适用当前generation的零副本status可合法省略计数字段，不能推断仍在运行。
-var _ = ginkgo.It("TestR03AgentZeroUsesApplicableStatus", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestR03AgentZeroUsesApplicableStatus(t ginkgo.GinkgoTInterface) {
 	// 接下来R03.agent-zero：适用当前generation的零副本status可合法省略计数字段，不能推断仍在运行。
 	ginkgo.By("R03.agent-zero：适用当前generation的零副本status可合法省略计数字段，不能推断仍在运行。")
 
@@ -209,11 +209,11 @@ var _ = ginkgo.It("TestR03AgentZeroUsesApplicableStatus", func() {
 			}
 		})
 	}
-})
+}
 
 // 已确认原UID卷在父资源消失后仍单独读取；同名新UID不能取代历史身份。
-var _ = ginkgo.It("TestAgentStorageRetainedIdentitySurvivesParents", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageRetainedIdentitySurvivesParents(t ginkgo.GinkgoTInterface) {
 	// 接下来已确认原UID卷在父资源消失后仍单独读取；同名新UID不能取代历史身份。
 	ginkgo.By("已确认原UID卷在父资源消失后仍单独读取；同名新UID不能取代历史身份。")
 
@@ -290,7 +290,7 @@ var _ = ginkgo.It("TestAgentStorageRetainedIdentitySurvivesParents", func() {
 	if replaced["error"] == "" || replaced["historical"] != true {
 		t.Fatal("同名新UID被认领", replaced)
 	}
-})
+}
 
 // storageVolumes把合法空列表作为空集断言，避免缺失字段导致测试panic。
 func storageVolumes(source map[string]any) []any { v, _ := source["volumes"].([]any); return v }
@@ -298,8 +298,8 @@ func storageVolumes(source map[string]any) []any { v, _ := source["volumes"].([]
 const dropAgentStorageSchema = `ALTER TABLE publication_previews DROP COLUMN storage_fingerprint;DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
 
 // A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。
-var _ = ginkgo.It("TestAgentStorageDangerRequiresAdoptedPolicy", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageDangerRequiresAdoptedPolicy(t ginkgo.GinkgoTInterface) {
 	// 接下来A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。
 	ginkgo.By("A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。")
 
@@ -362,11 +362,11 @@ var _ = ginkgo.It("TestAgentStorageDangerRequiresAdoptedPolicy", func() {
 			clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 3}, c, "", 409)
 		})
 	}
-})
+}
 
 // REG20-STORAGE-002：实例完成与逐卷任务独立；未知/Delete待核验保留凭据责任，合法Retain不阻塞集群变更。
-var _ = ginkgo.It("TestAgentStorageResponsibilityOutlivesInstance", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageResponsibilityOutlivesInstance(t ginkgo.GinkgoTInterface) {
 	// 接下来REG20-STORAGE-002：实例完成与逐卷任务独立；未知/Delete待核验保留凭据责任，合法Retain不阻塞集群变更。
 	ginkgo.By("REG20-STORAGE-002：实例完成与逐卷任务独立；未知/Delete待核验保留凭据责任，合法Retain不阻塞集群变更。")
 
@@ -500,11 +500,11 @@ var _ = ginkgo.It("TestAgentStorageResponsibilityOutlivesInstance", func() {
 			})
 		}
 	}
-})
+}
 
 // REG20-STORAGE-003：每种影响事实独立注入，ST新UID负例保持安全guard仍可通过。
-var _ = ginkgo.It("TestAgentStoragePreviewImpact", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStoragePreviewImpact(t ginkgo.GinkgoTInterface) {
 	// 接下来REG20-STORAGE-003：每种影响事实独立注入，ST新UID负例保持安全guard仍可通过。
 	ginkgo.By("REG20-STORAGE-003：每种影响事实独立注入，ST新UID负例保持安全guard仍可通过。")
 
@@ -619,11 +619,11 @@ var _ = ginkgo.It("TestAgentStoragePreviewImpact", func() {
 			}
 		})
 	}
-})
+}
 
 // REG20-STORAGE-004：ST ownerRef在保留ST的挂起中合法，删ST时却明确受whenDeleted=Delete控制。
-var _ = ginkgo.It("TestAgentStorageIndependentOwnerPolicy", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageIndependentOwnerPolicy(t ginkgo.GinkgoTInterface) {
 	// 接下来REG20-STORAGE-004：ST ownerRef在保留ST的挂起中合法，删ST时却明确受whenDeleted=Delete控制。
 	ginkgo.By("REG20-STORAGE-004：ST ownerRef在保留ST的挂起中合法，删ST时却明确受whenDeleted=Delete控制。")
 
@@ -805,4 +805,4 @@ var _ = ginkgo.It("TestAgentStorageIndependentOwnerPolicy", func() {
 			}
 		})
 	}
-})
+}

@@ -430,4 +430,4 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit("旧 profile 入口已退出；使用 make ut / make e2e。历史结果不可改写为新清单通过。")

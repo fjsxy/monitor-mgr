@@ -28,8 +28,28 @@ func (h observedBudgetMeta) WriteMeta(ctx context.Context, msg remote.Message) (
 }
 
 // R06的codec边界：不足1ms时在TTHeader编码前拒绝，不能发出0代表无限预算。
-var _ = ginkgo.It("TestR06WorkbenchSubmillisecondBudget", func() {
-	t := ginkgo.GinkgoT()
+func BudgetBoundaryForTest(t ginkgo.GinkgoTInterface) {
+	// 接下来直接检查服务端上限与继承的更短预算，只有一个网络请求另做实际计时。
+	for _, duration := range []time.Duration{0, 100000 * time.Second, 2 * time.Second} {
+		parent := context.Background()
+		cancelParent := func() {}
+		if duration > 0 {
+			parent, cancelParent = context.WithTimeout(parent, duration)
+		}
+		bounded, cancel := boundedRPCContext(parent)
+		deadline, ok := bounded.Deadline()
+		limit := 10 * time.Second
+		if duration > 0 && duration < limit {
+			limit = duration
+		}
+		remaining := time.Until(deadline)
+		if !ok || remaining > limit || remaining < limit-time.Second {
+			t.Fatal("服务端预算不符", duration, remaining)
+		}
+		cancel()
+		cancelParent()
+	}
+
 	// 接下来R06的codec边界：不足1ms时在TTHeader编码前拒绝，不能发出0代表无限预算。
 	ginkgo.By("R06的codec边界：不足1ms时在TTHeader编码前拒绝，不能发出0代表无限预算。")
 
@@ -61,4 +81,4 @@ var _ = ginkgo.It("TestR06WorkbenchSubmillisecondBudget", func() {
 	case <-time.After(time.Second):
 		t.Fatal("请求没有进入真实TTHeader编码边界")
 	}
-})
+}

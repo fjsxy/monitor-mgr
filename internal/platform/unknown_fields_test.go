@@ -30,8 +30,8 @@ func injectUnknownWireField(t ginkgo.GinkgoTInterface, value thrift.FastCodec) {
 }
 
 // F03 同时约束 HTTP 与真实 generated client→Kitex server，不把反序列化丢字段当作拒绝。
-var _ = ginkgo.It("TestF03KSMUnknownFieldsHTTPAndRPC", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestF03KSMUnknownFieldsHTTPAndRPC(t ginkgo.GinkgoTInterface) {
 	// 接下来F03 同时约束 HTTP 与真实 generated client→Kitex server，不把反序列化丢字段当作拒绝。
 	ginkgo.By("F03 同时约束 HTTP 与真实 generated client→Kitex server，不把反序列化丢字段当作拒绝。")
 
@@ -167,4 +167,4 @@ var _ = ginkgo.It("TestF03KSMUnknownFieldsHTTPAndRPC", func() {
 	if target.writes != 0 {
 		t.Fatal("未知字段请求产生了集群写入")
 	}
-})
+}

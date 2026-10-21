@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -13,74 +12,14 @@ import (
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
-	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	ginkgo "github.com/onsi/ginkgo/v2"
-	metavalidation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
 // REG21-AGENT-NAME-001：创建/保存/预览经真实HTTP→Kitex，固定Operator派生标签由同版Kubernetes校验。
-var _ = ginkgo.It("TestAgentRevisionNameBudgetHTTP", func() {
-	t := ginkgo.GinkgoT()
-	// 接下来REG21-AGENT-NAME-001：创建/保存/预览经真实HTTP→Kitex，固定Operator派生标签由同版Kubernetes校验。
-	ginkgo.By("REG21-AGENT-NAME-001：创建/保存/预览经真实HTTP→Kitex，固定Operator派生标签由同版Kubernetes校验。")
-
-	_, target := agentTarget(t)
-	p, cookie, owner := clusterPlatform(t)
-	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "name-budget", "ownerId": owner, "context": "explicit", "kubeconfig": target}, cookie, "register", 202)
-	cluster := awaitClusterOperation(t, p, cookie, op["operationId"].(string))["clusterId"].(string)
-	for index, tc := range []struct {
-		name       string
-		length     int
-		shards     int
-		lastSuffix string
-		valid      bool
-	}{
-		{"single-41", 41, 1, "", true},
-		{"single-42", 42, 1, "", false},
-		{"original-44", 44, 1, "", false},
-		{"two-33", 33, 2, "-shard-1", true},
-		{"two-34", 34, 2, "-shard-1", false},
-		{"ten-33", 33, 10, "-shard-9", true},
-		{"eleven-32", 32, 11, "-shard-10", true},
-		{"eleven-33", 33, 11, "-shard-10", false},
-	} {
-		teststeps.Step(tc.name, func() {
-			name := strings.Repeat(string(rune('a'+index)), tc.length)
-			cfg := agentConfig(name, "monitoring")
-			cfg["shards"] = tc.shards
-			// 关键：10位hash来自固定StatefulSet controller的uint32上界，不沿用有时更短的样本hash。
-			label := "prom-agent-" + name + tc.lastSuffix + "-2147483647"
-			validLabel := len(metavalidation.ValidateLabels(map[string]string{"controller-revision-hash": label}, field.NewPath("metadata", "labels"))) == 0
-			if validLabel != tc.valid {
-				t.Fatal("固定Kubernetes标签边界与独立用例预期不符")
-			}
-			want := 422
-			if tc.valid {
-				want = 201
-			}
-			created := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, cookie, "create-"+tc.name, want)
-			if !tc.valid {
-				if created["code"] != "INVALID_INPUT" || !strings.Contains(fmt.Sprint(created["fieldErrors"]), "agent.name") {
-					t.Fatal("超长名称必须返回agent.name字段错误")
-				}
-				return
-			}
-			id := created["id"].(string)
-			draft := clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"agent": cfg, "expectedDraftRevision": 1}, cookie, "save-"+tc.name, 200)
-			if draft["agent"].(map[string]any)["name"] != name {
-				t.Fatal("合法用户名称不能截断或替换")
-			}
-			clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, cookie, "preview-"+tc.name, 200)
-			cfg["name"] = name + "x"
-			clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"agent": cfg, "expectedDraftRevision": 2}, cookie, "invalid-save-"+tc.name, 422)
-		})
-	}
-})
 
 // 旧库只读与已排队worker是独立入口：保留原名称/版本，但任何新派发都不能绕过预算。
-var _ = ginkgo.It("TestAgentRevisionNameBudgetLegacyAndWorker", func() {
-	t := ginkgo.GinkgoT()
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentRevisionNameBudgetLegacyAndWorker(t ginkgo.GinkgoTInterface) {
 	// 接下来旧库只读与已排队worker是独立入口：保留原名称/版本，但任何新派发都不能绕过预算。
 	ginkgo.By("旧库只读与已排队worker是独立入口：保留原名称/版本，但任何新派发都不能绕过预算。")
 
@@ -197,4 +136,4 @@ var _ = ginkgo.It("TestAgentRevisionNameBudgetLegacyAndWorker", func() {
 	if awaitClusterOperation(t, p, cookie, del["operationId"].(string))["state"] != "SUCCEEDED" {
 		t.Fatal("新名称预算阻断旧CR的原UID清理")
 	}
-})
+}

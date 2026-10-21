@@ -1,0 +1,4 @@
+image: monitor-mgr:development
+imagePullPolicy: IfNotPresent
+source: development
+runId: local
