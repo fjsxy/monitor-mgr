@@ -1,5 +1,7 @@
 # 一期验收入口
 
+新的[UT/E2E 精简清单](test-plan.md)拟收敛为 18 个 UT、10 个 E2E，正在评审。本轮只调整方案；本页以下内容与 [ci-cases.md](ci-cases.md) 仍描述当前实际入口。
+
 固定目录为 `phase1.json`：`LOCAL_FULL` 207 键、`CI_FAST` 58 键、`CI_SMOKE` 17 键，共 282 个 profile 执行键。`--supplemental` 单独选择 `LOCAL_FULL` 的 104 个补充层键，不替代固定用例。完整步骤与期望见 `../e2e/issue-21.md`。
 
 正式运行前，由独立集成得到唯一干净候选 C。checkout、runner、平台及应用屏障镜像均使用 C；修改任何代码后重新冻结候选并执行该候选完整门禁。原组件收据和 `--focus` 诊断不能包装成最终 C 通过。
