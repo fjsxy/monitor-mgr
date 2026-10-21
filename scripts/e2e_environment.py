@@ -75,6 +75,16 @@ class Environment:
     def get(self, role, *args):
         return json.loads(self.k(role, 'get', *args, '-o', 'json').stdout)
 
+    def built_config(self,image,revision,inspect,label):
+        # 关键：inspect.Id 可能是 manifest；只用原 docker-save Config 字节的 SHA256 绑定实际 CRI config。
+        from image_provenance import read_docker_archive
+        path=self.private/(label+'.tar')
+        try:
+            self.command(['docker','save','--output',path,image],'save-'+label,timeout=180);os.chmod(path,0o600)
+            proof=read_docker_archive(path,image=image,expected_source=revision,platform=self.platform,inspect=inspect,destination=self.private/(label+'-metadata'))
+            return proof['configDigest']
+        finally:path.unlink(missing_ok=True)
+
     def verify_container(self,pod,container,expected_config):
         # 关键：绑定真实 Pod UID、容器 ID 与 CRI 实际 config，不能仅凭镜像 tag 或部署 annotation 宣称同源。
         node=pod['spec']['nodeName'];assert node in {n['metadata']['name'] for t in self.targets.values() for n in t['nodes']}
@@ -158,9 +168,9 @@ class Environment:
         self.command([*build,'--build-context','monitorop_go='+contexts['monitorop_go'],'-f',path,'-t',self.operator_image,source],'build-operator',timeout=1200)
         proof=json.loads(self.command(['docker','image','inspect',self.image],'platform-image-source').stdout)[0]
         assert proof['Config']['Labels']['org.opencontainers.image.revision']==self.candidate and proof['Architecture']==self.platform.split('/')[1]
-        self.platform_config=proof['Id']
+        self.platform_config=self.built_config(self.image,self.candidate,proof,'platform-image')
         operator=json.loads(self.command(['docker','image','inspect',self.operator_image],'operator-image-source').stdout)[0]
-        assert operator['Config']['Labels']['org.opencontainers.image.revision']==LOCK['monitorOp']['source'];self.operator_config=operator['Id']
+        assert operator['Config']['Labels']['org.opencontainers.image.revision']==LOCK['monitorOp']['source'];self.operator_config=self.built_config(self.operator_image,LOCK['monitorOp']['source'],operator,'operator-image')
         private_json(self.public/'images.json',dict(candidate=self.candidate,platformImage=self.image,configDigest=self.platform_config,platform=self.platform,operatorSource=LOCK['monitorOp']['source'],operatorConfigDigest=self.operator_config))
 
     def load_images(self):
