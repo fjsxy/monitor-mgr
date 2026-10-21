@@ -20,14 +20,18 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // TestWorkbenchBrowserFixture 仅提供受控TLS目标上的真实Host应用诊断，不访问真实集群或计入Pod B。
-func TestWorkbenchBrowserFixture(t *testing.T) {
+var _ = ginkgo.It("TestWorkbenchBrowserFixture", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来TestWorkbenchBrowserFixture 仅提供受控TLS目标上的真实Host应用诊断，不访问真实集群或计入Pod B。
+	ginkgo.By("TestWorkbenchBrowserFixture 仅提供受控TLS目标上的真实Host应用诊断，不访问真实集群或计入Pod B。")
+
 	path := os.Getenv("WORKBENCH_HOST_FIXTURE")
 	stop := os.Getenv("WORKBENCH_HOST_STOP")
 	if path == "" || stop == "" {
@@ -194,10 +198,10 @@ func TestWorkbenchBrowserFixture(t *testing.T) {
 			t.Fatal("Host诊断生命周期超时，已清理")
 		}
 	}
-}
+})
 
 // 私有故障控制仅作用于受控TLS目标；业务HTTP/RPC与SQLite均为真实平台，dryRun保持可用。
-func workbenchControlledTarget(t *testing.T, target, token string) (string, map[string]any) {
+func workbenchControlledTarget(t ginkgo.GinkgoTInterface, target, token string) (string, map[string]any) {
 	t.Helper()
 	var cfg map[string]any
 	if json.Unmarshal([]byte(target), &cfg) != nil {

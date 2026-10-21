@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // 安全回归使用同一真实HTTP/Kitex/SQLite边界，派发屏障不冒充网络超时。
-func agentSafetyFixture(t *testing.T, boundary func(string, string) error) (*platform.Runtime, *http.Cookie, string, string, *agentFixture) {
+func agentSafetyFixture(t ginkgo.GinkgoTInterface, boundary func(string, string) error) (*platform.Runtime, *http.Cookie, string, string, *agentFixture) {
 	t.Helper()
 	f, target := agentTarget(t)
 	dir := t.TempDir()
@@ -33,7 +33,11 @@ func agentSafetyFixture(t *testing.T, boundary func(string, string) error) (*pla
 }
 
 // REG18-FIXED-008：首次受理后保存新容量，成功回读后必须在预览和确认再次拒绝。
-func TestAgentFixedCapacityRevalidated(t *testing.T) {
+var _ = ginkgo.It("TestAgentFixedCapacityRevalidated", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG18-FIXED-008：首次受理后保存新容量，成功回读后必须在预览和确认再次拒绝。
+	ginkgo.By("REG18-FIXED-008：首次受理后保存新容量，成功回读后必须在预览和确认再次拒绝。")
+
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once, released sync.Once
 	p, c, cluster, _, f := agentSafetyFixture(t, func(stage, id string) error {
@@ -70,10 +74,14 @@ func TestAgentFixedCapacityRevalidated(t *testing.T) {
 	if capacity != "1Gi" {
 		t.Fatal("已创建容量被在途草稿改写")
 	}
-}
+})
 
 // 可能已发但尚无UID时也锁定版本容量，不能等到首次成功回读后才建立约束。
-func TestAgentFixedCapacityPossiblySent(t *testing.T) {
+var _ = ginkgo.It("TestAgentFixedCapacityPossiblySent", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来可能已发但尚无UID时也锁定版本容量，不能等到首次成功回读后才建立约束。
+	ginkgo.By("可能已发但尚无UID时也锁定版本容量，不能等到首次成功回读后才建立约束。")
+
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once, released sync.Once
 	p, c, cluster, _, _ := agentSafetyFixture(t, func(stage, id string) error {
@@ -100,10 +108,14 @@ func TestAgentFixedCapacityPossiblySent(t *testing.T) {
 	if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
 		t.Fatal("原冻结版本发布失败")
 	}
-}
+})
 
 // REG18-HEADERS-009：合法Agent remoteWrite.headers任意值必须投影脱敏，原值仍参与漂移指纹。
-func TestAgentHeadersReadProjection(t *testing.T) {
+var _ = ginkgo.It("TestAgentHeadersReadProjection", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG18-HEADERS-009：合法Agent remoteWrite.headers任意值必须投影脱敏，原值仍参与漂移指纹。
+	ginkgo.By("REG18-HEADERS-009：合法Agent remoteWrite.headers任意值必须投影脱敏，原值仍参与漂移指纹。")
+
 	p, c, cluster, dir, f := agentSafetyFixture(t, nil)
 	i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": agentConfig("headers", "monitoring")}, c, "create", 201)
 	id := i["id"].(string)
@@ -207,4 +219,4 @@ func TestAgentHeadersReadProjection(t *testing.T) {
 	if publicationJSONDocument(t, finalRaw)["metadata"].(map[string]any)["annotations"].(map[string]any)["preserve"] != "metadata-original" {
 		t.Fatal("脱敏改写目标metadata")
 	}
-}
+})

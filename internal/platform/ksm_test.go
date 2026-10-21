@@ -2,38 +2,35 @@ package platform_test
 
 import (
 	"bytes"
-	"log/slog"
-
-	"github.com/cloudwego/kitex/client"
-	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
-	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
-
-	"errors"
-	"os/exec"
-
+	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"context"
-	"database/sql"
-	"os"
-	"path/filepath"
-
+	"github.com/cloudwego/kitex/client"
 	"github.com/fjsxy/monitor-mgr/internal/platform"
-	"net/http"
-	"testing"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
+	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 func ksmConfig(name string) map[string]any {
 	return map[string]any{"name": name, "targetNamespace": "monitoring", "deploymentMode": "Deployment", "desiredState": "Running", "resources": map[string]any{"requestCPU": "100m", "requestMemory": "250Mi", "limitMemory": "500Mi"}, "collectors": map[string]any{"mode": "Default"}, "metricFilter": map[string]any{"mode": "All"}, "namespaceFilter": map[string]any{"mode": "All"}, "advancedResources": false}
 }
-func ksmCluster(t *testing.T) (*platform.Runtime, *http.Cookie, string) {
+func ksmCluster(t ginkgo.GinkgoTInterface) (*platform.Runtime, *http.Cookie, string) {
 	t.Helper()
 	_, cfg, _ := clusterAPI(t, 200, false)
 	p, c, owner := clusterPlatform(t)
@@ -58,7 +55,11 @@ func (b *ksmLogBuffer) Write(p []byte) (int, error) {
 }
 func (b *ksmLogBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.buffer.String() }
 
-func TestK10DraftNameAndRevision(t *testing.T) {
+var _ = ginkgo.It("TestK10DraftNameAndRevision", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来创建并更新 KSM 草稿，核验名称与 revision 并发保护。
+	ginkgo.By("创建并更新 KSM 草稿，核验名称与 revision 并发保护")
+
 	p, c, cluster := ksmCluster(t)
 	for _, name := range []string{"", "中文", "invalid_foo", "-foo"} {
 		clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": ksmConfig(name)}, c, "bad-"+name, 422)
@@ -84,9 +85,13 @@ func TestK10DraftNameAndRevision(t *testing.T) {
 	if copy["ksm"].(map[string]any)["name"] != "" {
 		t.Fatal("复制不得复用CR身份")
 	}
-}
+})
 
-func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
+var _ = ginkgo.It("TestF04EncryptedSchema3WrongKeyDoesNotMigrate", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来用错误密钥打开旧加密数据库，确认拒绝迁移。
+	ginkgo.By("用错误密钥打开旧加密数据库，确认拒绝迁移")
+
 	_, config, _ := clusterAPI(t, 200, false)
 	dir := t.TempDir()
 	cfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
@@ -137,7 +142,7 @@ func TestF04EncryptedSchema3WrongKeyDoesNotMigrate(t *testing.T) {
 	}
 	defer restored.Close(context.Background())
 	clusterCall(t, restored, "GET", "/clusters", nil, c, "", 200)
-}
+})
 
 type ksmFixture struct {
 	identityGate        chan struct{}
@@ -176,7 +181,7 @@ type ksmFixture struct {
 	readOnce            sync.Once
 }
 
-func ksmTarget(t *testing.T) (*ksmFixture, string) {
+func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 	t.Helper()
 	base, _, _ := clusterAPI(t, 200, false)
 	f := &ksmFixture{}
@@ -394,7 +399,7 @@ func ksmTarget(t *testing.T) (*ksmFixture, string) {
 	f.targetConfiguration = `{"clusters":[{"name":"t","cluster":{"server":"` + srv.URL + `","certificate-authority-data":"` + pem + `"}}],"users":[{"name":"u","user":{"token":"fixture"}}],"contexts":[{"name":"explicit","context":{"cluster":"t","user":"u"}}]}`
 	return f, f.targetConfiguration
 }
-func ksmPublishedFixture(t *testing.T) (*platform.Runtime, *http.Cookie, string, *ksmFixture) {
+func ksmPublishedFixture(t ginkgo.GinkgoTInterface) (*platform.Runtime, *http.Cookie, string, *ksmFixture) {
 	t.Helper()
 	f, cfg := ksmTarget(t)
 	p, c, owner := clusterPlatform(t)
@@ -406,10 +411,15 @@ func ksmPublishedFixture(t *testing.T) (*platform.Runtime, *http.Cookie, string,
 	created := clusterCall(t, p, "POST", "/clusters/"+op["clusterId"].(string)+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": ksmConfig("instance")}, c, "new", 201)
 	return p, c, created["id"].(string), f
 }
-func ksmPreview(t *testing.T, p *platform.Runtime, c *http.Cookie, id string, rev int) map[string]any {
+func ksmPreview(t ginkgo.GinkgoTInterface, p *platform.Runtime, c *http.Cookie, id string, rev int) map[string]any {
 	return clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": rev}, c, "preview", 200)
 }
-func TestP02PublicationFreezesSourceAndP03Idempotency(t *testing.T) {
+
+var _ = ginkgo.It("TestP02PublicationFreezesSourceAndP03Idempotency", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来发布草稿后继续编辑并重试，核验冻结版本与幂等。
+	ginkgo.By("发布草稿后继续编辑并重试，核验冻结版本与幂等")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	preview := ksmPreview(t, p, c, id, 1)
 	body := map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}
@@ -453,9 +463,13 @@ func TestP02PublicationFreezesSourceAndP03Idempotency(t *testing.T) {
 	if f.writes != 1 {
 		t.Fatal(f.writes)
 	}
-}
+})
 
-func TestExternalKSMReadOnlyAndFailedList(t *testing.T) {
+var _ = ginkgo.It("TestExternalKSMReadOnlyAndFailedList", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来发现外部 KSM 并注入列表失败，核验只读与错误边界。
+	ginkgo.By("发现外部 KSM 并注入列表失败，核验只读与错误边界")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	managed := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
 	cluster := managed["clusterId"].(string)
@@ -481,9 +495,13 @@ func TestExternalKSMReadOnlyAndFailedList(t *testing.T) {
 	if len(clusterCall(t, p, "GET", "/instances/"+ext+"/versions", nil, c, "", 200)["versions"].([]any)) != 0 {
 		t.Fatal("外部实例伪造发布历史")
 	}
-}
+})
 
-func TestP04DraftAndTargetPreviewRaces(t *testing.T) {
+var _ = ginkgo.It("TestP04DraftAndTargetPreviewRaces", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来预览后分别修改草稿与目标，确认旧预览不能发布。
+	ginkgo.By("预览后分别修改草稿与目标，确认旧预览不能发布")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	old := ksmPreview(t, p, c, id, 1)
 	cfg := ksmConfig("instance")
@@ -501,8 +519,12 @@ func TestP04DraftAndTargetPreviewRaces(t *testing.T) {
 	f.cr["spec"].(map[string]any)["suspended"] = true
 	f.mu.Unlock()
 	clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": stale["previewId"], "draftRevision": 2, "overwriteDrift": true}, c, "target-race", 409)
-}
-func TestP05DriftOverwritePreservesMetadataAndP06Equivalent(t *testing.T) {
+})
+var _ = ginkgo.It("TestP05DriftOverwritePreservesMetadataAndP06Equivalent", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来覆盖配置漂移并比较等价配置，核验元数据保留。
+	ginkgo.By("覆盖配置漂移并比较等价配置，核验元数据保留")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	p1 := ksmPreview(t, p, c, id, 1)
 	b := map[string]any{"previewId": p1["previewId"], "draftRevision": 1, "overwriteDrift": false}
@@ -583,9 +605,13 @@ func TestP05DriftOverwritePreservesMetadataAndP06Equivalent(t *testing.T) {
 			t.Fatal("RPC允许修改固定身份", e)
 		}
 	}
-}
+})
 
-func TestF05PublicationCrashBoundaries(t *testing.T) {
+var _ = ginkgo.It("TestF05PublicationCrashBoundaries", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来在事务提交前后模拟崩溃，核验发布任务恢复边界。
+	ginkgo.By("在事务提交前后模拟崩溃，核验发布任务恢复边界")
+
 	if stage := os.Getenv("MM_F05_STAGE"); stage != "" {
 		p, e := platform.Start(context.Background(), platform.Config{DataDir: os.Getenv("MM_F05_DIR"), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", OperationBoundary: func(s, id string) error {
 			if s == stage {
@@ -602,7 +628,7 @@ func TestF05PublicationCrashBoundaries(t *testing.T) {
 		return
 	}
 	for _, stage := range []string{"beforeAcceptanceCommit", "afterAcceptanceCommit"} {
-		t.Run(stage, func(t *testing.T) {
+		teststeps.Step(stage, func() {
 			f, target := ksmTarget(t)
 			dir := t.TempDir()
 			cfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
@@ -619,7 +645,7 @@ func TestF05PublicationCrashBoundaries(t *testing.T) {
 			id := i["id"].(string)
 			preview := ksmPreview(t, p, c, id, 1)
 			p.Close(context.Background())
-			cmd := exec.Command(os.Args[0], "-test.run=^TestF05PublicationCrashBoundaries$")
+			cmd := exec.Command(os.Args[0], "-test.run=^TestPlatform$", "-ginkgo.focus=(^| )TestF05PublicationCrashBoundaries$", "-ginkgo.fail-on-empty")
 			cmd.Env = append(os.Environ(), "MM_F05_STAGE="+stage, "MM_F05_DIR="+dir, "MM_F05_INSTANCE="+id, "MM_F05_PREVIEW="+preview["previewId"].(string))
 			raw, e := cmd.CombinedOutput()
 			var exited *exec.ExitError
@@ -663,9 +689,13 @@ func TestF05PublicationCrashBoundaries(t *testing.T) {
 			}
 		})
 	}
-}
+})
 
-func TestF03KSMValidationThroughHTTPAndDirectRPC(t *testing.T) {
+var _ = ginkgo.It("TestF03KSMValidationThroughHTTPAndDirectRPC", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来从 HTTP 和直接 RPC 分别提交非法 KSM 输入，核验一致拒绝。
+	ginkgo.By("从 HTTP 和直接 RPC 分别提交非法 KSM 输入，核验一致拒绝")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
 	cluster := instance["clusterId"].(string)
@@ -712,7 +742,7 @@ func TestF03KSMValidationThroughHTTPAndDirectRPC(t *testing.T) {
 		{"invalid-name", func(x map[string]any) { x["name"] = "invalid_name" }},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		teststeps.Step(tc.name, func() {
 			cfg := ksmConfig("invalid")
 			tc.change(cfg)
 			out := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": cfg}, c, "invalid-"+tc.name, 422)
@@ -755,8 +785,12 @@ func TestF03KSMValidationThroughHTTPAndDirectRPC(t *testing.T) {
 	if f.writes != 0 {
 		t.Fatal("非法请求产生mutation")
 	}
-}
-func TestR03KSMEffectiveZeroValuesAndMissingStatus(t *testing.T) {
+})
+var _ = ginkgo.It("TestR03KSMEffectiveZeroValuesAndMissingStatus", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来分别构造 KSM 零副本、停用和无匹配状态，核验运行摘要。
+	ginkgo.By("分别构造 KSM 零副本、停用和无匹配状态，核验运行摘要")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	preview := ksmPreview(t, p, c, id, 1)
 	o := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"draftRevision": 1, "previewId": preview["previewId"], "overwriteDrift": false}, c, "publish", 202)
@@ -766,7 +800,7 @@ func TestR03KSMEffectiveZeroValuesAndMissingStatus(t *testing.T) {
 		t.Fatal(unknown)
 	}
 	for _, tc := range []struct{ name, desired, reason, phase, ready, summary string }{{"ksm-suspended", "Suspended", "Suspended", "Ready", "True", "Suspended"}, {"ksm-disabled", "Disabled", "Disabled", "Disabled", "False", "Disabled"}, {"ksm-no-match", "Running", "NoNamespaceMatched", "Ready", "True", "NoMatch"}} {
-		t.Run(tc.name, func(t *testing.T) {
+		teststeps.Step(tc.name, func() {
 			f.mu.Lock()
 			spec := f.cr["spec"].(map[string]any)
 			spec["enabled"] = tc.desired != "Disabled"
@@ -786,9 +820,13 @@ func TestR03KSMEffectiveZeroValuesAndMissingStatus(t *testing.T) {
 			}
 		})
 	}
-}
+})
 
-func TestF02KSMHTTPHasRealRPCAndCannotBypassUnavailableRPC(t *testing.T) {
+var _ = ginkgo.It("TestF02KSMHTTPHasRealRPCAndCannotBypassUnavailableRPC", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来关闭真实 RPC 传输，确认 HTTP 无法绕过 RPC 执行业务。
+	ginkgo.By("关闭真实 RPC 传输，确认 HTTP 无法绕过 RPC 执行业务")
+
 	d := new(switchableDialer)
 	var logs ksmLogBuffer
 	p, e := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", RPCDialer: d, Logger: slog.New(slog.NewJSONHandler(&logs, nil))})
@@ -813,9 +851,13 @@ func TestF02KSMHTTPHasRealRPCAndCannotBypassUnavailableRPC(t *testing.T) {
 	d.breakConnections()
 	request(t, p, "GET", "/clusters", "", c, 503)
 	request(t, p, "POST", "/clusters/forged-cluster/instances", `{"component":"kube-state-metrics","ksm":{}}`, c, 503)
-}
+})
 
-func TestPublicationPreflightDoesNotBlockCurrentAccountRevocation(t *testing.T) {
+var _ = ginkgo.It("TestPublicationPreflightDoesNotBlockCurrentAccountRevocation", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来在发布预检期间撤销账号权限，核验授权不被阻塞。
+	ginkgo.By("在发布预检期间撤销账号权限，核验授权不被阻塞")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	actor := readJSON(t, p, "/session", c)["account"].(map[string]any)["id"].(string)
 	clusterCall(t, p, "POST", "/accounts", map[string]any{"username": "other-admin", "password": "temporary-password", "role": "ADMIN"}, c, "other-admin", 201)
@@ -835,6 +877,7 @@ func TestPublicationPreflightDoesNotBlockCurrentAccountRevocation(t *testing.T) 
 	}
 	result := make(chan int, 1)
 	go func() {
+		defer ginkgo.GinkgoRecover()
 		req, _ := http.NewRequest("PATCH", p.URL()+"/api/v1/accounts/"+actor, strings.NewReader(`{"enabled":false}`))
 		req.AddCookie(other)
 		req.Header.Set("Origin", p.URL())
@@ -871,4 +914,4 @@ func TestPublicationPreflightDoesNotBlockCurrentAccountRevocation(t *testing.T) 
 	if timely && f.writes != 0 {
 		t.Fatal("撤权后仍产生KSM写")
 	}
-}
+})

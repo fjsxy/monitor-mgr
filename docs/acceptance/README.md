@@ -34,3 +34,26 @@ make acceptance-recover E2E_ARGS='--output <原外置目录> --environment-json 
 诊断导出始终 `productGate=false`，保留 failed/not_run/cleanup 结果及允许的闭合引用。独立恢复不修改原 index、ledger 或原件；创建 UID 缺失、替代 UID、读取失败、持久化失败均保留失败边界。环境清理另加 `--environment-only`，仅在安全证据已持久化并从新路径离线核验后，顺序清理原 owner 的目标集群。
 
 原 stdout/stderr、私有 Operator checkout、镜像 tar/层、数据库、kubeconfig、认证及 session 材料留在私有目录，不进入公开 console、cache 或 artifact。公开目录仅来自严格 exporter；远端 artifact 下载后再核原 digest 与离线完整性，不能上传整个 run 或 workspace。
+
+## Ginkgo 测试与 CI 清单
+
+Go 场景使用 Ginkgo v2 的 `It`，参数和连续操作使用 `By`；原 `Test...` 字符串仅作为稳定 selector。`GinkgoT` 负责现有断言及资源清理。撤销角色后再禁用账号等共享状态步骤保留执行顺序；子步骤完成标识写入原生报告，未完成的输入不能得到通过事件。框架接口见 [Ginkgo 官方文档](https://onsi.github.io/ginkgo/)。
+
+产品 K/B 场景由 `tests/e2e` 的每个 Ginkgo `It` 通过私有 Unix socket 请求一个原 Python/Playwright 场景。父 Session 保留同一独占 lane、UID 账本、子进程身份和清理责任；业务断言与原始浏览器报告继续核验。Python 验收工具自测保持 unittest。
+
+```sh
+make test
+make test-race                    # 同次检查 race 与至少 70% 产品语句覆盖率
+make ginkgo-adapter-check         # Host 合成回调，不建立真实集群通过结果
+make ci-cases                    # 用例或 CI 入口变化后重新生成
+make ci-cases-check
+make publication-yaml-check       # 原聚焦目标已切换为 Ginkgo focus
+make acceptance-list E2E_ARGS='--profile LOCAL_FULL --focus-owner 16 --focus-layer K B'
+make e2e-ksm E2E_ARGS='--profile LOCAL_FULL --candidate <C> --run-id <本次执行ID> --environment-json <私有环境请求绝对路径> --output <全新外置目录>'
+```
+
+`e2e-clusters/ksm/agent/lifecycle/workbench/agent-storage` 与 `web-e2e` 的产品场景入口统一使用 `run.py run` 参数，旧的直接场景脚本参数不再传给这些 Make target。可用 `--focus-owner` 选择原所属 Issue、`--focus-layer` 选择层、`--focus` 选择稳定键；交集为空立即拒绝。聚焦运行仍保留完整 expected index，不能当成完整 profile 通过。普通 Go UT 不准备集群，显式 Host 诊断与 E2E 环境入口保持跳过。
+
+覆盖率口径为手写产品包 `internal/control` 与 `internal/platform` 的合计语句覆盖率；生成代码、命令参数入口和验收工具不计入 UT 覆盖率。各包的原生报告落在其 `.scratch/ginkgo-report.json`；Q 和 K/B 正式运行的原报告留在本次 `.private`，公开证据仅保留安全的 selector 事件及逐例状态。
+
+[CI 用例与选取标准](ci-cases.md) 逐项列出全部 Go 场景、工具自测、58 个 Q 键和 17 个 Smoke 键。文档一致性检查已接入 `make check`；真实执行结果单独记录，文档本身不代表 CI 或集群验收已通过。

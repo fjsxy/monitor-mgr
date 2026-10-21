@@ -11,19 +11,24 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"testing"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // F04：精确v5旧库保留由HTTP/Kitex创建的密文、会话、固定版本、已成功历史和未发保护。
-func TestF04LifecycleSchema5Upgrade(t *testing.T) {
+var _ = ginkgo.It("TestF04LifecycleSchema5Upgrade", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来F04：精确v5旧库保留由HTTP/Kitex创建的密文、会话、固定版本、已成功历史和未发保护。
+	ginkgo.By("F04：精确v5旧库保留由HTTP/Kitex创建的密文、会话、固定版本、已成功历史和未发保护。")
+
 	for _, fail := range []bool{false, true} {
 		name := "success"
 		if fail {
 			name = "failure"
 		}
-		t.Run(name, func(t *testing.T) {
+		teststeps.Step(name, func() {
 			f, target := ksmTarget(t)
 			_ = f
 			dir := t.TempDir()
@@ -158,4 +163,4 @@ func TestF04LifecycleSchema5Upgrade(t *testing.T) {
 			}
 		})
 	}
-}
+})

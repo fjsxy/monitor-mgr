@@ -7,13 +7,19 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"testing"
 	"time"
+
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
-func TestReviewStorageScope(t *testing.T) {
+var _ = ginkgo.It("TestReviewStorageScope", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来逐项验证存储删除影响范围与保留策略。
+	ginkgo.By("逐项验证存储删除影响范围与保留策略")
+
 	for _, variant := range []string{"identity-failure", "pvc-success"} {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			f, target := agentTarget(t)
 			p, c, owner := clusterPlatform(t)
 			registration := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "storage-scope", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
@@ -125,7 +131,11 @@ func TestReviewStorageScope(t *testing.T) {
 			armed = true
 			mu.Unlock()
 			finished := make(chan struct{})
-			go func() { clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200); close(finished) }()
+			go func() {
+				defer ginkgo.GinkgoRecover()
+				clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+				close(finished)
+			}()
 			select {
 			case <-entered:
 			case <-time.After(2 * time.Second):
@@ -156,4 +166,4 @@ func TestReviewStorageScope(t *testing.T) {
 			}
 		})
 	}
-}
+})

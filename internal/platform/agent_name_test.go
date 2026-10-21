@@ -10,16 +10,21 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	ginkgo "github.com/onsi/ginkgo/v2"
 	metavalidation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
 // REG21-AGENT-NAME-001：创建/保存/预览经真实HTTP→Kitex，固定Operator派生标签由同版Kubernetes校验。
-func TestAgentRevisionNameBudgetHTTP(t *testing.T) {
+var _ = ginkgo.It("TestAgentRevisionNameBudgetHTTP", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG21-AGENT-NAME-001：创建/保存/预览经真实HTTP→Kitex，固定Operator派生标签由同版Kubernetes校验。
+	ginkgo.By("REG21-AGENT-NAME-001：创建/保存/预览经真实HTTP→Kitex，固定Operator派生标签由同版Kubernetes校验。")
+
 	_, target := agentTarget(t)
 	p, cookie, owner := clusterPlatform(t)
 	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "name-budget", "ownerId": owner, "context": "explicit", "kubeconfig": target}, cookie, "register", 202)
@@ -40,7 +45,7 @@ func TestAgentRevisionNameBudgetHTTP(t *testing.T) {
 		{"eleven-32", 32, 11, "-shard-10", true},
 		{"eleven-33", 33, 11, "-shard-10", false},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		teststeps.Step(tc.name, func() {
 			name := strings.Repeat(string(rune('a'+index)), tc.length)
 			cfg := agentConfig(name, "monitoring")
 			cfg["shards"] = tc.shards
@@ -71,10 +76,14 @@ func TestAgentRevisionNameBudgetHTTP(t *testing.T) {
 			clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"agent": cfg, "expectedDraftRevision": 2}, cookie, "invalid-save-"+tc.name, 422)
 		})
 	}
-}
+})
 
 // 旧库只读与已排队worker是独立入口：保留原名称/版本，但任何新派发都不能绕过预算。
-func TestAgentRevisionNameBudgetLegacyAndWorker(t *testing.T) {
+var _ = ginkgo.It("TestAgentRevisionNameBudgetLegacyAndWorker", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来旧库只读与已排队worker是独立入口：保留原名称/版本，但任何新派发都不能绕过预算。
+	ginkgo.By("旧库只读与已排队worker是独立入口：保留原名称/版本，但任何新派发都不能绕过预算。")
+
 	f, target := agentTarget(t)
 	var writes atomic.Int32
 	f.hook = func(w http.ResponseWriter, r *http.Request) bool {
@@ -188,4 +197,4 @@ func TestAgentRevisionNameBudgetLegacyAndWorker(t *testing.T) {
 	if awaitClusterOperation(t, p, cookie, del["operationId"].(string))["state"] != "SUCCEEDED" {
 		t.Fatal("新名称预算阻断旧CR的原UID清理")
 	}
-}
+})

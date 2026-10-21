@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"gopkg.in/yaml.v3"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,16 +16,18 @@ import (
 	"reflect"
 	"strings"
 	"sync/atomic"
-	"testing"
 
 	"github.com/cloudwego/kitex/client"
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
+	ginkgo "github.com/onsi/ginkgo/v2"
+	"gopkg.in/yaml.v3"
 )
 
 // 投影负例不能在断言失败时输出响应体，否则测试报告自身会泄漏正在检测的认证串。
-func projectionCall(t *testing.T, p *platform.Runtime, method, path string, body any, cookie *http.Cookie, key string, want int) map[string]any {
+func projectionCall(t ginkgo.GinkgoTInterface, p *platform.Runtime, method, path string, body any, cookie *http.Cookie, key string, want int) map[string]any {
 	t.Helper()
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -59,7 +60,7 @@ func projectionCall(t *testing.T, p *platform.Runtime, method, path string, body
 }
 
 // 输出只记泄漏与否；临时marker、完整URL及原数据库仅在进程内用于比较。
-func assertProjectionSafe(t *testing.T, area string, value any, markers []string) {
+func assertProjectionSafe(t ginkgo.GinkgoTInterface, area string, value any, markers []string) {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -73,9 +74,13 @@ func assertProjectionSafe(t *testing.T, area string, value any, markers []string
 }
 
 // PROJECTION013经真实HTTP→生成Kitex→SQLite及TLS目标检验失败关闭；DB检查属于已批准的秘密不落盘边界。
-func TestAgentMalformedURLReadProjection(t *testing.T) {
+var _ = ginkgo.It("TestAgentMalformedURLReadProjection", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来PROJECTION013经真实HTTP→生成Kitex→SQLite及TLS目标检验失败关闭；DB检查属于已批准的秘密不落盘边界。
+	ginkgo.By("PROJECTION013经真实HTTP→生成Kitex→SQLite及TLS目标检验失败关闭；DB检查属于已批准的秘密不落盘边界。")
+
 	for _, tc := range []struct{ name, field string }{{"url-parse-error", "url"}, {"proxy-parse-error", "proxyUrl"}} {
-		t.Run(tc.name, func(t *testing.T) {
+		teststeps.Step(tc.name, func() {
 			f, target := agentTarget(t)
 			var writes atomic.Int32
 			var offline atomic.Bool
@@ -365,10 +370,10 @@ func TestAgentMalformedURLReadProjection(t *testing.T) {
 			projectionSchema7Restart(t, dir, id, outsideID, cookie, legacy, rawManaged, legacyRuntime, markers, logger)
 		})
 	}
-}
+})
 
 // projectionSchema7Restart 用真实旧cache验证数据迁移、失败原子性和离线首次HTTP/RPC响应。
-func projectionSchema7Restart(t *testing.T, dir, id, outside string, cookie *http.Cookie, legacy, rawManaged, legacyRuntime []byte, markers []string, logger *slog.Logger) {
+func projectionSchema7Restart(t ginkgo.GinkgoTInterface, dir, id, outside string, cookie *http.Cookie, legacy, rawManaged, legacyRuntime []byte, markers []string, logger *slog.Logger) {
 	t.Helper()
 	db, err := sql.Open("sqlite", filepath.Join(dir, "platform.db"))
 	if err != nil {

@@ -37,7 +37,7 @@ def ref(path, root, kind="safe-json"):
             "visibility": "public", "kind": kind}
 
 
-def selected_entries(profile, supplemental=False, focus=None, focus_layer=None):
+def selected_entries(profile, supplemental=False, focus=None, focus_layer=None, focus_owner=None):
     """list与dispatch共用同一交集；registry正式键及合同保持原样。"""
     selected = registry.entries(profile, supplemental, focus)
     if focus_layer is not None:
@@ -46,6 +46,10 @@ def selected_entries(profile, supplemental=False, focus=None, focus_layer=None):
         selected = [e for e in selected if e["layer"] in focus_layer]
         if not selected:
             raise ValueError("focus与focus-layer交集为空或profile不含该层")
+    if focus_owner is not None:
+        selected = [e for e in selected if e["owner"] == focus_owner]
+        if not selected:
+            raise ValueError("focus-owner 与 profile/层级交集为空")
     return selected
 
 
@@ -53,13 +57,13 @@ def run_batch(a):
     """完整期望 index 先于环境读取、等锁和任何 Suite 构造。"""
     # 关键：只过滤selected派发，完整seed始终不筛层；未选键仍not_run，不能伪装完整门禁。
     full = registry.entries(a.profile, a.supplemental)
-    selected = selected_entries(a.profile, a.supplemental, a.focus, getattr(a, "focus_layer", None))
+    selected = selected_entries(a.profile, a.supplemental, a.focus, getattr(a, "focus_layer", None), getattr(a, "focus_owner", None))
     actual = source_state()
     session = ExecutionSession(a.output, expected=[{"variantId": e["variantId"], "layer": e["layer"]} for e in full],
                            run_id=a.run_id, profile=a.profile, candidate=a.candidate, source=actual)
     session.index.update(manifestHash=registry.MANIFEST_HASH, supplemental=a.supplemental,
                          executionBoundary="acceptance", productGate=True,
-                         focused=bool(a.focus or getattr(a, "focus_layer", None)))
+                         focused=bool(a.focus or getattr(a, "focus_layer", None) or getattr(a, "focus_owner", None)))
     session.flush()
     failure = None
     current = selected[0]
@@ -112,8 +116,10 @@ def run_batch(a):
                     atomic_json(session.private / "environment.json", error.descriptor)
                 raise
             session.configure(descriptor)
-            for index, entry in enumerate(non_q):
+            def execute_entry(entry):
+                nonlocal current
                 current = entry
+                index = non_q.index(entry)
                 session.checkpoint()
                 session.index["stage"] = entry["layer"] + ":" + entry["variantId"]
                 session.flush()
@@ -137,8 +143,9 @@ def run_batch(a):
                     actual_receipt = json.loads((session.out / record["receipt"]["path"]).read_text())
                     if actual_receipt.get("cleanup", {}).get("success") is not True:
                         raise ValueError("actual-case-cleanup-failed")
-                if record["outcome"] != "passed" and a.fail_fast:
-                    raise ValueError("actual-case-failed")
+            # 接下来由每个 Ginkgo It 请求唯一业务键；原 Session 始终持有同一独占 lane。
+            from ginkgo_dispatch import run_specs
+            run_specs(session, non_q, execute_entry, fail_fast=a.fail_fast)
     except BaseException as error:
         failure = error
         private_captured = False
@@ -189,7 +196,7 @@ def run_batch(a):
             ACTIVE.reset(active)
     success = failure is None and session.index["state"] == "completed" and cleanup["success"]
     gate_result = None
-    if success and not (a.focus or getattr(a, "focus_layer", None)):
+    if success and not (a.focus or getattr(a, "focus_layer", None) or getattr(a, "focus_owner", None)):
         import gate
         try:
             gate_result = gate.validate(session.out / "index.json", a.candidate, a.profile, a.supplemental)
@@ -367,6 +374,8 @@ def main():
     run.add_argument("--supplemental", action="store_true")
     run.add_argument("--focus", nargs="+")
     run.add_argument("--focus-layer", nargs="+", choices=["Q", "K", "B"])
+    listing.add_argument("--focus-owner", type=int, choices=range(14, 22))
+    run.add_argument("--focus-owner", type=int, choices=range(14, 22))
     run.add_argument("--fail-fast", action="store_true")
     run.add_argument("--parent-index")
     internal = commands.add_parser("internal-case")
@@ -395,7 +404,7 @@ def main():
     try:
         if a := parser.parse_args():
             if a.command == "list":
-                print(json.dumps(selected_entries(a.profile, a.supplemental, a.focus, a.focus_layer), ensure_ascii=False, indent=2))
+                print(json.dumps(selected_entries(a.profile, a.supplemental, a.focus, a.focus_layer, a.focus_owner), ensure_ascii=False, indent=2))
                 return 0
             if a.command == "run":
                 return run_batch(a)

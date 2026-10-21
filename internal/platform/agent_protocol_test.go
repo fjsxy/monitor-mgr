@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"testing"
 
 	"github.com/cloudwego/gopkg/protocol/thrift"
 	"github.com/cloudwego/kitex/client"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
-func agentRPCConfig(t *testing.T, value map[string]any) *rpc.AgentConfiguration {
+func agentRPCConfig(t ginkgo.GinkgoTInterface, value map[string]any) *rpc.AgentConfiguration {
 	t.Helper()
 	raw, e := json.Marshal(value)
 	if e != nil {
@@ -25,7 +26,7 @@ func agentRPCConfig(t *testing.T, value map[string]any) *rpc.AgentConfiguration 
 	}
 	return c
 }
-func requireAgentFieldError(t *testing.T, e error) {
+func requireAgentFieldError(t ginkgo.GinkgoTInterface, e error) {
 	t.Helper()
 	var a *rpc.APIError
 	if !errors.As(e, &a) || a.Code != "INVALID_INPUT" || len(a.FieldErrors) == 0 {
@@ -38,9 +39,13 @@ func requireAgentFieldError(t *testing.T, e error) {
 }
 
 // F01每个子例经过锁定FastCodec及实际generated client→Kitex，不用JSON模拟Thrift往返。
-func TestF01Agent(t *testing.T) {
+var _ = ginkgo.It("TestF01Agent", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来F01每个子例经过锁定FastCodec及实际generated client→Kitex，不用JSON模拟Thrift往返。
+	ginkgo.By("F01每个子例经过锁定FastCodec及实际generated client→Kitex，不用JSON模拟Thrift往返。")
+
 	for _, variant := range []string{"absent", "empty-object", "empty-list", "unknown-mode"} {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			p, c, cluster := ksmCluster(t)
 			cli, e := controlservice.NewClient("agent-protocol", client.WithHostPorts(p.RPCAddress()))
 			if e != nil {
@@ -106,10 +111,14 @@ func TestF01Agent(t *testing.T) {
 			}
 		})
 	}
-}
+})
 
 // F03通过HTTP与直接RPC验证不同非法输入，拒绝发生在任何CR写入前。
-func TestF03Agent(t *testing.T) {
+var _ = ginkgo.It("TestF03Agent", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来F03通过HTTP与直接RPC验证不同非法输入，拒绝发生在任何CR写入前。
+	ginkgo.By("F03通过HTTP与直接RPC验证不同非法输入，拒绝发生在任何CR写入前。")
+
 	cases := []struct {
 		name   string
 		change func(map[string]any)
@@ -135,7 +144,7 @@ func TestF03Agent(t *testing.T) {
 		}},
 	}
 	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
+		teststeps.Step(test.name, func() {
 			p, c, cluster := ksmCluster(t)
 			value := agentConfig("invalid", "monitoring")
 			test.change(value)
@@ -157,7 +166,7 @@ func TestF03Agent(t *testing.T) {
 			}
 		})
 	}
-	t.Run("unknown-wire", func(t *testing.T) {
+	teststeps.Step("unknown-wire", func() {
 		p, c, cluster := ksmCluster(t)
 		cli, e := controlservice.NewClient("agent-unknown", client.WithHostPorts(p.RPCAddress()))
 		if e != nil {
@@ -169,12 +178,16 @@ func TestF03Agent(t *testing.T) {
 		_, e = cli.CreateInstance(context.Background(), &rpc.RequestContext{RequestId: key, SessionToken: &token, IdempotencyKey: &key}, request)
 		requireAgentFieldError(t, e)
 	})
-}
+})
 
 // REG18-VALID-006：CRD格式之外还需校验Prometheus duration可表示范围。
-func TestAgentDurationRange(t *testing.T) {
+var _ = ginkgo.It("TestAgentDurationRange", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG18-VALID-006：CRD格式之外还需校验Prometheus duration可表示范围。
+	ginkgo.By("REG18-VALID-006：CRD格式之外还需校验Prometheus duration可表示范围。")
+
 	for _, duration := range []string{"1y2w3d4h5m6s7ms", "1m1d", "1s1s", "999999999999999999999999y"} {
-		t.Run(duration, func(t *testing.T) {
+		teststeps.Step(duration, func() {
 			p, c, cluster := ksmCluster(t)
 			value := agentConfig("duration", "monitoring")
 			value["remoteWrite"].([]any)[0].(map[string]any)["remoteTimeout"] = duration
@@ -199,4 +212,4 @@ func TestAgentDurationRange(t *testing.T) {
 			}
 		})
 	}
-}
+})

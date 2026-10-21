@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import ginkgo_events
 """#20存储门禁：复用真实Pod/HTTP/Kitex环境，每例独立fixture，逐例保存卷UID结果。"""
 import argparse,copy,fcntl,hashlib,json,pathlib,signal,sys,time,urllib.request
 from transport import process as subprocess
@@ -236,16 +237,13 @@ class Suite(base.Suite):
 
 def quick(a,selected,contract):
  source=source_state();assert not source['dirty'],'Q正式收据要求干净source'
- mapping=QOWNED if a.layer=='Q' else QREG;roots=sorted({v.split('/')[0] for case in selected for v in mapping[case]});command=['go','test','./internal/platform','-count=1','-json','-run','^('+'|'.join(roots)+')$'];started=base.stamp();r=subprocess.run(command,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
- out=pathlib.Path(a.output);out.mkdir(parents=True,exist_ok=True);log=out/'go-test.jsonl';log.write_bytes(r.stdout);passed=set()
- for line in r.stdout.decode().splitlines():
-  try:
-   event=json.loads(line)
-   if event.get('Action')=='pass':passed.add(event.get('Test'))
-  except ValueError:pass
+ mapping=QOWNED if a.layer=='Q' else QREG
+ out=pathlib.Path(a.output);out.mkdir(parents=True,exist_ok=True)
+ started=base.stamp();command,r,events=ginkgo_events.run([s for v in selected for s in mapping[v]],out/'.private'/'ginkgo.json',subprocess.run,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+ log=out/'go-test.jsonl';raw=('\n'.join(json.dumps(e) for e in events)+'\n').encode();log.write_bytes(raw);passed=ginkgo_events.passed(events)
  results=[]
  for case in selected:
-  record={**contract[case],'kind':'owned' if case in QOWNED else 'supplementary','source':source,'testedCommit':source['commit'],'testedTree':source['tree'],'profile':a.profile,'runnerCommit':source['commit'],'testSelectors':mapping[case],'command':command,'commandExitCode':r.returncode,'startedAt':started,'finishedAt':base.stamp(),'outcome':'passed' if r.returncode==0 and all(v in passed for v in mapping[case]) else 'failed','evidenceRefs':[{'path':log.name,'sha256':hashlib.sha256(r.stdout).hexdigest()}],'executionBoundary':'真实HTTP→生成Kitex→SQLite与受控TLS API','cleanup':{'success':True,'scope':'t.TempDir/listener/屏障按测试finally清理'}}
+  record={**contract[case],'kind':'owned' if case in QOWNED else 'supplementary','source':source,'testedCommit':source['commit'],'testedTree':source['tree'],'profile':a.profile,'runnerCommit':source['commit'],'testSelectors':mapping[case],'command':command,'commandExitCode':r.returncode,'startedAt':started,'finishedAt':base.stamp(),'outcome':'passed' if r.returncode==0 and all(v in passed for v in mapping[case]) else 'failed','evidenceRefs':[{'path':log.name,'sha256':hashlib.sha256(raw).hexdigest()}],'executionBoundary':'真实HTTP→生成Kitex→SQLite与受控TLS API','cleanup':{'success':True,'scope':'t.TempDir/listener/屏障按测试finally清理'}}
   (out/(case+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));results.append(record)
  (out/'results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2));print(json.dumps({'executed':len(results),'passed':sum(v['outcome']=='passed' for v in results),'owned':sum(v['kind']=='owned' for v in results)}));return 0 if all(v['outcome']=='passed' for v in results) else 1
 

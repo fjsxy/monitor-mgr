@@ -6,13 +6,17 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
-	"testing"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // REG18-SHARED-003：从外部API返回的秘密也不能进入平台发现/YAML读模型。
-func TestSharedTargetSensitiveReadProjection(t *testing.T) {
+var _ = ginkgo.It("TestSharedTargetSensitiveReadProjection", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG18-SHARED-003：从外部API返回的秘密也不能进入平台发现/YAML读模型。
+	ginkgo.By("REG18-SHARED-003：从外部API返回的秘密也不能进入平台发现/YAML读模型。")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	cluster := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["clusterId"].(string)
 	f.mu.Lock()
@@ -28,10 +32,14 @@ func TestSharedTargetSensitiveReadProjection(t *testing.T) {
 	if !strings.Contains(f.cr["metadata"].(map[string]any)["annotations"].(map[string]any)["kubectl.kubernetes.io/last-applied-configuration"].(string), "inline-secret-value") {
 		t.Fatal("脱敏修改了真实目标metadata")
 	}
-}
+})
 
 // REG18-SHARED-001：真实v4旧库预览必须升级成安全指纹，且原previewId仍能发布。
-func TestSharedSchema4PreviewSurvivesUpgrade(t *testing.T) {
+var _ = ginkgo.It("TestSharedSchema4PreviewSurvivesUpgrade", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG18-SHARED-001：真实v4旧库预览必须升级成安全指纹，且原previewId仍能发布。
+	ginkgo.By("REG18-SHARED-001：真实v4旧库预览必须升级成安全指纹，且原previewId仍能发布。")
+
 	_, target := ksmTarget(t)
 	dir := t.TempDir()
 	cfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
@@ -159,10 +167,14 @@ func TestSharedSchema4PreviewSurvivesUpgrade(t *testing.T) {
 	if awaitClusterOperation(t, p, c, published["operationId"].(string))["state"] != "SUCCEEDED" {
 		t.Fatal("升级使原安全预览失效")
 	}
-}
+})
 
 // REG18-SHARED-003：隐藏秘密仍须参与配置变化判定；仅RV/status变化不能使预览过期。
-func TestSharedHMACDetectsHiddenConfigAndPreservesMetadata(t *testing.T) {
+var _ = ginkgo.It("TestSharedHMACDetectsHiddenConfigAndPreservesMetadata", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG18-SHARED-003：隐藏秘密仍须参与配置变化判定；仅RV/status变化不能使预览过期。
+	ginkgo.By("REG18-SHARED-003：隐藏秘密仍须参与配置变化判定；仅RV/status变化不能使预览过期。")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	first := ksmPreview(t, p, c, id, 1)
 	op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": first["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "initial", 202)
@@ -195,4 +207,4 @@ func TestSharedHMACDetectsHiddenConfigAndPreservesMetadata(t *testing.T) {
 	if f.cr["metadata"].(map[string]any)["annotations"].(map[string]any)["kubectl.kubernetes.io/last-applied-configuration"] != "preserved-sensitive-annotation" {
 		t.Fatal("脱敏改写了目标metadata")
 	}
-}
+})

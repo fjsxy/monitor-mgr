@@ -14,17 +14,18 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/cloudwego/kitex/client"
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // The controlled TLS API is the external system boundary; every platform call still crosses generated Kitex.
-func clusterAPI(t *testing.T, ssrCode int, anonymous bool, beforeSSR ...func(*http.Request)) (*httptest.Server, string, *atomic.Int64) {
+func clusterAPI(t ginkgo.GinkgoTInterface, ssrCode int, anonymous bool, beforeSSR ...func(*http.Request)) (*httptest.Server, string, *atomic.Int64) {
 	t.Helper()
 	calls := new(atomic.Int64)
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +66,7 @@ func clusterAPI(t *testing.T, ssrCode int, anonymous bool, beforeSSR ...func(*ht
 func pemCert(raw []byte) string {
 	return "-----BEGIN CERTIFICATE-----\n" + base64.StdEncoding.EncodeToString(raw) + "\n-----END CERTIFICATE-----\n"
 }
-func clusterPlatform(t *testing.T) (*platform.Runtime, *http.Cookie, string) {
+func clusterPlatform(t ginkgo.GinkgoTInterface) (*platform.Runtime, *http.Cookie, string) {
 	t.Helper()
 	p, e := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
 	if e != nil {
@@ -77,7 +78,7 @@ func clusterPlatform(t *testing.T) (*platform.Runtime, *http.Cookie, string) {
 	id := readJSON(t, p, "/session", cookie)["account"].(map[string]any)["id"].(string)
 	return p, cookie, id
 }
-func clusterCall(t *testing.T, p *platform.Runtime, method, path string, body any, cookie *http.Cookie, key string, want int) map[string]any {
+func clusterCall(t ginkgo.GinkgoTInterface, p *platform.Runtime, method, path string, body any, cookie *http.Cookie, key string, want int) map[string]any {
 	t.Helper()
 	raw, _ := json.Marshal(body)
 	req, _ := http.NewRequest(method, p.URL()+"/api/v1"+path, strings.NewReader(string(raw)))
@@ -101,7 +102,7 @@ func clusterCall(t *testing.T, p *platform.Runtime, method, path string, body an
 	}
 	return v
 }
-func awaitClusterOperation(t *testing.T, p *platform.Runtime, c *http.Cookie, id string) map[string]any {
+func awaitClusterOperation(t ginkgo.GinkgoTInterface, p *platform.Runtime, c *http.Cookie, id string) map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
@@ -115,7 +116,12 @@ func awaitClusterOperation(t *testing.T, p *platform.Runtime, c *http.Cookie, id
 	t.Fatal("operation did not finish")
 	return nil
 }
-func TestC01PersistentClusterRegistrationThroughRPC(t *testing.T) {
+
+var _ = ginkgo.It("TestC01PersistentClusterRegistrationThroughRPC", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来通过真实 RPC 注册集群，再核验数据库中的注册结果。
+	ginkgo.By("通过真实 RPC 注册集群，再核验数据库中的注册结果")
+
 	_, config, _ := clusterAPI(t, 200, false)
 	p, c, owner := clusterPlatform(t)
 	body := map[string]any{"name": "fixture", "ownerId": owner, "context": "explicit", "kubeconfig": config}
@@ -143,15 +149,19 @@ func TestC01PersistentClusterRegistrationThroughRPC(t *testing.T) {
 	}
 	body["name"] = "other"
 	clusterCall(t, p, "POST", "/clusters", body, c, "register-1", 409)
-}
+})
 
-func TestC03UnverifiedIdentityCannotRegister(t *testing.T) {
+var _ = ginkgo.It("TestC03UnverifiedIdentityCannotRegister", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来逐项构造身份核验失败，确认集群不能被注册。
+	ginkgo.By("逐项构造身份核验失败，确认集群不能被注册")
+
 	for _, tc := range []struct {
 		name string
 		code int
 		anon bool
 	}{{"missing", 404, false}, {"forbidden", 403, false}, {"anonymous", 200, true}, {"error", 500, false}} {
-		t.Run(tc.name, func(t *testing.T) {
+		teststeps.Step(tc.name, func() {
 			_, cfg, _ := clusterAPI(t, tc.code, tc.anon)
 			p, c, owner := clusterPlatform(t)
 			o := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "fixture", "ownerId": owner, "context": "explicit", "kubeconfig": cfg}, c, "register", 202)
@@ -164,10 +174,14 @@ func TestC03UnverifiedIdentityCannotRegister(t *testing.T) {
 			}
 		})
 	}
-}
-func TestC09RejectSelectedContextDependenciesBeforeNetworking(t *testing.T) {
+})
+var _ = ginkgo.It("TestC09RejectSelectedContextDependenciesBeforeNetworking", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来逐项构造不支持的 kubeconfig 依赖，确认联网前拒绝。
+	ginkgo.By("逐项构造不支持的 kubeconfig 依赖，确认联网前拒绝")
+
 	for _, name := range []string{"http", "skip-tls", "external-ca", "external-cert", "token-file", "exec", "auth-provider", "proxy"} {
-		t.Run(name, func(t *testing.T) {
+		teststeps.Step(name, func() {
 			_, cfg, calls := clusterAPI(t, 200, false)
 			var doc map[string]any
 			json.Unmarshal([]byte(cfg), &doc)
@@ -200,8 +214,12 @@ func TestC09RejectSelectedContextDependenciesBeforeNetworking(t *testing.T) {
 			}
 		})
 	}
-}
-func TestT07TargetOfflineDoesNotBreakPlatformReadiness(t *testing.T) {
+})
+var _ = ginkgo.It("TestT07TargetOfflineDoesNotBreakPlatformReadiness", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来使目标集群离线，确认平台自身仍可就绪。
+	ginkgo.By("使目标集群离线，确认平台自身仍可就绪")
+
 	srv, cfg, _ := clusterAPI(t, 200, false)
 	p, c, owner := clusterPlatform(t)
 	o := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "fixture", "ownerId": owner, "context": "explicit", "kubeconfig": cfg}, c, "register", 202)
@@ -216,9 +234,13 @@ func TestT07TargetOfflineDoesNotBreakPlatformReadiness(t *testing.T) {
 	if res.StatusCode != 200 {
 		t.Fatal("one target failure made platform unready")
 	}
-}
+})
 
-func TestClusterCredentialLifecycleAndImmediateOwnership(t *testing.T) {
+var _ = ginkgo.It("TestClusterCredentialLifecycleAndImmediateOwnership", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来替换集群凭据与归属，核验权限立即生效。
+	ginkgo.By("替换集群凭据与归属，核验权限立即生效")
+
 	_, cfg, _ := clusterAPI(t, 200, false)
 	p, c, owner := clusterPlatform(t)
 	o := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "fixture", "ownerId": owner, "context": "explicit", "kubeconfig": cfg}, c, "register", 202)
@@ -275,9 +297,13 @@ func TestClusterCredentialLifecycleAndImmediateOwnership(t *testing.T) {
 		t.Fatal("reactivation failed to retain identity")
 	}
 	clusterCall(t, p, "GET", "/clusters/"+id+"/namespaces", nil, alice, "", 200)
-}
+})
 
-func TestClusterSecretsRecoverOnlyWithOriginalKeyAndPreserveSession(t *testing.T) {
+var _ = ginkgo.It("TestClusterSecretsRecoverOnlyWithOriginalKeyAndPreserveSession", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来重启并替换加密密钥，核验凭据恢复限制及会话保留。
+	ginkgo.By("重启并替换加密密钥，核验凭据恢复限制及会话保留")
+
 	_, cfg, _ := clusterAPI(t, 200, false)
 	dir := t.TempDir()
 	pcfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
@@ -335,9 +361,13 @@ func TestClusterSecretsRecoverOnlyWithOriginalKeyAndPreserveSession(t *testing.T
 	}
 	defer p.Close(context.Background())
 	clusterCall(t, p, "GET", "/clusters/"+id+"/namespaces", nil, c, "", 200)
-}
+})
 
-func TestClusterUnfinishedChangesBlockTransferAndUnregisterAcrossKinds(t *testing.T) {
+var _ = ginkgo.It("TestClusterUnfinishedChangesBlockTransferAndUnregisterAcrossKinds", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来构造未完成操作，阻止跨组件的归属转移和注销。
+	ginkgo.By("构造未完成操作，阻止跨组件的归属转移和注销")
+
 	_, cfg, _ := clusterAPI(t, 200, false)
 	dir := t.TempDir()
 	p, e := platform.Start(context.Background(), platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
@@ -367,9 +397,13 @@ func TestClusterUnfinishedChangesBlockTransferAndUnregisterAcrossKinds(t *testin
 		clusterCall(t, p, "POST", "/clusters/"+id+"/unregister", map[string]any{}, c, "blocked-unregister-"+kind, 409)
 		db.Exec(`DELETE FROM operations WHERE id=?`, opid)
 	}
-}
+})
 
-func TestClusterMetadataReadFailureCannotBecomeEmptyList(t *testing.T) {
+var _ = ginkgo.It("TestClusterMetadataReadFailureCannotBecomeEmptyList", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来注入元数据读取失败，确认不会将失败转换为空列表。
+	ginkgo.By("注入元数据读取失败，确认不会将失败转换为空列表")
+
 	srv, cfg, _ := clusterAPI(t, 200, false)
 	p, c, owner := clusterPlatform(t)
 	o := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "fixture", "ownerId": owner, "context": "explicit", "kubeconfig": cfg}, c, "register", 202)
@@ -378,9 +412,13 @@ func TestClusterMetadataReadFailureCannotBecomeEmptyList(t *testing.T) {
 	for _, suffix := range []string{"/namespaces", "/references?kind=Secret&namespace=monitoring"} {
 		clusterCall(t, p, "GET", "/clusters/"+done["clusterId"].(string)+suffix, nil, c, "", 502)
 	}
-}
+})
 
-func TestClusterPendingCredentialSurvivesRestartWithoutAutomaticReplay(t *testing.T) {
+var _ = ginkgo.It("TestClusterPendingCredentialSurvivesRestartWithoutAutomaticReplay", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来重启待确认的凭据变更，核验状态保留且写请求不自动重放。
+	ginkgo.By("重启待确认的凭据变更，核验状态保留且写请求不自动重放")
+
 	var gated atomic.Bool
 	var reviews atomic.Int64
 	entered := make(chan struct{}, 1)
@@ -441,9 +479,13 @@ func TestClusterPendingCredentialSurvivesRestartWithoutAutomaticReplay(t *testin
 	if resumed["state"] != "SUCCEEDED" || resumed["credentialRevision"] != float64(2) {
 		t.Fatalf("explicit recovery failed: %v", resumed)
 	}
-}
+})
 
-func TestCredentialContinueRejectsOtherOperationKindsWithoutChangingActor(t *testing.T) {
+var _ = ginkgo.It("TestCredentialContinueRejectsOtherOperationKindsWithoutChangingActor", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来尝试继续其他类型操作，确认被拒绝且发起者不变。
+	ginkgo.By("尝试继续其他类型操作，确认被拒绝且发起者不变")
+
 	dir := t.TempDir()
 	p, e := platform.Start(context.Background(), platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
 	if e != nil {
@@ -480,9 +522,13 @@ func TestCredentialContinueRejectsOtherOperationKindsWithoutChangingActor(t *tes
 			t.Fatalf("credential recovery changed another kind: %v", op)
 		}
 	}
-}
+})
 
-func TestReferenceMetadataRequiresCompletePagesAndNeverReturnsSecretValues(t *testing.T) {
+var _ = ginkgo.It("TestReferenceMetadataRequiresCompletePagesAndNeverReturnsSecretValues", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来验证引用资源分页完整性，并确认 Secret 值不被返回。
+	ginkgo.By("验证引用资源分页完整性，并确认 Secret 值不被返回")
+
 	var failSecond atomic.Bool
 	failSecond.Store(true)
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -527,9 +573,13 @@ func TestReferenceMetadataRequiresCompletePagesAndNeverReturnsSecretValues(t *te
 	if bytes.Contains(raw, []byte("c2Vuc2l0aXZl")) || bytes.Contains(raw, []byte("sensitive")) {
 		t.Fatal("Secret values leaked into reference metadata")
 	}
-}
+})
 
-func TestClusterCanRegisterWithRestrictedComponentCapabilities(t *testing.T) {
+var _ = ginkgo.It("TestClusterCanRegisterWithRestrictedComponentCapabilities", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来使用受限组件权限注册，核验平台准确记录能力边界。
+	ginkgo.By("使用受限组件权限注册，核验平台准确记录能力边界")
+
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -561,4 +611,4 @@ func TestClusterCanRegisterWithRestrictedComponentCapabilities(t *testing.T) {
 		}
 	}
 	clusterCall(t, p, "GET", "/clusters/"+done["clusterId"].(string)+"/namespaces", nil, c, "", 403)
-}
+})

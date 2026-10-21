@@ -7,17 +7,22 @@ import (
 	"errors"
 	"net/http"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // 注册/候选/人工继续都先持久受理；命中只能找回当前任务，不再触发核验。
-func TestReviewCredentialReplayCurrent(t *testing.T) {
+var _ = ginkgo.It("TestReviewCredentialReplayCurrent", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来注册/候选/人工继续都先持久受理；命中只能找回当前任务，不再触发核验。
+	ginkgo.By("注册/候选/人工继续都先持久受理；命中只能找回当前任务，不再触发核验。")
+
 	for _, action := range []string{"REGISTER", "CREDENTIAL", "REACTIVATE", "CONTINUE"} {
 		for _, state := range []string{"SUCCEEDED", "FAILED", "WAITING_CONFIRMATION"} {
-			t.Run(action+"/"+state, func(t *testing.T) {
+			teststeps.Step(action+"/"+state, func() {
 				var gated atomic.Bool
 				var reviews atomic.Int64
 				entered := make(chan struct{}, 2)
@@ -117,15 +122,15 @@ func TestReviewCredentialReplayCurrent(t *testing.T) {
 					key = "review-continue"
 				}
 				beforeReviews := reviews.Load()
-				t.Run("current-state", func(t *testing.T) {
+				teststeps.Step("current-state", func() {
 					replay := clusterCall(t, p, "POST", path, body, c, key, 202)
 					if replay["operationId"] != oid || replay["state"] != current["state"] || replay["clusterId"] != current["clusterId"] {
 						t.Fatalf("幂等命中返回受理快照而非当前operation: state=%v current=%v", replay["state"], current["state"])
 					}
 				})
-				t.Run("unauthenticated", func(t *testing.T) { clusterCall(t, p, "POST", path, body, nil, key, 401) })
+				teststeps.Step("unauthenticated", func() { clusterCall(t, p, "POST", path, body, nil, key, 401) })
 				if action != "CONTINUE" {
-					t.Run("changed-content", func(t *testing.T) {
+					teststeps.Step("changed-content", func() {
 						changed := map[string]any{}
 						for k, v := range body {
 							changed[k] = v
@@ -137,10 +142,10 @@ func TestReviewCredentialReplayCurrent(t *testing.T) {
 				_, backup := reviewAccount(t, p, c, "replay-backup", "ADMIN")
 				clusterCall(t, p, "PATCH", "/accounts/"+owner, map[string]any{"role": "USER"}, backup, "revoke-role", 200)
 				c = request(t, p, "POST", "/sessions", `{"username":"admin","password":"first-password-123"}`, nil, 201).Cookies()[0]
-				t.Run("revoked-role", func(t *testing.T) { clusterCall(t, p, "POST", path, body, c, key, 403) })
+				teststeps.Step("revoked-role", func() { clusterCall(t, p, "POST", path, body, c, key, 403) })
 				clusterCall(t, p, "PATCH", "/accounts/"+owner, map[string]any{"enabled": false}, backup, "disable-actor", 200)
-				t.Run("disabled", func(t *testing.T) { clusterCall(t, p, "POST", path, body, c, key, 401) })
-				t.Run("no-second-verification", func(t *testing.T) {
+				teststeps.Step("disabled", func() { clusterCall(t, p, "POST", path, body, c, key, 401) })
+				teststeps.Step("no-second-verification", func() {
 					if reviews.Load() != beforeReviews {
 						t.Fatal("幂等命中再次核验候选")
 					}
@@ -148,10 +153,10 @@ func TestReviewCredentialReplayCurrent(t *testing.T) {
 			})
 		}
 	}
-}
+})
 
 // reviewAccount通过真实账号流程得到可用会话，避免把mustChangePassword账号当授权正控。
-func reviewAccount(t *testing.T, p *platform.Runtime, admin *http.Cookie, name, role string) (string, *http.Cookie) {
+func reviewAccount(t ginkgo.GinkgoTInterface, p *platform.Runtime, admin *http.Cookie, name, role string) (string, *http.Cookie) {
 	t.Helper()
 	a := clusterCall(t, p, "POST", "/accounts", map[string]any{"username": name, "password": "temporary-password", "role": role}, admin, "account-"+name, 201)
 	c := request(t, p, "POST", "/sessions", `{"username":"`+name+`","password":"temporary-password"}`, nil, 201).Cookies()[0]
@@ -160,11 +165,15 @@ func reviewAccount(t *testing.T, p *platform.Runtime, admin *http.Cookie, name, 
 	return a["id"].(string), c
 }
 
-func TestReviewCapabilitiesRoute(t *testing.T) {
+var _ = ginkgo.It("TestReviewCapabilitiesRoute", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来分别以管理员、所属用户及无权账号查询组件能力。
+	ginkgo.By("分别以管理员、所属用户及无权账号查询组件能力")
+
 	p, c, cluster := ksmCluster(t)
 	current := clusterCall(t, p, "GET", "/clusters/"+cluster, nil, c, "", 200)
 	path := "/clusters/" + cluster + "/capabilities"
-	check := func(t *testing.T, c *http.Cookie) {
+	check := func(t ginkgo.GinkgoTInterface, c *http.Cookie) {
 		req, _ := http.NewRequest("GET", p.URL()+"/api/v1"+path, nil)
 		req.AddCookie(c)
 		resp, err := http.DefaultClient.Do(req)
@@ -185,20 +194,24 @@ func TestReviewCapabilitiesRoute(t *testing.T) {
 			t.Fatal("规范入口未返回同一安全能力投影")
 		}
 	}
-	t.Run("admin", func(t *testing.T) { check(t, c) })
+	teststeps.Step("admin", func() { check(t, c) })
 	aid, alice := reviewAccount(t, p, c, "cap-owner", "USER")
-	t.Run("other-owner", func(t *testing.T) { clusterCall(t, p, "GET", path, nil, alice, "", 403) })
-	t.Run("unauthenticated", func(t *testing.T) { clusterCall(t, p, "GET", path, nil, nil, "", 401) })
-	t.Run("missing", func(t *testing.T) { clusterCall(t, p, "GET", "/clusters/missing/capabilities", nil, c, "", 404) })
+	teststeps.Step("other-owner", func() { clusterCall(t, p, "GET", path, nil, alice, "", 403) })
+	teststeps.Step("unauthenticated", func() { clusterCall(t, p, "GET", path, nil, nil, "", 401) })
+	teststeps.Step("missing", func() { clusterCall(t, p, "GET", "/clusters/missing/capabilities", nil, c, "", 404) })
 	clusterCall(t, p, "POST", "/clusters/"+cluster+"/transfer", map[string]any{"ownerId": aid}, c, "cap-transfer", 200)
-	t.Run("owner", func(t *testing.T) { check(t, alice) })
+	teststeps.Step("owner", func() { check(t, alice) })
 	clusterCall(t, p, "PATCH", "/accounts/"+aid, map[string]any{"enabled": false}, c, "disable-owner", 200)
-	t.Run("disabled", func(t *testing.T) { clusterCall(t, p, "GET", path, nil, alice, "", 401) })
-}
+	teststeps.Step("disabled", func() { clusterCall(t, p, "GET", path, nil, alice, "", 401) })
+})
 
-func TestReviewDeleteRoute(t *testing.T) {
+var _ = ginkgo.It("TestReviewDeleteRoute", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来逐项验证删除接口的当前权限、输入与幂等边界。
+	ginkgo.By("逐项验证删除接口的当前权限、输入与幂等边界")
+
 	for _, variant := range []string{"draft", "confirmed", "missing-preview", "stale-impact", "replaced-uid", "other-owner", "idempotent"} {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			p, c, id, f := lifecycleFixture(t, nil)
 			if variant == "draft" {
 				clusterCall(t, p, "DELETE", "/instances/"+id, nil, c, "delete-draft", 200)
@@ -254,16 +267,20 @@ func TestReviewDeleteRoute(t *testing.T) {
 			}
 		})
 	}
-}
+})
 
-func TestReviewContinueRoute(t *testing.T) {
+var _ = ginkgo.It("TestReviewContinueRoute", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来逐项验证继续操作接口的类型、状态与权限边界。
+	ginkgo.By("逐项验证继续操作接口的类型、状态与权限边界")
+
 	for _, action := range []string{"PUBLISH", "DELETE"} {
 		variants := []string{"unsent", "wrong-revision", "other-owner", "possibly-sent"}
 		if action == "DELETE" {
 			variants = append(variants, "stale-preview")
 		}
 		for _, variant := range variants {
-			t.Run(action+"/"+variant, func(t *testing.T) {
+			teststeps.Step(action+"/"+variant, func() {
 				f, target := ksmTarget(t)
 				var hold atomic.Bool
 				entered := make(chan struct{}, 1)
@@ -372,4 +389,4 @@ func TestReviewContinueRoute(t *testing.T) {
 			})
 		}
 	}
-}
+})

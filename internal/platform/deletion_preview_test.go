@@ -8,23 +8,28 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // deletionConfirmation 通过公开HTTP获取已确认范围，不能用当前version冒充删除预览。
-func deletionConfirmation(t *testing.T, p *platform.Runtime, c *http.Cookie, id string) map[string]any {
+func deletionConfirmation(t ginkgo.GinkgoTInterface, p *platform.Runtime, c *http.Cookie, id string) map[string]any {
 	t.Helper()
 	preview := clusterCall(t, p, "POST", "/instances/"+id+"/deletion-previews", map[string]any{}, c, "", 200)
 	return map[string]any{"versionId": preview["versionId"], "previewId": preview["previewId"]}
 }
 
 // REG17-DELETE-003：状态自然变化可继续，目标或原UID影响范围变化必须重新预览。
-func TestDeletionPreviewBindsTargetAndImpact(t *testing.T) {
+var _ = ginkgo.It("TestDeletionPreviewBindsTargetAndImpact", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG17-DELETE-003：状态自然变化可继续，目标或原UID影响范围变化必须重新预览。
+	ginkgo.By("REG17-DELETE-003：状态自然变化可继续，目标或原UID影响范围变化必须重新预览。")
+
 	for _, variant := range []string{"status-only", "before-acceptance-target", "before-dispatch-target", "before-dispatch-impact", "same-range-rollout"} {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			var armed atomic.Bool
 			entered, release := make(chan struct{}), make(chan struct{})
 			var once, released sync.Once
@@ -87,10 +92,14 @@ func TestDeletionPreviewBindsTargetAndImpact(t *testing.T) {
 			}
 		})
 	}
-}
+})
 
 // 旧v6未发删除升级后仍受保护，显式再确认只能沿原operation/UID/version建立新attempt。
-func TestDeletionPreviewSchema6UnsentCanContinue(t *testing.T) {
+var _ = ginkgo.It("TestDeletionPreviewSchema6UnsentCanContinue", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来旧v6未发删除升级后仍受保护，显式再确认只能沿原operation/UID/version建立新attempt。
+	ginkgo.By("旧v6未发删除升级后仍受保护，显式再确认只能沿原operation/UID/version建立新attempt。")
+
 	f, target := ksmTarget(t)
 	dir := t.TempDir()
 	var hold atomic.Bool
@@ -182,4 +191,4 @@ func TestDeletionPreviewSchema6UnsentCanContinue(t *testing.T) {
 	if e = db.QueryRow("SELECT current_version_id FROM instances WHERE id=?", id).Scan(&persistedVersion); e != nil || persistedVersion != publication["versionId"] {
 		t.Fatal("删除清除了持久版本身份", persistedVersion, e)
 	}
-}
+})

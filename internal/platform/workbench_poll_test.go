@@ -3,21 +3,26 @@ package platform_test
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/transmeta"
 	"github.com/cloudwego/kitex/transport"
+	"github.com/fjsxy/monitor-mgr/internal/platform"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
-	"net/http"
-	"sync"
-	"testing"
-	"time"
-
-	"github.com/fjsxy/monitor-mgr/internal/platform"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // R01.intervals：服务端调度不依赖页面，默认10秒；公开启动配置精确限定1–20秒。
-func TestR01WorkbenchIntervals(t *testing.T) {
+var _ = ginkgo.It("TestR01WorkbenchIntervals", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来R01.intervals：服务端调度不依赖页面，默认10秒；公开启动配置精确限定1–20秒。
+	ginkgo.By("R01.intervals：服务端调度不依赖页面，默认10秒；公开启动配置精确限定1–20秒。")
+
 	for _, seconds := range []int{0, 21, -1} {
 		interval := time.Duration(seconds) * time.Second
 		p, e := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", ObservationInterval: &interval})
@@ -27,7 +32,7 @@ func TestR01WorkbenchIntervals(t *testing.T) {
 		}
 	}
 	for _, seconds := range []int{1, 10, 20} {
-		t.Run(fmt.Sprint(seconds), func(t *testing.T) {
+		teststeps.Step(fmt.Sprint(seconds), func() {
 			ticks := make(chan time.Time, 1)
 			p, c, id, f, clock := workbenchSourceFixture(t, func(cfg *platform.Config) {
 				cfg.ObservationTicks = ticks
@@ -70,10 +75,14 @@ func TestR01WorkbenchIntervals(t *testing.T) {
 			}
 		})
 	}
-}
+})
 
 // R06：并发手动读取同一真实目标只产生一个GET；每个HTTP调用仍独立鉴权。
-func TestR06WorkbenchCoalescesReads(t *testing.T) {
+var _ = ginkgo.It("TestR06WorkbenchCoalescesReads", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来R06：并发手动读取同一真实目标只产生一个GET；每个HTTP调用仍独立鉴权。
+	ginkgo.By("R06：并发手动读取同一真实目标只产生一个GET；每个HTTP调用仍独立鉴权。")
+
 	p, c, id, f, _ := workbenchSourceFixture(t)
 	gate := make(chan struct{})
 	entered := make(chan struct{})
@@ -94,6 +103,7 @@ func TestR06WorkbenchCoalescesReads(t *testing.T) {
 	for n := 0; n < 16; n++ {
 		wg.Add(1)
 		go func() {
+			defer ginkgo.GinkgoRecover()
 			defer wg.Done()
 			req, _ := http.NewRequest("POST", p.URL()+"/api/v1/instances/"+id+"/refresh", nil)
 			req.Header.Set("Origin", p.URL())
@@ -127,10 +137,14 @@ func TestR06WorkbenchCoalescesReads(t *testing.T) {
 	if during-before != 1 {
 		t.Fatalf("相同目标并发读取未合并:实际GET=%d", during-before)
 	}
-}
+})
 
 // R06：下游不得使用超过短调用方剩余预算的8秒新预算。
-func TestR06WorkbenchRemainingBudget(t *testing.T) {
+var _ = ginkgo.It("TestR06WorkbenchRemainingBudget", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来R06：下游不得使用超过短调用方剩余预算的8秒新预算。
+	ginkgo.By("R06：下游不得使用超过短调用方剩余预算的8秒新预算。")
+
 	p, c, id, f, _ := workbenchSourceFixture(t)
 	gate, entered, canceled := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	f.mu.Lock()
@@ -157,4 +171,4 @@ func TestR06WorkbenchRemainingBudget(t *testing.T) {
 	case <-time.After(750 * time.Millisecond):
 		t.Fatal("下游忽略调用方剩余预算，仍占用目标请求")
 	}
-}
+})

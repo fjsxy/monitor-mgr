@@ -31,24 +31,12 @@ def reference(path, root, kind="safe-json"):
 
 
 def go_events(raw, entries, returncode):
-    """公开仅保留真实Go事件的安全字段；根与leaf的skip/fail均使对应键失败。"""
-    values = []
-    for line in raw.splitlines():
-        try:
-            event = json.loads(line)
-        except (ValueError, TypeError):
-            continue
-        if isinstance(event, dict) and event.get("Action") in ["start", "run", "pause", "cont", "pass", "fail", "skip"]:
-            values.append({k: event[k] for k in ["Time", "Action", "Package", "Test", "Elapsed"] if k in event})
-    outcomes = {}
-    for entry in entries:
-        selectors = entry["testSelectors"]
-        roots = {s.split("/")[0] for s in selectors}
-        relevant = [v for v in values if v.get("Test", "").split("/")[0] in roots]
-        passed = {v.get("Test") for v in relevant if v["Action"] == "pass"}
-        outcomes[entry["variantId"]] = (returncode == 0 and set(selectors) <= passed and
-                                         not any(v["Action"] in ["skip", "fail"] for v in relevant))
-    return values, outcomes
+    """从真实 Ginkgo 报告读取稳定根与子例，stdout 不能证明用例通过。"""
+    import ginkgo_events
+    roots = {selector.split('/')[0] for entry in entries for selector in entry['testSelectors']}
+    values = ginkgo_events.project(raw, roots, returncode)
+    passed = ginkgo_events.passed(values)
+    return values, {entry['variantId']: returncode == 0 and set(entry['testSelectors']) <= passed for entry in entries}
 
 
 class ExecutionSession(BatchSession):
@@ -158,13 +146,16 @@ class ExecutionSession(BatchSession):
                           original_evidence_base=original_evidence_base)
 
     def run_go(self, entries):
-        """复用原Go测试函数，实际HTTP→generated Kitex/TLS/SQLite断言保持原样。"""
+        """执行原生 Ginkgo It/By，保留实际 HTTP→generated Kitex/TLS/SQLite 断言。"""
         if not entries:
             return
-        roots = sorted({s.split("/")[0] for e in entries for s in e["testSelectors"]})
-        command = ["go", "test", "./internal/platform", "-count=1", "-json", "-run", "^(" + "|".join(roots) + ")$"]
-        result = self.processes.run(command, label="actual-go-acceptance", cwd=registry.ROOT, timeout=1800)
-        events, outcomes = go_events(result.stdout, entries, result.returncode)
+        import ginkgo_events
+        selectors = [selector for entry in entries for selector in entry['testSelectors']]
+        report = self.private / ('ginkgo-q-' + uuid.uuid4().hex + '.json')
+        command, result, events = ginkgo_events.run(selectors, report, self.processes.run,
+            label="actual-ginkgo-acceptance", cwd=registry.ROOT, timeout=1800)
+        passed = ginkgo_events.passed(events)
+        outcomes = {entry['variantId']: result.returncode == 0 and set(entry['testSelectors']) <= passed for entry in entries}
         path = self.out / "events" / "go.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
@@ -177,7 +168,7 @@ class ExecutionSession(BatchSession):
                         "command": command, "commandExitCode": result.returncode, "processLocation": "host-Q",
                         "noSkipped": outcomes[entry["variantId"]], "goEventRef": event_ref,
                         "runtimeOS": self.index["environment"]["runtimeOS"], "runtimeArch": self.index["environment"]["runtimeArch"],
-                        "cleanup": {"success": True, "scope": "原Go测试t.Cleanup/TempDir/listener"}, "evidenceRefs": [event_ref]}
+                        "cleanup": {"success": True, "scope": "Ginkgo Cleanup/TempDir/listener"}, "evidenceRefs": [event_ref]}
             self.store(entry, original)
 
     def run_protocol_q(self, entries):

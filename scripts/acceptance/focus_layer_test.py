@@ -43,6 +43,18 @@ def cli(*args):
 
 
 class FocusLayer(unittest.TestCase):
+    def test_owner_and_layer_select_only_requested_business_without_mutating_profile(self):
+        """组件 Make 入口使用所属 Issue 与层级交集，空交集不能退化成全量执行。"""
+        code, output, errors = cli('list', '--profile', 'LOCAL_FULL', '--focus-owner', '16', '--focus-layer', 'B')
+        self.assertEqual(code, 0, errors)
+        selected = json.loads(output)
+        self.assertTrue(selected)
+        self.assertTrue(all(e['owner'] == 16 and e['layer'] == 'B' for e in selected))
+        self.assertEqual(len(registry.entries('LOCAL_FULL')), 207)
+        code, output, errors = cli('list', '--profile', 'CI_FAST', '--focus-owner', '16', '--focus-layer', 'B')
+        self.assertNotEqual(code, 0)
+        self.assertFalse(json.loads(output)['success'])
+
     def test_list_intersection_is_exact_twenty_and_does_not_select_overlapping_q(self):
         """REG21-FOCUS-LAYER-001：仅17K3B；两013 K与SOURCE B的同ID Q不得被选中。"""
         code, output, errors = cli('list', '--profile', 'LOCAL_FULL', '--supplemental',

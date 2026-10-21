@@ -4,16 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
-	"testing"
 
 	"github.com/cloudwego/kitex/client"
 	"github.com/fjsxy/monitor-mgr/internal/platform"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // REG19-HTTP-I64-001：HTTP不安全修订以字符串精确往返，真实RPC保留i64。
-func TestWorkbenchHTTPInt64RoundTrip(t *testing.T) {
+var _ = ginkgo.It("TestWorkbenchHTTPInt64RoundTrip", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG19-HTTP-I64-001：HTTP不安全修订以字符串精确往返，真实RPC保留i64。
+	ginkgo.By("REG19-HTTP-I64-001：HTTP不安全修订以字符串精确往返，真实RPC保留i64。")
+
 	_, target := ksmTarget(t)
 	cfg := platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
 	p, e := platform.Start(context.Background(), cfg)
@@ -80,4 +84,4 @@ func TestWorkbenchHTTPInt64RoundTrip(t *testing.T) {
 		body["expectedDraftRevision"] = invalid
 		clusterCall(t, p, "PUT", "/instances/"+id+"/draft", body, c, "invalid", 400)
 	}
-}
+})

@@ -5,14 +5,14 @@ import (
 	"net/http"
 	"reflect"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // workbenchSourceFixture 仅控制外部API与时钟，实例/版本/授权始终经真实HTTP和Kitex建立。
-func workbenchSourceFixture(t *testing.T, configure ...func(*platform.Config)) (*platform.Runtime, *http.Cookie, string, *ksmFixture, *atomic.Int64) {
+func workbenchSourceFixture(t ginkgo.GinkgoTInterface, configure ...func(*platform.Config)) (*platform.Runtime, *http.Cookie, string, *ksmFixture, *atomic.Int64) {
 	t.Helper()
 	f, target := ksmTarget(t)
 	stamp := &atomic.Int64{}
@@ -41,7 +41,7 @@ func workbenchSourceFixture(t *testing.T, configure ...func(*platform.Config)) (
 	clusterCall(t, p, "POST", "/instances/"+id+"/refresh", nil, c, "", 200)
 	return p, c, id, f, stamp
 }
-func workbenchSource(t *testing.T, value map[string]any, name string) map[string]any {
+func workbenchSource(t ginkgo.GinkgoTInterface, value map[string]any, name string) map[string]any {
 	t.Helper()
 	sources, _ := value["sources"].([]any)
 	for _, raw := range sources {
@@ -54,7 +54,11 @@ func workbenchSource(t *testing.T, value map[string]any, name string) map[string
 	return nil
 }
 
-func TestR01WorkbenchSourceFreshness(t *testing.T) {
+var _ = ginkgo.It("TestR01WorkbenchSourceFreshness", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来推进观察时钟，验证工作台按来源计算新鲜度。
+	ginkgo.By("推进观察时钟，验证工作台按来源计算新鲜度")
+
 	p, c, id, _, clock := workbenchSourceFixture(t)
 	start := clock.Load()
 	for _, seconds := range []int64{29, 30, 31} {
@@ -75,8 +79,12 @@ func TestR01WorkbenchSourceFreshness(t *testing.T) {
 			}
 		}
 	}
-}
-func TestR01WorkbenchEarlyError(t *testing.T) {
+})
+var _ = ginkgo.It("TestR01WorkbenchEarlyError", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来在首次成功观察前注入错误，验证错误状态的展示。
+	ginkgo.By("在首次成功观察前注入错误，验证错误状态的展示")
+
 	p, c, id, f, clock := workbenchSourceFixture(t)
 	original := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
 	before := workbenchSource(t, original, "CR")
@@ -91,10 +99,14 @@ func TestR01WorkbenchEarlyError(t *testing.T) {
 	if runtime["summary"] != "Unknown" || runtime["availablePods"] != nil || source["historical"] != true || source["stale"] != false || source["error"] == "" || source["lastSuccessAt"] != before["lastSuccessAt"] || source["lastAttemptAt"] == source["lastSuccessAt"] || source["runtimeSnapshot"].(map[string]any)["summary"] != "Available" {
 		t.Fatal("立即失败不能丢失历史或等30秒才未知", instance)
 	}
-}
+})
 
 // REG19-SOURCE-001：注销后的旧在途读取不能继续推进原来源。
-func TestWorkbenchLateObservationAfterUnregister(t *testing.T) {
+var _ = ginkgo.It("TestWorkbenchLateObservationAfterUnregister", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG19-SOURCE-001：注销后的旧在途读取不能继续推进原来源。
+	ginkgo.By("REG19-SOURCE-001：注销后的旧在途读取不能继续推进原来源。")
+
 	p, c, id, f, clock := workbenchSourceFixture(t)
 	original := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
 	before := workbenchSource(t, original, "CR")
@@ -106,6 +118,7 @@ func TestWorkbenchLateObservationAfterUnregister(t *testing.T) {
 	f.mu.Unlock()
 	done := make(chan struct{})
 	go func() {
+		defer ginkgo.GinkgoRecover()
 		defer close(done)
 		req, _ := http.NewRequest("POST", p.URL()+"/api/v1/instances/"+id+"/refresh", nil)
 		req.Header.Set("Origin", p.URL())
@@ -139,10 +152,14 @@ func TestWorkbenchLateObservationAfterUnregister(t *testing.T) {
 	if after["lastAttemptAt"] != before["lastAttemptAt"] || after["lastSuccessAt"] != before["lastSuccessAt"] || after["historical"] != true || current["runtime"].(map[string]any)["summary"] != "Unknown" {
 		t.Fatal("注销后迟到读取改变来源", after)
 	}
-}
+})
 
 // REG19-SOURCE-001：旧凭据读取失败不得覆盖新修订已经提交的成功观察。
-func TestWorkbenchLateObservationAfterCredentialSwitch(t *testing.T) {
+var _ = ginkgo.It("TestWorkbenchLateObservationAfterCredentialSwitch", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG19-SOURCE-001：旧凭据读取失败不得覆盖新修订已经提交的成功观察。
+	ginkgo.By("REG19-SOURCE-001：旧凭据读取失败不得覆盖新修订已经提交的成功观察。")
+
 	p, c, id, f, clock := workbenchSourceFixture(t)
 	instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
 	gate := make(chan struct{})
@@ -153,6 +170,7 @@ func TestWorkbenchLateObservationAfterCredentialSwitch(t *testing.T) {
 	f.mu.Unlock()
 	done := make(chan struct{})
 	go func() {
+		defer ginkgo.GinkgoRecover()
 		defer close(done)
 		req, _ := http.NewRequest("POST", p.URL()+"/api/v1/instances/"+id+"/refresh", nil)
 		req.Header.Set("Origin", p.URL())
@@ -198,9 +216,13 @@ func TestWorkbenchLateObservationAfterCredentialSwitch(t *testing.T) {
 	if after["lastAttemptAt"] != before["lastAttemptAt"] || after["lastSuccessAt"] != before["lastSuccessAt"] || after["error"] != "" || current["runtime"].(map[string]any)["summary"] != "Available" {
 		t.Fatal("旧修订失败覆盖了新成功", after)
 	}
-}
+})
 
-func TestR03WorkbenchMissingStatus(t *testing.T) {
+var _ = ginkgo.It("TestR03WorkbenchMissingStatus", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来构造缺失 status 的资源，核验运行摘要保持未知。
+	ginkgo.By("构造缺失 status 的资源，核验运行摘要保持未知")
+
 	p, c, id, f, _ := workbenchSourceFixture(t)
 	f.mu.Lock()
 	delete(f.cr, "status")
@@ -209,8 +231,12 @@ func TestR03WorkbenchMissingStatus(t *testing.T) {
 	if runtime["summary"] != "Unknown" || runtime["availablePods"] != nil || runtime["desiredPods"] != nil {
 		t.Fatal("无status伪造0/0", runtime)
 	}
-}
-func TestR03WorkbenchIncompleteStatus(t *testing.T) {
+})
+var _ = ginkgo.It("TestR03WorkbenchIncompleteStatus", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来构造不完整 status，防止工作台误报运行正常。
+	ginkgo.By("构造不完整 status，防止工作台误报运行正常")
+
 	p, c, id, f, _ := workbenchSourceFixture(t)
 	for _, status := range []map[string]any{
 		{"phase": "Ready", "conditions": []any{map[string]any{"type": "Ready", "status": "True"}}},
@@ -226,10 +252,14 @@ func TestR03WorkbenchIncompleteStatus(t *testing.T) {
 			t.Fatal("不适用状态伪造运行", runtime)
 		}
 	}
-}
+})
 
 // R07.pod的来源隔离回归：CR成功不能续期读取失败的Pod来源。
-func TestWorkbenchPodSourceIndependent(t *testing.T) {
+var _ = ginkgo.It("TestWorkbenchPodSourceIndependent", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来R07.pod的来源隔离回归：CR成功不能续期读取失败的Pod来源。
+	ginkgo.By("R07.pod的来源隔离回归：CR成功不能续期读取失败的Pod来源。")
+
 	p, c, id, f, clock := workbenchSourceFixture(t)
 	original := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
 	pod := workbenchSource(t, original, "Pod")
@@ -244,10 +274,14 @@ func TestWorkbenchPodSourceIndependent(t *testing.T) {
 	if cr["lastSuccessAt"] == pod["lastSuccessAt"] || cr["error"] != "" || failed["lastSuccessAt"] != pod["lastSuccessAt"] || failed["error"] == "" || failed["historical"] != true || current["runtime"].(map[string]any)["summary"] != "Available" {
 		t.Fatal("CR成功污染Pod独立失败来源", current)
 	}
-}
+})
 
 // REG19-SOURCE-001：后台集群身份预读失败也必须保留读取开始时的凭据范围。
-func TestWorkbenchLateObservationIdentityRead(t *testing.T) {
+var _ = ginkgo.It("TestWorkbenchLateObservationIdentityRead", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来REG19-SOURCE-001：后台集群身份预读失败也必须保留读取开始时的凭据范围。
+	ginkgo.By("REG19-SOURCE-001：后台集群身份预读失败也必须保留读取开始时的凭据范围。")
+
 	ticks := make(chan time.Time, 1)
 	p, c, id, f, clock := workbenchSourceFixture(t, func(cfg *platform.Config) { cfg.ObservationTicks = ticks })
 	instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
@@ -308,4 +342,4 @@ func TestWorkbenchLateObservationIdentityRead(t *testing.T) {
 	if !reflect.DeepEqual(externalAfter, externalBefore) {
 		t.Fatal("旧身份预读错误覆盖新凭据外部发现", externalAfter)
 	}
-}
+})

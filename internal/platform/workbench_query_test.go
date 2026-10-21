@@ -3,14 +3,19 @@ package platform_test
 import (
 	"context"
 	"errors"
+
 	"github.com/cloudwego/kitex/client"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
-	"testing"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // U04的后端契约：完整授权集合先过滤/排序再分页，统计独立于过滤。
-func TestWorkbenchQueryFiltersAndStatistics(t *testing.T) {
+var _ = ginkgo.It("TestWorkbenchQueryFiltersAndStatistics", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来U04的后端契约：完整授权集合先过滤/排序再分页，统计独立于过滤。
+	ginkgo.By("U04的后端契约：完整授权集合先过滤/排序再分页，统计独立于过滤。")
+
 	p, c, id, f, _ := workbenchSourceFixture(t)
 	cl := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["clusterId"].(string)
 	for _, name := range []string{"alpha.one", "alpha-two"} {
@@ -47,9 +52,13 @@ func TestWorkbenchQueryFiltersAndStatistics(t *testing.T) {
 	}
 	clusterCall(t, p, "GET", "/clusters/"+cl+"/instances?page=0&pageSize=100", nil, c, "", 422)
 	clusterCall(t, p, "GET", "/clusters/"+cl+"/instances?page=1&pageSize=101", nil, c, "", 422)
-}
+})
 
-func TestWorkbenchQueryCurrentAuthorization(t *testing.T) {
+var _ = ginkgo.It("TestWorkbenchQueryCurrentAuthorization", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来查询工作台前核验当前账号与集群归属权限。
+	ginkgo.By("查询工作台前核验当前账号与集群归属权限")
+
 	p, c, cl := ksmCluster(t)
 	clusterCall(t, p, "POST", "/accounts", map[string]any{"username": "query-user", "password": "temporary-password", "role": "USER"}, c, "new-user", 201)
 	user := request(t, p, "POST", "/sessions", `{"username":"query-user","password":"temporary-password"}`, nil, 201).Cookies()[0]
@@ -75,4 +84,4 @@ func TestWorkbenchQueryCurrentAuthorization(t *testing.T) {
 	if e != nil || result.Statistics.Managed != 0 {
 		t.Fatal("管理员真实RPC查询失败", e)
 	}
-}
+})

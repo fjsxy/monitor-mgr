@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"testing"
 
 	"github.com/cloudwego/gopkg/protocol/thrift"
 	"github.com/cloudwego/kitex/client"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // 注入实际未知 Thrift wire 字段，再由生成的 FastRead 解码；不经过会丢弃未知字段的 JSON 转换。
-func injectUnknownWireField(t *testing.T, value thrift.FastCodec) {
+func injectUnknownWireField(t ginkgo.GinkgoTInterface, value thrift.FastCodec) {
 	t.Helper()
 	raw := thrift.FastMarshal(value)
 	if len(raw) == 0 || raw[len(raw)-1] != byte(thrift.STOP) {
@@ -29,7 +30,11 @@ func injectUnknownWireField(t *testing.T, value thrift.FastCodec) {
 }
 
 // F03 同时约束 HTTP 与真实 generated client→Kitex server，不把反序列化丢字段当作拒绝。
-func TestF03KSMUnknownFieldsHTTPAndRPC(t *testing.T) {
+var _ = ginkgo.It("TestF03KSMUnknownFieldsHTTPAndRPC", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来F03 同时约束 HTTP 与真实 generated client→Kitex server，不把反序列化丢字段当作拒绝。
+	ginkgo.By("F03 同时约束 HTTP 与真实 generated client→Kitex server，不把反序列化丢字段当作拒绝。")
+
 	p, cookie, instanceID, target := ksmPublishedFixture(t)
 	instance := clusterCall(t, p, "GET", "/instances/"+instanceID, nil, cookie, "", 200)
 	clusterID := instance["clusterId"].(string)
@@ -39,7 +44,7 @@ func TestF03KSMUnknownFieldsHTTPAndRPC(t *testing.T) {
 	}
 	key, token := "unknown-fields", cookie.Value
 	callContext := &rpc.RequestContext{RequestId: "unknown-fields", SessionToken: &token, IdempotencyKey: &key}
-	newRequest := func(t *testing.T, name string) *rpc.CreateInstanceRequest {
+	newRequest := func(t ginkgo.GinkgoTInterface, name string) *rpc.CreateInstanceRequest {
 		t.Helper()
 		raw, err := json.Marshal(ksmConfig(name))
 		if err != nil {
@@ -51,7 +56,7 @@ func TestF03KSMUnknownFieldsHTTPAndRPC(t *testing.T) {
 		}
 		return &rpc.CreateInstanceRequest{ClusterId: clusterID, Component: "kube-state-metrics", Ksm: &config}
 	}
-	wantInvalid := func(t *testing.T, err error, field string) {
+	wantInvalid := func(t ginkgo.GinkgoTInterface, err error, field string) {
 		t.Helper()
 		var apiError *rpc.APIError
 		if !errors.As(err, &apiError) || apiError.Code != "INVALID_INPUT" || apiError.FieldErrors[field] == "" {
@@ -67,7 +72,7 @@ func TestF03KSMUnknownFieldsHTTPAndRPC(t *testing.T) {
 		}
 	}
 
-	t.Run("HTTP拒绝不支持字段与资源键", func(t *testing.T) {
+	teststeps.Step("HTTP拒绝不支持字段与资源键", func() {
 		for _, level := range []string{"request", "ksm", "resources"} {
 			config := ksmConfig("unknown-http")
 			body := map[string]any{"component": "kube-state-metrics", "ksm": config}
@@ -94,32 +99,32 @@ func TestF03KSMUnknownFieldsHTTPAndRPC(t *testing.T) {
 		}
 	})
 
-	t.Run("请求未知wire字段", func(t *testing.T) {
+	teststeps.Step("请求未知wire字段", func() {
 		request := newRequest(t, "unknown-request")
 		injectUnknownWireField(t, request)
 		_, err := cli.CreateInstance(context.Background(), callContext, request)
 		wantInvalid(t, err, "request")
 	})
-	t.Run("嵌套配置未知wire字段", func(t *testing.T) {
+	teststeps.Step("嵌套配置未知wire字段", func() {
 		request := newRequest(t, "unknown-config")
 		injectUnknownWireField(t, request.Ksm)
 		_, err := cli.CreateInstance(context.Background(), callContext, request)
 		wantInvalid(t, err, "request.ksm")
 	})
-	t.Run("嵌套资源未知wire字段", func(t *testing.T) {
+	teststeps.Step("嵌套资源未知wire字段", func() {
 		request := newRequest(t, "unknown-resource")
 		injectUnknownWireField(t, request.Ksm.Resources)
 		_, err := cli.CreateInstance(context.Background(), callContext, request)
 		wantInvalid(t, err, "request.ksm.resources")
 	})
-	t.Run("关闭的高级资源也不能透传未知字段", func(t *testing.T) {
+	teststeps.Step("关闭的高级资源也不能透传未知字段", func() {
 		request := newRequest(t, "unknown-advanced")
 		request.Ksm.NodeResources = &rpc.RoleResources{Mode: "Override", Resources: &rpc.ContainerResources{}}
 		injectUnknownWireField(t, request.Ksm.NodeResources.Resources)
 		_, err := cli.CreateInstance(context.Background(), callContext, request)
 		wantInvalid(t, err, "request.ksm.nodeResources.resources")
 	})
-	t.Run("当前认证优先于未知字段拒绝", func(t *testing.T) {
+	teststeps.Step("当前认证优先于未知字段拒绝", func() {
 		request := newRequest(t, "unknown-unauthenticated")
 		injectUnknownWireField(t, request)
 		unauthenticated := &rpc.RequestContext{RequestId: "unknown-unauthenticated", IdempotencyKey: &key}
@@ -130,13 +135,13 @@ func TestF03KSMUnknownFieldsHTTPAndRPC(t *testing.T) {
 			t.Fatalf("未知字段绕过了当前认证优先级：%v", err)
 		}
 	})
-	t.Run("认证上下文未知wire字段", func(t *testing.T) {
+	teststeps.Step("认证上下文未知wire字段", func() {
 		ctx := &rpc.RequestContext{RequestId: "unknown-context", SessionToken: &token, IdempotencyKey: &key}
 		injectUnknownWireField(t, ctx)
 		_, err := cli.CreateInstance(context.Background(), ctx, newRequest(t, "unknown-context"))
 		wantInvalid(t, err, "context")
 	})
-	t.Run("同键命中前仍拒绝嵌套未知字段", func(t *testing.T) {
+	teststeps.Step("同键命中前仍拒绝嵌套未知字段", func() {
 		replayKey := "unknown-wire-replay"
 		ctx := &rpc.RequestContext{RequestId: "unknown-replay", SessionToken: &token, IdempotencyKey: &replayKey}
 		created, err := cli.CreateInstance(context.Background(), ctx, newRequest(t, "known-replay"))
@@ -162,4 +167,4 @@ func TestF03KSMUnknownFieldsHTTPAndRPC(t *testing.T) {
 	if target.writes != 0 {
 		t.Fatal("未知字段请求产生了集群写入")
 	}
-}
+})

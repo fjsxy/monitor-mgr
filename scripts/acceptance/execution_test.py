@@ -234,9 +234,9 @@ class ExecutionBoundary(unittest.TestCase):
     def test_go_skip_beneath_passing_root_cannot_pass(self):
         """父测试pass但真实leaf skip仍拒绝，Output原文本不会被公开。"""
         entry={'variantId':'fixture','testSelectors':['TestFixture']}
-        raw=b'\n'.join(json.dumps(v).encode() for v in [
-            {'Action':'output','Output':'private-auth-canary'},
-            {'Action':'skip','Test':'TestFixture/required'}, {'Action':'pass','Test':'TestFixture'}])
+        raw=json.dumps([dict(SuiteSucceeded=True, SuiteConfig={}, SpecReports=[dict(
+            LeafNodeType='It', LeafNodeText='TestFixture', State='skipped', NumAttempts=1,
+            CapturedStdOutErr='private-auth-canary')])]).encode()
         events,outcomes=go_events(raw,[entry],0)
         self.assertFalse(outcomes['fixture'])
         self.assertNotIn('private-auth-canary',json.dumps(events))

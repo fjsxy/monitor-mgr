@@ -7,16 +7,21 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/cloudwego/kitex/client"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // SELECTOR012沿HTTP→真实Kitex→SQLite→worker验证CR裁剪；typed空集合与外层selector语义分别断言。
-func TestAgentSelectorExpressionProjection(t *testing.T) {
+var _ = ginkgo.It("TestAgentSelectorExpressionProjection", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来SELECTOR012沿HTTP→真实Kitex→SQLite→worker验证CR裁剪；typed空集合与外层selector语义分别断言。
+	ginkgo.By("SELECTOR012沿HTTP→真实Kitex→SQLite→worker验证CR裁剪；typed空集合与外层selector语义分别断言。")
+
 	for _, tc := range []struct {
 		name, operator string
 		values         []string
@@ -29,7 +34,7 @@ func TestAgentSelectorExpressionProjection(t *testing.T) {
 		{"in", "In", []string{"alpha", "beta"}, []string{"alpha"}},
 		{"not-in", "NotIn", []string{"alpha", "beta"}, []string{"gamma", "missing"}},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		teststeps.Step(tc.name, func() {
 			f, target := agentTarget(t)
 			writes := 0
 			f.hook = func(w http.ResponseWriter, r *http.Request) bool {
@@ -169,4 +174,4 @@ func TestAgentSelectorExpressionProjection(t *testing.T) {
 			}
 		})
 	}
-}
+})

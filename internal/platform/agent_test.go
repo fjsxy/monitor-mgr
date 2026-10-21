@@ -9,7 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"testing"
+
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 func agentConfig(name, namespace string) map[string]any {
@@ -20,7 +21,11 @@ func agentConfig(name, namespace string) map[string]any {
 }
 
 // A03/F01：保存typed Agent只创建平台草稿，跨namespace同名保持独立。
-func TestAgentTypedDraftIdentityAndDefaults(t *testing.T) {
+var _ = ginkgo.It("TestAgentTypedDraftIdentityAndDefaults", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来A03/F01：保存typed Agent只创建平台草稿，跨namespace同名保持独立。
+	ginkgo.By("A03/F01：保存typed Agent只创建平台草稿，跨namespace同名保持独立。")
+
 	p, c, cluster := ksmCluster(t)
 	var ids []string
 	for _, ns := range []string{"one", "two"} {
@@ -44,10 +49,14 @@ func TestAgentTypedDraftIdentityAndDefaults(t *testing.T) {
 	if copy["agent"].(map[string]any)["name"] != "" {
 		t.Fatal("复制复用原身份")
 	}
-}
+})
 
 // A01/A04/F01：默认Agent发布仍经过同一真实Kitex/版本/attempt/worker链，四selector省略不能丢remoteWrite。
-func TestAgentDefaultPublicationWithDependencies(t *testing.T) {
+var _ = ginkgo.It("TestAgentDefaultPublicationWithDependencies", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来A01/A04/F01：默认Agent发布仍经过同一真实Kitex/版本/attempt/worker链，四selector省略不能丢remoteWrite。
+	ginkgo.By("A01/A04/F01：默认Agent发布仍经过同一真实Kitex/版本/attempt/worker链，四selector省略不能丢remoteWrite。")
+
 	f, target := agentTarget(t)
 	p, c, owner := clusterPlatform(t)
 	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "agent", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
@@ -80,7 +89,7 @@ func TestAgentDefaultPublicationWithDependencies(t *testing.T) {
 	if !strings.Contains(preview["rightYAML"].(string), "1Gi") {
 		t.Fatal("默认PVC容量未映射")
 	}
-}
+})
 
 type agentFixture struct {
 	mu        sync.Mutex
@@ -89,7 +98,7 @@ type agentFixture struct {
 	hook      func(http.ResponseWriter, *http.Request) bool
 }
 
-func agentTarget(t *testing.T) (*agentFixture, string) {
+func agentTarget(t ginkgo.GinkgoTInterface) (*agentFixture, string) {
 	t.Helper()
 	base, _, _ := clusterAPI(t, 200, false)
 	f := &agentFixture{objects: map[string]map[string]any{}}
@@ -200,7 +209,11 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 }
 
 // R03.agent-paused：外部paused仅停止调谐，已有Pod不能被宣称停止。
-func TestR03AgentPausedReadOnly(t *testing.T) {
+var _ = ginkgo.It("TestR03AgentPausedReadOnly", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来R03.agent-paused：外部paused仅停止调谐，已有Pod不能被宣称停止。
+	ginkgo.By("R03.agent-paused：外部paused仅停止调谐，已有Pod不能被宣称停止。")
+
 	f, target := agentTarget(t)
 	p, c, owner := clusterPlatform(t)
 	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "agent", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
@@ -218,4 +231,4 @@ func TestR03AgentPausedReadOnly(t *testing.T) {
 		t.Fatal("paused被错误解释为停止Pod")
 	}
 	clusterCall(t, p, "PUT", "/instances/"+i["id"].(string)+"/draft", map[string]any{"expectedDraftRevision": 1, "agent": agentConfig("outside", "monitoring")}, c, "cannot-adopt", 403)
-}
+})

@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strings"
 	"sync/atomic"
-	"testing"
+
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 func operatorDoc(args []string) map[string]any {
@@ -17,10 +19,14 @@ func operatorPodDoc(name string, args []string) map[string]any {
 }
 
 // CAP补充回归通过HTTP公开预览边界验证，缺启动能力、单-范围、override及旧RS均不能误放行。
-func TestAgentOperatorCapabilityBoundaries(t *testing.T) {
+var _ = ginkgo.It("TestAgentOperatorCapabilityBoundaries", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来CAP补充回归通过HTTP公开预览边界验证，缺启动能力、单-范围、override及旧RS均不能误放行。
+	ginkgo.By("CAP补充回归通过HTTP公开预览边界验证，缺启动能力、单-范围、override及旧RS均不能误放行。")
+
 	cases := []string{"missing-agent-controller", "missing-scrape-informer", "single-dash-namespace", "single-dash-selector", "identity-override", "old-rs-mismatch", "mixed-pod-scope", "none-without-scrape-api", "positional", "terminator", "duplicate-scope", "boolean-arity", "known-scope-space", "env-expansion"}
 	for _, variant := range cases {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			f, target := agentTarget(t)
 			p, c, owner := clusterPlatform(t)
 			registered := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "capability", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
@@ -135,12 +141,16 @@ func TestAgentOperatorCapabilityBoundaries(t *testing.T) {
 			}
 		})
 	}
-}
+})
 
 // A13安全错误必须区分不存在、禁止访问与缺key，不把所有依赖问题揉成CONFLICT。
-func TestAgentDependencyErrorClassification(t *testing.T) {
+var _ = ginkgo.It("TestAgentDependencyErrorClassification", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来A13安全错误必须区分不存在、禁止访问与缺key，不把所有依赖问题揉成CONFLICT。
+	ginkgo.By("A13安全错误必须区分不存在、禁止访问与缺key，不把所有依赖问题揉成CONFLICT。")
+
 	for _, variant := range []string{"missing-secret", "forbidden-secret", "missing-key", "missing-sa"} {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			f, target := agentTarget(t)
 			p, c, owner := clusterPlatform(t)
 			op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "dependencies", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
@@ -182,10 +192,14 @@ func TestAgentDependencyErrorClassification(t *testing.T) {
 			}
 		})
 	}
-}
+})
 
 // R07公开读模型：CR持续成功也不能掩盖PVC/关联读取失败或刷新其最后成功时间。
-func TestAgentIndependentSourceFreshness(t *testing.T) {
+var _ = ginkgo.It("TestAgentIndependentSourceFreshness", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来R07公开读模型：CR持续成功也不能掩盖PVC/关联读取失败或刷新其最后成功时间。
+	ginkgo.By("R07公开读模型：CR持续成功也不能掩盖PVC/关联读取失败或刷新其最后成功时间。")
+
 	f, target := agentTarget(t)
 	p, c, owner := clusterPlatform(t)
 	registered := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "sources", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
@@ -252,10 +266,14 @@ func TestAgentIndependentSourceFreshness(t *testing.T) {
 			t.Fatal("失败丢失历史匹配集合")
 		}
 	}
-}
+})
 
 // 草稿匹配与实际CR运行来源属于不同读模型；冲突预览也不能写入运行缓存。
-func TestAgentDraftSourceIsolation(t *testing.T) {
+var _ = ginkgo.It("TestAgentDraftSourceIsolation", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来草稿匹配与实际CR运行来源属于不同读模型；冲突预览也不能写入运行缓存。
+	ginkgo.By("草稿匹配与实际CR运行来源属于不同读模型；冲突预览也不能写入运行缓存。")
+
 	f, target := agentTarget(t)
 	p, c, owner := clusterPlatform(t)
 	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "isolation", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
@@ -317,4 +335,4 @@ func TestAgentDraftSourceIsolation(t *testing.T) {
 	revise.Store(true)
 	clusterCall(t, p, "POST", "/instances/"+id+"/association-previews", map[string]any{"draftRevision": 2}, c, "preview-conflict", 409)
 	assertUnchanged()
-}
+})

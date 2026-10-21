@@ -1,13 +1,18 @@
 package platform_test
 
 import (
-	"github.com/fjsxy/monitor-mgr/internal/platform"
-	"testing"
 	"time"
+
+	"github.com/fjsxy/monitor-mgr/internal/platform"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // R05.page：第二页失败只标未知/历史，不能丢掉上次完整发现的对象或提交第一页为全集。
-func TestR05WorkbenchFailedInventoryPage(t *testing.T) {
+var _ = ginkgo.It("TestR05WorkbenchFailedInventoryPage", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来R05.page：第二页失败只标未知/历史，不能丢掉上次完整发现的对象或提交第一页为全集。
+	ginkgo.By("R05.page：第二页失败只标未知/历史，不能丢掉上次完整发现的对象或提交第一页为全集。")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	cl := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["clusterId"].(string)
 	outside := func(name, uid string) map[string]any {
@@ -40,10 +45,14 @@ func TestR05WorkbenchFailedInventoryPage(t *testing.T) {
 			t.Fatal("外部对象被认领")
 		}
 	}
-}
+})
 
 // R05.item：同一后台批次中失败对象与成功对象各自记录，不整批覆盖。
-func TestR05WorkbenchIndependentItems(t *testing.T) {
+var _ = ginkgo.It("TestR05WorkbenchIndependentItems", func() {
+	t := ginkgo.GinkgoT()
+	// 接下来R05.item：同一后台批次中失败对象与成功对象各自记录，不整批覆盖。
+	ginkgo.By("R05.item：同一后台批次中失败对象与成功对象各自记录，不整批覆盖。")
+
 	ticks := make(chan time.Time, 1)
 	p, c, id, f, clock := workbenchSourceFixture(t, func(cfg *platform.Config) { cfg.ObservationTicks = ticks })
 	other, target := ksmTarget(t)
@@ -78,4 +87,4 @@ func TestR05WorkbenchIndependentItems(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-}
+})
