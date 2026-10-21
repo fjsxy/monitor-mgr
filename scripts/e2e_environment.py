@@ -44,6 +44,13 @@ class Environment:
     def command(self, command, label='command', **kwargs):
         result = self.processes.run([str(v) for v in command], label=label, **kwargs)
         if result.returncode:
+            if label in ('build-platform','build-operator'):
+                # 关键：只投影固定分类与 exit；Docker 原文可能包含私有路径/源码，不能进入公开 artifact。
+                diagnostic=dict(operation=label,exit=result.returncode,errorCode='BUILD_COMMAND_FAILED')
+                if b'unknown scheme oci-layout' in result.stderr:diagnostic['errorCode']='BUILD_OCI_LAYOUT_UNSUPPORTED'
+                if b'no space left on device' in result.stderr:diagnostic['errorCode']='BUILD_DISK_FULL'
+                private_json(self.public/'command-failure.json',diagnostic)
+                print('构建失败：'+json.dumps(diagnostic),flush=True)
             raise RuntimeError(label + ': exit=' + str(result.returncode) + '；原始输出见私有 processes')
         return result
 
@@ -162,7 +169,7 @@ class Environment:
         dockerfile=dockerfile.replace('FROM golang:1.22.12-alpine AS builder','FROM monitorop_go AS builder').replace('FROM gcr.io/distroless/static:nonroot','FROM '+LOCK['images']['monitorop_runtime']['image'])
         dockerfile+='\nLABEL org.opencontainers.image.revision="'+LOCK['monitorOp']['source']+'"\n'
         path=self.private/'operator.Dockerfile';path.write_text(dockerfile)
-        build=['docker','build','--platform',self.platform,'--provenance=false','--sbom=false']
+        build=['docker','buildx','build','--load','--platform',self.platform,'--provenance=false','--sbom=false']
         print('构建同候选平台和锁定 Operator 镜像',flush=True)
         self.command([*build,'--build-context','platform_node='+contexts['platform_node'],'--build-context','platform_go='+contexts['platform_go'],'-f',platform_path,'--build-arg','SOURCE_SHA='+self.candidate,'-t',self.image,ROOT],'build-platform',timeout=1200)
         self.command([*build,'--build-context','monitorop_go='+contexts['monitorop_go'],'-f',path,'-t',self.operator_image,source],'build-operator',timeout=1200)

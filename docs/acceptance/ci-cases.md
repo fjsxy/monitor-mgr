@@ -5,7 +5,7 @@
 | CI job | 执行入口与内容 | 通过标准 |
 | --- | --- | --- |
 | UT | `make ut`：18 个 Ginkgo UT，一次 race/覆盖率；生成一致性、vet、前端类型检查/构建 | 全部18项通过，无漏跑/skip/retry/race，手写产品语句覆盖率≥70% |
-| E2E | `make e2e`：自动创建 control(1cp+2worker)/data(1可调度cp)，Helm 部署固定依赖和平台；10项串行运行 | 环境就绪、10项全部通过且原身份清理成功；失败/未执行/环境失败分别记录 |
+| E2E | `make ci-builder` 固定独占 BuildKit；`make e2e` 自动创建 control(1cp+2worker)/data(1可调度cp)，Helm 部署固定依赖和平台；10项串行运行 | 环境就绪、10项全部通过；集群与构建器均按原身份清理成功；失败/未执行/环境失败分别记录 |
 
 两类 job 在可信同仓 PR 和 main 使用同一清单；E2E 依赖私有 Operator 源码，凭据仅在获取来源步骤使用。构建/生成检查不另算测试类型。
 
@@ -57,4 +57,4 @@
 
 `make ut` 生成 `.scratch/ut-results.json` 和 `.scratch/coverage.out`；`make e2e` 输出 `.scratch/e2e/<runId>/public/results.json`、`cleanup.json` 和浏览器截图。原始日志/报告、kubeconfig、数据库、证书、私有源码仅在同 run 的 `.private/`。CI 只上传 public 和 UT 安全摘要。
 
-入口摘要：`Makefile` SHA256=b3b467f1510ca096635aab38c4cb06550a1a7b77b7757ef3e5ca4c1c05a8f3ca；workflow SHA256=cb2708157c88ee916d05217776db1e09b54a4819d8de894759f2b9a1c0a0c5b3。
+入口摘要：`Makefile` SHA256=a029fe483bb174363598982c7a02c491fd0bb9cdeffeb395a636312fce7dbd8a；workflow SHA256=8d27a26a933d50efaa3a3ff12d9328d6930b85adf29725d5d9f55f366ae68dda。

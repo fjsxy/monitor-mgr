@@ -46,6 +46,8 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    env:
+      BUILDX_BUILDER: mm-ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -56,6 +58,8 @@ jobs:
           python3 scripts/acceptance/bootstrap_linux.py --prefix "$RUNNER_TEMP/tools" \
             --record "$RUNNER_TEMP/private/bootstrap.json" --public-report "$RUNNER_TEMP/e2e-bootstrap-public/bootstrap.json" --browsers
           python3 scripts/install-helm.py "$RUNNER_TEMP/tools/bin/helm"
+      - name: 固定独占 BuildKit，支持经校验的 OCI 输入
+        run: make ci-builder PYTHON=python
       - name: 仅此步骤获取锁定私有源码
         env:
           MONITOR_OP_DEPLOY_KEY: ${{ secrets.MONITOR_OP_DEPLOY_KEY }}
@@ -74,6 +78,9 @@ jobs:
           if test -f "$RUNNER_TEMP/e2e/.private/environment.json"; then
             python scripts/e2e.py --cleanup "$RUNNER_TEMP/e2e"
           fi
+      - name: 按原身份清理独占构建器
+        if: always()
+        run: make ci-builder-cleanup PYTHON=python
       - name: 上传安全结果与截图
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

@@ -27,3 +27,5 @@ python scripts/e2e.py --cleanup /tmp/mm-example # 进程中断后，独立核验
 旧 `phase1.json`、历史 `issue-*.md` 结果与 `scripts/acceptance` 中未被新入口使用的 profile/export/recover 代码仅供历史追溯。旧 80/207、58 Q、17 Smoke 不再是当前 CI 的数量门槛；历史通过记录保持原 SHA 和原含义，不改写为新的 18+10 已通过。
 
 构建阶段先通过主机 HTTPS 校验固定 Docker Hub index、目标架构 manifest 和所有 config/layer，再以[本地 OCI build context](https://docs.docker.com/reference/cli/docker/buildx/build/#additional-build-contexts---build-context)交给 BuildKit。可复用的纯公开构建输入缓存为 `.scratch/oci-inputs/`；版本/摘要不变，不依赖 Docker Hub 登录材料。先构建后创建集群，避免同时占用编译和四节点内存。
+
+远端 CI 使用 `make ci-builder` 创建本 run 独占、固定 `moby/buildkit:v0.31.1` 摘要的 `docker-container` 构建器，通过 `docker buildx build --load` 将产物载入 kind 所用的 Docker。Docker 28 默认内置后端不识别本地 OCI 输入；已用同一份 OCI 输入做隔离红/绿对照。`make ci-builder-cleanup` 核对原构建容器 ID 后清理，不修改 runner 的默认 Docker 存储配置。

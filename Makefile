@@ -4,6 +4,7 @@ GO ?= go
 NPM ?= npm
 PYTHON ?= python3
 E2E_ARGS ?=
+BUILDX_BUILDER ?=
 COVERAGE_FILE ?= .scratch/coverage.out
 HTTP_ADDR ?= 127.0.0.1:18080
 RPC_ADDR ?= 127.0.0.1:18888
@@ -12,7 +13,7 @@ IMAGE ?= monitor-mgr:development
 SOURCE_SHA ?= $(shell git rev-parse HEAD)
 PLATFORM ?= linux/arm64
 
-.PHONY: help ut e2e check test test-race generate check-generated vet web-install web-build build run image ci-cases ci-cases-check
+.PHONY: help ut e2e check test test-race generate check-generated vet web-install web-build build run image ci-cases ci-cases-check ci-builder ci-builder-cleanup
 help: ## 查看常用命令
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 ut: ci-cases-check check-generated vet web-build ## 18 个 Ginkgo UT，一次 race 与不少于70%的产品语句覆盖率
@@ -46,3 +47,8 @@ ci-cases: ## 生成完整28项CI清单及选择标准
 	$(PYTHON) scripts/ci-cases.py
 ci-cases-check: ## 核对固定目录、代码、CI和本地清单
 	$(PYTHON) scripts/ci-cases.py --check
+
+ci-builder: ## CI 创建本 run 独占、固定版本的 BuildKit；须指定 BUILDX_BUILDER=mm-...
+	$(PYTHON) scripts/ci-builder.py create --name "$(BUILDX_BUILDER)"
+ci-builder-cleanup: ## 按记录的原容器 ID 清理本 run 构建器
+	$(PYTHON) scripts/ci-builder.py cleanup --name "$(BUILDX_BUILDER)"
