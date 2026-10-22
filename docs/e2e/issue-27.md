@@ -17,3 +17,17 @@
 | I27-B01 | 页面展示具体资源进度及安全动作 | 浏览器打开成功、未发、结果待确认和删除操作；展开资源信息及执行尝试 | 显示 kind、namespace/name、状态、UID、发送边界、冻结 YAML及原因；动作与现有安全边界一致 | #27 |
 
 以上为实施前计划，尚不表示实际通过；结果另记并绑定 testedCommit。
+
+## 审查补充：拒绝旧冻结目标与当前实例身份错绑
+
+沿用公开 HTTP → 真实 Kitex RPC → SQLite → worker/受控 TLS Kubernetes API 接缝；各行在 UT-11 内独立执行，不扩大固定 UT 目录。保留首次确定失败后可修改未部署实例身份的现有行为。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| I27-R01.ksm-name | KSM 更名后禁止旧版本错绑 UID | 首次 KSM POST 明确拒绝；公开保存新 name；恢复目标；原操作 retry；读取草稿、实例、版本及目标写计数 | retry 返回 409 CONFLICT、0新增目标写和0新增 attempt；实例 UID 为空、name 为新值；旧冻结文档与新草稿均不被改写 | #27 |
+| I27-R01.ksm-namespace | KSM 部署 namespace 也是冻结身份 | 首次 KSM POST 明确拒绝；保存新 targetNamespace；恢复目标并 retry 原操作 | 写前返回409 CONFLICT；不创建旧 namespace 的 exporter/SM、不绑定 UID；当前 targetNamespace 与旧冻结目标各自保留 | #27 |
+| I27-R01.agent-name | Agent 更名后禁止旧版本错绑 UID | 首次 PrometheusAgent POST 明确拒绝；保存新 name；恢复目标并 retry 原版本 | 写前返回409 CONFLICT；原 namespaced CR 不被创建、实例不绑定旧 UID；最新草稿不被回写 | #27 |
+| I27-R01.agent-namespace | Agent namespaced identity 不能被旧重试绕过 | 首次 PrometheusAgent POST 明确拒绝；保存新 namespace；恢复目标并 retry 原版本 | 写前返回409 CONFLICT；旧 namespace 无新增请求；实例 namespace 与 UID 正确保留，冻结文档不重算 | #27 |
+| I27-R02 | 合法新身份可明确发布，派发使用一致身份 | 对以上四个变更后草稿分别重新预览并明确发布；读取新版本、逐资源进度、实例与真实目标请求路径 | 新发布成功，instance name/namespace/UID 与新冻结组件一致；KSM SM 使用新部署 namespace；旧操作仍失败、旧资源文档不变；每次写入前均核对当前实例与冻结组件身份 | #27 |
+
+本补充为实施前计划，不表示实际通过；实际红绿与 testedCommit 另记。

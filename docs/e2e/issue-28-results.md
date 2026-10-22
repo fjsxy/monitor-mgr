@@ -21,3 +21,15 @@
 完整门禁之后仅补充真实验收Python接线与文档：修正原创建响应identity字段取证、按独立原UID统计请求、为受限namespace夹具明确授予该namespace的SM权限。Python `py_compile`、固定目录检查通过；没有据此宣称真实API已通过。
 
 另在远程旧候选`e3f9e9e`的E2E-09公共收据中观察到fixture finalizer patch失败，尚无私有stderr/HTTP code，**不能确认根因为RV推进**。夹具仅对明确`/metadata/resourceVersion` JSONpatch test失败或标准“object has been modified”Conflict，在重新读取确认同原UID+新RV后最多尝试三次；其他失败原样停止，并保存安全分类收据。该改动仍待真实重跑，不记为已修复通过。
+
+## 真实 CI 验收缺口补充
+
+补充计划 I28-R01–R04 已完整发布并逐字回读：https://github.com/fjsxy/monitor-mgr/issues/28#issuecomment-6337768012 。
+
+原实际诊断候选 `ade5ce9d79d317e1f41b179308947fbde14f2b7d` 的独占 storage 重跑：E2E-05通过、E2E-09失败、cleanup=true。私有最后 Operation 的安全投影明确为 `WAITING_CONFIRMATION`，SM `SUCCEEDED/possiblySent=true`，component `QUEUED/possiblySent=false`。这确认原验收把 SM 异步删除阻塞误当成 KSM finalizer 阻塞；不能靠延长 timeout 或在 refresh 中补写组件解决。
+
+- I28-R01 RED：旧代理通过真实 loopback 控制 HTTP 返回409拒绝精确SSAR条件，见 `runtime-red-proxy.log`；新增严格KSM SSAR白名单后 UT-18 GREEN（`runtime-green-proxy.log`，6.481s），并验证SM/畸形/dryRun不消费规则、旧无正文规则兼容。上游故意不可达，仅证明HTTP选择/暂停，不宣称Kubernetes/mTLS验收通过。
+- I28-R02/R03：公开 HTTP→Kitex→SQLite→受控TLS目标覆盖已发送组件finalizer恢复，以及SM异步删除→只读确认→未发组件WAITING→重新预览/明确继续同版本新attempt→组件finalizer→只读成功。每份原UID/RV DELETE严格一次；UT-12通过，见 `runtime-delete-probe.log`（11.870s）。
+- I28-R04：修正后的E2E-08先真实202/operation、再确认KSM SSAR屏障与possiblySent=false后撤权。E2E-09先证明原组件已发、实际deletionTimestamp与本例hold在场才移除hold；只读确认整体原图清空，原SM/KSM实际DELETE各一次，另一实例UID/spec保持。白名单收据为 `instance-dispatch-unsent.json` 与 `companion-deletion-recovery.json`；修后真实E2E仍待根最终同源执行。
+
+完整 `testedCommit=c0a556a215b2dfe796a4a3be73a9026e11c6008f` 执行 `make ut PYTHON=/tmp/monitor-mgr-spec23-tools.3nB8bT/venv/bin/python` 退出0：18/18、race、产品合并语句覆盖率 **78.10%**、生成一致性、vet、前端构建及目录核对通过，平台包525.378s（`runtime-ut.log`）。已合最新集成 `7f8d853`。后续审查修复 `c82b75a` 的定向UT-08/10/11/12/16/18再次通过（52.412s）；两份收据分别保留，不把旧全量当成修复后全量。

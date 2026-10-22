@@ -2,13 +2,118 @@ package platform_test
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"reflect"
 	"strings"
 	"sync/atomic"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
 	ginkgo "github.com/onsi/ginkgo/v2"
-	"net/http"
 )
+
+// I27-R01：首次确定失败后允许更名，但旧版本不能把原目标 UID 绑定到新身份实例。
+func checkResourceRetryIdentity(t ginkgo.GinkgoTInterface) {
+	for _, variant := range []string{"ksm-name", "ksm-namespace", "agent-name", "agent-namespace"} {
+		ginkgo.By("I27-R01." + variant + "：确定失败后变更身份，旧重试零写且新明确发布可成功")
+		name, namespace := "lifecycle", "monitoring"
+		if strings.HasSuffix(variant, "-name") {
+			name = "renamed-after-failure"
+		} else {
+			namespace = "monitoring-two"
+		}
+		var p *platform.Runtime
+		var c *http.Cookie
+		var id, field string
+		var cfg map[string]any
+		var restore func()
+		var writes func() int
+		var verifyTarget func(string)
+		if strings.HasPrefix(variant, "ksm-") {
+			var f *ksmFixture
+			p, c, id, f = lifecycleFixture(t, nil)
+			f.mu.Lock()
+			f.rejectWrite = 422
+			f.mu.Unlock()
+			field, cfg = "ksm", ksmConfig(name)
+			cfg["targetNamespace"] = namespace
+			restore = func() { f.mu.Lock(); f.rejectWrite = 0; f.mu.Unlock() }
+			writes = func() int { f.mu.Lock(); defer f.mu.Unlock(); return f.writeRequests + f.smRequests }
+			verifyTarget = func(uid string) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				if f.cr == nil || f.sm == nil || f.cr["metadata"].(map[string]any)["name"] != name || f.cr["metadata"].(map[string]any)["uid"] != uid || f.cr["spec"].(map[string]any)["targetNamespace"] != namespace || f.sm["metadata"].(map[string]any)["namespace"] != namespace {
+					t.Error("新 KSM 身份与目标组件/配套资源不一致")
+				}
+			}
+		} else {
+			var cluster string
+			var f *agentFixture
+			p, c, cluster, _, f = agentSafetyFixture(t, nil)
+			var reject atomic.Bool
+			var requests atomic.Int64
+			reject.Store(true)
+			f.mu.Lock()
+			f.hook = func(w http.ResponseWriter, r *http.Request) bool {
+				if r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/prometheusagents") {
+					requests.Add(1)
+					if reject.Load() {
+						w.WriteHeader(422)
+						w.Write([]byte(`{}`))
+						return true
+					}
+				}
+				if r.URL.Path == "/api/v1/namespaces/monitoring-two" || r.URL.Path == "/api/v1/namespaces/monitoring-two/serviceaccounts/prometheus-agent" {
+					name := "monitoring-two"
+					if strings.HasSuffix(r.URL.Path, "/prometheus-agent") {
+						name = "prometheus-agent"
+					}
+					json.NewEncoder(w).Encode(map[string]any{"metadata": map[string]any{"name": name, "uid": "new-namespace-fixture"}})
+					return true
+				}
+				return false
+			}
+			f.mu.Unlock()
+			instance := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": agentConfig("lifecycle", "monitoring")}, c, "create-agent", 201)
+			id = instance["id"].(string)
+			field, cfg = "agent", agentConfig(name, namespace)
+			restore = func() { reject.Store(false) }
+			writes = func() int { return int(requests.Load()) }
+			verifyTarget = func(uid string) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				cr := f.objects[namespace+"/"+name]
+				if len(f.objects) != 1 || cr == nil || cr["metadata"].(map[string]any)["uid"] != uid {
+					t.Error("新 Agent namespaced identity 与目标不一致")
+				}
+			}
+		}
+		preview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "initial-preview", 200)
+		op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1}, c, "rejected", 202)
+		oid := op["operationId"].(string)
+		awaitLifecycleState(t, p, c, oid, "FAILED")
+		versionPath := "/instances/" + id + "/versions/" + op["versionId"].(string)
+		frozen := clusterCall(t, p, "GET", versionPath, nil, c, "", 200)
+		draft := clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, field: cfg}, c, "rename-rejected", 200)
+		restore()
+		before := writes()
+		rejected := clusterCall(t, p, "POST", "/operations/"+oid+"/retry", lifecycleRevision(t, p, c, oid), c, "stale-identity", 409)
+		instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+		attempts := clusterCall(t, p, "GET", "/operations/"+oid+"/attempts", nil, c, "", 200)["attempts"].([]any)
+		if rejected["code"] != "CONFLICT" || len(attempts) != 1 || instance["name"] != name || instance["targetNamespace"] != namespace || instance["uid"] != "" || writes() != before || !reflect.DeepEqual(draft, clusterCall(t, p, "GET", "/instances/"+id+"/draft", nil, c, "", 200)) || !reflect.DeepEqual(frozen, clusterCall(t, p, "GET", versionPath, nil, c, "", 200)) {
+			t.Fatal("旧重试写入目标或改写新草稿、旧版本、实例身份", instance)
+		}
+		// 关键：拒绝的是旧冻结身份，不锁死合法新草稿；新的明确发布固定新身份并独立保存 UID。
+		preview = clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, c, "new-preview", 200)
+		fresh := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 2}, c, "new-identity", 202)
+		awaitLifecycleState(t, p, c, fresh["operationId"].(string), "SUCCEEDED")
+		instance = clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+		if fresh["versionId"] == op["versionId"] || instance["name"] != name || instance["targetNamespace"] != namespace || instance["uid"] == "" || !reflect.DeepEqual(frozen, clusterCall(t, p, "GET", versionPath, nil, c, "", 200)) {
+			t.Fatal("新发布错绑身份或改写旧版本", instance)
+		}
+		verifyTarget(instance["uid"].(string))
+	}
+}
 
 // resourceProgress 经公开 API 核对资源读模型，不读取业务表替代用户可见结果。
 func resourceProgress(t ginkgo.GinkgoTInterface, p *platform.Runtime, c *http.Cookie, oid string) map[string]any {

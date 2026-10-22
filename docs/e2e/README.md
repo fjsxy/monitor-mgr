@@ -4,7 +4,7 @@
 
 #14、#15 的本次表格为新增约束后的标准化补录；此前实施前计划及真实运行来源保留。#16 在继续新增实现前补齐新格式。#17–#21 的表格预先保存并发布，后续领取时再次核对是否与本地一致。
 
-重复命令从 `make help` 查找。首次前端操作运行 `make web-install`；真实浏览器使用 `make web-e2e BASE_URL=<测试地址>`；真实集群验收使用 `make e2e-clusters PYTHON=<已具备PyYAML的解释器> E2E_ARGS='<脚本要求的显式参数>'`。凭据只通过受限文件路径提供，运行脚本的 `--help` 查看参数。
+重复命令从 `make help` 查找。首次前端操作运行 `make web-install`；本地完整自动化使用 `make ut PYTHON=<已具备PyYAML的解释器>`。真实集群和浏览器统一使用 `make e2e PYTHON=<已具备PyYAML的解释器> E2E_ARGS='<脚本要求的显式参数>'`，自动准备独占集群、平台与浏览器并按本 run 原身份清理；运行 `scripts/e2e.py --help` 查看候选提交、run ID、输出目录及分组参数。凭据只通过受限文件路径提供。
 
 | Issue | 本地用例 | 标准化评论 |
 | --- | --- | --- |
@@ -16,5 +16,9 @@
 | #19 | [issue-19.md](issue-19.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/19#issuecomment-6254247315) |
 | #20 | [issue-20.md](issue-20.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/20#issuecomment-6253732817) |
 | #21 | [issue-21.md](issue-21.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254819921) |
-
-| #27 | [issue-27.md](issue-27.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/27#issuecomment-6336217158) |
+| #25 | [issue-25.md](issue-25.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/25#issuecomment-6336357215) |
+| #26 | [issue-26.md](issue-26.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/26#issuecomment-6336837311) |
+| #27 | [issue-27.md](issue-27.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/27#issuecomment-6338083215) |
+| #28 | [issue-28.md](issue-28.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/28#issuecomment-6337768012) |
+| #29 | [issue-29.md](issue-29.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/29#issuecomment-6337439176) |
+| #30 | [issue-30.md](issue-30.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/30#issuecomment-6337276378) |

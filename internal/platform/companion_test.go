@@ -336,3 +336,80 @@ func checkCompanionRetryRechecksExporter(t ginkgo.GinkgoTInterface) {
 		}
 	}
 }
+
+// I28-R02/R03：异步 Foreground 删除按独立资源恢复，只读核验不会隐式派发尚未发送的组件。
+func checkCompanionDeletionRecovery(t ginkgo.GinkgoTInterface) {
+	for _, delayedSM := range []bool{false, true} {
+		ginkgo.By(fmt.Sprintf("I28-R02/R03：原 UID 两资源删除恢复 · 配套资源异步=%v", delayedSM))
+		p, c, id, f := lifecycleFixture(t, nil)
+		published := lifecyclePublish(t, p, c, id)
+		awaitLifecycleState(t, p, c, published["operationId"].(string), "SUCCEEDED")
+		f.mu.Lock()
+		f.retainSM, f.retainCR = delayedSM, true
+		f.owned = deletionGraph()
+		f.cr["metadata"].(map[string]any)["finalizers"] = []any{"fixture/hold"}
+		f.mu.Unlock()
+		deletion := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", deletionConfirmation(t, p, c, id), c, "delete-recovery", 202)
+		oid := deletion["operationId"].(string)
+		blocked := awaitLifecycleState(t, p, c, oid, "DELETION_BLOCKED")
+		if delayedSM {
+			rs := blocked["resources"].([]any)
+			if rs[0].(map[string]any)["possiblySent"] != false || rs[1].(map[string]any)["possiblySent"] != true {
+				t.Fatal("SM 未清理时错误派发组件", blocked)
+			}
+			f.mu.Lock()
+			before := f.deleteRequests
+			f.sm = nil
+			f.mu.Unlock()
+			if before != 0 {
+				t.Fatal("组件未等配套资源结束", before)
+			}
+			clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "read-sm", 200)
+			waiting := awaitLifecycleState(t, p, c, oid, "WAITING_CONFIRMATION")
+			for n := 0; n < 3; n++ {
+				clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "read-unsent", 200)
+			}
+			f.mu.Lock()
+			requests, smRequests := f.deleteRequests, f.smDeleteRequests
+			f.mu.Unlock()
+			if requests != 0 || smRequests != 1 {
+				t.Fatal("只读恢复隐式发送或重放删除", requests, smRequests)
+			}
+			// 关键：重新确认当前删除影响后，显式继续同一版本的新尝试；旧 SM 成功记录不能重放。
+			preview := clusterCall(t, p, "POST", "/instances/"+id+"/deletion-previews", map[string]any{"operationId": oid}, c, "preview-unsent", 200)
+			body := lifecycleRevision(t, p, c, oid)
+			body["deletePreviewId"] = preview["previewId"]
+			continued := clusterCall(t, p, "POST", "/operations/"+oid+"/continue-unsent", body, c, "continue-component", 202)
+			if continued["versionId"] != published["versionId"] || continued["attemptId"] == waiting["attemptId"] {
+				t.Fatal("继续未绑定原版本的新尝试", continued, waiting)
+			}
+			blocked = awaitLifecycleState(t, p, c, oid, "DELETION_BLOCKED")
+		}
+		rs := blocked["resources"].([]any)
+		component, sm := rs[0].(map[string]any), rs[1].(map[string]any)
+		if component["possiblySent"] != true || component["confirmedUid"] != "created-uid" || sm["state"] != "SUCCEEDED" || sm["confirmedUid"] != "service-monitor-uid" {
+			t.Fatal("原组件 finalizer 阶段未确认两份独立资源", blocked)
+		}
+		instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+		if instance["lifecycle"] == "DELETED" {
+			t.Fatal("原组件仍存在却结束整体删除", instance)
+		}
+		f.mu.Lock()
+		f.cr, f.owned = nil, nil
+		f.mu.Unlock()
+		clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "read-component", 200)
+		awaitLifecycleState(t, p, c, oid, "SUCCEEDED")
+		instance = clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+		if instance["lifecycle"] != "DELETED" {
+			t.Fatal("完整原图清空后未结束删除", instance)
+		}
+		f.mu.Lock()
+		smCount, count := f.smDeleteRequests, f.deleteRequests
+		smUID := f.lastSMDelete["preconditions"].(map[string]any)["uid"]
+		componentUID := f.lastDelete["preconditions"].(map[string]any)["uid"]
+		f.mu.Unlock()
+		if smCount != 1 || count != 1 || smUID != "service-monitor-uid" || componentUID != "created-uid" {
+			t.Fatal("删除丢失原 UID 或重放", smCount, count)
+		}
+	}
+}

@@ -151,6 +151,7 @@ type ksmFixture struct {
 	smWrites, smRequests, smDeleteRequests int
 	rejectSM                               int
 	dropSM, smUnavailable, smReadFailure   bool
+	retainSM                               bool
 	denySM                                 string
 	lastSMDelete                           map[string]any
 
@@ -166,6 +167,7 @@ type ksmFixture struct {
 	mu                  sync.Mutex
 	cr                  map[string]any
 	writes              int
+	writeRequests       int
 	lastWrite           []byte
 	rejectWrite         int
 	dropResponse        bool
@@ -234,7 +236,7 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 				return
 			}
 		}
-		if r.URL.Path == "/api/v1/namespaces/monitoring" {
+		if r.URL.Path == "/api/v1/namespaces/monitoring" || r.URL.Path == "/api/v1/namespaces/monitoring-two" {
 			f.mu.Lock()
 			gate, entered := f.readGate, f.readEntered
 			if f.readGateSkip > 0 {
@@ -255,7 +257,7 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 				w.WriteHeader(404)
 				return
 			}
-			io.WriteString(w, `{"metadata":{"name":"monitoring","uid":"namespace-uid"}}`)
+			json.NewEncoder(w).Encode(map[string]any{"metadata": map[string]any{"name": strings.TrimPrefix(r.URL.Path, "/api/v1/namespaces/"), "uid": "namespace-uid"}})
 			return
 		}
 		if (strings.HasPrefix(r.URL.Path, "/apis/apps/v1/") || strings.HasSuffix(r.URL.Path, "/pods")) && r.Method == "GET" {
@@ -293,7 +295,7 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 			json.NewEncoder(w).Encode(map[string]any{"status": map[string]any{"allowed": !denied}})
 			return
 		}
-		if strings.HasPrefix(r.URL.Path, "/apis/monitoring.coreos.com/v1/namespaces/monitoring/servicemonitors") {
+		if strings.HasPrefix(r.URL.Path, "/apis/monitoring.coreos.com/v1/namespaces/") && strings.Contains(r.URL.Path, "/servicemonitors") {
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			if f.smUnavailable {
@@ -340,7 +342,11 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 					w.WriteHeader(409)
 					return
 				}
-				f.sm = nil
+				if f.retainSM {
+					meta["deletionTimestamp"] = "2026-10-22T00:00:00Z"
+				} else {
+					f.sm = nil
+				}
 				io.WriteString(w, `{"kind":"Status","status":"Success"}`)
 				return
 			}
@@ -418,6 +424,7 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 			json.NewEncoder(w).Encode(f.cr)
 			return
 		}
+		f.writeRequests++
 		if f.rejectWrite != 0 {
 			w.WriteHeader(f.rejectWrite)
 			io.WriteString(w, `{}`)

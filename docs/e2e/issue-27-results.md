@@ -34,3 +34,21 @@
 | I27-B01 | E2E-10，web/tests/phase1.spec.ts | 未执行；已交付资源进度、UID、冻结集合及截图断言，等待集成浏览器执行 |
 
 真实第二 CR 的部分成功、第二资源响应丢失及跨步骤重启，由 #28 实际加入 ServiceMonitor 后验证；本结果不以合成资源或静态列表代替该证明。
+
+## 审查修复：旧冻结身份与可变草稿隔离
+
+本次定向 `testedCommit`：`c82b75a1e4d3f266577c4b927b7ce5bc6d9f5135`，包含最新集成基线 `7f8d853`。补充五列计划完整发布并回读：https://github.com/fjsxy/monitor-mgr/issues/27#issuecomment-6338083215 。
+
+正式 RED：`runtime-red-identity.log` 中公开 HTTP 的旧版本 retry 返回 202，预期 409；与独立审查探针的旧 CR UID 错绑事实一致。新增共同核验后，单一 KSM name 变体 GREEN（`runtime-green-identity-name.log`，7.807s）；扩展四个身份变体与各自明确新发布正控后 GREEN（`runtime-green-identity-all.log`，8.891s）。Agent 新 namespace 的初次正控曾因测试目标漏返回 namespace metadata.name 失败；补齐真实 API 响应字段后转绿，没有放宽产品 namespace 校验。
+
+| 用例编号 | 实际结果 | 证据与范围 |
+| --- | --- | --- |
+| I27-R01.ksm-name | 通过 | 首次 POST 明确拒绝后合法更名；旧 retry 返回409 CONFLICT，0新增目标请求/attempt，实例不绑定 UID；最新草稿与旧版本保持 |
+| I27-R01.ksm-namespace | 通过 | KSM spec.targetNamespace 参与冻结身份比较；部署 namespace 变更后旧 retry 零新增写 |
+| I27-R01.agent-name | 通过 | Agent 更名后旧 retry 写前拒绝，原 namespaced CR 不创建 |
+| I27-R01.agent-namespace | 通过 | Agent metadata.namespace 参与比较；旧 namespace 零新增请求，新实例身份不被旧 UID 覆盖 |
+| I27-R02 | 通过 | 四个变体均重新预览并明确发布当前草稿成功；新 UID 与新目标一致，KSM SM 位于新部署 namespace；旧冻结文档不变 |
+
+提交后 UT-08/10/11/12/16/18 定向组合通过（`runtime-final-focused.log`，52.412s）；生成一致性、Go vet、Python语法、固定18 UT / 10 E2E目录及diff-check通过。受理事务与每份资源/条件写的最终派发事务共用冻结组件身份核验；不修改 SaveDraft 的既有更名语义，不引入产品测试钩子、UI或IDL变化。
+
+此前 `c0a556a215b2dfe796a4a3be73a9026e11c6008f` 已完整 `make ut` 通过18/18、race、产品合并语句覆盖率78.10%，日志 `runtime-ut.log`，收据来源已核对精确SHA。该完整收据不替代本次产品修复后的最终全量门禁；最终集成 head 的完整UT和真实E2E由根协调执行。

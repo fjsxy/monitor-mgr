@@ -11,6 +11,7 @@ from e2e_shards import SHARDS, aggregate, selection
 from e2e_diagnostics import failure_summary
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/acceptance'))
 from clusters import Suite as ClusterSuite
+from fault_proxy_boundary import check_ssar_rule
 
 
 class TrustBoundary(unittest.TestCase):
@@ -19,6 +20,8 @@ class TrustBoundary(unittest.TestCase):
             {'LeafNodeType': 'It', 'LeafNodeText': 'E2E-01 示例', 'State': 'passed', 'NumAttempts': 1}]}]
 
     def test_events(self):
+        # I28-R01：验收暂停规则也须通过公开 HTTP，避免代理误拦受理使授权结论失真。
+        check_ssar_rule(self)
         # 接下来验证真实成功正控，再检查漏跑、失败、跳过、重复以及重试都不能变绿。
         validate_specs(self.report(), ['E2E-01'], 'candidate', 'candidate')
         for kind in ['missing', 'failed', 'skipped', 'duplicate', 'retry']:
