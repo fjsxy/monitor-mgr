@@ -1047,7 +1047,7 @@ function Editor({
           <div>
             <p className="help">实例详情 · {cluster.name}</p>
             <h2>{current?.name || config.name || "新 KSM 实例"}</h2>
-            {current && <><InstanceIdentity value={current} /><InstanceManagement value={current} isAdmin={isAdmin} onConfirmed={next => { setCurrent(next); onChange(); }} /></>}
+            {current && <><InstanceIdentity value={current} /><InstanceManagement value={current} clusterActive={cluster.state === "ACTIVE"} isAdmin={isAdmin} onConfirmed={next => { setCurrent(next); onChange(); }} /></>}
             <span className={"badge " + (readOnly ? "gray" : "ok")}>
               {readOnly
                 ? "平台未纳管 · 只读"

@@ -153,6 +153,20 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
       }
       await checkUser(result==='allow');
     }
+    await loginAdmin();await open(fixture.historical[0],true);
+    await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+    await send(`/clusters/${fixture.clusterId}/unregister`,{});
+    await page.getByRole('button',{name:'刷新列表',exact:true}).click();
+    // 不重载整个工作台，验证已打开页面刷新后即遵守注销状态，同时继续展示原确认记录。
+    for(const instance of fixture.historical){
+      const row=page.getByRole('row').filter({has:page.getByText(instance.name,{exact:true})});
+      await row.getByRole('button',{name:'查看',exact:true}).click();
+      await expect(drawer.getByRole('button',{name:'确认历史实例管理权限',exact:true})).toHaveCount(0);
+      await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('集群已注销');
+      await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText(`确认用户：${actor}`);
+      await expect(drawer.getByLabel('名称',{exact:true})).toBeDisabled();
+      await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+    }
   });
   expect(errors).toEqual([]);await page.screenshot({path:info.outputPath('main-flow.png')});
 });

@@ -1,6 +1,6 @@
 # #26 实施结果与待验收项
 
-实施前计划：`docs/e2e/issue-26.md`；完整评论已逐字回读一致：https://github.com/fjsxy/monitor-mgr/issues/26#issuecomment-6336384174 。本文件区分执行证据与待执行检查。
+实施前计划：`docs/e2e/issue-26.md`；完整评论已逐字回读一致：https://github.com/fjsxy/monitor-mgr/issues/26#issuecomment-6336837311 。本文件区分执行证据与待执行检查。
 
 - RED1：真实 v10 唯一创建证据读取时 creatorUserId 仍为空；GREEN1：可靠 KSM/Agent、证据缺失、矛盾、错误 target/name/component/namespace、actor 不存在、损坏 JSON 全部定向通过。
 - RED2：管理员权限确认入口为 404；GREEN2：HTTP→真实 Kitex→SQLite 及直接 RPC，确认 actor/time/result、允许/撤销、重启、幂等、当前管理员授权和已知角色保护通过。后台派发前撤销后零目标写入。
@@ -12,3 +12,5 @@
 ## 真实 E2E 启动根因修复
 
 首轮远程 CI candidate `586caca890b3a9aa2c7b3e2a911f4fdaee6c0d64` 的 topology 用例在 `Scenario.deploy` 失败：Helm release 为 `platform`，chart 以 `.Release.Name` 命名，而验收随后寻找 `Deployment/monitor-mgr`。将验收 release 统一为 `monitor-mgr`；`helm template monitor-mgr charts/monitor-mgr` 已实际核对 Deployment/Service 为 `monitor-mgr`、PVC 为 `monitor-mgr-data`。最终真实启动结果由集中 E2E 给出，不以渲染通过代替集群通过。
+
+集成复核补充：确认入口要求集群 ACTIVE 且最新实例 canManage；集群注销后收起操作、保留既有确认记录。现有 I26-B01 加入注销后刷新历史 KSM/Agent 的只读步骤。Go完整门禁仍绑定8c9d73f，追加仅前端/浏览器/文档，另验证web-build和唯一用例注册。

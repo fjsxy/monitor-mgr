@@ -3,9 +3,10 @@ import { api } from "./api";
 import type { InstanceIdentityValue } from "./instance-identity";
 
 // 历史角色未知时由管理员明确选择管理权限；确认只改变权限，不能补造创建用户或历史角色。
-export function InstanceManagement<T extends InstanceIdentityValue & { id: string; readOnly: boolean; lifecycle: string }>({ value, isAdmin, onConfirmed }: { value: T; isAdmin: boolean; onConfirmed: (next: T) => void }) {
+export function InstanceManagement<T extends InstanceIdentityValue & { id: string; readOnly: boolean; lifecycle: string }>({ value, isAdmin, clusterActive, onConfirmed }: { value: T; isAdmin: boolean; clusterActive: boolean; onConfirmed: (next: T) => void }) {
   const [open, setOpen] = useState(false), [allow, setAllow] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  if (!isAdmin || value.creatorRole !== "" || value.readOnly || value.lifecycle === "DELETED") return null;
+  // 关键：集群注销或刷新后失去管理权限时立即收起确认入口，历史确认记录由独立只读组件继续展示。
+  if (!clusterActive || !value.canManage || !isAdmin || value.creatorRole !== "" || value.readOnly || value.lifecycle === "DELETED") return null;
   async function confirm() {
     if (!allow || busy) return;
     setBusy(true); setError("");
