@@ -1,0 +1,6 @@
+apiVersion: v2
+name: test-receiver
+description: 本 run 独占且不主动采集的 remote_write 验收接收端
+version: 0.1.0
+type: application
+kubeVersion: ">=1.28.0-0"

@@ -219,11 +219,34 @@ class Environment:
                     {'apiVersion': 'rbac.authorization.k8s.io/v1', 'kind': 'Role', 'metadata': {'name': name, 'namespace': namespace}, 'rules': [{'apiGroups': ['coordination.k8s.io'], 'resources': ['leases'], 'verbs': ['get', 'list', 'watch', 'create', 'update', 'patch']}, {'apiGroups': [''], 'resources': ['events'], 'verbs': ['create', 'patch']}]},
                     {'apiVersion': 'rbac.authorization.k8s.io/v1', 'kind': 'RoleBinding', 'metadata': {'name': name, 'namespace': namespace}, 'roleRef': {'apiGroup': 'rbac.authorization.k8s.io', 'kind': 'Role', 'name': name}, 'subjects': [{'kind': 'ServiceAccount', 'name': name, 'namespace': namespace}]},
                     {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': {'name': name, 'namespace': namespace}, 'spec': {'replicas': 1, 'selector': {'matchLabels': {'app': name}}, 'template': {'metadata': {'labels': {'app': name}}, 'spec': {'serviceAccountName': name, 'containers': [{'name': 'manager', 'image': self.operator_image, 'imagePullPolicy': 'Never', 'args': ['--leader-elect=true', '--health-probe-bind-address=:8081', '--log-level=info'], 'readinessProbe': {'httpGet': {'path': '/readyz', 'port': 8081}}}]}}}}]
-        path = self.private / 'operator-values.json'; private_json(path, {'objects': [o for o in objects if o]})
+        objects=[o for o in objects if o]
+        path = self.private / 'operator-values.json'; private_json(path, {'objects': objects})
+        prerequisites=self.private/'operator-prerequisites.json';private_json(prerequisites,{'objects':[o for o in objects if o['kind']!='Deployment']})
+        crds=['crd/'+o['metadata']['name'] for o in objects if o['kind']=='CustomResourceDefinition']
+        deployment=next(o for o in objects if o['kind']=='Deployment' and o['metadata']['name']=='prometheus-operator')
+        service_account=deployment['spec']['template']['spec']['serviceAccountName']
+        identity='system:serviceaccount:'+namespace+':'+service_account
+        preparation=[]
         for role, target in self.targets.items():
-            print('Helm 安装 Operator：' + role, flush=True)
-            self.command(['helm', 'upgrade', '--install', 'operators', ROOT / 'charts/test-operators', '--kubeconfig', target['kubeconfig'], '--kube-context', target['context'], '--namespace', namespace, '--create-namespace', '-f', path, '--wait', '--timeout', '5m'], 'helm-operators-' + role, timeout=360)
-            self.k(role, 'wait', '--for=condition=Established', 'crd/kubestatemetrics.monitoring.fjsxy.github.io', '--timeout=60s')
+            print('Helm 准备 Operator CRD/RBAC：' + role, flush=True)
+            helm=['helm','upgrade','--install','operators',ROOT/'charts/test-operators','--kubeconfig',target['kubeconfig'],'--kube-context',target['context'],'--namespace',namespace,'--create-namespace']
+            # 关键：锁定Operator启动时仅判定一次可用CRD/RBAC；先完成前置能力，再创建原进程。
+            # 两阶段沿用同一Helm release，第二次只加入Deployment，不改变组件来源或产品能力判据。
+            self.command([*helm,'-f',prerequisites,'--wait','--timeout','5m'],'helm-operator-prerequisites-'+role,timeout=360)
+            self.k(role,'wait','--for=condition=Established',*crds,'--timeout=90s')
+            sa=self.get(role,'serviceaccount',service_account,'-n',namespace)
+            discovery=json.loads(self.k(role,'get','--raw','/apis/monitoring.coreos.com/v1alpha1','--as',identity).stdout)
+            require={'prometheusagents','scrapeconfigs'}
+            assert require<={r['name'] for r in discovery['resources']}
+            for resource in sorted(require):
+                for verb in ('get','list','watch'):
+                    allowed=self.k(role,'auth','can-i',verb,resource+'.monitoring.coreos.com','--all-namespaces','--as',identity).stdout.decode().strip()
+                    assert allowed=='yes','Operator原SA前置权限未就绪'
+                actual=json.loads(self.k(role,'get','--raw','/apis/monitoring.coreos.com/v1alpha1/'+resource,'--as',identity).stdout)
+                assert isinstance(actual.get('items'),list)
+            preparation.append(dict(target=role,serviceAccountUID=sa['metadata']['uid'],allCRDsEstablished=True,discoveryServed=True,agentAndScrapeConfigPermissions=True))
+            print('Helm 启动 Operator：' + role, flush=True)
+            self.command([*helm,'-f',path,'--wait','--timeout','5m'],'helm-operators-'+role,timeout=360)
             self.k(role,'set','image','deployment/local-path-provisioner','-n','local-path-storage','local-path-provisioner='+LOCK['images']['provisioner']['image'])
             self.k(role,'rollout','status','deployment/local-path-provisioner','-n','local-path-storage','--timeout=120s')
             for deployment,config in [('prometheus-operator',self.official_configs['promop']),(name,self.operator_config)]:
@@ -233,7 +256,7 @@ class Environment:
                 assert len(pods)==1
                 proof=self.verify_container(pods[0],dep['spec']['template']['spec']['containers'][0]['name'],config)
                 self.operator_proofs.append(dict(target=role,deployment=deployment,**proof))
-        report=json.loads((self.public/'images.json').read_text());report.update(lockedRuntimeConfigs=self.official_configs,operators=self.operator_proofs);private_json(self.public/'images.json',report)
+        report=json.loads((self.public/'images.json').read_text());report.update(lockedRuntimeConfigs=self.official_configs,operators=self.operator_proofs,operatorPreparation=preparation);private_json(self.public/'images.json',report)
 
 
     def cleanup_clusters(self):

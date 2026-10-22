@@ -85,7 +85,11 @@ def main():
                         case_started=time.monotonic();scenario=Scenario(environment,int(id[-2:]),emit)
                         try:
                             scenario.by('Helm 部署本例独立平台与 PVC，并经 Service 初始化登录');scenario.deploy()
-                            CASES[id](scenario);result['outcome']='passed'
+                            CASES[id](scenario)
+                            if id=='E2E-04':
+                                from testing_contract import validate_agent_collection
+                                result['agentCollection']=validate_agent_collection(getattr(scenario,'agent_collection',None),candidate,environment.run_id)
+                            result['outcome']='passed'
                         except Exception as error:
                             result['failedStep']=scenario.step;result['errorType']=type(error).__name__
                             result['diagnostic']=failure_summary(error)

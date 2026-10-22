@@ -58,6 +58,8 @@ var _ = ginkgo.It("UT-08 保存预览与版本冻结", func() {
 	checkTestP02PublicationFreezesSourceAndP03Idempotency(t)
 	checkTestP04DraftAndTargetPreviewRaces(t)
 	checkTestAgentDraftSourceIsolation(t)
+	checkAgentCreatorAssociation(t)
+	checkAgentCreatorMatching(t)
 })
 
 var _ = ginkgo.It("UT-09 幂等与受理事务", func() {

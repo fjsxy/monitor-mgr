@@ -98,6 +98,12 @@ ut-exporter-companion: ## exporter 配套ServiceMonitor冻结、预检、部分�
 ut-historical-identity: ## 历史创建证据、管理员确认与撤销派发的 Ginkgo 定向验证
 	$(GO) test -count=1 -timeout 5m ./internal/platform -run TestPlatform -args -ginkgo.focus='UT-07|UT-10|UT-16' -ginkgo.no-color
 
+.PHONY: ut-agent-creator receiver-chart-check
+ut-agent-creator: ## Agent固定创建用户关联、namespace/匹配、HTTP/RPC保护及样本证据门禁的Ginkgo验证
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 4m -args -ginkgo.focus='UT-08|UT-18' -ginkgo.no-color -ginkgo.fail-on-empty
+receiver-chart-check: ## 校验独占remote_write接收端Helm夹具，显式读取source-lock锁定镜像
+	$(HELM) lint charts/test-receiver --set-string runId=chart-check --set-string image="$$($(PYTHON) -c 'import json;print(json.load(open("scripts/acceptance/source-lock.json"))["images"]["prometheus"]["image"])')"
+
 .PHONY: ut-historical-exporter
 ut-historical-exporter: ## 历史exporter真实v10升级零写、明确补建、旧操作和身份恢复边界
 	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-12|UT-16' -ginkgo.no-color -ginkgo.fail-on-empty
