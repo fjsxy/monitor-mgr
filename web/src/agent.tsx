@@ -1,3 +1,4 @@
+import {FrozenResources,type FrozenResource} from "./lifecycle";
 import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
 import { useDraftBookmark } from "./draft-bookmark";
@@ -102,6 +103,7 @@ type Instance = InstanceIdentityValue & {
 };
 type Draft = { revision: Int64; agent: AgentConfiguration; yaml: string };
 type Version = {
+ resources?:FrozenResource[];
   versionId: string;
   sourceDraftRevision: Int64;
   agent: AgentConfiguration;
@@ -642,7 +644,7 @@ export function AgentEditor({
             <section>
               <button onClick={closeVersion}>返回当前草稿</button>
               <span className="badge gray">只读发布版本</span>
-              <h3>版本 {viewed.versionId.slice(0, 8)}</h3>
+              <h3>版本 {viewed.versionId.slice(0, 8)}</h3><FrozenResources resources={viewed.resources}/>
               <p className="help">
                 来源草稿 v{viewed.sourceDraftRevision} ·{" "}
                 {timestamp(viewed.createdAt)}

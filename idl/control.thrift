@@ -46,10 +46,14 @@ struct RegisterClusterRequest { 1: required string name, 2: required string owne
 struct ClusterID { 1: required string id }
 struct CredentialRequest { 1: required string id, 2: required string context, 3: required string kubeconfig, 4: optional string ownerId }
 struct TransferClusterRequest { 1: required string id, 2: required string ownerId }
+// 资源目标是发布时冻结的文档；重试和升级禁止重新映射当前草稿。
+struct FrozenResource { 1: required string key, 2: required string apiVersion, 3: required string kind, 4: required string namespace, 5: required string name, 6: required string yaml }
+// 每份资源独立保存确认身份、可能发送边界和结果，不以操作级状态替代。
+struct ResourceProgress { 1: required FrozenResource target, 2: required string state, 3: required string confirmedUid, 4: required bool possiblySent, 5: required string message, 6: required string updatedAt, 7: required string attemptId }
 struct Operation {
  1: required string operationId, 2: required string action, 3: required string state,
  4: required string clusterId, 5: required string actorId, 6: required string message,
- 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId, 12: optional string instanceId, 13: optional string versionId, 14: optional string attemptId, 15: optional i64 revision, 16: optional string storageResult, 17: optional list<VolumeObservation> storageVolumes
+ 7: required string createdAt, 8: required string updatedAt, 9: required i64 credentialRevision, 10: required string ownerId, 11: required string previousOwnerId, 12: optional string instanceId, 13: optional string versionId, 14: optional string attemptId, 15: optional i64 revision, 16: optional string storageResult, 17: optional list<VolumeObservation> storageVolumes, 18: optional list<ResourceProgress> resources
 }
 struct OperationID { 1: required string operationId }
 struct OperationsResult { 1: required list<Operation> operations }
@@ -110,11 +114,11 @@ struct QueryInstancesResult { 1: required list<ObservationInstance> instances, 2
 struct PreviewRequest { 1: required string id, 2: required i64 draftRevision }
 struct PublicationPreview { 1: required string previewId, 2: required i64 draftRevision, 3: required string leftYAML, 4: required string rightYAML, 5: required bool drift, 6: required list<string> warnings, 7: optional list<VolumeObservation> storageVolumes, 8: optional list<AgentStatefulPolicy> policies, 9: optional string storageMode }
 struct PublishRequest { 1: required string id, 2: required string previewId, 3: required i64 draftRevision, 4: required bool overwriteDrift }
-struct PublicationVersion { 1: required string versionId, 2: required string instanceId, 3: required i64 sourceDraftRevision, 4: optional KSMConfiguration ksm, 5: required string yaml, 6: required string createdAt, 7: optional AgentConfiguration agent }
+struct PublicationVersion { 1: required string versionId, 2: required string instanceId, 3: required i64 sourceDraftRevision, 4: optional KSMConfiguration ksm, 5: required string yaml, 6: required string createdAt, 7: optional AgentConfiguration agent, 8: optional list<FrozenResource> resources }
 struct VersionsResult { 1: required list<PublicationVersion> versions }
 struct VersionRequest { 1: required string id, 2: required string versionId }
 struct OperationLookup { 1: required string instanceId, 2: required string idempotencyKey }
-struct ExecutionAttempt { 1: required string attemptId, 2: required string operationId, 3: required string state, 4: required bool possiblySent, 5: required string createdAt, 6: required string updatedAt, 7: optional i64 revision, 8: optional i64 sequence, 9: optional string actorId, 10: optional string message }
+struct ExecutionAttempt { 1: required string attemptId, 2: required string operationId, 3: required string state, 4: required bool possiblySent, 5: required string createdAt, 6: required string updatedAt, 7: optional i64 revision, 8: optional i64 sequence, 9: optional string actorId, 10: optional string message, 11: optional list<ResourceProgress> resources }
 // 生命周期变更绑定当前操作与尝试修订，避免过期页面取消或重试较新的尝试。
 struct LifecycleRequest { 1: required string operationId, 2: required i64 expectedOperationRevision, 3: required string expectedAttemptId, 4: required i64 expectedAttemptRevision, 5: optional string deletePreviewId }
 struct DeleteInstanceRequest { 1: required string id, 2: required string versionId, 3: optional string previewId }

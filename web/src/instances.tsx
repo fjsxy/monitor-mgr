@@ -1,3 +1,4 @@
+import {FrozenResources,type FrozenResource} from "./lifecycle";
 import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
 import { useDraftBookmark } from "./draft-bookmark";
@@ -66,6 +67,7 @@ type Pagination = { number: number; size: number; total: number; pages: number }
 type QueryResult = { instances: Instance[]; statistics: Statistics; page: Pagination };
 type Draft = { revision: Int64; ksm: KSM; yaml: string };
 type Version = {
+ resources?:FrozenResource[];
   versionId: string;
   instanceId: string;
   sourceDraftRevision: Int64;
@@ -1101,7 +1103,7 @@ function Editor({
                 <button onClick={closeVersion}>返回当前草稿</button>
                 <span className="badge gray">只读发布版本</span>
               </div>
-              <h3>版本 {versionName(viewedVersion.versionId)}</h3>
+              <h3>版本 {versionName(viewedVersion.versionId)}</h3><FrozenResources resources={viewedVersion.resources}/>
               <p className="help">
                 来源草稿 v{viewedVersion.sourceDraftRevision} ·{" "}
                 {stamp(viewedVersion.createdAt)}

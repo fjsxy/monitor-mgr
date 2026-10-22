@@ -83,6 +83,9 @@ ci-builder: ## CI 创建本 run 独占、固定版本的 BuildKit；须指定 BU
 ci-builder-cleanup: ## 按记录的原容器 ID 清理本 run 构建器
 	$(PYTHON) scripts/ci-builder.py cleanup --name "$(BUILDX_BUILDER)"
 
+.PHONY: ut-resource-progress
+ut-resource-progress: ## 核验逐资源进度、重启禁重放、删除和历史迁移（UT-11/12/16）
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-11 |UT-12 |UT-16 ' -ginkgo.fail-on-empty
 .PHONY: ut-instance-identity
 ut-instance-identity: ## 实例创建身份、HTTP/RPC写保护、派发撤权与历史未知角色的Ginkgo验证
 	$(GO) test -count=1 -timeout 5m ./internal/platform -run TestPlatform -args -ginkgo.focus='UT-07|UT-10|UT-16' -ginkgo.no-color
