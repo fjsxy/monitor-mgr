@@ -14,11 +14,11 @@
 | #17 | [issue-17.md](issue-17.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/17#issuecomment-6250672039) |
 | #18 | [issue-18.md](issue-18.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/18#issuecomment-6252666518) |
 | #19 | [issue-19.md](issue-19.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/19#issuecomment-6254247315) |
-| #20 | [issue-20.md](issue-20.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/20#issuecomment-6253732817) |
+| #20 | [issue-20.md](issue-20.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/20#issuecomment-6338843923) |
 | #21 | [issue-21.md](issue-21.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6254819921) |
 | #25 | [issue-25.md](issue-25.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/25#issuecomment-6336357215) |
 | #26 | [issue-26.md](issue-26.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/26#issuecomment-6336837311) |
 | #27 | [issue-27.md](issue-27.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/27#issuecomment-6338083215) |
-| #28 | [issue-28.md](issue-28.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/28#issuecomment-6337768012) |
+| #28 | [issue-28.md](issue-28.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/28#issuecomment-6338844553) |
 | #29 | [issue-29.md](issue-29.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/29#issuecomment-6337439176) |
 | #30 | [issue-30.md](issue-30.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/30#issuecomment-6337276378) |

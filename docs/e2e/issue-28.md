@@ -41,3 +41,9 @@
 | I28-R04 | 真实写前撤权与删除最终状态可判定 | E2E-08 用 KSM resourceAttributes SSAR 规则先获取 202 与 operation，再证明 CHECKING/possiblySent=false 后降权；E2E-09 读取逐资源状态，必要时仅显式继续已确认消失 SM 后尚未发送的组件，移除本例 finalizer 后只读等原图清空 | 撤权前已真实受理、0组件/SM写；删除阶段不弱化 UID/RV、原图清理和独立实例保护；公共收据只含白名单状态/身份/计数 | #28 |
 
 补充执行映射：I28-R01 → UT-18；I28-R02/R03 → UT-12；I28-R04 → E2E-08/E2E-09。真实环境由集成协调者独占执行并保留私有诊断。
+
+## 浏览器失败诊断补充
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| I28-R05 | Playwright失败只公开固定步骤与合法源码位置 | UT-18向投影器传入含动态step、error.message/DOM/URL/cookie/config/stack及文本片段的私有JSON；包含一个与当前唯一test.step静态标题相符的失败及合法源行列；另注入错误文件/越界行列/非数字stats；E2E-10在最终成功判据前写public/browser-result.json | 仅固定源码test.step标题、web/tests/phase1.spec.ts范围内行列与白名单数字stats进入公共收据；所有私有文本、其他路径与非法数值拒绝；原唯一test/失败/跳过/重试验收判据不放宽 | #28 |

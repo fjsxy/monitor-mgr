@@ -52,8 +52,8 @@
 
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
-| REG20-STORAGE-002.transfer | 未决存储核验期间不丢集群归属责任 | 经真实HTTP→生成Kitex→SQLite和受控TLS API完成原UID Agent删除，使实例/operation已完成，而whenDeleted=Delete原PVC读取Unknown/待核；通过transfer尝试转移。恢复当前凭据/读取并核实原PVC结果，再重新转移。独立Retain正控保留合法原PVC且实际核实Retain后转移。 | pending/Unknown独立卷任务时transfer409，实例与operation仍完成且不重建实例protection；只读核实完成后允许转移，凭据更新不受此责任阻塞。已确认Retain合法残卷是终态，不阻塞转移。 | #20 |
-| REG20-STORAGE-002.unregister | 未决存储核验期间不提前清除原凭据 | 独立应用fixture完成原UID Agent删除，使CR/workload/Pod消失、实例/operation完成但Delete/PVC结果未知；调用unregister，再恢复读取并核实原PVC消失后重试。另以实际核实Retain原PVC仍存在作为独立正控。全程公开HTTP/真实Kitex，不直接改业务表制造结果。 | pending/Unknown任务时unregister409、保留可用凭据供只读核验；实例完成不被回滚/延迟。任务核实终态后注销允许；已确认Retain残卷不阻塞注销，平台不删除该卷。 | #20 |
+| REG20-STORAGE-002.transfer | 未决存储核验期间不丢集群归属责任 | 经真实HTTP→生成Kitex→SQLite和受控TLS API完成原UID Agent删除，使实例/operation已完成，而whenDeleted=Delete原PVC读取Unknown/待核；通过transfer尝试转移。恢复当前凭据/读取并核实原PVC结果，再重新转移。独立Retain正控保留合法原PVC且实际核实Retain后转移。 删除受理时固定原12秒总核验预算；各存储阶段等待实际新读取轮次，并同时核对原PVC UID、策略、逐卷结果与lastAttemptAt推进；一次refresh可能返回在途旧快照，不当作新核验完成。 | pending/Unknown独立卷任务时transfer409，实例与operation仍完成且不重建实例protection；只读核实完成后允许转移，凭据更新不受此责任阻塞。已确认Retain合法残卷是终态，不阻塞转移。 | #20 |
+| REG20-STORAGE-002.unregister | 未决存储核验期间不提前清除原凭据 | 独立应用fixture完成原UID Agent删除，使CR/workload/Pod消失、实例/operation完成但Delete/PVC结果未知；调用unregister，再恢复读取并核实原PVC消失后重试。另以实际核实Retain原PVC仍存在作为独立正控。全程公开HTTP/真实Kitex，不直接改业务表制造结果。 删除受理时固定原12秒总核验预算；各存储阶段等待实际新读取轮次，并同时核对原PVC UID、策略、逐卷结果与lastAttemptAt推进；一次refresh可能返回在途旧快照，不当作新核验完成。 | pending/Unknown任务时unregister409、保留可用凭据供只读核验；实例完成不被回滚/延迟。任务核实终态后注销允许；已确认Retain残卷不阻塞注销，平台不删除该卷。 | #20 |
 
 ## Agent发布存储影响预览
 
@@ -81,3 +81,14 @@
 | --- | --- | --- | --- | --- |
 | REG20-STORAGE-005.pending-suspend | 挂起后的原卷仍承担Delete责任时不提前恢复挂载 | Q：真实HTTP→生成Kitex→SQLite/TLS运行原UID PVC Agent，实际whenScaled=Delete已采用。公开发布挂起，实例变更完成而独立原PVC任务为Deleting，原PVC尚无deletionTimestamp且UID历史可信；保存运行草稿并预览恢复。随后让原PVC返回404，先通过原任务refresh实际核实并持久Deleted，再预览/下发恢复，模拟原Agent owner链产生同名新PVC UID并读取来源。独立whenScaled=Retain正控挂起后原卷Retained，恢复复用原UID。 | 未终结Delete任务的同Agent/原PVC UID不得因历史可信被视为Retain，恢复预览409且无新mutation；仅一次GET404不能跳过旧任务。原任务先独立Deleted后恢复允许，新卷UID与旧卷责任分别保存；Retain正控通过，不阻塞其他卷或已经终态的责任。accept与dispatch复用同一guard，不另造状态旁路。 | #20 |
 | REG20-STORAGE-005.pending-shard | 减分片后原卷Delete未决时不提前加回原shard | Q：独立公开HTTP/Kitex/TLS fixture运行2shard原UID PVC Agent，实际whenDeleted=Delete已采用，明确减至1shard；旧shard ST/Pod消失但原PVC仍同UID存在且任务Deleting。保存加回2shard草稿并预览。之后原PVC404先由原任务refresh核实持久Deleted，再明确加回并回读新owner链同名新PVC UID及旧任务结果。独立whenDeleted=Retain正控减分片后Retained，再加回复用原PVC。 | 原shard所用PVC的未结束Delete责任使加回预览409、原CR/卷不被新写；完成原UID404只读核验并落盘Deleted后允许加回，新旧PVC身份独立。Retain正控恢复允许；不能因其他卷未决一律阻塞。共用准入/派发重验，不通过直接业务表写或虚构不可达竞态测试。 | #20 |
+
+## 在途只读核验与公开刷新
+
+沿用已确认的公开 HTTP → 真实 Kitex → SQLite → 受控 TLS Kubernetes API 接缝；产品 refresh 保持非阻塞，核验中的旧结果不能冒充新的观察轮次。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| REG20-STORAGE-006.transfer | 在途旧PVC快照不能被误认为转移前的新核验 | UT-13同原Agent删除完成、Delete卷待核实；在真实目标读取处固定并暂停旧200响应；令原卷消失并refresh；核对仍原UID/策略/Deleting且无第二并发GET；释放旧响应，沿删除受理时固定的原12秒总预算等待实际404新轮次及lastAttemptAt推进，随后转移 | 屏障内refresh可返回旧Deleting且transfer仍409；新轮次读原PVC404后独立Deleted，0新增写；后续refresh终态不倒退/不重复读取，原责任结束后transfer允许 | #20 |
+| REG20-STORAGE-006.unregister | 在途旧PVC快照不能提前结束注销责任 | 独立UT-13应用重复上述原UID旧200屏障、卷消失、在途refresh、释放及真实404新轮次；在核验前后分别尝试unregister；保留同原12秒总预算与逐卷身份/策略核对 | 在途Deleting不结束责任，注销409且凭据保留；独立原卷Deleted后注销允许；终态不被旧快照覆盖，无PVC写请求或新实例保护 | #20 |
+
+补充属于测试假设修正，不改变 refresh、存储终态或集群准入产品语义；没有增加产品测试钩子或放宽原UID判据。
