@@ -239,6 +239,18 @@ func (s *Store) authorizeLifecycleDispatch(ctx context.Context, o *rpc.Operation
 	if e != nil {
 		return fail(e)
 	}
+	// 关键：与账号撤权共用派发锁，并从本事务重读创建角色和当前角色；受理时的管理员身份不能授权后续写入。
+	instance, err := instanceByID(ctx, tx, o.GetInstanceId())
+	if err != nil {
+		return fail(err)
+	}
+	var role string
+	if err = tx.QueryRowContext(ctx, `SELECT role FROM accounts WHERE id=?`, actor).Scan(&role); err != nil {
+		return fail(Error("FORBIDDEN", "发起账号当前无操作权限"))
+	}
+	if err = instanceWritePermission(&Principal{Account: &rpc.Account{Id: actor, Role: role}}, instance); err != nil {
+		return fail(err)
+	}
 	if cl.CredentialRevision != credentialRevision {
 		return fail(Error("CONFLICT", "预检期间凭据已变化，请重新核验"))
 	}
