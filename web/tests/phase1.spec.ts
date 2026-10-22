@@ -74,8 +74,11 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     await expect(frozen).toContainText('冻结资源（1）');await expect(frozen).toContainText('KubeStateMetrics');await expect(frozen).not.toContainText('ServiceMonitor');
     await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
     await legacyRow().getByRole('button',{name:'编辑',exact:true}).click();
-    await drawer.getByRole('tab',{name:'运行信息',exact:true}).click();
-    const oldProgress=drawer.getByLabel('逐资源执行进度',{exact:true}).first();
+    // 旧操作由服务端变更历史回读；新打开的运行信息不会自动选中最近一次操作。
+    await drawer.getByRole('tab',{name:'变更历史',exact:true}).click();
+    const oldOperation=drawer.locator('article.publication-item').filter({has:page.getByText(`下发操作 ${legacy.operationId}`,{exact:true})});
+    await expect(oldOperation).toBeVisible();
+    const oldProgress=oldOperation.getByLabel('逐资源执行进度',{exact:true}).first();
     await expect(oldProgress).toContainText('KubeStateMetrics');await expect(oldProgress).not.toContainText('ServiceMonitor');
     await drawer.getByRole('tab',{name:'配置草稿',exact:true}).click();
     await drawer.getByRole('button',{name:'预览下发',exact:true}).click();

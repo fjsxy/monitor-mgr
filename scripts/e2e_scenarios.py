@@ -806,7 +806,9 @@ def browser(s):
     out=s.out/'playwright';report_path=s.out/'playwright.json';env=dict(os.environ,BASE_URL=s.base,PHASE1_E2E_FIXTURE=str(fixture),PLAYWRIGHT_JSON_OUTPUT_FILE=str(report_path))
     r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)
     report=json.loads(report_path.read_text()) if report_path.is_file() else {}
-    # 仅截图和数字结果公开；原 Playwright 输出含本地 fixture 路径，保留在私有目录。
+    # 关键：私有报告可含凭据和DOM；只公开固定步骤/合法源码坐标/数字统计，不能复制错误正文。
+    from e2e_diagnostics import browser_result_summary
+    (s.env.public/'browser-result.json').write_text(json.dumps(browser_result_summary(report,ROOT/'web/tests/phase1.spec.ts'),ensure_ascii=False,indent=2)+'\n')
     for path in out.rglob('*.png'):
         import shutil
         destination=s.env.public/'browser';destination.mkdir(exist_ok=True);shutil.copyfile(path,destination/path.name)
