@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { api, APIError } from "./api";
 
 // 通用生命周期界面只发送类型化意图；服务端以当前权限和修订决定能否执行。
-export type Operation = { operationId:string; action?:string; state:string; message:string; createdAt:string; versionId?:string; attemptId?:string; instanceId?:string; revision?: Int64; storageResult?:string;storageVolumes?:StorageVolume[] };
+export type FrozenResource = {key:string;apiVersion:string;kind:string;namespace:string;name:string;yaml:string};
+export type ResourceProgress = {target:FrozenResource;state:string;confirmedUid:string;possiblySent:boolean;message:string;updatedAt:string;attemptId:string};
+export type Operation = {resources?:ResourceProgress[]; operationId:string; action?:string; state:string; message:string; createdAt:string; versionId?:string; attemptId?:string; instanceId?:string; revision?: Int64; storageResult?:string;storageVolumes?:StorageVolume[] };
 export type DeletionPreview=StorageImpactValue & {previewId:string;instanceId:string;versionId:string;uid:string;name:string;namespace:string;impactNamespaces:string[]};
-type Attempt = { attemptId:string; state:string; possiblySent:boolean; revision: Int64; sequence: Int64; actorId:string; message:string; createdAt:string };
+type Attempt = { attemptId:string; state:string; possiblySent:boolean; revision: Int64; sequence: Int64; actorId:string; message:string; createdAt:string;resources?:ResourceProgress[] };
 const names:Record<string,string> = {QUEUED:"已受理",CHECKING:"检查中",DISPATCHED:"可能已发送",SUCCEEDED:"已完成",FAILED:"失败",CANCELLED:"已取消",WAITING_CONFIRMATION:"等待明确继续",RESULT_UNCERTAIN:"结果待确认",IDENTITY_UNCERTAIN:"资源身份无法确认",DELETION_VERIFYING:"清理核验中",DELETION_BLOCKED:"清理受阻"};
 export function LifecycleActions({operation,onOperation}:{operation:Operation;onOperation:(value:Operation)=>Promise<void>|void}) {
  const [attempts,setAttempts]=useState<Attempt[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[deleteConfirm,setDeleteConfirm]=useState<{action:string;preview:DeletionPreview}|null>(null);
@@ -14,7 +16,7 @@ export function LifecycleActions({operation,onOperation}:{operation:Operation;on
  async function load(){const result=await api<{attempts:Attempt[]}>(`/operations/${operation.operationId}/attempts`);setAttempts(result.attempts)}
  useEffect(()=>{void load().catch(()=>setError("执行尝试读取失败，请刷新历史"))},[operation.operationId,operation.state,operation.revision]);
  const current=attempts.find(a=>a.attemptId===operation.attemptId);
- const unsent=current && !current.possiblySent && ["QUEUED","CHECKING","WAITING_CONFIRMATION"].includes(operation.state);
+ const unsent=current && (operation.resources?.length?operation.resources.every(r=>r.state==="SUCCEEDED"||!r.possiblySent):!current.possiblySent) && ["QUEUED","CHECKING","WAITING_CONFIRMATION"].includes(operation.state);
  async function act(action:string,deletePreviewId?:string){
   if(!current)return;setBusy(true);setError("");
   if(operation.action==="DELETE"&&["retry","continue-unsent"].includes(action)&&!deletePreviewId){
@@ -39,7 +41,18 @@ export function LifecycleActions({operation,onOperation}:{operation:Operation;on
    {(["RESULT_UNCERTAIN","IDENTITY_UNCERTAIN","DELETION_VERIFYING","DELETION_BLOCKED"].includes(operation.state)||["Unknown","Deleting","Pending"].includes(operation.storageResult??""))&&<button disabled={busy||!current} onClick={()=>void act("refresh")}>只读核验结果</button>}
   </div>
   {operation.state==="IDENTITY_UNCERTAIN"&&<p className="help">未确认原 UID，不能凭同名资源补认、重新下发或删除。</p>}
+  <ResourceProgressView resources={operation.resources}/>
   <StorageResult result={operation.storageResult} volumes={operation.storageVolumes}/>
-  <details><summary>执行尝试（{attempts.length}）</summary>{attempts.map(a=><article className="publication-item" key={a.attemptId}><strong>尝试 {a.sequence} · {names[a.state]??a.state}</strong><p>{a.message}</p><p className="help">{a.possiblySent?"可能已发送":"持久记录可证明未发送"} · {new Date(a.createdAt).toLocaleString()}</p><p className="help">发起账号 {a.actorId}</p><p className="help">attemptId {a.attemptId}</p></article>)}</details>
+  <details><summary>执行尝试（{attempts.length}）</summary>{attempts.map(a=><article className="publication-item" key={a.attemptId}><strong>尝试 {a.sequence} · {names[a.state]??a.state}</strong><p>{a.message}</p><p className="help">{a.possiblySent?"可能已发送":"持久记录可证明未发送"} · {new Date(a.createdAt).toLocaleString()}</p><p className="help">发起账号 {a.actorId}</p><p className="help">attemptId {a.attemptId}</p><ResourceProgressView resources={a.resources}/></article>)}</details>
  </div>
+}
+
+// 资源状态独立展示；已完成步骤与未确认身份不能由操作总状态推断。
+export function FrozenResources({resources}:{resources?:FrozenResource[]}) {
+ if(!resources?.length)return null;
+ return <section aria-label="冻结资源集合"><h4>冻结资源（{resources.length}）</h4>{resources.map(r=><details key={r.key}><summary>{r.kind} · {r.namespace||"集群范围"}/{r.name}</summary><pre className="yaml">{r.yaml}</pre></details>)}</section>
+}
+function ResourceProgressView({resources}:{resources?:ResourceProgress[]}) {
+ if(!resources?.length)return null;
+ return <section aria-label="逐资源执行进度"><h4>资源进度（{resources.length}）</h4>{resources.map(r=><article className="publication-item" key={r.target.key}><strong>{r.target.kind} · {names[r.state]??r.state}</strong><p>{r.target.namespace||"集群范围"}/{r.target.name}</p><p>{r.message}</p><p className="help">UID：{r.confirmedUid||"尚未确认，禁止同名补认"}</p><p className="help">{r.possiblySent?"该资源可能已发送":"该资源持久记录可证明未发送"}</p><details><summary>查看冻结配置</summary><pre className="yaml">{r.target.yaml}</pre></details></article>)}</section>
 }

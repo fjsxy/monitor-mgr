@@ -77,6 +77,8 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 		checkTestP13RestartUsesPersistentSentBoundary(t)
 		return
 	}
+	checkResourcePublicationProgress(t)
+	checkResourceProgressSurvivesRestart(t)
 	checkTestP07RetryUsesFrozenVersionAndCurrentRevisions(t)
 	checkTestPublicationUnknownOutcomeNeverReplays(t)
 	checkTestP13RestartUsesPersistentSentBoundary(t)
