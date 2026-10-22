@@ -1,3 +1,4 @@
+import { AgentExporterAssociation } from "./agent-exporter";
 import { InstanceManagement } from "./instance-management";
 import {FrozenResources,type FrozenResource} from "./lifecycle";
 import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
@@ -654,6 +655,7 @@ export function AgentEditor({
               </p>
               <AgentForm
                 value={viewed.agent}
+                creatorUserId={current?.creatorUserId}
                 onChange={() => {}}
                 fixed
                 disabled
@@ -674,6 +676,7 @@ export function AgentEditor({
                   >
                     <AgentForm
                       value={config}
+                      creatorUserId={current?.creatorUserId}
                       onChange={change}
                       fixed={fixed}
                       disabled={busy || !canManage}
@@ -966,6 +969,7 @@ export function AgentEditor({
 // 配置表单只开放首期单 shard/PVC 运行形态；既有 CR 的身份和存储不可原地迁移。
 function AgentForm({
   value,
+  creatorUserId,
   onChange,
   fixed,
   disabled,
@@ -975,6 +979,7 @@ function AgentForm({
   onRefresh,
 }: {
   value: AgentConfiguration;
+  creatorUserId?: string;
   onChange: (value: AgentConfiguration) => void;
   fixed: boolean;
   disabled: boolean;
@@ -1120,6 +1125,7 @@ function AgentForm({
           每类独立设置对象与 namespace 规则。默认 None / Own，不修改已有资源
           labels；匹配预览不等于实际采集目标。
         </p>
+        <AgentExporterAssociation creatorUserId={creatorUserId} object={value.associations.serviceMonitor.object} disabled={disabled} onChange={(object)=>patch({associations:{...value.associations,serviceMonitor:{...value.associations.serviceMonitor,object}}})}/>
         {kinds.map(([key, label]) => (
           <details className="publication-item" key={key} open>
             <summary>

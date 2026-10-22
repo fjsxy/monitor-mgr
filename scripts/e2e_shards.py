@@ -3,6 +3,7 @@ import argparse
 from collections import Counter
 import json
 from pathlib import Path
+from testing_contract import validate_agent_collection
 
 ROOT = Path(__file__).resolve().parents[1]
 # 按 run 39620800818 的真实耗时平衡三组；每组使用独立 runner 与双集群。
@@ -47,6 +48,8 @@ def aggregate(reports, candidate, run_id, jobs_result):
             raise ValueError('ginkgo-case-not-passed')
         if any(c.get('id') != id or c.get('outcome') != 'passed' or c.get('cleanup') != [] for id, c in cases.items()):
             raise ValueError('scenario-not-passed')
+        if 'E2E-04' in cases:
+            validate_agent_collection(cases['E2E-04'].get('agentCollection'),candidate,report['runId'])
         combined.update(cases)
     if Counter(combined.keys()) != Counter(expected):
         raise ValueError('incomplete-e2e')

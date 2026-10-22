@@ -7,6 +7,7 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
   const path=process.env.PHASE1_E2E_FIXTURE;
   expect(path,'必须提供真实平台 Pod 的私有夹具').toBeTruthy();
   const fixture=JSON.parse(readFileSync(path!, 'utf8'));
+  let browserOwner:{id:string;password:string};
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await test.step('登录并用表单创建 KSM 草稿',async()=>{
     await page.goto('/');await page.getByLabel('账号',{exact:true}).fill('admin');await page.getByLabel('密码',{exact:true}).fill(fixture.password);
@@ -100,12 +101,12 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     const draft=await(await page.request.get(`/api/v1/instances/${fixture.largeId}/draft`)).json();
     const ksm={...draft.ksm,name:'browser-protected-ksm'};
     const rule=()=>({object:{mode:'None'},namespace:{mode:'Own'}});
-    const agent={name:'browser-protected-agent',namespace:fixture.namespace,desiredState:'Running',shards:1,resources:{requestCPU:'200m',requestMemory:'512Mi',limitMemory:'1Gi'},storage:{mode:'PVC',capacity:'1Gi',whenScaled:'Retain',whenDeleted:'Retain'},serviceAccountName:'prometheus-agent',associations:{serviceMonitor:rule(),podMonitor:rule(),probe:rule(),scrapeConfig:rule()},remoteWrite:[{url:'http://receiver.example.invalid/write',auth:{mode:'None'}}]};
+    const agent={name:'browser-protected-agent',namespace:fixture.agentNamespace,desiredState:'Running',shards:1,resources:{requestCPU:'200m',requestMemory:'512Mi',limitMemory:'1Gi'},storage:{mode:'PVC',capacity:'1Gi',whenScaled:'Retain',whenDeleted:'Retain'},serviceAccountName:'prometheus-agent',associations:{serviceMonitor:rule(),podMonitor:rule(),probe:rule(),scrapeConfig:rule()},remoteWrite:[{url:'http://receiver.example.invalid/write',auth:{mode:'None'}}]};
     const protectedKsm=await send(`/clusters/${fixture.clusterId}/instances`,{component:'kube-state-metrics',ksm},201);
     const protectedAgent=await send(`/clusters/${fixture.clusterId}/instances`,{component:'Prometheus Agent',agent},201);
     expect(protectedKsm.creatorRole).toBe('ADMIN');expect(protectedAgent.creatorRole).toBe('ADMIN');
     const temporary=crypto.randomUUID(),personal=crypto.randomUUID();
-    const user=await send('/accounts',{username:'browser-owner',password:temporary,role:'USER'},201);
+    const user=await send('/accounts',{username:'browser-owner',password:temporary,role:'USER'},201);browserOwner={id:user.id,password:personal};
     await send(`/clusters/${fixture.clusterId}/transfer`,{ownerId:user.id});
     await send('/sessions',{username:'browser-owner',password:temporary},201);
     await send('/session/password',{currentPassword:temporary,newPassword:personal});
@@ -133,6 +134,59 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
       await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText(user.id);
       await expect(drawer.getByLabel('名称',{exact:true})).toBeEnabled();
       await expect(drawer.getByRole('button',{name:'保存草稿',exact:true})).toBeEnabled();
+      await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+    }
+  });
+  await test.step('I30-B01 快捷关联固定创建用户，namespace和自定义规则保留，管理员编辑不改目标',async()=>{
+    const open=async()=>{await page.reload();await page.getByRole('button',{name:'观测配置',exact:true}).click();await page.getByRole('row').filter({has:page.getByText('browser-user-agent',{exact:true})}).getByRole('button',{name:'编辑',exact:true}).click();};
+    await open();
+    const quick=drawer.getByLabel('按用户关联 exporter',{exact:true});
+    await expect(drawer.getByLabel('ServiceMonitor 对象模式',{exact:true})).toHaveValue('None');
+    await expect(drawer.getByLabel('ServiceMonitor namespace模式',{exact:true})).toHaveValue('Own');
+    await expect(quick).toContainText('未按 user 标签关联');await expect(quick).toContainText(`快捷默认用户：${browserOwner.id}`);
+    await quick.getByRole('button',{name:'按创建用户关联 exporter',exact:true}).click();
+    await expect(drawer.getByLabel('ServiceMonitor 对象 label 1 key',{exact:true})).toHaveValue('monitor-mgr.io/user-id');
+    await expect(drawer.getByLabel('ServiceMonitor 对象 label 1 value',{exact:true})).toHaveValue(browserOwner.id);
+    await expect(drawer.getByLabel('ServiceMonitor namespace模式',{exact:true})).toHaveValue('Own');
+    await drawer.getByLabel('ServiceMonitor namespace模式',{exact:true}).selectOption('All');
+    await drawer.getByRole('button',{name:'添加 ServiceMonitor 对象 expression',exact:true}).click();
+    await drawer.getByLabel('ServiceMonitor 对象 expression 1 key',{exact:true}).fill('disabled');
+    await drawer.getByLabel('ServiceMonitor 对象 expression 1 operator',{exact:true}).selectOption('DoesNotExist');
+    await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(drawer.getByText('草稿 v2 已保存',{exact:true})).toBeVisible();
+    await drawer.getByRole('button',{name:'刷新采集关联预览',exact:true}).click();
+    await expect(drawer.getByText('草稿修订 2 的匹配预览',{exact:true})).toBeVisible();
+    await expect(drawer.getByLabel('来源 association:ServiceMonitor',{exact:true})).toContainText('已读取');
+    await drawer.getByRole('button',{name:'预览下发',exact:true}).click();
+    const preview=page.getByRole('dialog',{name:/下发预览/});await expect(preview).toContainText('serviceMonitorSelector:');await expect(preview).toContainText(browserOwner.id);await preview.getByRole('button',{name:'返回编辑',exact:true}).click();
+    await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+    expect((await page.request.post('/api/v1/sessions',{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data:{username:'admin',password:fixture.password}})).status()).toBe(201);
+    await open();await expect(quick).toContainText(`当前规则目标用户：${browserOwner.id}`);
+    await drawer.getByLabel('Agent CPU request',{exact:true}).fill('210m');
+    await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(drawer.getByText('草稿 v3 已保存',{exact:true})).toBeVisible();
+    await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();await open();
+    await expect(quick).toContainText(`当前规则目标用户：${browserOwner.id}`);
+    await expect(drawer.getByLabel('ServiceMonitor namespace模式',{exact:true})).toHaveValue('All');
+    await expect(drawer.getByLabel('ServiceMonitor 对象 expression 1 operator',{exact:true})).toHaveValue('DoesNotExist');
+    await page.screenshot({path:info.outputPath('agent-creator-association.png')});await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+  });
+  await test.step('I30-B02 历史可靠userId与未知创建用户分别处理，快捷配置不代替权限',async()=>{
+    const known=fixture.historical.find((i:{component:string})=>i.component==='Prometheus Agent');
+    for(const [instance,unknown] of [[known,false],[fixture.unknownCreatorAgent,true]] as const){
+      await page.reload();await page.getByRole('button',{name:'观测配置',exact:true}).click();
+      await page.getByRole('row').filter({has:page.getByText(instance.name,{exact:true})}).getByRole('button',{name:'编辑',exact:true}).click();
+      await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('创建时角色：未知');
+      const quick=drawer.getByLabel('按用户关联 exporter',{exact:true});
+      if(unknown){
+        await expect(quick).toContainText('实例创建用户未知');await expect(quick.getByRole('button',{name:'按创建用户关联 exporter',exact:true})).toBeDisabled();
+        await drawer.getByLabel('ServiceMonitor 对象模式',{exact:true}).selectOption('Labels');
+        await drawer.getByRole('button',{name:'添加 ServiceMonitor 对象 label',exact:true}).click();
+        await drawer.getByLabel('ServiceMonitor 对象 label 1 key',{exact:true}).fill('team');await drawer.getByLabel('ServiceMonitor 对象 label 1 value',{exact:true}).fill('custom');
+        await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(drawer.getByText('草稿 v2 已保存',{exact:true})).toBeVisible();
+      }else{
+        const detail=await(await page.request.get(`/api/v1/instances/${instance.id}`)).json();expect(detail.creatorUserId).toBeTruthy();expect(detail.creatorIdentityKnown).toBe(false);
+        await expect(quick.getByRole('button',{name:'按创建用户关联 exporter',exact:true})).toBeEnabled();
+        await quick.getByRole('button',{name:'按创建用户关联 exporter',exact:true}).click();await expect(drawer.getByLabel('ServiceMonitor 对象 label 1 value',{exact:true})).toHaveValue(detail.creatorUserId);
+      }
       await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
     }
   });
