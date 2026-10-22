@@ -7,9 +7,9 @@
 | I29-U01 | 升级、补身份、确认与轮询零补建 | HTTP 创建并发布 exporter；停平台并裁为真实 v10 单资源库及旧集群；升级，读取实例/版本/任务，管理员明确确认，刷新状态 | 原 exporter UID、旧版本/任务不变；创建用户可靠补齐、角色未知；各阶段 SM mutation 增量均 0 | #29 |
 | I29-U02 | 新明确发布补建与原创建用户 | 对 I29-U01 实例先由另一管理员预览，再明确发布新版本；读取冻结版本/逐资源进度和目标请求 | 新 versionID 冻结 component + service-monitor；user-id 为原 creator，角色未知仍可发布；原 KSM UID 不变且仅条件 PUT，SM 单独 POST | #29 |
 | I29-U03 | 未知创建用户拒绝且无替代 | 真实 v10 夹具删除 CREATE_INSTANCE 证据；升级后管理员允许管理；分别 HTTP 与直接 Kitex RPC 预览/发布 | 身份仍未知；明确拒绝依赖身份的配套发布；不采用 owner/currentActor，KSM/SM mutation 增量均 0 | #29 |
-| I29-U04.failed | 旧失败操作仅重试原资源 | 真实 v10 单资源 FAILED 操作升级；编辑新草稿，明确 retry | 原 versionID/operationID不变，attempt增加；仅恢复原 component，SM 0写，不采纳新草稿 | #29 |
-| I29-U04.unsent | 旧未发送操作只读恢复及明确继续 | 真实 v10 单资源操作保留未发送边界；重启升级，轮询，再明确 continue-unsent | 轮询0写；明确继续仅写原 component；旧资源集合不追加SM | #29 |
-| I29-U04.sent | 旧已发送操作只读确认 | 真实 v10 保留原 KSM UID、possiblySent 与待确认操作；升级后refresh | 只读核验原UID与冻结配置，无 KSM/SM 重放，旧版本仍单资源 | #29 |
+| I29-U04.failed | 旧失败操作仅重试原资源 | 真实 v10 单资源 FAILED 操作升级；移除SM CRD并拒绝create权限；编辑新草稿，明确 retry | 原 versionID/operationID不变，attempt增加；仅恢复原 component，SM 0写，不采纳新草稿 | #29 |
+| I29-U04.unsent | 旧未发送操作只读恢复及明确继续 | 真实 v10 单资源操作保留未发送边界；重启升级后移除SM CRD并拒绝create权限，轮询，再明确 continue-unsent | 轮询0写；明确继续仅写原 component；旧资源集合不追加SM | #29 |
+| I29-U04.sent | 旧已发送操作只读确认 | 真实 v10 保留原 KSM UID、possiblySent 与待确认操作；升级后移除SM CRD并拒绝create权限，再refresh | 只读核验原UID与冻结配置，无 KSM/SM 重放，旧版本仍单资源 | #29 |
 | I29-U05.uid | 补建原 exporter UID 替换保护 | 历史升级后替换 KSM UID，再新预览/发布 | 拒绝接管替代资源；SM0写，原平台UID不改 | #29 |
 | I29-U05.drift | 补建原 exporter 漂移保护 | 历史升级后外改 KSM spec，先不确认漂移，再明确确认 | 未确认时拒绝且0写；明确发布沿原UID/RV写，冻结新双资源版本 | #29 |
 | I29-U05.foreign | 同名外部SM保护 | 历史升级后预置同名外部SM，预览/发布 | 拒绝且0业务写，不凭name/spec/labels认领 | #29 |

@@ -258,7 +258,7 @@ def platform(s):
     assert backfilled['versionId']!=old_publication['versionId'] and len(backfilled['resources'])==2
     after_counts=publication_counts(s,s.crname,old_sm)
     assert after_counts['componentPOST']==legacy_counts['componentPOST'] and after_counts['componentPUT']==legacy_counts['componentPUT']+1
-    assert after_counts['smPOST']==legacy_counts['smPOST']+1 and after_counts['smPUT']==legacy_counts['smPUT']
+    assert after_counts['smPOST']==legacy_counts['smPOST']+1 and after_counts['smPUT']==legacy_counts['smPUT'] and after_counts['smMutation']==legacy_counts['smMutation']+1
     sm=s.get('servicemonitor',old_sm['name'],'-n',old_sm['namespace'])
     assert sm['metadata']['labels']['monitor-mgr.io/user-id']==original_actor and s.cr()['metadata']['uid']==original_uid
     assert legacy_single_resource(s,known,old_publication)==old_frozen

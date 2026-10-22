@@ -78,7 +78,9 @@ func legacyExporterFixture(t ginkgo.GinkgoTInterface, state string, known bool) 
 	if e != nil {
 		t.Fatal(e)
 	}
-	q := dropInstanceCreatorSchema + `DELETE FROM schema_migrations WHERE version>10;`
+	q := dropInstanceCreatorSchema + `DELETE FROM schema_migrations WHERE version>10;
+UPDATE command_results SET result_json=json_remove(result_json,'$.creatorUserId','$.creatorRole','$.creatorIdentityKnown','$.canManage','$.readOnlyReason','$.managementConfirmation') WHERE action='CREATE_INSTANCE';
+UPDATE publication_previews SET storage_fingerprint='' WHERE instance_id IN (SELECT id FROM instances WHERE component='kube-state-metrics');`
 	if !known {
 		q += `DELETE FROM command_results WHERE action='CREATE_INSTANCE';`
 	}
@@ -195,6 +197,9 @@ func checkHistoricalCompanionOldOperations(t ginkgo.GinkgoTInterface) {
 		p, c, id, f, _, first, op := legacyExporterFixture(t, state, true)
 		oid := op["operationId"].(string)
 		f.mu.Lock()
+		// 关键：旧冻结操作不依赖新SM的CRD或创建权限，恢复不能转而执行新发布预检。
+		f.smUnavailable = true
+		f.denySM = "create"
 		before := f.writes
 		f.mu.Unlock()
 		assertLegacyFrozen(t, p, c, id, first)

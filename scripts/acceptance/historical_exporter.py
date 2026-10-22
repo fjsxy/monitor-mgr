@@ -22,9 +22,11 @@ def publication_counts(s, name, sm):
     component = '/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics'
     companion = '/apis/monitoring.coreos.com/v1/namespaces/' + sm['namespace'] + '/servicemonitors'
     events = [e for e in s.capture_proxy() if e['stage'] == 'upstream_completed']
-    return {key: len([e for e in events if e['method'] == method and e['path'] == path])
+    result = {key: len([e for e in events if e['method'] == method and e['path'] == path])
             for key, method, path in [('componentPOST', 'POST', component), ('componentPUT', 'PUT', component + '/' + name),
                                       ('smPOST', 'POST', companion), ('smPUT', 'PUT', companion + '/' + sm['name'])]}
+    result['smMutation'] = len([e for e in events if e['method'] in ('POST', 'PUT', 'PATCH', 'DELETE') and e['path'] in (companion, companion + '/' + sm['name'])])
+    return result
 
 
 def legacy_single_resource(s, instance, operation):
@@ -82,7 +84,7 @@ def recovery(s, proxy):
             sm_progress = next(r for r in after['resources'] if r['target']['key'] == 'service-monitor')
             s.owned_crs[(s.target, 'servicemonitor', sm['namespace'], sm['name'])] = sm_progress['confirmedUid']
             final = publication_counts(s, s.crname, sm)
-            assert final['componentPUT'] == writes['componentPUT'] and final['smPOST'] == writes['smPOST'] + 1
+            assert final['componentPUT'] == writes['componentPUT'] and final['smPOST'] == writes['smPOST'] + 1 and final['smMutation'] == writes['smMutation'] + 1
         else:
             after = s.state(operation, 'IDENTITY_UNCERTAIN')
             assert not next(r for r in after['resources'] if r['target']['key'] == 'service-monitor')['confirmedUid']
