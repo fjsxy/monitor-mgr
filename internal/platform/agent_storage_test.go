@@ -3,8 +3,10 @@ package platform_test
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/teststeps"
@@ -295,7 +297,9 @@ func checkTestAgentStorageRetainedIdentitySurvivesParents(t ginkgo.GinkgoTInterf
 // storageVolumes把合法空列表作为空集断言，避免缺失字段导致测试panic。
 func storageVolumes(source map[string]any) []any { v, _ := source["volumes"].([]any); return v }
 
-const dropAgentStorageSchema = `ALTER TABLE publication_previews DROP COLUMN storage_fingerprint;DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
+const dropResourceProgressSchema = `DROP TABLE IF EXISTS resource_progress;DROP TABLE IF EXISTS operation_resources;DROP TABLE IF EXISTS version_resources;DROP TABLE IF EXISTS instance_resource_identities;`
+
+const dropAgentStorageSchema = dropResourceProgressSchema + `ALTER TABLE publication_previews DROP COLUMN storage_fingerprint;DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
 
 // A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。
 // 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
@@ -455,12 +459,36 @@ func checkTestAgentStorageResponsibilityOutlivesInstance(t ginkgo.GinkgoTInterfa
 				f.mu.Unlock()
 				current := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
 				dp := clusterCall(t, p, "POST", "/instances/"+id+"/deletion-previews", map[string]any{}, c, "", 200)
+				storageDeadline := time.Now().Add(12 * time.Second)
 				deletion := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": current["currentVersionId"], "previewId": dp["previewId"]}, c, "delete", 202)
 				oid := deletion["operationId"].(string)
+				// 关键：refresh允许返回在途结果；沿删除受理时的原12秒总预算，核对新轮次的原UID/策略和观察时间。
+				awaitStorage := func(want, previous string) map[string]any {
+					var result map[string]any
+					for time.Now().Before(storageDeadline) {
+						result = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+						volumes, _ := result["storageVolumes"].([]any)
+						if result["state"] == "SUCCEEDED" && result["storageResult"] == want && len(volumes) == 1 {
+							volume := volumes[0].(map[string]any)
+							stamp, stampErr := time.Parse(time.RFC3339Nano, volume["lastAttemptAt"].(string))
+							before, _ := time.Parse(time.RFC3339Nano, previous)
+							if stampErr == nil && stamp.After(before) && volume["uid"] == "duty-pvc-uid" && volume["agentUID"] == "uid-monitoring/"+name && volume["expectedPolicy"] == policy && volume["retentionResult"] == want {
+								return result
+							}
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
+					t.Fatal("原UID存储新核验未在原总预算完成", result)
+					return nil
+				}
 				if awaitClusterOperation(t, p, c, oid)["state"] != "SUCCEEDED" {
 					t.Fatal("实例删除未独立完成")
 				}
 				current = clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+				progress := resourceProgress(t, p, c, oid)
+				if progress["state"] != "SUCCEEDED" || progress["target"].(map[string]any)["kind"] != "PrometheusAgent" {
+					t.Fatal("I27-U02：Agent删除资源状态不完整", progress)
+				}
 				if current["lifecycle"] != "DELETED" {
 					t.Fatal("卷任务延迟实例完成", current)
 				}
@@ -470,7 +498,7 @@ func checkTestAgentStorageResponsibilityOutlivesInstance(t ginkgo.GinkgoTInterfa
 					body["ownerId"] = u["id"]
 				}
 				if policy == "Delete" {
-					current = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+					current = awaitStorage("Unknown", "")
 					if current["storageResult"] != "Unknown" {
 						t.Fatal("PVC读取失败未独立表达", current)
 					}
@@ -478,20 +506,64 @@ func checkTestAgentStorageResponsibilityOutlivesInstance(t ginkgo.GinkgoTInterfa
 					mu.Lock()
 					denied = false
 					mu.Unlock()
-					current = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+					previous := current["storageVolumes"].([]any)[0].(map[string]any)["lastAttemptAt"].(string)
+					current = awaitStorage("Deleting", previous)
 					if current["storageResult"] != "Deleting" {
 						t.Fatal("原卷残留未保持独立待确认", current)
 					}
 					clusterCall(t, p, "POST", "/clusters/"+cluster+"/"+action, body, c, "blocked-pending", 409)
+					ginkgo.By("REG20-STORAGE-006." + action + "：旧PVC读取在途时不冒充新核验，释放后以原UID实际404结束责任")
+					entered, release := make(chan struct{}), make(chan struct{})
+					var released sync.Once
+					var reads, absentReads atomic.Int64
+					defer released.Do(func() { close(release) })
+					f.mu.Lock()
+					originalHook := f.hook
+					f.hook = func(w http.ResponseWriter, r *http.Request) bool {
+						if r.Method != "GET" || r.URL.Path != "/api/v1/namespaces/monitoring/persistentvolumeclaims/"+claim {
+							return originalHook(w, r)
+						}
+						// 在外部API边界固定真实旧200响应，暂停期间允许目标卷消失，不锁住测试目标状态。
+						recorded := httptest.NewRecorder()
+						handled := originalHook(recorded, r)
+						if reads.Add(1) == 1 {
+							close(entered)
+							<-release
+						}
+						if recorded.Code == 404 {
+							absentReads.Add(1)
+						}
+						w.WriteHeader(recorded.Code)
+						w.Write(recorded.Body.Bytes())
+						return handled
+					}
+					f.mu.Unlock()
+					select {
+					case <-entered:
+					case <-time.After(time.Until(storageDeadline)):
+						t.Fatal("原总预算内未进入在途PVC读取屏障")
+					}
 					mu.Lock()
 					gone = true
 					mu.Unlock()
 					current = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+					if current["storageResult"] != "Deleting" || reads.Load() != 1 || absentReads.Load() != 0 {
+						t.Fatal("在途刷新错误冒充新核验或并发读取原卷", current)
+					}
+					clusterCall(t, p, "POST", "/clusters/"+cluster+"/"+action, body, c, "blocked-inflight", 409)
+					released.Do(func() { close(release) })
+					previous = current["storageVolumes"].([]any)[0].(map[string]any)["lastAttemptAt"].(string)
+					current = awaitStorage("Deleted", previous)
 					if current["storageResult"] != "Deleted" {
 						t.Fatal("原卷消失未核实", current)
 					}
-				} else {
+					completedReads := reads.Load()
 					current = clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
+					if current["storageResult"] != "Deleted" || absentReads.Load() != 1 || completedReads != 2 || reads.Load() != completedReads {
+						t.Fatal("原UID终态倒退或重复核验", current)
+					}
+				} else {
+					current = awaitStorage("Retained", "")
 					if current["storageResult"] != "Retained" {
 						t.Fatal("合法Retain未单独完成", current)
 					}

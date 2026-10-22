@@ -75,6 +75,13 @@ func (s *Store) readDeletionSnapshot(ctx context.Context, i *rpc.ObservationInst
 		// 关键：实际策略和原PVC UID属于确认影响；自然Pod滚动不改变影响。
 		impact = s.fingerprint(i, "delete-impact/agent-storage/v3:"+canonical(namespaces)+":"+s.agentStorageImpact(i, storage))
 	}
+	if i.Component == KSMComponent {
+		companion, e := s.companionDeletionImpact(ctx, i, t)
+		if e != nil {
+			return nil, e
+		}
+		impact = s.fingerprint(i, "delete-impact/companions/v1:"+canonical(namespaces)+":"+companion)
+	}
 	// 关键：目标摘要不含status/RV，影响摘要不含易变Pod UID；新增跨namespace原owner链仍使确认过期。
 	return &deletionSnapshot{target: s.fingerprint(i, "delete-target/v1:"+componentFor(i.Component).normalizeSpec(objectMap(cr, "spec"))), impact: impact, namespace: ns, namespaces: namespaces, storage: storage}, nil
 }
@@ -134,6 +141,9 @@ func (s *Store) PreviewDeletion(ctx context.Context, c *rpc.RequestContext, r *r
 	i, e := s.authorizedInstance(ctx, c, r.Id)
 	if e != nil {
 		return nil, e
+	}
+	if !i.CanManage {
+		return nil, Error("FORBIDDEN", i.ReadOnlyReason)
 	}
 	if e = rejectUnknownFields(r, "request"); e != nil {
 		return nil, e

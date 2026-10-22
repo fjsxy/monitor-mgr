@@ -82,3 +82,36 @@ ci-builder: ## CI 创建本 run 独占、固定版本的 BuildKit；须指定 BU
 	$(PYTHON) scripts/ci-builder.py create --name "$(BUILDX_BUILDER)"
 ci-builder-cleanup: ## 按记录的原容器 ID 清理本 run 构建器
 	$(PYTHON) scripts/ci-builder.py cleanup --name "$(BUILDX_BUILDER)"
+
+.PHONY: ut-resource-progress
+ut-resource-progress: ## 核验逐资源进度、重启禁重放、删除和历史迁移（UT-11/12/16）
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-11 |UT-12 |UT-16 ' -ginkgo.fail-on-empty
+.PHONY: ut-instance-identity
+ut-instance-identity: ## 实例创建身份、HTTP/RPC写保护、派发撤权与历史未知角色的Ginkgo验证
+	$(GO) test -count=1 -timeout 5m ./internal/platform -run TestPlatform -args -ginkgo.focus='UT-07|UT-10|UT-16' -ginkgo.no-color
+
+.PHONY: ut-exporter-companion
+ut-exporter-companion: ## exporter 配套ServiceMonitor冻结、预检、部分失败、恢复、失权和删除的Ginkgo验证
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-08|UT-10|UT-11|UT-12|UT-16' -ginkgo.no-color -ginkgo.fail-on-empty
+
+.PHONY: ut-historical-identity
+ut-historical-identity: ## 历史创建证据、管理员确认与撤销派发的 Ginkgo 定向验证
+	$(GO) test -count=1 -timeout 5m ./internal/platform -run TestPlatform -args -ginkgo.focus='UT-07|UT-10|UT-16' -ginkgo.no-color
+
+.PHONY: ut-agent-creator receiver-chart-check
+ut-agent-creator: ## Agent固定创建用户关联、namespace/匹配、HTTP/RPC保护及样本证据门禁的Ginkgo验证
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 4m -args -ginkgo.focus='UT-08|UT-18' -ginkgo.no-color -ginkgo.fail-on-empty
+receiver-chart-check: ## 校验独占remote_write接收端Helm夹具，显式读取source-lock锁定镜像
+	$(HELM) lint charts/test-receiver --set-string runId=chart-check --set-string image="$$($(PYTHON) -c 'import json;print(json.load(open("scripts/acceptance/source-lock.json"))["images"]["prometheus"]["image"])')"
+
+.PHONY: ut-historical-exporter
+ut-historical-exporter: ## 历史exporter真实v10升级零写、明确补建、旧操作和身份恢复边界
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-12|UT-16' -ginkgo.no-color -ginkgo.fail-on-empty
+
+.PHONY: ut-runtime-repairs
+ut-runtime-repairs: ## 冻结身份重试、SSAR精确暂停及两资源异步删除的公开HTTP/Ginkgo验证（UT-11/12/18）
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-11|UT-12|UT-18' -ginkgo.no-color -ginkgo.fail-on-empty
+
+.PHONY: ut-storage-recovery
+ut-storage-recovery: ## 原UID存储新核验轮次与在途刷新边界的Ginkgo race验证（UT-13）
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -race ./internal/platform -count=1 -timeout 3m -args -ginkgo.focus='UT-13' -ginkgo.no-color -ginkgo.fail-on-empty

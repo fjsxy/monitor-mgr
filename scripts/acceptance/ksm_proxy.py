@@ -54,12 +54,15 @@ else:print(json.dumps({'verified':False,'error':last}))
  def control(self,action,body=None):
   req=urllib.request.Request(self.base+'/'+('rule' if action=='arm' else action),data=None if body is None else json.dumps(body).encode(),method='GET' if action=='state' else 'POST',headers={'X-Fault-Control':self.token,'Content-Type':'application/json'})
   return json.load(urllib.request.urlopen(req,timeout=5))
- def arm(self,method,path,action='pause_before_send'):return self.control('arm',{'method':method,'path':path,'action':action})
+ def arm(self,method,path,action='pause_before_send',ssar_resource=None):
+  body={'method':method,'path':path,'action':action}
+  if ssar_resource is not None:body['ssarResource']=ssar_resource
+  return self.control('arm',body)
  def paused(self):
   end=time.monotonic()+6
   while time.monotonic()<end:
    state=self.control('state');rule=state.get('rule') or {}
-   if rule.get('stage')=='paused_before_send':return state
+   if rule.get('stage') in ('paused_before_send','paused_after_upstream'):return state
    time.sleep(.05)
   raise AssertionError('没有抵达真实API发送前fixture屏障')
  def close(self):

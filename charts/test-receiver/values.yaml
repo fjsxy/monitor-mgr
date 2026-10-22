@@ -1,0 +1,3 @@
+# 镜像必须由 source-lock.json 显式传入，避免验收引入未锁定依赖。
+image: ''
+runId: ''

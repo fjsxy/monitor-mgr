@@ -1,3 +1,6 @@
+import { InstanceManagement } from "./instance-management";
+import {FrozenResources,type FrozenResource} from "./lifecycle";
+import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
 import { useDraftBookmark } from "./draft-bookmark";
 import {StorageImpact} from "./agent-storage";
@@ -43,7 +46,7 @@ type Runtime = {
   error: string;
   observedAt: string;
 };
-type Instance = {
+type Instance = InstanceIdentityValue & {
   id: string;
   clusterId: string;
   name: string;
@@ -65,6 +68,7 @@ type Pagination = { number: number; size: number; total: number; pages: number }
 type QueryResult = { instances: Instance[]; statistics: Statistics; page: Pagination };
 type Draft = { revision: Int64; ksm: KSM; yaml: string };
 type Version = {
+ resources?:FrozenResource[];
   versionId: string;
   instanceId: string;
   sourceDraftRevision: Int64;
@@ -493,6 +497,7 @@ export function Instances({
                 <td>
                   <strong>{item.name}</strong>
                   <div className="help">{item.targetNamespace}</div>
+                  <InstanceIdentity value={item} compact />
                   {item.readOnly && (
                     <span className="badge gray">平台未纳管 · 只读</span>
                   )}
@@ -544,19 +549,19 @@ export function Instances({
                 <td>
                   <div className="row-actions">
                     <button onClick={() => open(item)}>
-                      {item.readOnly ? "查看" : "编辑"}
+                      {item.canManage ? "编辑" : "查看"}
                     </button>
                     <button
                       onClick={() => open(item, "draft")}
-                      disabled={item.readOnly}
-                      title={item.readOnly ? "平台未纳管实例只读" : ""}
+                      disabled={!item.canManage}
+                      title={item.readOnlyReason}
                     >
                       下发
                     </button>
                     <button
                       className="danger"
-                      disabled={item.readOnly || item.lifecycle==="DELETED"}
-                      title={item.readOnly?"平台未纳管实例只读":"删除原 UID 对应的实例"}
+                      disabled={!item.canManage || item.lifecycle==="DELETED"}
+                      title={item.readOnlyReason || "删除原 UID 对应的实例"}
                       onClick={() => void openDeletion(item)}
                     >
                       删除
@@ -667,6 +672,7 @@ export function Instances({
           <AgentEditor
             key={selection.key}
             selection={selection}
+            isAdmin={account.role === "ADMIN"}
             cluster={current}
             onAction={onAction}
             onChange={() => void load()}
@@ -683,6 +689,7 @@ export function Instances({
           <Editor
             key={selection.key}
             selection={selection}
+            isAdmin={account.role === "ADMIN"}
             cluster={current}
             onAction={onAction}
             onChange={() => void load()}
@@ -723,6 +730,7 @@ export function Instances({
 
 // 抽屉中的配置状态独立于运行轮询，保存冲突或读取失败均不覆盖本地编辑。
 function Editor({
+  isAdmin,
   selection,
   cluster,
   onAction,
@@ -731,6 +739,7 @@ function Editor({
   onCopy,
 }: {
   selection: Selection;
+  isAdmin: boolean;
   cluster: Cluster;
   onAction: (work: () => Promise<void>) => Promise<void>;
   onChange: () => void;
@@ -765,6 +774,7 @@ function Editor({
     [viewedVersion, setViewedVersion] = useState<Version | null>(null),
     [namespaceOpen, setNamespaceOpen] = useState(false);
   const readOnly = Boolean(current?.readOnly);
+  const canManage = !current || current.canManage;
   const fixed = Boolean(current?.uid);
   const dirty = JSON.stringify(requestConfig(config)) !== saved;
   const bodyRef = useRef<HTMLDivElement>(null),
@@ -907,7 +917,7 @@ function Editor({
     setConfig(next);
     setNotice("");
     setPreview(null);
-    if (currentRef.current && !readOnly) {
+    if (currentRef.current && canManage) {
       if (editingTimer.current) clearTimeout(editingTimer.current);
       editingTimer.current = setTimeout(() => {
         void api(
@@ -1037,6 +1047,7 @@ function Editor({
           <div>
             <p className="help">实例详情 · {cluster.name}</p>
             <h2>{current?.name || config.name || "新 KSM 实例"}</h2>
+            {current && <><InstanceIdentity value={current} /><InstanceManagement value={current} clusterActive={cluster.state === "ACTIVE"} isAdmin={isAdmin} onConfirmed={next => { setCurrent(next); onChange(); }} /></>}
             <span className={"badge " + (readOnly ? "gray" : "ok")}>
               {readOnly
                 ? "平台未纳管 · 只读"
@@ -1097,7 +1108,7 @@ function Editor({
                 <button onClick={closeVersion}>返回当前草稿</button>
                 <span className="badge gray">只读发布版本</span>
               </div>
-              <h3>版本 {versionName(viewedVersion.versionId)}</h3>
+              <h3>版本 {versionName(viewedVersion.versionId)}</h3><FrozenResources resources={viewedVersion.resources}/>
               <p className="help">
                 来源草稿 v{viewedVersion.sourceDraftRevision} ·{" "}
                 {stamp(viewedVersion.createdAt)}
@@ -1126,7 +1137,7 @@ function Editor({
                   <Configuration
                     config={config}
                     onChange={change}
-                    disabled={busy}
+                    disabled={busy || !canManage}
                     fixed={fixed}
                     namespaces={effectiveNamespaces}
                     namespacesError={namespaceError}
@@ -1185,7 +1196,7 @@ function Editor({
                         {operation.attemptId &&
                           ` · 执行尝试 ${operation.attemptId}`}
                       </p>
-                      <LifecycleActions operation={operation} onOperation={async next=>{setOperation(next);setTab("runtime");await refreshRuntime();if(current)await loadHistory(current.id)}}/>
+                      <LifecycleActions canManage={canManage} operation={operation} onOperation={async next=>{setOperation(next);setTab("runtime");await refreshRuntime();if(current)await loadHistory(current.id)}}/>
                     </div>
                   )}
                   <div className="row-actions">
@@ -1245,7 +1256,7 @@ function Editor({
                             </button>
                           )}
                           <p className="help">{item.action==="DELETE"?"删除":"下发"}操作 {item.operationId}</p>
-                          <LifecycleActions operation={item} onOperation={async next=>{setOperation(next);setTab("runtime");if(current)await loadHistory(current.id);onChange()}}/>
+                          <LifecycleActions canManage={canManage} operation={item} onOperation={async next=>{setOperation(next);setTab("runtime");if(current)await loadHistory(current.id);onChange()}}/>
                         </article>
                       ))}
                       <h3>发布版本</h3>
@@ -1290,7 +1301,7 @@ function Editor({
             </>
           )}
         </div>
-        {!viewedVersion && !readOnly && tab === "draft" && (
+        {!viewedVersion && canManage && tab === "draft" && (
           <div className="drawer-footer">
             <div>
               <span className={"badge " + (dirty ? "warn" : "gray")}>
@@ -1363,7 +1374,7 @@ function Editor({
               )}
               <h3>CR YAML 对比</h3>
               <p className="help">
-                左侧集群原 CR，右侧将下发 CR；红色为删除，绿色为新增。
+                左侧为集群原资源，右侧为本次 exporter 与配套 ServiceMonitor；红色为删除，绿色为新增。ServiceMonitor 使用实例创建用户标签，随实例更新和删除。
               </p>
               {preview.warnings.map((warning, index) => (
                 <p className="alert" key={index}>

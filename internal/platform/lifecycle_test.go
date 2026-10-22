@@ -216,14 +216,18 @@ func checkTestPublicationUnknownOutcomeNeverReplays(t ginkgo.GinkgoTInterface) {
 			if !known {
 				awaitLifecycleState(t, p, c, oid, "IDENTITY_UNCERTAIN")
 			} else {
-				awaitLifecycleState(t, p, c, oid, "RESULT_UNCERTAIN", "SUCCEEDED")
+				awaitLifecycleState(t, p, c, oid, "RESULT_UNCERTAIN", "WAITING_CONFIRMATION")
 			}
 			clusterCall(t, p, "POST", "/operations/"+oid+"/retry", lifecycleRevision(t, p, c, oid), c, "forbidden-retry", 409)
 			clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "refresh", 200)
 			if known {
-				awaitLifecycleState(t, p, c, oid, "SUCCEEDED")
+				awaitLifecycleState(t, p, c, oid, "WAITING_CONFIRMATION")
 			} else {
 				awaitLifecycleState(t, p, c, oid, "IDENTITY_UNCERTAIN")
+			}
+			progress := resourceProgress(t, p, c, oid)
+			if progress["possiblySent"] != true || (!known && (progress["confirmedUid"] != "" || progress["state"] != "IDENTITY_UNCERTAIN")) || (known && (progress["confirmedUid"] != "created-uid" || progress["state"] != "SUCCEEDED")) {
+				t.Fatal("I27-U04/U05：资源独立身份或只读恢复结果错误", progress)
 			}
 			f.mu.Lock()
 			writes := f.writes
@@ -343,6 +347,9 @@ func checkTestP14ForegroundDeletionKeepsUIDGraphProtection(t ginkgo.GinkgoTInter
 				awaitLifecycleState(t, p, c, oid, "SUCCEEDED")
 			}
 			i := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+			if progress := resourceProgress(t, p, c, oid); progress["state"] != "SUCCEEDED" || progress["confirmedUid"] != "created-uid" || progress["possiblySent"] != true {
+				t.Fatal("I27：删除未独立保留原身份和结果", progress)
+			}
 			if i["lifecycle"] != "DELETED" {
 				t.Fatal(i)
 			}
@@ -455,6 +462,10 @@ func checkTestP13RestartUsesPersistentSentBoundary(t ginkgo.GinkgoTInterface) {
 			}
 			op := ops[0].(map[string]any)
 			oid := op["operationId"].(string)
+			progress := resourceProgress(t, p, c, oid)
+			if progress["state"] != op["state"] || progress["possiblySent"] != (stage == "afterSendMarker") {
+				t.Fatal("I27-U07/U08：重启丢失资源发送边界", progress, op)
+			}
 			f.mu.Lock()
 			writes := f.writes
 			f.mu.Unlock()

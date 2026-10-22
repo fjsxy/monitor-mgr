@@ -84,7 +84,36 @@ func (s *Store) targetForActor(ctx context.Context, actor, cluster string) (*Tar
 	t.clusterUID = cl.Uid
 	return t, cl, nil
 }
+
+// executePublication 只消费受理时冻结的有序资源；前序结果提交后才进入下一份资源。
 func (s *Store) executePublication(life context.Context, id string) {
+	resources, e := readFrozenResources(life, s.DB, id, true)
+	if e != nil {
+		return
+	}
+	for _, resource := range resources {
+		var state, attempt string
+		if s.DB.QueryRowContext(life, `SELECT o.state,l.current_attempt_id FROM operations o JOIN operation_lifecycle l ON l.operation_id=o.id WHERE o.id=?`, id).Scan(&state, &attempt) != nil || state != "CHECKING" {
+			return
+		}
+		var progress string
+		if s.DB.QueryRowContext(life, `SELECT state FROM resource_progress WHERE attempt_id=? AND resource_key=?`, attempt, resource.key).Scan(&progress) != nil {
+			return
+		}
+		if progress == "SUCCEEDED" {
+			if !s.verifyCompletedResource(life, id, attempt, resource, false) {
+				return
+			}
+			continue
+		}
+		if resource.key == "component" {
+			s.executePrimaryPublication(life, id, resource)
+		} else {
+			s.executeAdditionalResource(life, id, resource, false)
+		}
+	}
+}
+func (s *Store) executePrimaryPublication(life context.Context, id string, resource frozenResource) {
 	// 只读预检不占派发保护，避免目标读取阻塞账号撤权；最终派发事务会重新授权。
 	if s.OperationBoundary != nil {
 		if s.OperationBoundary("beforeDispatch", id) != nil {
@@ -96,6 +125,7 @@ func (s *Store) executePublication(life context.Context, id string) {
 		return
 	}
 	s.enrichPublicationOperation(life, s.DB, o)
+	selectExecutionResource(o, resource.key)
 	i, e := instanceByID(life, s.DB, o.GetInstanceId())
 	if e != nil {
 		s.finishExecution(life, o, "FAILED", e, nil)
@@ -118,11 +148,12 @@ func (s *Store) executePublication(life context.Context, id string) {
 			return
 		}
 	}
-	frozen, e := frozenVersionSpec(life, s.DB, o.GetVersionId(), i.Id)
-	if e != nil {
-		s.finishExecution(life, o, "FAILED", e, nil)
+	frozen := objectMap(resource.document, "spec")
+	if frozen == nil {
+		s.finishExecution(life, o, "FAILED", Error("UNAVAILABLE", "冻结资源配置缺失"), nil)
 		return
 	}
+	i = resourceInstance(i, resource, resource.originalUID)
 	var previewID string
 	var overwrite bool
 	if s.DB.QueryRowContext(life, `SELECT preview_id,overwrite_drift FROM publication_operations WHERE operation_id=?`, id).Scan(&previewID, &overwrite) != nil {
@@ -180,10 +211,10 @@ func (s *Store) executePublication(life context.Context, id string) {
 		}
 		// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
 		body := publicationDocument(cfg, cr, frozen)
-		method, path := "POST", componentFor(i.Component).collectionPath(instanceCRNamespace(i))
+		method, path := "POST", resource.collection
 		if i.Uid != "" {
 			method = "PUT"
-			path = componentFor(i.Component).objectPath(i)
+			path = resource.path
 			if objectString(objectMap(body, "metadata"), "resourceVersion") == "" {
 				s.finishExecution(life, o, "FAILED", Error("CONFLICT", "目标 RV 缺失，拒绝无条件更新"), nil)
 				return
@@ -256,14 +287,16 @@ func (s *Store) finishExecution(life context.Context, o *rpc.Operation, state st
 	if (life.Err() != nil || s.stopping.Load()) && state != "SUCCEEDED" {
 		a, _, e := lifecycleAttempt(context.Background(), s.DB, o.OperationId)
 		if e == nil && a.AttemptId == o.GetAttemptId() {
-			if a.PossiblySent {
+			sent := a.PossiblySent
+			s.DB.QueryRow(`SELECT possibly_sent FROM resource_progress WHERE attempt_id=? AND resource_key=?`, a.AttemptId, executionResourceKey(o)).Scan(&sent)
+			if sent {
 				state = "RESULT_UNCERTAIN"
 				if o.Action == "DELETE" {
 					state = "DELETION_VERIFYING"
 				}
 				if o.Action == "PUBLISH" {
 					var uid string
-					s.DB.QueryRow(`SELECT uid FROM instances WHERE id=?`, o.GetInstanceId()).Scan(&uid)
+					s.DB.QueryRow(`SELECT confirmed_uid FROM resource_progress WHERE attempt_id=? AND resource_key=?`, o.GetAttemptId(), executionResourceKey(o)).Scan(&uid)
 					if uid == "" {
 						state = "IDENTITY_UNCERTAIN"
 					}
@@ -313,6 +346,28 @@ func (s *Store) finishPublication(expected *rpc.Operation, state string, cause e
 	if state == "IDENTITY_UNCERTAIN" {
 		message = "首次创建可能已发送，原 UID 未确认；禁止根据同名自动认领"
 	}
+	if e = recordResourceResult(ctx, tx, o, executionResourceKey(expected), state, message, objectString(objectMap(cr, "metadata"), "uid"), now); e != nil {
+		return
+	}
+	if state == "SUCCEEDED" {
+		if executionResourceKey(expected) == "component" {
+			if _, e = tx.ExecContext(ctx, `UPDATE instances SET uid=?,lifecycle='DEPLOYED' WHERE id=?`, objectString(objectMap(cr, "metadata"), "uid"), o.GetInstanceId()); e != nil {
+				return
+			}
+		}
+		var remaining int
+		if tx.QueryRowContext(ctx, `SELECT count(*) FROM resource_progress WHERE attempt_id=? AND state<>'SUCCEEDED'`, o.GetAttemptId()).Scan(&remaining) != nil {
+			return
+		}
+		if remaining > 0 {
+			state = "CHECKING"
+			message = "前序资源已确认，等待剩余冻结资源"
+			if o.State == "RESULT_UNCERTAIN" {
+				state = "WAITING_CONFIRMATION"
+				message = "原资源结果已确认；剩余未发送资源等待明确继续"
+			}
+		}
+	}
 	if _, e = tx.ExecContext(ctx, `UPDATE operations SET state=?,message=?,updated_at=? WHERE id=?`, state, message, now, id); e != nil {
 		return
 	}
@@ -326,8 +381,7 @@ func (s *Store) finishPublication(expected *rpc.Operation, state string, cause e
 		tx.ExecContext(ctx, `UPDATE operations SET message=? WHERE id=?`, "平台退出或重启；明确未发送，等待继续或取消", id)
 	}
 	if state == "SUCCEEDED" {
-		uid := objectString(objectMap(cr, "metadata"), "uid")
-		if _, e = tx.ExecContext(ctx, `UPDATE instances SET uid=?,lifecycle='DEPLOYED',current_version_id=? WHERE id=?`, uid, o.GetVersionId(), o.GetInstanceId()); e != nil {
+		if _, e = tx.ExecContext(ctx, `UPDATE instances SET lifecycle='DEPLOYED',current_version_id=? WHERE id=?`, o.GetVersionId(), o.GetInstanceId()); e != nil {
 			return
 		}
 	}

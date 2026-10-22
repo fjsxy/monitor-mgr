@@ -2,6 +2,7 @@
 import base64
 import copy
 import http.cookiejar
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import socket
 import time
 import urllib.request
 import uuid
+import yaml
 from types import SimpleNamespace
 
 from e2e_environment import ROOT, RUN_LABEL
@@ -87,7 +89,7 @@ class Scenario(LifecycleSuite, AgentSuite):
                 for listener in reserved:listener.close()
         self.namespace(self.ns,'control')
         t=self.env.targets['control']
-        self.env.command(['helm','upgrade','--install','platform',ROOT/'charts/monitor-mgr','--kubeconfig',t['kubeconfig'],'--kube-context',t['context'],'--namespace',self.ns,
+        self.env.command(['helm','upgrade','--install','monitor-mgr',ROOT/'charts/monitor-mgr','--kubeconfig',t['kubeconfig'],'--kube-context',t['context'],'--namespace',self.ns,
                           '--set-string','image='+self.env.image,'--set-string','imagePullPolicy=Never','--set-string','source='+self.env.candidate,'--set-string','runId='+self.env.run_id,'--wait','--timeout','3m'], 'helm-platform',timeout=210)
         self.k('-n',self.ns,'rollout','status','deployment/monitor-mgr','--timeout=120s')
         pod=self.get('pods','-n',self.ns,'-l','app=monitor-mgr',target='control')['items'][0]
@@ -131,6 +133,9 @@ class Scenario(LifecycleSuite, AgentSuite):
         # 原 UID 优先来自平台已确认的实例，未知创建结果只能使用代理保存的原 API 响应。
         current=self.call('GET','/instances/'+i['id']);uid=current.get('uid')
         if uid:self.track_cr(uid,name=current['name'],namespace=current.get('targetNamespace',self.targetns) if self.component=='agent' else '')
+        for resource in result.get('resources',[]):
+            if resource['target']['key']=='service-monitor' and resource.get('confirmedUid'):
+                r=resource['target'];self.owned_crs[(self.target,'servicemonitor',r['namespace'],r['name'])]=resource['confirmedUid']
         return result
     def track_cr(self, uid, name=None, namespace=None, component=None, target=None):
         kind='prometheusagent' if (component or self.component)=='agent' else 'kubestatemetrics'
@@ -157,7 +162,9 @@ class Scenario(LifecycleSuite, AgentSuite):
         self.cookies=cookies;self.connect();return self.platform_pod_uid
 
     def cleanup(self):
-        failures=[]
+        registration=getattr(self,'cleanup_registration',dict(failures=[]))
+        failures=['browser-publication-cleanup'] if registration['failures'] else []
+        self.cleanup_details=[dict(scope='publication',stage='register',reason=reason) for reason in registration['failures']]
         for proxy in self.proxies:
             try: proxy.close()
             except Exception: failures.append('proxy-cleanup')
@@ -165,21 +172,27 @@ class Scenario(LifecycleSuite, AgentSuite):
             self.forward.terminate();self.forward.wait(timeout=5)
         # 关键：仅清理原 UID；替代 CR 如果由本例显式构造，会另外保存自己的创建身份。
         for (target,kind,namespace,name),uid in reversed(list(self.owned_crs.items())):
+            stage='read'
             try:
                 args=['get',kind,name,'-o','json']+(['-n',namespace] if namespace else [])
                 r=self.k(*args,target=target,check=False)
                 if r.returncode:
                     assert b'(NotFound)' in r.stderr;continue
-                obj=json.loads(r.stdout);assert obj['metadata']['uid']==uid
+                obj=json.loads(r.stdout);stage='identity';assert obj['metadata']['uid']==uid
                 finalizers=obj['metadata'].get('finalizers',[])
                 ours=[f for f in finalizers if f in ('phase1.fixture/hold','fixture.monitor-mgr/hold')]
                 if ours:
+                    stage='finalizers'
                     patch=[{'op':'test','path':'/metadata/uid','value':uid},{'op':'test','path':'/metadata/resourceVersion','value':obj['metadata']['resourceVersion']},{'op':'replace','path':'/metadata/finalizers','value':[f for f in finalizers if f not in ours]}]
                     self.k('patch',kind,name,*(['-n',namespace] if namespace else []),'--type=json','-p',json.dumps(patch),target=target)
                 # DELETE precondition 由原 UID 的 JSON DeleteOptions 提供，避免 GET/DELETE 间同名替换。
-                path='/apis/monitoring.coreos.com/v1alpha1/namespaces/'+namespace+'/prometheusagents/'+name if kind=='prometheusagent' else '/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+name
-                self.delete_uid(target,path,uid)
-            except Exception: failures.append('original-cr-cleanup')
+                path=('/apis/monitoring.coreos.com/v1/namespaces/'+namespace+'/servicemonitors/'+name if kind=='servicemonitor' else '/apis/monitoring.coreos.com/v1alpha1/namespaces/'+namespace+'/prometheusagents/'+name if kind=='prometheusagent' else '/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+name)
+                stage='delete';self.delete_uid(target,path,uid)
+            except Exception:
+                failures.append('original-cr-cleanup')
+                # 关键：仅公开固定资源种类/阶段/原因，不公开异常、stderr、路径或对象正文。
+                reason={'read':'read-failed','identity':'uid-mismatch','finalizers':'finalizer-patch-failed','delete':'delete-failed'}[stage]
+                self.cleanup_details.append(dict(scope='cr',resource=kind if kind in ('servicemonitor','prometheusagent','kubestatemetrics') else 'unknown',stage=stage,reason=reason))
         for (target,namespace),uid in reversed(list(self.namespace_uids.items())):
             try:
                 actual=self.get('namespace',namespace,target=target)
@@ -223,6 +236,48 @@ def platform(s):
     s.by('重建真实平台 Pod，沿用原 Cookie 读回管理状态')
     s.rebuild();assert s.proof('store-after')==proof;assert s.call('GET','/session')['expiresAt']==before['expiresAt'];assert s.call('GET','/clusters/'+cluster['id'])['uid']==cluster['uid']
     assert s.get('pvc','monitor-mgr-data','-n',s.ns,target='control')['metadata']['uid']==pvc
+    s.by('I26-K01：真实 v10 PVC 升级仅补可靠创建用户，历史角色保持未知')
+    s.prepare();proxy=s.setup_proxy();known=s.create();missing=s.create(s.cfg(name='missing-'+s.crname))
+    from historical_exporter import remove_fixture_companion, publication_counts, legacy_single_resource
+    old_publication=s.publish(known);original_uid=s.cr()['metadata']['uid'];old_sm=remove_fixture_companion(s,old_publication)
+    legacy_counts=publication_counts(s,s.crname,old_sm)
+    original_actor=s.call('GET','/session')['account']['id']
+    from historical_identity import upgrade_v10
+    upgrade_v10(s,missing_ids=[missing['id']])
+    old_frozen=legacy_single_resource(s,known,old_publication)
+    assert publication_counts(s,s.crname,old_sm)==legacy_counts
+    assert s.cr()['metadata']['uid']==original_uid
+    account,client=s.user('legacy');s.call('POST','/clusters/'+cluster['id']+'/transfer',{'ownerId':account['id']})
+    for instance,expected in [(known,original_actor),(missing,'')]:
+        with s.using(client):
+            current=s.call('GET','/instances/'+instance['id'])
+            assert current['creatorUserId']==expected and current['creatorRole']=='' and not current['canManage']
+            s.call('POST','/instances/'+instance['id']+'/management-confirmations',{'allowClusterManagers':True},status=403)
+    result=s.call('POST','/instances/'+known['id']+'/management-confirmations',{'allowClusterManagers':True})
+    assert result['managementConfirmation']['actorId']==original_actor and result['managementConfirmation']['confirmedAt'] and result['creatorRole']==''
+    s.by('I29-K01：升级、补齐、管理员确认和轮询零SM写，明确发布新版本才补建')
+    for _ in range(3):
+        s.call('POST','/instances/'+known['id']+'/refresh',{})
+        s.call('POST','/operations/'+old_publication['operationId']+'/refresh',{})
+    assert publication_counts(s,s.crname,old_sm)==legacy_counts
+    s.by('I26-K01：确认后普通所属用户真实保存/发布，撤销后恢复只读')
+    with s.using(client):
+        s.save(known,s.cfg());backfilled=s.publish(known);s.runtime(known)
+    assert backfilled['versionId']!=old_publication['versionId'] and len(backfilled['resources'])==2
+    after_counts=publication_counts(s,s.crname,old_sm)
+    assert after_counts['componentPOST']==legacy_counts['componentPOST'] and after_counts['componentPUT']==legacy_counts['componentPUT']+1
+    assert after_counts['smPOST']==legacy_counts['smPOST']+1 and after_counts['smPUT']==legacy_counts['smPUT'] and after_counts['smMutation']==legacy_counts['smMutation']+1
+    sm=s.get('servicemonitor',old_sm['name'],'-n',old_sm['namespace'])
+    assert sm['metadata']['labels']['monitor-mgr.io/user-id']==original_actor and s.cr()['metadata']['uid']==original_uid
+    assert legacy_single_resource(s,known,old_publication)==old_frozen
+    (s.env.public/'historical-exporter.json').write_text(json.dumps({'testedCommit':s.env.candidate,'podUID':s.platform_pod_uid,'legacy':old_frozen,'newVersionId':backfilled['versionId'],'componentUID':original_uid,'serviceMonitorUID':sm['metadata']['uid'],'creatorUserId':original_actor,'before':legacy_counts,'after':after_counts},ensure_ascii=False,indent=2)+'\n')
+    assert s.call('GET','/instances/'+known['id'])['uid']==s.cr()['metadata']['uid']
+    s.call('POST','/instances/'+known['id']+'/management-confirmations',{'allowClusterManagers':False})
+    with s.using(client):
+        assert not s.call('GET','/instances/'+known['id'])['canManage']
+        draft=s.call('GET','/instances/'+known['id']+'/draft')
+        s.call('PUT','/instances/'+known['id']+'/draft',{'expectedDraftRevision':draft['revision'],'ksm':s.cfg()},status=403)
+    (s.env.public/'historical-identity.json').write_text(json.dumps({'testedCommit':s.env.candidate,'podUID':s.platform_pod_uid,'instanceId':known['id'],'creatorUserId':original_actor,'creatorRole':'','confirmation':s.call('GET','/instances/'+known['id'])['managementConfirmation'],'targetUID':s.cr()['metadata']['uid'],'missingCreatorUserId':s.call('GET','/instances/'+missing['id'])['creatorUserId']},ensure_ascii=False,indent=2)+'\n')
     s.by('核对 HTTP 唯一 Service 端口和容器 RPC loopback 监听')
     service=s.get('service','monitor-mgr','-n',s.ns,target='control');assert [p['port'] for p in service['spec']['ports']]==[8080]
     pod=s.get('pod',s.pod,'-n',s.ns,target='control');container=pod['spec']['containers'][0]
@@ -267,11 +322,119 @@ def clusters(s):
     assert s.k('logs','deployment/monitor-mgr','-n',s.ns).stdout.count('目标API写请求'.encode())==mutations_before
 
 
+def companion_contract(s,instance,service_count):
+    """I28-K01：冻结配置必须匹配 Operator 实际生成的全部指标 Service，不能只验猜测标签。"""
+    current=s.call('GET','/instances/'+instance['id'])
+    version=s.call('GET','/instances/'+instance['id']+'/versions/'+current['currentVersionId'])
+    resources=version['resources'];assert len(resources)==2
+    target=next(r for r in resources if r['key']=='service-monitor')
+    expected=yaml.safe_load(target['yaml']);sm=s.get('servicemonitor',target['name'],'-n',target['namespace'])
+    assert sm['spec']==expected['spec'] and sm['metadata']['labels']['monitor-mgr.io/user-id']==current['creatorUserId']
+    assert target['namespace']==s.targetns and sm['spec']['namespaceSelector']=={'matchNames':[s.targetns]}
+    selector=sm['spec']['selector']['matchLabels'];assert len(selector)==3 and 'monitor-mgr.io/user-id' not in selector
+    services=s.get('services','-n',s.targetns)['items']
+    matched=[v for v in services if all(v['metadata'].get('labels',{}).get(k)==value for k,value in selector.items())]
+    assert len(matched)==service_count,(selector,[v['metadata']['labels'] for v in services])
+    for service in matched:
+        assert 'monitor-mgr.io/user-id' not in service['metadata']['labels']
+        assert any(p['name']=='http-metrics' and p['port']==8080 for p in service['spec']['ports'])
+        assert any(owner.get('controller') and owner['uid']==current['uid'] for owner in service['metadata']['ownerReferences'])
+    assert sm['spec']['endpoints']==[{'port':'http-metrics','path':'/metrics','interval':'30s','scrapeTimeout':'10s'}]
+    s.owned_crs[(s.target,'servicemonitor',target['namespace'],target['name'])]=sm['metadata']['uid']
+    return sm
+
+
+def companion_dispatch_authorization(s,proxy):
+    """I28-U06 的真实 Pod 对照：exporter 已生效，返回前撤权只阻止后续 SM 写。"""
+    proxy.control('reset',{})
+    username='sm-actor-'+uuid.uuid4().hex[:8];temporary=secrets.token_urlsafe(24);password=secrets.token_urlsafe(24)
+    actor=s.call('POST','/accounts',{'username':username,'password':temporary,'role':'ADMIN'},status=201)
+    opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    with s.using(opener):
+        s.call('POST','/sessions',{'username':username,'password':temporary},status=201)
+        s.call('POST','/session/password',{'currentPassword':temporary,'newPassword':password})
+        s.call('POST','/sessions',{'username':username,'password':password},status=201)
+    s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':actor['id']})
+    s.crname='sm-auth-'+uuid.uuid4().hex[:8]
+    with s.using(opener):instance=s.create();preview=s.preview(instance)
+    doc=next(d for d in yaml.safe_load_all(preview['rightYAML']) if d and d['kind']=='ServiceMonitor')
+    collection='/apis/monitoring.coreos.com/v1/namespaces/'+s.targetns+'/servicemonitors'
+    before=len([e for e in s.capture_proxy() if e['stage']=='upstream_completed' and e['method']=='POST' and e['path']==collection])
+    s.by('I28-K02：真实 exporter 已写入后撤销创建管理员身份，SM 必须保持未发送')
+    proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics','pause_after_upstream')
+    try:
+        with s.using(opener):op=s.publish(instance,preview=preview,wait=False)
+        paused=proxy.paused()['rule'];assert paused['stage']=='paused_after_upstream'
+        s.call('PATCH','/accounts/'+actor['id'],{'role':'USER'})
+        proxy.control('release',{'ruleId':paused['id']});done=s.state(op,'FAILED')
+        component=next(p for p in done['resources'] if p['target']['key']=='component');sm=next(p for p in done['resources'] if p['target']['key']=='service-monitor')
+        assert component['state']=='SUCCEEDED' and component['confirmedUid'] and sm['possiblySent'] is False
+        assert len([e for e in s.capture_proxy() if e['stage']=='upstream_completed' and e['method']=='POST' and e['path']==collection])==before
+        assert s.k('get','servicemonitor',doc['metadata']['name'],'-n',s.targetns,check=False).returncode!=0
+        s.track_cr(component['confirmedUid'])
+    finally:proxy.control('reset',{})
+    s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner})
+
+
+def companion_recovery(s,proxy):
+    """I28-K02：真实第二CR拒绝/丢响应/Pod重建，每次请求以独立路径计数。"""
+    companion_dispatch_authorization(s,proxy)
+    receipt={'testedCommit':s.env.candidate,'cases':[]}
+    for variant in ('reject','known','unknown'):
+        proxy.control('reset',{});s.crname='sm-'+variant+'-'+uuid.uuid4().hex[:8];instance=s.create();preview=s.preview(instance)
+        doc=next(d for d in yaml.safe_load_all(preview['rightYAML']) if d and d['kind']=='ServiceMonitor')
+        name=doc['metadata']['name'];namespace=doc['metadata']['namespace'];collection='/apis/monitoring.coreos.com/v1/namespaces/'+namespace+'/servicemonitors';path=collection+'/'+name
+        component_path='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+s.crname
+        if variant=='known':
+            s.publish(instance,preview=preview);cfg=s.cfg();cfg['resources']['requestCPU']='233m';s.save(instance,cfg);preview=s.preview(instance)
+        s.by('I28-K02：真实 ServiceMonitor '+variant+'，保留 exporter 独立结果并重建平台 Pod')
+        if variant=='reject':proxy.control('faults',{'readMode':'none','rejectWritePath':collection})
+        else:
+            if variant=='unknown':proxy.control('register-create',{'intentId':uuid.uuid4().hex,'identity':{'apiVersion':'monitoring.coreos.com/v1','kind':'ServiceMonitor','namespace':namespace,'name':name}})
+            proxy.arm('PUT' if variant=='known' else 'POST',path if variant=='known' else collection,'drop_and_block_reads')
+        op=s.publish(instance,preview=preview,wait=False)
+        state={'reject':'FAILED','known':'RESULT_UNCERTAIN','unknown':'IDENTITY_UNCERTAIN'}[variant];before=s.state(op,state)
+        component=next(p for p in before['resources'] if p['target']['key']=='component');sm=next(p for p in before['resources'] if p['target']['key']=='service-monitor')
+        assert component['state']=='SUCCEEDED' and component['confirmedUid'] and sm['state']==state
+        original_uid=sm['confirmedUid'];observed_sm_uid=original_uid
+        if variant=='unknown':
+            assert not original_uid
+            creates=[e for e in s.capture_proxy() if e['stage']=='original_create_response' and e['path']==collection and e['originalCreate']['identity']['name']==name];assert len(creates)==1
+            observed_sm_uid=creates[0]['originalCreate']['uid']
+            s.owned_crs[(s.target,'servicemonitor',namespace,name)]=observed_sm_uid
+        elif original_uid:s.owned_crs[(s.target,'servicemonitor',namespace,name)]=original_uid
+        def counts():
+            events=s.capture_proxy()
+            return {'component':len([e for e in events if e['stage']=='upstream_completed' and e['method'] in ('POST','PUT') and e['path'] in (component_path,component_path.rsplit('/',1)[0]) and e.get('metadataUID')==component['confirmedUid']]),
+                    'sm':len([e for e in events if e['stage']=='upstream_completed' and e['method'] in ('POST','PUT') and e['path'] in (collection,path) and (not observed_sm_uid or e.get('metadataUID')==observed_sm_uid)])}
+        before_count=counts()
+        s.rebuild();proxy.control('reset',{})
+        s.call('POST','/operations/'+op['operationId']+'/refresh',{})
+        if variant=='reject':
+            cfg=s.cfg();cfg['resources']['requestCPU']='999m';s.save(instance,cfg)
+            repaired=s.action(op,'retry');after=s.state(op,'SUCCEEDED');assert repaired['versionId']==op['versionId']
+            assert s.cr()['spec']['podResources']['requests']['cpu']=='100m'
+            current_count=counts();assert current_count['component']==before_count['component'] and current_count['sm']==before_count['sm']+1
+        elif variant=='known':
+            after=s.state(op,'SUCCEEDED');assert counts()==before_count
+            confirmed=next(p for p in after['resources'] if p['target']['key']=='service-monitor');assert confirmed['confirmedUid']==original_uid
+        else:
+            after=s.state(op,'IDENTITY_UNCERTAIN');s.action(op,'retry',409);s.action(op,'continue-unsent',409);assert counts()==before_count
+            assert not next(p for p in after['resources'] if p['target']['key']=='service-monitor')['confirmedUid']
+        for resource in after['resources']:
+            r=resource['target']
+            if r['key']=='service-monitor' and resource['confirmedUid']:s.owned_crs[(s.target,'servicemonitor',r['namespace'],r['name'])]=resource['confirmedUid']
+        assert after['versionId']==op['versionId']
+        receipt['cases'].append({'variant':variant,'operationId':op['operationId'],'versionId':op['versionId'],'before':state,'after':after['state'],'componentUID':component['confirmedUid'],'smUIDBefore':original_uid,'requestsBefore':before_count,'requestsAfter':counts()})
+    (s.env.public/'companion-recovery.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+
+
 def ksm(s):
-    s.prepare();s.by('保存草稿不创建 CR；发布 Deployment 并回读真实参数与 Pod')
+    s.prepare();s.crname='ksm.'+uuid.uuid4().hex[:12];s.by('保存草稿不创建 CR；发布含点名称 Deployment 并回读真实参数、Pod 与配套 ServiceMonitor')
     cfg=s.cfg();i=s.create(cfg)
     assert s.k('get','kubestatemetrics',s.crname,target=s.target,check=False).returncode!=0
     s.publish(i);s.runtime(i);assert len([x for x in s.workloads() if x['kind']=='Deployment'])==1
+    companion_contract(s,i,1)
     s.by('替换为双分片 StatefulSet，再替换为三角色 DaemonSet')
     for mode in ('StatefulSetSharded','DaemonSetSharded'):
         cfg=s.cfg(mode=mode)
@@ -279,7 +442,7 @@ def ksm(s):
             cfg.update(advancedResources=True,collectors={'mode':'Include','names':['pods','nodes']},metricFilter={'mode':'Deny','patterns':['kube_pod_labels']})
             for role,cpu in [('nodeResources','110m'),('clusterResources','120m'),('unscheduledResources','130m')]:cfg[role]={'mode':'Override','resources':{'requestCPU':cpu,'requestMemory':'64Mi','limitMemory':'256Mi'}}
         else:cfg.update(collectors={'mode':'Include','names':['pods','nodes']},metricFilter={'mode':'Allow','patterns':['kube_.*']})
-        s.save(i,cfg);s.publish(i);s.runtime(i)
+        s.save(i,cfg);s.publish(i);s.runtime(i);companion_contract(s,i,2 if mode=='DaemonSetSharded' else 1)
         if mode=='StatefulSetSharded':assert controller(s,'StatefulSet')['spec']['replicas']==2
         else:
             assert len([x for x in s.workloads() if x['kind']=='DaemonSet'])==1
@@ -316,7 +479,10 @@ def agent(s):
         cfg['associations'][key]=rule;obj=s.collection(kind,foreign if nm=='Labels' else s.targetns);originals[kind]=obj['metadata']['uid']
     ref=lambda k:{'name':'agent-auth','key':k}
     cfg['remoteWrite']=[{'url':'http://receiver.example.invalid/none','auth':{'mode':'None'}},{'url':'https://receiver.example.invalid/basic','auth':{'mode':'BasicAuth','username':ref('username'),'password':ref('password')}},{'url':'https://receiver.example.invalid/bearer','auth':{'mode':'Bearer','credentials':ref('credentials')},'tls':{'ca':ref('ca'),'cert':ref('cert'),'key':ref('key'),'serverName':'receiver.example.invalid'}}]
-    s.save(i,cfg);s.publish(i);s.runtime(i)
+    s.save(i,cfg)
+    from agent_collection import wait_associations
+    wait_associations(s,i)
+    s.publish(i);s.runtime(i)
     sources=s.association_preview(i)
     for kind,_,_ in kinds:assert originals[kind] in {v['uid'] for v in sources['association:'+kind]['matches']}
     added=s.collection('PodMonitor',s.targetns,'added');assert added['metadata']['uid'] in {v['uid'] for v in s.association_preview(i)['association:PodMonitor']['matches']}
@@ -331,6 +497,8 @@ def agent(s):
     s.k('patch','secret','agent-auth','-n',s.targetns,'--type=json','-p','[{"op":"remove","path":"/data/credentials"}]',target='data')
     s.preview(i,status=422)
     s.prepare('-control','control','agent');j=s.create();s.publish(j);s.runtime(j)
+    from agent_collection import creator_collection
+    creator_collection(s)
 
 
 def storage(s):
@@ -406,26 +574,156 @@ def faults(s):
     patch[-1]['value']=original;s.k('patch','pod',pod['metadata']['name'],'-n',s.targetns,'--type=json','-p',json.dumps(patch));s.runtime(j)
 
 
+def resource_progress(s, operation, state, uid):
+    """公开 HTTP 读取逐资源进度与版本，真实 Pod 重建/代理故障场景共用此断言。"""
+    current=s.call('GET','/operations/'+operation['operationId'])
+    progress=next(p for p in current['resources'] if p['target']['key']=='component')
+    target=progress['target'];version=s.call('GET','/instances/'+current['instanceId']+'/versions/'+current['versionId'])
+    frozen=next(r for r in version['resources'] if r['key']=='component')
+    assert target==frozen and target['kind']=='KubeStateMetrics'
+    assert progress['state']==state and progress['confirmedUid']==uid and progress['possiblySent'] is True
+    return dict(operationId=current['operationId'],attemptId=progress['attemptId'],resourceKey=target['key'],
+                kind=target['kind'],namespace=target['namespace'],name=target['name'],state=progress['state'],
+                confirmedUid=progress['confirmedUid'],possiblySent=progress['possiblySent'],
+                frozenSHA256=hashlib.sha256(target['yaml'].encode()).hexdigest())
+
+
 def recovery(s):
     s.prepare();i=s.create();s.publish(i);s.runtime(i);proxy=s.setup_proxy();cfg=s.cfg();cfg['resources']['requestCPU']='222m';s.save(i,cfg)
     s.by('真实更新完成后丢失响应并阻断读取，重建平台只核验原 UID')
     path='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+s.crname
     proxy.arm('PUT',path,'drop_and_block_reads');op=s.publish(i,wait=False);s.state(op,'RESULT_UNCERTAIN')
-    before=len(s.mutations(s.capture_proxy(),'PUT'));assert before==1;s.rebuild();proxy.control('reset',{})
-    s.call('POST','/operations/'+op['operationId']+'/refresh',{});s.state(op,'SUCCEEDED',timeout=60)
-    assert len(s.mutations(s.capture_proxy(),'PUT'))==before
+    s.by('I27-K01：记录该资源独立 UID、发送边界及冻结版本后重建真实平台 Pod')
+    original_uid=s.cr()['metadata']['uid'];before_progress=resource_progress(s,op,'RESULT_UNCERTAIN',original_uid)
+    before=len([event for event in s.mutations(s.capture_proxy(),'PUT') if event['path']==path]);assert before==1;s.rebuild();proxy.control('reset',{})
+    s.call('POST','/operations/'+op['operationId']+'/refresh',{});s.state(op,'WAITING_CONFIRMATION',timeout=60)
+    assert len([event for event in s.mutations(s.capture_proxy(),'PUT') if event['path']==path])==before
+    after_progress=resource_progress(s,op,'SUCCEEDED',original_uid);assert after_progress['frozenSHA256']==before_progress['frozenSHA256']
+    current=s.call('GET','/operations/'+op['operationId']);sm=next(p for p in current['resources'] if p['target']['key']=='service-monitor');assert not sm['possiblySent']
+    s.by('I28：组件只读确认后，显式继续尚未发送的 ServiceMonitor，禁止隐式补写')
+    s.action(op,'continue-unsent');s.state(op,'SUCCEEDED',timeout=60)
+    assert len([event for event in s.mutations(s.capture_proxy(),'PUT') if event['path']==path])==before
+    instance_identity_authorization(s,proxy)
+    companion_recovery(s,proxy)
     s.by('首次创建丢响应且没有原 UID，禁止按同名对象补认或重建')
     s.crname='unknown-'+uuid.uuid4().hex[:8];unknown=s.create()
     # 关键：先登记明确的创建身份，代理才会在丢响应前保存原 API UID；不能事后按名字补认。
     proxy.control('register-create',{'intentId':uuid.uuid4().hex,'identity':{'apiVersion':'monitoring.fjsxy.github.io/v1alpha1','kind':'KubeStateMetrics','namespace':'','name':s.crname}})
+    unknown_posts_before=len(s.mutations(s.capture_proxy(),'POST'))
     proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics','drop_after_upstream');o=s.publish(unknown,wait=False);s.state(o,'IDENTITY_UNCERTAIN')
+    unknown_before=resource_progress(s,o,'IDENTITY_UNCERTAIN','')
     events=s.capture_proxy();created=[e for e in events if e['stage']=='original_create_response' and e['path'].endswith('/kubestatemetrics')];assert len(created)==1
-    s.track_cr(created[0]['originalCreate']['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['originalCreate']['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
+    s.track_cr(created[0]['originalCreate']['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['originalCreate']['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==unknown_posts_before+1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
+    unknown_after=resource_progress(s,o,'IDENTITY_UNCERTAIN','');assert unknown_before==unknown_after
     s.by('确定失败后显式 retry，保留原冻结版本并产生新 attempt')
     proxy.control('reset',{});s.crname='retry-'+uuid.uuid4().hex[:8];retry=s.create();p=s.preview(retry)
     writepath='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics';proxy.control('faults',{'readMode':'none','rejectWritePath':writepath})
     failure=s.publish(retry,preview=p,wait=False);s.state(failure,'FAILED');cfg=s.cfg();cfg['resources']['requestCPU']='999m';s.save(retry,cfg);proxy.control('reset',{})
     again=s.action(failure,'retry');s.state(again,'SUCCEEDED');assert again['versionId']==failure['versionId'] and again['attemptId']!=failure['attemptId'];assert s.cr()['spec']['podResources']['requests']['cpu']=='100m';s.track_cr(s.cr()['metadata']['uid'])
+    s.by('I27-K01：人工重试保存原资源结果，公开收据只含身份、状态、冻结摘要和真实写次数')
+    retry_progress=resource_progress(s,again,'SUCCEEDED',s.cr()['metadata']['uid']);attempts=s.call('GET','/operations/'+failure['operationId']+'/attempts')['attempts']
+    assert len(attempts)==2 and next(p for p in attempts[0]['resources'] if p['target']['key']=='component')['state']=='FAILED'
+    receipt=dict(testedCommit=s.env.candidate,beforeRebuild=before_progress,afterRebuild=after_progress,knownUIDWriteCount=before,unknownBefore=unknown_before,unknownAfter=unknown_after,unknownWriteCount=1,retry=retry_progress)
+    (s.env.public/'resource-progress-recovery.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+    from historical_exporter import recovery as historical_exporter_recovery
+    historical_exporter_recovery(s,proxy)
+
+
+def instance_identity_authorization(s,proxy):
+    """I25-K01：通过真实 Helm Pod、HTTP→Kitex、mTLS API 代理验证实例写前授权。"""
+    username='dispatch-'+uuid.uuid4().hex[:12];temporary=secrets.token_urlsafe(24);personal=secrets.token_urlsafe(24)
+    actor=s.call('POST','/accounts',{'username':username,'password':temporary,'role':'ADMIN'},status=201)
+    opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    with s.using(opener):
+        s.call('POST','/sessions',{'username':username,'password':temporary},status=201)
+        s.call('POST','/session/password',{'currentPassword':temporary,'newPassword':personal})
+        s.call('POST','/sessions',{'username':username,'password':personal},status=201)
+    s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':actor['id']})
+    s.crname='auth-unsent-'+uuid.uuid4().hex[:8]
+    with s.using(opener):
+        instance=s.create();preview=s.preview(instance)
+    assert instance['creatorUserId']==actor['id'] and instance['creatorRole']=='ADMIN'
+    def writes():
+        return [event for event in s.capture_proxy() if event['stage']=='upstream_completed' and event['method'] in ('POST','PUT','PATCH','DELETE')
+                and ('kubestatemetrics' in event['path'] or 'servicemonitors' in event['path'])]
+    s.by('I25-K01.unsent：已受理且possiblySent=false时降级集群所属管理员，实际组件写入必须为零')
+    before=len(writes())
+    # 关键：暂停的是worker的SelfSubjectAccessReview只读预检，不能用已到代理的组件写请求冒充未发送边界。
+    proxy.arm('POST','/apis/authorization.k8s.io/v1/selfsubjectaccessreviews','pause_before_send',ssar_resource='kubestatemetrics')
+    try:
+        with s.using(opener):operation=s.publish(instance,preview=preview,wait=False)
+        assert operation['operationId']
+        paused=proxy.paused()['rule'];assert paused['ssarResource']=='kubestatemetrics'
+        current=s.call('GET','/operations/'+operation['operationId'])
+        attempts=s.call('GET','/operations/'+operation['operationId']+'/attempts')['attempts']
+        attempt=next(value for value in attempts if value['attemptId']==current['attemptId'])
+        assert current['state']=='CHECKING' and attempt['possiblySent'] is False and attempt['actorId']==actor['id']
+        s.call('PATCH','/accounts/'+actor['id'],{'role':'USER'})
+        assert s.call('GET','/clusters/'+s.cluster['id'])['ownerId']==actor['id']
+        proxy.control('release',{'ruleId':paused['id']})
+        failed=s.state(operation,'FAILED')
+        assert '管理员创建' in failed['message'] and len(writes())==before
+        absent=s.k('get','kubestatemetrics',s.crname,target=s.target,check=False)
+        assert absent.returncode!=0 and b'(NotFound)' in absent.stderr
+        (s.env.public/'instance-dispatch-unsent.json').write_text(json.dumps(dict(
+            testedCommit=s.env.candidate,operationId=operation['operationId'],accepted=True,
+            pausedSSARResource=paused['ssarResource'],beforeRevocation=dict(state=current['state'],possiblySent=attempt['possiblySent']),
+            afterRevocation=dict(state=failed['state'],businessWrites=len(writes())-before)),ensure_ascii=False,indent=2)+'\n')
+    finally:proxy.control('reset',{})
+
+    s.call('PATCH','/accounts/'+actor['id'],{'role':'ADMIN'})
+    with s.using(opener):
+        s.call('POST','/sessions',{'username':username,'password':personal},status=201)
+        s.crname='auth-sent-'+uuid.uuid4().hex[:8];known=s.create();s.publish(known)
+        original=s.call('GET','/instances/'+known['id']);uid=original['uid'];assert uid
+        cfg=s.cfg();cfg['resources']['requestCPU']='244m';s.save(known,cfg);preview=s.preview(known)
+    s.by('I25-K01.sent：真实更新丢响应并阻读后停用发起账号，恢复时只读核验且禁止再次写入')
+    path='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+s.crname
+    written_before_update=len(writes())
+    proxy.arm('PUT',path,'drop_and_block_reads')
+    try:
+        with s.using(opener):operation=s.publish(known,preview=preview,wait=False)
+        s.state(operation,'RESULT_UNCERTAIN')
+        sent=len(writes());assert sent==written_before_update+1 and len([event for event in writes() if event['method']=='PUT' and event['path']==path])==1
+        s.call('PATCH','/accounts/'+actor['id'],{'enabled':False})
+        proxy.control('reset',{})
+        for _ in range(3):s.call('POST','/operations/'+operation['operationId']+'/refresh',{})
+        s.state(operation,'WAITING_CONFIRMATION',timeout=60)
+        progress=resource_progress(s,operation,'SUCCEEDED',uid)
+        current=s.call('GET','/operations/'+operation['operationId']);sm=next(p for p in current['resources'] if p['target']['key']=='service-monitor');assert not sm['possiblySent']
+        actual=s.cr();assert actual['metadata']['uid']==uid and actual['spec']['podResources']['requests']['cpu']=='244m'
+        assert s.call('GET','/instances/'+known['id'])['creatorUserId']==actor['id'] and len(writes())==sent
+    finally:proxy.control('reset',{})
+    s.by('I28：当前管理员明确继续剩余未发送配套资源，原 exporter 更新不重放')
+    s.action(operation,'continue-unsent');s.state(operation,'SUCCEEDED',timeout=60)
+    assert len([event for event in writes() if event['method']=='PUT' and event['path']==path])==1
+    s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner})
+
+
+def remove_fixture_finalizer(s,resource,name,uid,finalizer):
+    """仅移除本例finalizer；只对明确RV test/修改冲突且同UID新RV的情况最多尝试三次。"""
+    current=s.get(resource,name);records=[]
+    for attempt in range(3):
+        meta=current['metadata'];assert meta['uid']==uid,'fixture拒绝修改替代UID'
+        if finalizer not in meta.get('finalizers',[]):return
+        rv=meta['resourceVersion']
+        patch=[{'op':'test','path':'/metadata/uid','value':uid},{'op':'test','path':'/metadata/resourceVersion','value':rv},{'op':'replace','path':'/metadata/finalizers','value':[f for f in meta['finalizers'] if f!=finalizer]}]
+        result=s.k('patch',resource,name,'--type=json','-p',json.dumps(patch),target=s.target,check=False)
+        if not result.returncode:
+            records.append({'attempt':attempt+1,'result':'SUCCEEDED','uid':uid,'resourceVersion':rv})
+            (s.env.public/'fixture-finalizer.json').write_text(json.dumps({'testedCommit':s.env.candidate,'records':records},ensure_ascii=False,indent=2)+'\n');return
+        # 关键：不能仅凭观察到RV变化重试任意拒绝；必须先从原错误确认RV test或标准修改冲突。
+        error=result.stderr.decode(errors='replace')
+        rv_test='testing value /metadata/resourceVersion failed' in error and 'test failed' in error
+        rv_conflict='(Conflict)' in error and 'the object has been modified' in error
+        category='JSON_PATCH_RV_TEST' if rv_test else 'RV_MODIFIED_CONFLICT' if rv_conflict else 'NON_RV_REJECTED'
+        records.append({'attempt':attempt+1,'result':category,'uid':uid,'resourceVersion':rv})
+        (s.env.public/'fixture-finalizer.json').write_text(json.dumps({'testedCommit':s.env.candidate,'records':records},ensure_ascii=False,indent=2)+'\n')
+        if not (rv_test or rv_conflict):raise RuntimeError('fixture finalizer非RV失败；保留私有原stderr，不重试')
+        fresh=s.get(resource,name);latest=fresh['metadata']
+        if latest['uid']!=uid or latest['resourceVersion']==rv:raise RuntimeError('fixture finalizer错误无法确认同原UID的新RV，不重试')
+        if attempt==2:raise RuntimeError('fixture finalizer同原UID的RV冲突达到三次上限')
+        current=fresh
 
 
 def deletion(s):
@@ -433,14 +731,61 @@ def deletion(s):
     kept={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'keep','namespace':unrelated},'data':{'marker':'owned-fixture'}}
     kept_uid=json.loads(s.k('create','-f','-',data=kept).stdout)['metadata']['uid']
     s.by('原 CR finalizer 阻塞真实 Foreground 删除；移除后等待原图完全消失')
-    i=s.create();s.publish(i);s.runtime(i);original=s.cr();uid=original['metadata']['uid']
+    i=s.create();s.publish(i);s.runtime(i);original=s.cr();uid=original['metadata']['uid'];original_sm=companion_contract(s,i,1)
+    original_namespace,original_name=s.targetns,s.crname
+    s.prepare('-other');other=s.create();s.publish(other);s.runtime(other);other_cr=s.cr();other_sm=companion_contract(s,other,1);other_namespace=s.targetns;other_name=s.crname
+    s.targetns,s.crname=original_namespace,original_name
+    proxy=s.setup_proxy()
     finalizers=original['metadata'].get('finalizers',[])+['phase1.fixture/hold']
     s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'add','path':'/metadata/finalizers','value':finalizers}]))
-    op=s.delete(i,False);s.state(op,'DELETION_BLOCKED','DELETION_VERIFYING');assert s.call('GET','/operations/'+op['operationId'])['state']!='SUCCEEDED'
+    op=s.delete(i,False)
+    # 关键：SM Foreground 删除也可能异步。先核验其消失，未发送组件只能重新预览后明确继续。
+    paths={'component':'/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+s.crname,
+           'service-monitor':'/apis/monitoring.coreos.com/v1/namespaces/'+original_namespace+'/servicemonitors/'+original_sm['metadata']['name']}
+    phases=[];continued=False
+    def snapshot(operation):
+        return dict(state=operation['state'],attemptId=operation['attemptId'],versionId=operation['versionId'],
+                    resources=[dict(key=r['target']['key'],state=r['state'],confirmedUid=r['confirmedUid'],possiblySent=r['possiblySent']) for r in operation['resources']])
+    def delete_counts():
+        events=s.capture_proxy()
+        return {key:len([e for e in events if e['stage']=='upstream_send_started' and e['method']=='DELETE' and e['path']==path]) for key,path in paths.items()}
+    def reach_component():
+        nonlocal continued
+        current=s.call('POST','/operations/'+op['operationId']+'/refresh',{})
+        progress={r['target']['key']:r for r in current['resources']};component,sm=progress['component'],progress['service-monitor']
+        assert component['confirmedUid']==uid and sm['confirmedUid']==original_sm['metadata']['uid']
+        if component['possiblySent']:
+            assert sm['state']=='SUCCEEDED' and current['state']!='SUCCEEDED'
+            return current
+        assert current['state'] not in ('FAILED','CANCELLED','IDENTITY_UNCERTAIN','SUCCEEDED'),current['state']
+        if current['state']=='WAITING_CONFIRMATION':
+            assert not continued and sm['state']=='SUCCEEDED' and sm['possiblySent']
+            s.by('I28-R04：配套资源已确认消失，重新预览并明确继续尚未发送的原组件删除')
+            phases.append(snapshot(current));assert delete_counts()=={'component':0,'service-monitor':1}
+            preview=s.call('POST','/instances/'+i['id']+'/deletion-previews',{'operationId':op['operationId']})
+            body=s.request_revision(op);body['deletePreviewId']=preview['previewId']
+            next_attempt=s.call('POST','/operations/'+op['operationId']+'/continue-unsent',body,status=202)
+            assert next_attempt['versionId']==current['versionId'] and next_attempt['attemptId']!=current['attemptId']
+            continued=True
+        return None
+    component_sent=wait(reach_component,message='原组件删除尚未到达已发送阶段');phases.append(snapshot(component_sent))
+    def original_deleting():
+        actual=s.cr();meta=actual['metadata'];assert meta['uid']==uid and 'phase1.fixture/hold' in meta.get('finalizers',[])
+        return actual if meta.get('deletionTimestamp') else None
+    deleting=wait(original_deleting,message='未证明原KSM已进入真实Foreground删除')
+    assert delete_counts()=={'component':1,'service-monitor':1}
+    assert s.call('GET','/operations/'+op['operationId'])['state']!='SUCCEEDED'
     s.call('POST','/clusters/'+s.cluster['id']+'/unregister',{},status=409);s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner},status=409)
-    cr=s.cr();s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'test','path':'/metadata/resourceVersion','value':cr['metadata']['resourceVersion']},{'op':'replace','path':'/metadata/finalizers','value':[f for f in cr['metadata'].get('finalizers',[]) if f!='phase1.fixture/hold']}]))
-    wait(lambda:s.call('POST','/operations/'+op['operationId']+'/refresh',{}),lambda value:value['state']=='SUCCEEDED',message='前台删除原图未结束')
+    remove_fixture_finalizer(s,'kubestatemetrics',s.crname,uid,'phase1.fixture/hold')
+    completed=wait(lambda:s.call('POST','/operations/'+op['operationId']+'/refresh',{}),lambda value:value['state']=='SUCCEEDED',message='前台删除原图未结束')
+    phases.append(snapshot(completed));assert delete_counts()=={'component':1,'service-monitor':1}
+    (s.env.public/'companion-deletion-recovery.json').write_text(json.dumps(dict(testedCommit=s.env.candidate,
+        operationId=op['operationId'],continuedUnsent=continued,phases=phases,deleteRequests=delete_counts(),
+        originalComponent=dict(uid=uid,deletionTimestamp=deleting['metadata']['deletionTimestamp'],fixtureFinalizerPresent=True)),ensure_ascii=False,indent=2)+'\n')
     assert not s.workloads() and s.k('get','kubestatemetrics',s.crname,check=False).returncode!=0
+    assert s.k('get','servicemonitor',original_sm['metadata']['name'],'-n',original_namespace,check=False).returncode!=0
+    assert s.get('kubestatemetrics',other_name)['metadata']['uid']==other_cr['metadata']['uid']
+    kept_sm=s.get('servicemonitor',other_sm['metadata']['name'],'-n',other_namespace);assert kept_sm['metadata']['uid']==other_sm['metadata']['uid'] and kept_sm['spec']==other_sm['spec']
     s.by('同名 CR 替换成新 UID 后，旧平台实例不能删除替代对象')
     s.crname='replace-'+uuid.uuid4().hex[:8];i=s.create();s.publish(i);s.runtime(i);old=s.cr();uid=old['metadata']['uid']
     p=s.call('POST','/instances/'+i['id']+'/deletion-previews',{});s.delete_uid(s.target,'/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+s.crname,uid)
@@ -452,18 +797,34 @@ def deletion(s):
 
 
 def browser(s):
-    s.prepare();s.by('停止平台夹具，预置超出 JavaScript 安全整数范围的草稿 revision')
-    i=s.create();cookies=s.cookies;s.forward.terminate();s.forward.wait(timeout=5);del s.forward
-    s.k('scale','deployment/monitor-mgr','-n',s.ns,'--replicas=0');s.k('wait','--for=delete','pods','-l','app=monitor-mgr','-n',s.ns,'--timeout=60s')
-    script="import json,sqlite3;c=sqlite3.connect('/data/platform.db');c.execute('update drafts set revision=? where instance_id=?',(9007199254740993,"+repr(i['id'])+"));c.commit();print(json.dumps({'ok':True}))"
-    assert s.job('large-revision',script)['ok'];s.k('scale','deployment/monitor-mgr','-n',s.ns,'--replicas=1');s.k('rollout','status','deployment/monitor-mgr','-n',s.ns,'--timeout=120s')
-    pod=s.get('pods','-n',s.ns,'-l','app=monitor-mgr',target='control')['items'][0];s.pod=pod['metadata']['name'];s.platform_pod_uid=pod['metadata']['uid'];s.cookies=cookies;s.connect()
-    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,largeId=i['id'],largeName=i['name'])));os.chmod(fixture,0o600)
+    s.prepare();proxy=s.setup_proxy();s.by('停止平台夹具，预置超出 JavaScript 安全整数范围的草稿 revision')
+    i=s.create()
+    agent_namespace=s.a.prefix+'-browser-agent';s.fixture(agent_namespace,'control')
+    legacy_unknown=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='unknown-creator-agent',namespace=agent_namespace)},status=201)
+    legacy_ksm=s.create(s.cfg(name='historical-'+s.crname))
+    legacy_agent=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='historical-agent',namespace=s.targetns)},status=201)
+    from historical_identity import upgrade_v10
+    from historical_exporter import remove_fixture_companion
+    historical_publication=s.publish(legacy_ksm);remove_fixture_companion(s,historical_publication)
+    upgrade_v10(s,missing_ids=[legacy_unknown['id']],draft_revisions={i['id']:9007199254740993})
+    # 大revision主流程需要显式开放历史实例管理权限；创建事实仍保持未知角色。
+    s.call('POST','/instances/'+i['id']+'/management-confirmations',{'allowClusterManagers':True})
+    publication_ledger=s.out/'browser-publications.jsonl';publication_ledger.write_text('');os.chmod(publication_ledger,0o600)
+    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(publicationLedger=str(publication_ledger),password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,agentNamespace=agent_namespace,runId=s.env.run_id,unknownCreatorAgent={'id':legacy_unknown['id'],'name':legacy_unknown['name']},largeId=i['id'],largeName=i['name'],proxyBase=proxy.base,proxyToken=proxy.token,historicalPublication={'instanceId':legacy_ksm['id'],'name':legacy_ksm['name'],'versionId':historical_publication['versionId'],'operationId':historical_publication['operationId']},historical=[{'id':x['id'],'name':x['name'],'component':x['component']} for x in [legacy_ksm,legacy_agent]])));os.chmod(fixture,0o600)
     s.by('真实 Chromium 完成表单保存、精确大 revision、YAML/diff、发布、工作台与删除')
     out=s.out/'playwright';report_path=s.out/'playwright.json';env=dict(os.environ,BASE_URL=s.base,PHASE1_E2E_FIXTURE=str(fixture),PLAYWRIGHT_JSON_OUTPUT_FILE=str(report_path))
-    r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)
+    browser_succeeded=False
+    try:
+        r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)
+        browser_succeeded=r.returncode==0
+    finally:
+        # 关键：浏览器失败也须交接已受理资源；只从精确操作 confirmedUid 登记，不能回读同名对象认领。
+        from e2e_cleanup import register_browser_publications
+        register_browser_publications(s,publication_ledger,{i['id'],legacy_ksm['id']},require_complete=browser_succeeded)
     report=json.loads(report_path.read_text()) if report_path.is_file() else {}
-    # 仅截图和数字结果公开；原 Playwright 输出含本地 fixture 路径，保留在私有目录。
+    # 关键：私有报告可含凭据和DOM；只公开固定步骤/合法源码坐标/数字统计，不能复制错误正文。
+    from e2e_diagnostics import browser_result_summary
+    (s.env.public/'browser-result.json').write_text(json.dumps(browser_result_summary(report,ROOT/'web/tests/phase1.spec.ts'),ensure_ascii=False,indent=2)+'\n')
     for path in out.rglob('*.png'):
         import shutil
         destination=s.env.public/'browser';destination.mkdir(exist_ok=True);shutil.copyfile(path,destination/path.name)

@@ -114,6 +114,10 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 			return nil, Error("UNAVAILABLE", "删除受理事务失败")
 		}
 	}
+	if e = freezeOperationResources(ctx, tx, o, i); e != nil {
+		return nil, e
+	}
+	enrichResourceProgress(ctx, tx, o)
 	if e = s.recordInstanceActivity(ctx, tx, i.Id); e != nil {
 		return nil, e
 	}
@@ -282,6 +286,34 @@ func (s *Store) observeOwnerGraphRecords(ctx context.Context, i *rpc.Observation
 
 // executeDeletion 在只读预检后争用派发资格，原UID与新读RV共同约束唯一Foreground请求。
 func (s *Store) executeDeletion(life context.Context, id string) {
+	resources, e := readFrozenResources(life, s.DB, id, true)
+	if e != nil {
+		return
+	}
+	// 先清理后加入的依赖资源，再沿用组件完整 owner UID 图核验。
+	for index := len(resources) - 1; index >= 0; index-- {
+		r := resources[index]
+		var state, attempt, progress string
+		if s.DB.QueryRowContext(life, `SELECT o.state,l.current_attempt_id FROM operations o JOIN operation_lifecycle l ON l.operation_id=o.id WHERE o.id=?`, id).Scan(&state, &attempt) != nil || state != "CHECKING" {
+			return
+		}
+		if s.DB.QueryRowContext(life, `SELECT state FROM resource_progress WHERE attempt_id=? AND resource_key=?`, attempt, r.key).Scan(&progress) != nil {
+			return
+		}
+		if progress == "SUCCEEDED" {
+			if !s.verifyCompletedResource(life, id, attempt, r, true) {
+				return
+			}
+			continue
+		}
+		if r.key == "component" {
+			s.executePrimaryDeletion(life, id, r)
+		} else {
+			s.executeAdditionalResource(life, id, r, true)
+		}
+	}
+}
+func (s *Store) executePrimaryDeletion(life context.Context, id string, resource frozenResource) {
 	if s.OperationBoundary != nil {
 		if s.OperationBoundary("beforeDispatch", id) != nil {
 			return
@@ -292,11 +324,13 @@ func (s *Store) executeDeletion(life context.Context, id string) {
 		return
 	}
 	s.enrichLifecycle(life, s.DB, o)
+	selectExecutionResource(o, resource.key)
 	i, e := instanceByID(life, s.DB, o.GetInstanceId())
 	if e != nil {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
+	i = resourceInstance(i, resource, resource.originalUID)
 	a, _, e := lifecycleAttempt(life, s.DB, id)
 	if e != nil {
 		return
@@ -433,6 +467,22 @@ func (s *Store) finishDeletion(expected *rpc.Operation, state, message string) {
 		return
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
+	if e = recordResourceResult(ctx, tx, expected, executionResourceKey(expected), state, message, "", now); e != nil {
+		return
+	}
+	if state == "SUCCEEDED" {
+		var remaining int
+		if tx.QueryRowContext(ctx, `SELECT count(*) FROM resource_progress WHERE attempt_id=? AND state<>'SUCCEEDED'`, expected.GetAttemptId()).Scan(&remaining) != nil {
+			return
+		}
+		if remaining > 0 {
+			state = "CHECKING"
+			message = "部分资源已核实清理，剩余原资源尚未完成"
+			if current == "DELETION_BLOCKED" || expected.State == "DELETION_VERIFYING" {
+				state = "WAITING_CONFIRMATION"
+			}
+		}
+	}
 	if _, e = tx.ExecContext(ctx, `UPDATE operations SET state=?,message=?,updated_at=? WHERE id=?`, state, message, now, expected.OperationId); e != nil {
 		return
 	}
