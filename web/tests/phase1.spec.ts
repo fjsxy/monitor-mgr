@@ -221,10 +221,30 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
         await open(instance,manage);
         await expect(drawer.getByRole('button',{name:'确认历史实例管理权限',exact:true})).toHaveCount(0);
         if(manage){
-          await expect(drawer.getByLabel('名称',{exact:true})).toBeEnabled();
+          const detail=await(await page.request.get(`/api/v1/instances/${instance.id}`)).json();
+          const before=await(await page.request.get(`/api/v1/instances/${instance.id}/draft`)).json();
+          const component=instance.component==='Prometheus Agent'?'agent':'ksm';
+          // 关键：管理权限允许修改配置；I29 已发布的 KSM 身份仍固定，不能以名称可改代替授权判据。
+          for(const label of ['名称',component==='agent'?'Agent namespace':'部署命名空间']){
+            const identity=drawer.getByLabel(label,{exact:true});
+            if(detail.uid)await expect(identity).toBeDisabled();else await expect(identity).toBeEnabled();
+          }
           await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('允许现有集群管理用户');
+          const cpu=drawer.getByLabel(component==='agent'?'Agent CPU request':'通用 CPU request',{exact:true});
+          await expect(cpu).toBeEnabled();
+          const nextCPU=before[component].resources.requestCPU==='123m'?'124m':'123m';
+          await cpu.fill(nextCPU);
+          const saving=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${instance.id}/draft`&&r.request().method()==='PUT');
           await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();
-          await expect(drawer.getByText('草稿 v2 已保存',{exact:true})).toBeVisible();
+          const response=await saving;expect(response.status()).toBe(200);
+          expect(response.request().postDataJSON().expectedDraftRevision).toBe(before.revision);
+          const nextRevision=(BigInt(before.revision)+1n).toString();
+          expect(String((await response.json()).revision)).toBe(nextRevision);
+          await expect(drawer.getByText(`草稿 v${nextRevision} 已保存`,{exact:true})).toBeVisible();
+          const after=await(await page.request.get(`/api/v1/instances/${instance.id}/draft`)).json();
+          expect(String(after.revision)).toBe(nextRevision);expect(after[component].resources.requestCPU).toBe(nextCPU);
+          expect(after[component].name).toBe(before[component].name);
+          expect(after[component][component==='agent'?'namespace':'targetNamespace']).toBe(before[component][component==='agent'?'namespace':'targetNamespace']);
         }else{
           await expect(drawer.getByLabel('名称',{exact:true})).toBeDisabled();
           await expect(drawer.getByRole('button',{name:'保存草稿',exact:true})).toHaveCount(0);
