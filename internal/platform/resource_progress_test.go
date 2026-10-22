@@ -15,7 +15,7 @@ func resourceProgress(t ginkgo.GinkgoTInterface, p *platform.Runtime, c *http.Co
 	t.Helper()
 	o := clusterCall(t, p, "GET", "/operations/"+oid, nil, c, "", 200)
 	resources, ok := o["resources"].([]any)
-	if !ok || len(resources) != 1 {
+	if !ok || len(resources) < 1 || len(resources) > 2 {
 		t.Fatal("操作未展示原冻结资源集合", o)
 	}
 	return resources[0].(map[string]any)
@@ -35,7 +35,7 @@ func checkResourcePublicationProgress(t ginkgo.GinkgoTInterface) {
 	}
 	v := clusterCall(t, p, "GET", "/instances/"+id+"/versions/"+accepted["versionId"].(string), nil, c, "", 200)
 	frozen, ok := v["resources"].([]any)
-	if !ok || len(frozen) != 1 || !strings.Contains(frozen[0].(map[string]any)["yaml"].(string), "kind: KubeStateMetrics") {
+	if !ok || len(frozen) != 2 || !strings.Contains(frozen[0].(map[string]any)["yaml"].(string), "kind: KubeStateMetrics") {
 		t.Fatal("版本缺少冻结资源文档", v)
 	}
 }
@@ -101,7 +101,7 @@ func checkResourceProgressSurvivesRestart(t ginkgo.GinkgoTInterface) {
 		}
 		clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "", 200)
 		if variant == "known-uid" {
-			wantState = "SUCCEEDED"
+			wantState = "WAITING_CONFIRMATION"
 		}
 		awaitLifecycleState(t, p, c, oid, wantState)
 		progress := resourceProgress(t, p, c, oid)
@@ -109,11 +109,15 @@ func checkResourceProgressSurvivesRestart(t ginkgo.GinkgoTInterface) {
 		if variant == "first-create" {
 			wantUID = ""
 		}
-		if progress["state"] != wantState || progress["confirmedUid"] != wantUID || progress["possiblySent"] != true {
+		wantResourceState := wantState
+		if variant == "known-uid" {
+			wantResourceState = "SUCCEEDED"
+		}
+		if progress["state"] != wantResourceState || progress["confirmedUid"] != wantUID || progress["possiblySent"] != true {
 			t.Fatal("重启丢失资源结果", progress)
 		}
 		versions := clusterCall(t, p, "GET", "/instances/"+id+"/versions/"+accepted["versionId"].(string), nil, c, "", 200)["resources"].([]any)
-		if len(versions) != 1 {
+		if len(versions) != 2 {
 			t.Fatal("重启追加了新的资源", versions)
 		}
 		f.mu.Lock()

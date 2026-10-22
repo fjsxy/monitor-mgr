@@ -360,6 +360,9 @@ func (s *Store) agentStorageImpact(i *rpc.ObservationInstance, snapshot *agentSt
 	}{snapshot.mode, snapshot.facts, snapshot.volumes}))
 }
 func (s *Store) validateAgentStorageImpact(i *rpc.ObservationInstance, baseline string, snapshot *agentStorageSnapshot) error {
+	if i.Component != AgentComponent {
+		return nil
+	}
 	if baseline != s.agentStorageImpact(i, snapshot) {
 		return Error("CONFLICT", "实际存储影响已变化，请重新预览确认")
 	}

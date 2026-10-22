@@ -53,6 +53,8 @@ var _ = ginkgo.It("UT-07 实例身份与不可变字段", func() {
 
 var _ = ginkgo.It("UT-08 保存预览与版本冻结", func() {
 	t := ginkgo.GinkgoT()
+	checkCompanionPublication(t)
+	checkCompanionContract(t)
 	checkTestP02PublicationFreezesSourceAndP03Idempotency(t)
 	checkTestP04DraftAndTargetPreviewRaces(t)
 	checkTestAgentDraftSourceIsolation(t)
@@ -70,6 +72,7 @@ var _ = ginkgo.It("UT-09 幂等与受理事务", func() {
 
 var _ = ginkgo.It("UT-10 派发取消与任务授权", func() {
 	t := ginkgo.GinkgoT()
+	checkCompanionDispatchAuthorization(t)
 	checkTestInstanceDispatchReauthorizesCreatorProtection(t)
 	checkTestHistoricalManagementDispatchRevocation(t)
 	checkTestInstanceDeletionDispatchReauthorizes(t)
@@ -86,6 +89,9 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 		checkTestP13RestartUsesPersistentSentBoundary(t)
 		return
 	}
+	checkCompanionPartialRetry(t)
+	checkCompanionRetryRechecksExporter(t)
+	checkCompanionUnknownRecovery(t)
 	checkResourcePublicationProgress(t)
 	checkResourceProgressSurvivesRestart(t)
 	checkTestP07RetryUsesFrozenVersionAndCurrentRevisions(t)
@@ -95,6 +101,7 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 
 var _ = ginkgo.It("UT-12 预览与删除保护", func() {
 	t := ginkgo.GinkgoT()
+	checkCompanionIdentityAndDeletion(t)
 	checkTestDeletionPreviewBindsTargetAndImpact(t)
 	checkTestP05DriftOverwritePreservesMetadataAndP06Equivalent(t)
 	checkPublicationStatusConflict(t)

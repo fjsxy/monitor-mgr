@@ -61,9 +61,9 @@
       "id": "UT-08",
       "type": "ut",
       "purpose": "保存、预览与版本冻结",
-      "steps": "保存草稿并读回；生成预览后分别修改草稿和目标配置；发布 v1 后编辑成 v2，再读 v1 来源；关闭高级选项后查看有效 CR。",
-      "expected": "仅保存/预览不产生 Kubernetes mutation；过期预览拒绝发布；发布版本和来源快照不被新草稿改写；未启用字段不进入有效 CR。",
-      "issues": "#17、#19"
+      "steps": "保存草稿并读回；生成预览后分别修改草稿和目标配置；发布 v1 后编辑成 v2，再读 v1 来源；关闭高级选项后查看有效 CR。 经HTTP检查新exporter两资源预览/冻结；覆盖点号、长名称及Deployment/StatefulSetSharded/DaemonSetSharded的SM选择器，注入CRD/namespace/RBAC/同名变化。",
+      "expected": "仅保存/预览不产生 Kubernetes mutation；过期预览拒绝发布；发布版本和来源快照不被新草稿改写；未启用字段不进入有效 CR。 草稿零写；ServiceMonitor在指标Service部署namespace，使用锁定Operator规范化实例标签和http-metrics；预检失败零业务写。",
+      "issues": "#17、#19、#28"
     },
     {
       "id": "UT-09",
@@ -77,25 +77,25 @@
       "id": "UT-10",
       "type": "ut",
       "purpose": "派发、取消与任务授权",
-      "steps": "用派发屏障分别让取消获胜、派发获胜；队列内撤销角色或转移归属；另让 Cookie 到期而账号仍有权限。 历史实例允许后的普通用户任务在派发前撤销确认。",
-      "expected": "取消与派发只有一个结果；当前失权时不发集群写；仅 Cookie 到期不取消已受理任务；HTTP 断开不删除持久化任务。 未发送的任务重新读取最新确认结果，撤销后零目标写入。",
-      "issues": "#17、#26"
+      "steps": "用派发屏障分别让取消获胜、派发获胜；队列内撤销角色或转移归属；另让 Cookie 到期而账号仍有权限。 在exporter成功后、SM派发前降级管理员；核对每资源发送边界。 历史实例允许后的普通用户任务在派发前撤销确认。",
+      "expected": "取消与派发只有一个结果；当前失权时不发集群写；仅 Cookie 到期不取消已受理任务；HTTP 断开不删除持久化任务。 exporter成功保留；SM失权0写。原组件丢响应只读确认后，剩余未发SM等待明确继续。 未发送的任务重新读取最新确认结果，撤销后零目标写入。",
+      "issues": "#17、#28、#26"
     },
     {
       "id": "UT-11",
       "type": "ut",
       "purpose": "重试与重启恢复",
-      "steps": "针对未提交、已受理未发、可能已发三个持久状态重开平台；对确定失败做显式 retry；创建新草稿后继续原操作。",
-      "expected": "未提交没有半条操作；未发任务待人工继续；可能已发只读核验，不自动补写；retry 保留原固定版本/actor，形成新 attempt。",
-      "issues": "#17"
+      "steps": "针对未提交、已受理未发、可能已发三个持久状态重开平台；对确定失败做显式 retry；创建新草稿后继续原操作。 注入SM明确拒绝、首次/已知UID丢响应并重启平台；新草稿后retry；在补齐前替换/漂移成功exporter。",
+      "expected": "未提交没有半条操作；未发任务待人工继续；可能已发只读核验，不自动补写；retry 保留原固定版本/actor，形成新 attempt。 只补原冻结SM；成功exporter不重写且先核验。无UID不认领；已知UID只读确认；历史单资源版本不偷偷追加SM。",
+      "issues": "#17、#28"
     },
     {
       "id": "UT-12",
       "type": "ut",
       "purpose": "预览与删除保护",
-      "steps": "修改 preview 绑定的 UID、配置或 namespace 影响；在 Worker 读取后、条件写入前用屏障只改 status/RV，并分别改变 spec、UID、当前权限或凭据 revision；持续制造 RV 冲突；构造同名新 UID、跨 namespace owner、CR 已消失但旧 Pod 尚在。",
-      "expected": "纯 status/RV 冲突可重新读取后在原 attempt 内完成（最多 3 次条件写）；spec/UID/权限/凭据变化或持续冲突停止；不确定响应绝不重放；真正影响变化需重新预览；仍有原工作负载时不报删除完成。",
-      "issues": "#17"
+      "steps": "修改 preview 绑定的 UID、配置或 namespace 影响；在 Worker 读取后、条件写入前用屏障只改 status/RV，并分别改变 spec、UID、当前权限或凭据 revision；持续制造 RV 冲突；构造同名新 UID、跨 namespace owner、CR 已消失但旧 Pod 尚在。 替换SM UID或修改spec；确认漂移后覆盖；删除两份独立原UID资源。",
+      "expected": "纯 status/RV 冲突可重新读取后在原 attempt 内完成（最多 3 次条件写）；spec/UID/权限/凭据变化或持续冲突停止；不确定响应绝不重放；真正影响变化需重新预览；仍有原工作负载时不报删除完成。 替代UID拒绝，漂移明确覆盖；SM使用UID/RV条件删除，全集清理后才完成。",
+      "issues": "#17、#28"
     },
     {
       "id": "UT-13",
@@ -165,9 +165,9 @@
       "id": "E2E-03",
       "type": "e2e",
       "purpose": "KSM 从草稿到三种真实拓扑",
-      "steps": "HTTP 保存后先确认无 CR 写入，再发布 control 上的 KSM，按 Deployment→StatefulSet(2 shards)→DaemonSet 执行替换；在同一流程检查资源覆盖、过滤、零匹配及运行/挂起/停用；data 再部署一个默认 KSM；预置一个外部只读 CR。",
-      "expected": "真实 CR、Deployment/StatefulSet/DaemonSet、三角色、Pod 数和参数匹配当前模式；两个集群均能运行；保存不部署；切换清理旧工作负载；外部 CR 不能编辑/发布/删除。",
-      "issues": "#16"
+      "steps": "HTTP 保存后先确认无 CR 写入，再发布 control 上的 KSM，按 Deployment→StatefulSet(2 shards)→DaemonSet 执行替换；在同一流程检查资源覆盖、过滤、零匹配及运行/挂起/停用；data 再部署一个默认 KSM；预置一个外部只读 CR。 含点CR名逐模式回读实际Service和SM选择器、命名端口及创建用户标签；DaemonSet检查两个Service。",
+      "expected": "真实 CR、Deployment/StatefulSet/DaemonSet、三角色、Pod 数和参数匹配当前模式；两个集群均能运行；保存不部署；切换清理旧工作负载；外部 CR 不能编辑/发布/删除。 SM匹配本实例全部指标Service、不含其他实例；Operator拥有的Service无平台用户标签。",
+      "issues": "#16、#28"
     },
     {
       "id": "E2E-04",
@@ -205,25 +205,25 @@
       "id": "E2E-08",
       "type": "e2e",
       "purpose": "真实写响应丢失与重启禁重放",
-      "steps": "代理让真实 API 完成一次已知 UID 更新后丢响应；在确认前重建平台 Pod并恢复读取；再对首次创建丢响应、未保存 UID 的情况执行一次同名资源检查；对一个确定失败操作显式 retry。",
-      "expected": "已有 UID 只核验原资源，原 API 写次数不增加；首次创建身份不明不按名字补认/重建/删除；retry 使用原固定版本和新 attempt；重启不自动重放。",
-      "issues": "#17"
+      "steps": "代理让真实 API 完成一次已知 UID 更新后丢响应；在确认前重建平台 Pod并恢复读取；再对首次创建丢响应、未保存 UID 的情况执行一次同名资源检查；对一个确定失败操作显式 retry。 分别使第二CR明确拒绝、首次/已知UID写入丢响应并重建Pod；真实exporter生效后、返回前撤权。",
+      "expected": "已有 UID 只核验原资源，原 API 写次数不增加；首次创建身份不明不按名字补认/重建/删除；retry 使用原固定版本和新 attempt；重启不自动重放。 拒绝后只补SM；无UID不补认；原UID只读恢复不重放；第二步失权零写；未发SM需明确继续，按独立路径计数。",
+      "issues": "#17、#28"
     },
     {
       "id": "E2E-09",
       "type": "e2e",
       "purpose": "真实前台删除与阻塞保护",
-      "steps": "为受管 CR/子资源添加一个测试 finalizer 后从 HTTP 删除；确认仍受阻；移除自己的 finalizer 并等原 UID 图消失；另将同名 CR 替换为新 UID 后尝试删除；检查无关 namespace/对象。",
-      "expected": "只有原 CR、workload、Pod 全消失才完成；阻塞期间不能解除保护/转移集群；新 UID 和无关对象未被平台删除；PVC 结果与 E2E-05 独立确认。",
-      "issues": "#17、#20"
+      "steps": "为受管 CR/子资源添加一个测试 finalizer 后从 HTTP 删除；确认仍受阻；移除自己的 finalizer 并等原 UID 图消失；另将同名 CR 替换为新 UID 后尝试删除；检查无关 namespace/对象。 同时保留另一独立实例，再删除原exporter和SM。",
+      "expected": "只有原 CR、workload、Pod 全消失才完成；阻塞期间不能解除保护/转移集群；新 UID 和无关对象未被平台删除；PVC 结果与 E2E-05 独立确认。 SM与原exporter清理后完成，另一实例的UID及SM配置不变。",
+      "issues": "#17、#20、#28"
     },
     {
       "id": "E2E-10",
       "type": "e2e",
       "purpose": "唯一浏览器主流程",
-      "steps": "Playwright 登录→用表单创建一个 KSM 草稿→编辑测试夹具预置的 revision=9007199254740993 草稿→查看只读 YAML/diff→明确发布→工作台查看状态/版本→明确删除；前后通过后端读回确认操作对象与版本；不增加产品测试接口。 历史KSM/Agent明确管理员确认前、允许后、撤销后的普通用户页面交互。",
-      "expected": "关键控件可操作、确认后才发发布/删除；显示正确实例和状态，大 revision 经浏览器操作后不舍入；没有前端控制台致命错误；不逐字段/逐模式重复验证后端规则。 仅管理员可确认并展示actor/time/result；普通用户控件与真实保存权限同步，历史角色保持未知。",
-      "issues": "#14、#16、#19、#26"
+      "steps": "Playwright 登录→用表单创建一个 KSM 草稿→编辑测试夹具预置的 revision=9007199254740993 草稿→查看只读 YAML/diff→明确发布→工作台查看状态/版本→明确删除；前后通过后端读回确认操作对象与版本；不增加产品测试接口。 真实Chromium查看SM预览/冻结/逐资源结果；代理拒绝SM，页面点击重试原版本。 历史KSM/Agent明确管理员确认前、允许后、撤销后的普通用户页面交互。",
+      "expected": "关键控件可操作、确认后才发发布/删除；显示正确实例和状态，大 revision 经浏览器操作后不舍入；没有前端控制台致命错误；不逐字段/逐模式重复验证后端规则。 页面显示exporter成功与SM失败，人工补齐沿原版本、新attempt，两资源独立显示UID。 仅管理员可确认并展示actor/time/result；普通用户控件与真实保存权限同步，历史角色保持未知。",
+      "issues": "#14、#16、#19、#28、#26"
     }
   ],
   "omitted": [

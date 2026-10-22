@@ -59,7 +59,7 @@ else:print(json.dumps({'verified':False,'error':last}))
   end=time.monotonic()+6
   while time.monotonic()<end:
    state=self.control('state');rule=state.get('rule') or {}
-   if rule.get('stage')=='paused_before_send':return state
+   if rule.get('stage') in ('paused_before_send','paused_after_upstream'):return state
    time.sleep(.05)
   raise AssertionError('没有抵达真实API发送前fixture屏障')
  def close(self):

@@ -145,6 +145,15 @@ func checkTestF04EncryptedSchema3WrongKeyDoesNotMigrate(t ginkgo.GinkgoTInterfac
 }
 
 type ksmFixture struct {
+	readGateSkip                           int
+	missingNamespace                       bool
+	sm                                     map[string]any
+	smWrites, smRequests, smDeleteRequests int
+	rejectSM                               int
+	dropSM, smUnavailable, smReadFailure   bool
+	denySM                                 string
+	lastSMDelete                           map[string]any
+
 	identityGate        chan struct{}
 	identityEntered     chan struct{}
 	identityOnce        sync.Once
@@ -228,6 +237,11 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 		if r.URL.Path == "/api/v1/namespaces/monitoring" {
 			f.mu.Lock()
 			gate, entered := f.readGate, f.readEntered
+			if f.readGateSkip > 0 {
+				f.readGateSkip--
+				gate = nil
+			}
+			missing := f.missingNamespace
 			f.mu.Unlock()
 			if gate != nil {
 				f.readOnce.Do(func() { close(entered) })
@@ -236,6 +250,10 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 				case <-r.Context().Done():
 					return
 				}
+			}
+			if missing {
+				w.WriteHeader(404)
+				return
 			}
 			io.WriteString(w, `{"metadata":{"name":"monitoring","uid":"namespace-uid"}}`)
 			return
@@ -261,6 +279,89 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 				items = []any{}
 			}
 			json.NewEncoder(w).Encode(map[string]any{"items": items})
+			return
+		}
+
+		// 配套资源使用独立目标身份、写计数和故障开关，避免组件成功掩盖第二资源失败。
+		if r.URL.Path == "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" {
+			var review map[string]any
+			json.NewDecoder(r.Body).Decode(&review)
+			attrs := review["spec"].(map[string]any)["resourceAttributes"].(map[string]any)
+			f.mu.Lock()
+			denied := attrs["resource"] == "servicemonitors" && attrs["verb"] == f.denySM
+			f.mu.Unlock()
+			json.NewEncoder(w).Encode(map[string]any{"status": map[string]any{"allowed": !denied}})
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/apis/monitoring.coreos.com/v1/namespaces/monitoring/servicemonitors") {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.smUnavailable {
+				w.WriteHeader(404)
+				return
+			}
+			if r.Method == "GET" {
+				if strings.HasSuffix(r.URL.Path, "/servicemonitors") {
+					items := []any{}
+					if f.sm != nil {
+						items = append(items, f.sm)
+					}
+					json.NewEncoder(w).Encode(map[string]any{"items": items})
+					return
+				}
+				if f.smReadFailure {
+					w.WriteHeader(403)
+					return
+				}
+				if f.sm == nil {
+					w.WriteHeader(404)
+					return
+				}
+				json.NewEncoder(w).Encode(f.sm)
+				return
+			}
+			f.smRequests++
+			if f.rejectSM != 0 {
+				w.WriteHeader(f.rejectSM)
+				return
+			}
+			var doc map[string]any
+			json.NewDecoder(r.Body).Decode(&doc)
+			if r.Method == "DELETE" {
+				f.smDeleteRequests++
+				f.lastSMDelete = doc
+				if f.sm == nil {
+					w.WriteHeader(404)
+					return
+				}
+				pre := doc["preconditions"].(map[string]any)
+				meta := f.sm["metadata"].(map[string]any)
+				if pre["uid"] != meta["uid"] || pre["resourceVersion"] != meta["resourceVersion"] {
+					w.WriteHeader(409)
+					return
+				}
+				f.sm = nil
+				io.WriteString(w, `{"kind":"Status","status":"Success"}`)
+				return
+			}
+			if r.Method == "POST" && f.sm != nil {
+				w.WriteHeader(409)
+				return
+			}
+			meta := doc["metadata"].(map[string]any)
+			if r.Method == "PUT" && (f.sm == nil || meta["uid"] != f.sm["metadata"].(map[string]any)["uid"] || meta["resourceVersion"] != f.sm["metadata"].(map[string]any)["resourceVersion"]) {
+				w.WriteHeader(409)
+				return
+			}
+			f.smWrites++
+			meta["uid"] = "service-monitor-uid"
+			meta["resourceVersion"] = fmt.Sprint(f.smWrites)
+			f.sm = doc
+			if f.dropSM {
+				f.smReadFailure = true
+				panic(http.ErrAbortHandler)
+			}
+			json.NewEncoder(w).Encode(doc)
 			return
 		}
 		if !strings.HasPrefix(r.URL.Path, "/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics") {
@@ -774,6 +875,7 @@ func checkTestPublicationPreflightDoesNotBlockCurrentAccountRevocation(t ginkgo.
 	preview := ksmPreview(t, p, c, id, 1)
 	f.mu.Lock()
 	f.readGate = make(chan struct{})
+	f.readGateSkip = 1
 	f.readEntered = make(chan struct{})
 	f.mu.Unlock()
 	op := clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
