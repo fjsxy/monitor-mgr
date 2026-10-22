@@ -1,0 +1,9 @@
+VictoriaMetrics Cluster 已部署到 {{ .Release.Namespace }}。
+
+Prometheus Agent remoteWrite URL（租户 0，无认证）：
+  http://vminsert.{{ .Release.Namespace }}.svc.cluster.local:8480/insert/0/prometheus/api/v1/write
+
+查询 API：
+  http://vmselect.{{ .Release.Namespace }}.svc.cluster.local:8481/select/0/prometheus/api/v1/query
+
+本地配置为三个组件各一个副本，vmstorage 使用 5Gi PVC、保留 7 天数据。

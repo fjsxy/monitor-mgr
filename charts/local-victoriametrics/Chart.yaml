@@ -1,0 +1,12 @@
+apiVersion: v2
+name: local-victoriametrics
+description: 本地 Prometheus Agent 的无认证 VictoriaMetrics Cluster 接收端
+type: application
+version: 0.1.0
+appVersion: "v1.152.0"
+kubeVersion: ">=1.25.0-0"
+dependencies:
+  - name: victoria-metrics-cluster
+    alias: vmcluster
+    version: "0.51.0"
+    repository: https://victoriametrics.github.io/helm-charts/

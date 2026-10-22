@@ -10,9 +10,19 @@ COVERAGE_FILE ?= .scratch/coverage.out
 HTTP_ADDR ?= 127.0.0.1:18080
 RPC_ADDR ?= 127.0.0.1:18888
 DATA_DIR ?= data/local
-IMAGE ?= monitor-mgr:development
+# 本地部署保留 IMAGE_TAG 入口；CI 和自定义仓库仍可通过 IMAGE 指定完整镜像。
+IMAGE ?= monitor-mgr:$(IMAGE_TAG)
 SOURCE_SHA ?= $(shell git rev-parse HEAD)
 PLATFORM ?= linux/arm64
+HELM ?= helm
+KUBECTL ?= kubectl
+KUBE_CONFIG ?=
+KUBE_CONTEXT ?=
+NAMESPACE ?= monitor-system
+RELEASE ?= monitor-mgr
+IMAGE_TAG ?= development
+VM_RELEASE ?= vmcluster
+VM_NAMESPACE ?= monitoring
 
 .PHONY: help ut e2e e2e-summary check test test-race generate check-generated vet web-install web-build build run image ci-cases ci-cases-check ci-builder ci-builder-cleanup
 help: ## 查看常用命令
@@ -50,6 +60,23 @@ ci-cases: ## 生成完整28项CI清单及选择标准
 	$(PYTHON) scripts/ci-cases.py
 ci-cases-check: ## 核对固定目录、代码、CI和本地清单
 	$(PYTHON) scripts/ci-cases.py --check
+.PHONY: chart-check deploy-platform platform-forward
+chart-check: ## 检查平台 Helm chart
+	$(HELM) lint charts/monitor-mgr
+deploy-platform: ## Helm 部署平台，必须显式指定 KUBE_CONFIG/KUBE_CONTEXT/IMAGE_TAG
+	@test -n "$(KUBE_CONFIG)" && test -n "$(KUBE_CONTEXT)" || (echo '必须指定 KUBE_CONFIG 和 KUBE_CONTEXT' >&2; exit 1)
+	$(HELM) upgrade --install "$(RELEASE)" charts/monitor-mgr --kubeconfig "$(KUBE_CONFIG)" --kube-context "$(KUBE_CONTEXT)" --namespace "$(NAMESPACE)" --create-namespace --set-string image="$(IMAGE)" --set-string source="$(SOURCE_SHA)" --wait --timeout 180s
+platform-forward: ## 将管控集群平台转发至本机 18080；前台运行
+	@test -n "$(KUBE_CONFIG)" && test -n "$(KUBE_CONTEXT)" || (echo '必须指定 KUBE_CONFIG 和 KUBE_CONTEXT' >&2; exit 1)
+	$(KUBECTL) --kubeconfig "$(KUBE_CONFIG)" --context "$(KUBE_CONTEXT)" -n "$(NAMESPACE)" port-forward --address 127.0.0.1 service/"$(RELEASE)" 18080:8080
+.PHONY: vm-chart-deps vm-chart-check deploy-vmcluster
+vm-chart-deps: ## 下载锁定的 VictoriaMetrics 官方 Helm chart 依赖
+	$(HELM) dependency build charts/local-victoriametrics
+vm-chart-check: ## 校验本地 VictoriaMetrics Cluster chart（先执行 vm-chart-deps）
+	$(HELM) lint charts/local-victoriametrics
+deploy-vmcluster: ## Helm 部署无认证 VM Cluster；必须显式指定 KUBE_CONFIG/KUBE_CONTEXT
+	@test -n "$(KUBE_CONFIG)" && test -n "$(KUBE_CONTEXT)" || (echo '必须指定 KUBE_CONFIG 和 KUBE_CONTEXT' >&2; exit 1)
+	$(HELM) upgrade --install "$(VM_RELEASE)" charts/local-victoriametrics --kubeconfig "$(KUBE_CONFIG)" --kube-context "$(KUBE_CONTEXT)" --namespace "$(VM_NAMESPACE)" --create-namespace --wait --timeout 5m
 
 ci-builder: ## CI 创建本 run 独占、固定版本的 BuildKit；须指定 BUILDX_BUILDER=mm-...
 	$(PYTHON) scripts/ci-builder.py create --name "$(BUILDX_BUILDER)"

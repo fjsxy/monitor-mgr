@@ -2,3 +2,13 @@ image: monitor-mgr:development
 imagePullPolicy: IfNotPresent
 source: development
 runId: local
+storage:
+  size: 1Gi
+  # 留空时采用集群默认 StorageClass；底层必须支持 SQLite WAL 和文件锁。
+  storageClassName: ""
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi

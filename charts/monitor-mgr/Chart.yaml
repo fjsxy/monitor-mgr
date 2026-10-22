@@ -4,3 +4,4 @@ description: 一期平台单 writer 与持久数据卷
 version: 0.1.0
 appVersion: 'phase1'
 type: application
+kubeVersion: ">=1.28.0-0"

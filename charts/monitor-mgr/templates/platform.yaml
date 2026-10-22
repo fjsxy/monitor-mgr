@@ -1,31 +1,38 @@
-{{/* 平台只暴露 HTTP；RPC 始终使用容器 loopback。 */}}
+{{/* 平台只暴露 HTTP；RPC 始终使用容器 loopback。数据库与独立密钥一并持久化。 */}}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: monitor-mgr-data
+  name: {{ .Release.Name }}-data
+  annotations:
+    helm.sh/resource-policy: keep
   labels: {"monitor-mgr.test/run": {{ .Values.runId | quote }}}
 spec:
   accessModes: [ReadWriteOnce]
+  {{- with .Values.storage.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
   resources:
     requests:
-      storage: 1Gi
+      storage: {{ .Values.storage.size | quote }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: monitor-mgr
+  name: {{ .Release.Name }}
 spec:
+  # 关键：SQLite 仅允许一个 writer；Recreate 避免升级时两个 Pod 同时写卷。
   replicas: 1
   strategy:
     type: Recreate
   selector:
-    matchLabels: {app: monitor-mgr}
+    matchLabels: {app: {{ .Release.Name | quote }}}
   template:
     metadata:
       annotations: {"monitor-mgr-source": {{ .Values.source | quote }}}
-      labels: {app: monitor-mgr, "monitor-mgr.test/run": {{ .Values.runId | quote }}}
+      labels: {app: {{ .Release.Name | quote }}, "monitor-mgr.test/run": {{ .Values.runId | quote }}}
     spec:
       terminationGracePeriodSeconds: 15
+      # 目标集群须明确注册，不以 Pod 身份绕过平台授权。
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -37,6 +44,7 @@ spec:
         - name: platform
           image: {{ .Values.image | quote }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args: ["-data-dir", "/data", "-http", ":8080", "-rpc", "127.0.0.1:8888", "-static", "/web"]
           ports:
             - name: http
               containerPort: 8080
@@ -45,8 +53,8 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
           resources:
-            requests: {cpu: 100m, memory: 256Mi}
-            limits: {memory: 512Mi}
+            {{- toYaml .Values.resources | nindent 12 }}
+          # /readyz 实际经过 Kitex 和数据库，不能用静态页面代替就绪检查。
           readinessProbe:
             httpGet: {path: /readyz, port: http}
             initialDelaySeconds: 1
@@ -55,13 +63,13 @@ spec:
             - {name: data, mountPath: /data}
       volumes:
         - name: data
-          persistentVolumeClaim: {claimName: monitor-mgr-data}
+          persistentVolumeClaim: {claimName: {{ printf "%s-data" .Release.Name | quote }}}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: monitor-mgr
+  name: {{ .Release.Name }}
 spec:
-  selector: {app: monitor-mgr}
+  selector: {app: {{ .Release.Name | quote }}}
   ports:
     - {name: http, port: 8080, targetPort: http}

@@ -1,0 +1,50 @@
+# 复用官方 chart；本地单节点环境中，每个组件运行一个副本。
+vmcluster:
+  printNotes: false
+  vmauth:
+    enabled: false
+  vminsert:
+    fullnameOverride: vminsert
+    replicaCount: 1
+    image:
+      registry: docker.io
+      tag: v1.152.0-cluster@sha256:17bbb279b07ecd3306d194d442c7f452f55f660fd00cb0448aaf1acb1f13f3ae
+    service:
+      type: ClusterIP
+    extraArgs:
+      memory.allowedBytes: "134217728"
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 256Mi}
+  vmselect:
+    fullnameOverride: vmselect
+    replicaCount: 1
+    image:
+      registry: docker.io
+      tag: v1.152.0-cluster@sha256:f88db791815a4c67bf83fe9e1cf45a6cbed4d9af6a4a549f3bf55314181d6883
+    service:
+      type: ClusterIP
+    persistentVolume:
+      enabled: false
+    extraArgs:
+      memory.allowedBytes: "134217728"
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 256Mi}
+  vmstorage:
+    fullnameOverride: vmstorage
+    replicaCount: 1
+    image:
+      registry: docker.io
+      tag: v1.152.0-cluster@sha256:7d95c8c2fd66d6d7d936e4fbc14155d20db07e7788cab9c818bd12995cba2bf2
+    retentionPeriod: 7d
+    # 关键：样本写入 PVC，Pod 重建继续使用原卷；kind 集群删除仍会销毁节点内数据。
+    persistentVolume:
+      enabled: true
+      storageClassName: standard
+      size: 5Gi
+    extraArgs:
+      memory.allowedBytes: "268435456"
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 512Mi}
