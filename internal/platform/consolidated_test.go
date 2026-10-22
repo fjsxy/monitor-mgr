@@ -95,6 +95,7 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 	checkCompanionRetryRechecksExporter(t)
 	checkCompanionUnknownRecovery(t)
 	checkResourcePublicationProgress(t)
+	checkResourceRetryIdentity(t)
 	checkResourceProgressSurvivesRestart(t)
 	checkTestP07RetryUsesFrozenVersionAndCurrentRevisions(t)
 	checkTestPublicationUnknownOutcomeNeverReplays(t)

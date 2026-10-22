@@ -129,6 +129,10 @@ func (s *Store) lifecycleCommandObserved(ctx context.Context, c *rpc.RequestCont
 		if i.Lifecycle == "DELETED" {
 			return nil, Error("CONFLICT", "实例已删除")
 		}
+		// 关键：同一受理事务先核对冻结身份，再创建新attempt和保护，拒绝更名后的旧版本重试。
+		if e = validateFrozenInstanceIdentity(ctx, tx, i, o.OperationId); e != nil {
+			return nil, e
+		}
 		if o.Action == "DELETE" {
 			if r.GetDeletePreviewId() == "" {
 				return nil, Error("INVALID_INPUT", "继续或重试删除前必须重新预览确认")
@@ -260,6 +264,10 @@ func (s *Store) authorizeLifecycleDispatch(ctx context.Context, o *rpc.Operation
 		return fail(Error("FORBIDDEN", "发起账号当前无操作权限"))
 	}
 	if err = instanceWritePermission(&Principal{Account: &rpc.Account{Id: actor, Role: role}}, instance); err != nil {
+		return fail(err)
+	}
+	// 关键：每份资源及条件写重试都在发送标记前重读实例，历史排队任务不能绕过冻结身份约束。
+	if err = validateFrozenInstanceIdentity(ctx, tx, instance, o.OperationId); err != nil {
 		return fail(err)
 	}
 	if cl.CredentialRevision != credentialRevision {

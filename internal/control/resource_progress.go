@@ -82,6 +82,30 @@ func readFrozenResources(ctx context.Context, q clusterQuery, id string, operati
 	return out, rows.Err()
 }
 
+// validateFrozenInstanceIdentity 将原操作冻结组件身份与当前实例对照，不从最新草稿重算旧目标。
+func validateFrozenInstanceIdentity(ctx context.Context, q clusterQuery, i *rpc.ObservationInstance, operation string) error {
+	resources, e := readFrozenResources(ctx, q, operation, true)
+	if e != nil {
+		return e
+	}
+	for _, r := range resources {
+		if r.key != "component" {
+			continue
+		}
+		metadata := objectMap(r.document, "metadata")
+		namespace := objectString(metadata, "namespace")
+		if i.Component == KSMComponent {
+			namespace = objectString(objectMap(r.document, "spec"), "targetNamespace")
+		}
+		// 关键：首次确定失败后草稿可合法更名；旧重试不能把旧目标UID绑定到新身份，也不能回写草稿。
+		if objectString(metadata, "name") != i.Name || namespace != i.TargetNamespace {
+			return Error("CONFLICT", "实例 name/namespace 已偏离原冻结目标，请预览并明确发布当前草稿")
+		}
+		return nil
+	}
+	return Error("UNAVAILABLE", "原冻结组件身份缺失")
+}
+
 // freezeOperationResources 在受理事务内复制目标并绑定原身份；后续草稿及实例字段不能改变目标。
 func freezeOperationResources(ctx context.Context, tx *sql.Tx, o *rpc.Operation, i *rpc.ObservationInstance) error {
 	resources, e := readFrozenResources(ctx, tx, o.GetVersionId(), false)
