@@ -151,6 +151,7 @@ type ksmFixture struct {
 	smWrites, smRequests, smDeleteRequests int
 	rejectSM                               int
 	dropSM, smUnavailable, smReadFailure   bool
+	retainSM                               bool
 	denySM                                 string
 	lastSMDelete                           map[string]any
 
@@ -340,7 +341,11 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 					w.WriteHeader(409)
 					return
 				}
-				f.sm = nil
+				if f.retainSM {
+					meta["deletionTimestamp"] = "2026-10-22T00:00:00Z"
+				} else {
+					f.sm = nil
+				}
 				io.WriteString(w, `{"kind":"Status","status":"Success"}`)
 				return
 			}

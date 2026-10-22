@@ -28,3 +28,16 @@
 | I28-B01 | 页面展示配套配置和逐资源状态 | 独占平台运行现有E2E-10唯一Playwright test；在预览/版本/操作页检查SM YAML与资源结果；失败后查看可执行修复入口 | 用户可看到SM namespace/selector/user标签/冻结配置及独立UID、失败原因、补齐动作 | #28 |
 
 执行映射：I28-U01/U02/U03 → UT-08；I28-U04/U05 → UT-11；I28-U06 → UT-10；I28-U07 → UT-12；I28-U08 → UT-16；I28-K01 → E2E-03/E2E-09；I28-K02 → E2E-08；I28-B01 → E2E-10。
+
+## 真实 CI 缺口补充（I28-R）
+
+沿用原计划和已确认接缝；以下补充不代表真实集群已通过。
+
+| 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
+| --- | --- | --- | --- | --- |
+| I28-R01 | 故障代理仅暂停指定 KSM SSAR，不误拦 ServiceMonitor 受理预检 | 经真实 loopback 控制 HTTP 登记带 resourceAttributes 白名单的 SSAR 暂停规则；发送 ServiceMonitor SSAR、畸形或不匹配输入、dryRun，再发送 KSM create SSAR；核对旧无正文规则仍有效 | 非匹配输入不消费规则；仅目标 KSM SSAR 抵达屏障；未知匹配字段/非 SSAR 路径拒绝；旧规则兼容 | #28 |
+| I28-R02 | 已发送组件删除在配套资源成功后仍可只读完成 | 经公开 HTTP→Kitex 发布两资源，SM 删除成功，KSM Foreground 删除被 finalizer 或原 Pod 阻塞；读回两资源状态及 possiblySent；目标原图清空后 refresh | 原 SM 保持成功；组件只读核验转成功；整体最后才 DELETED；每份 DELETE 保持唯一原 UID/RV 请求，不重放 | #28 |
+| I28-R03 | 配套资源异步删除后不隐式发送剩余组件 | 经公开 HTTP 发布两资源，目标暂时保留已发 DELETE 的 SM；只读核验 SM 消失，再查看未发组件并显式 continue-unsent，之后清空原组件图 | SM 确认后整体 WAITING_CONFIRMATION；组件 possiblySent=false；只读刷新不产生组件 DELETE；显式继续后只删原组件，不重放 SM，整体清理才成功 | #28 |
+| I28-R04 | 真实写前撤权与删除最终状态可判定 | E2E-08 用 KSM resourceAttributes SSAR 规则先获取 202 与 operation，再证明 CHECKING/possiblySent=false 后降权；E2E-09 读取逐资源状态，必要时仅显式继续已确认消失 SM 后尚未发送的组件，移除本例 finalizer 后只读等原图清空 | 撤权前已真实受理、0组件/SM写；删除阶段不弱化 UID/RV、原图清理和独立实例保护；公共收据只含白名单状态/身份/计数 | #28 |
+
+补充执行映射：I28-R01 → UT-18；I28-R02/R03 → UT-12；I28-R04 → E2E-08/E2E-09。真实环境由集成协调者独占执行并保留私有诊断。

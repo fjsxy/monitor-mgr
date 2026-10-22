@@ -101,3 +101,7 @@ ut-historical-identity: ## 历史创建证据、管理员确认与撤销派发�
 .PHONY: ut-historical-exporter
 ut-historical-exporter: ## 历史exporter真实v10升级零写、明确补建、旧操作和身份恢复边界
 	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-12|UT-16' -ginkgo.no-color -ginkgo.fail-on-empty
+
+.PHONY: ut-runtime-repairs
+ut-runtime-repairs: ## SSAR精确暂停及两资源异步删除的公开HTTP/Ginkgo边界验证（UT-12/18）
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-12|UT-18' -ginkgo.no-color -ginkgo.fail-on-empty

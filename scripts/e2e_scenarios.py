@@ -636,10 +636,11 @@ def instance_identity_authorization(s,proxy):
     s.by('I25-K01.unsent：已受理且possiblySent=false时降级集群所属管理员，实际组件写入必须为零')
     before=len(writes())
     # 关键：暂停的是worker的SelfSubjectAccessReview只读预检，不能用已到代理的组件写请求冒充未发送边界。
-    proxy.arm('POST','/apis/authorization.k8s.io/v1/selfsubjectaccessreviews','pause_before_send')
+    proxy.arm('POST','/apis/authorization.k8s.io/v1/selfsubjectaccessreviews','pause_before_send',ssar_resource='kubestatemetrics')
     try:
         with s.using(opener):operation=s.publish(instance,preview=preview,wait=False)
-        paused=proxy.paused()['rule']
+        assert operation['operationId']
+        paused=proxy.paused()['rule'];assert paused['ssarResource']=='kubestatemetrics'
         current=s.call('GET','/operations/'+operation['operationId'])
         attempts=s.call('GET','/operations/'+operation['operationId']+'/attempts')['attempts']
         attempt=next(value for value in attempts if value['attemptId']==current['attemptId'])
@@ -651,6 +652,10 @@ def instance_identity_authorization(s,proxy):
         assert '管理员创建' in failed['message'] and len(writes())==before
         absent=s.k('get','kubestatemetrics',s.crname,target=s.target,check=False)
         assert absent.returncode!=0 and b'(NotFound)' in absent.stderr
+        (s.env.public/'instance-dispatch-unsent.json').write_text(json.dumps(dict(
+            testedCommit=s.env.candidate,operationId=operation['operationId'],accepted=True,
+            pausedSSARResource=paused['ssarResource'],beforeRevocation=dict(state=current['state'],possiblySent=attempt['possiblySent']),
+            afterRevocation=dict(state=failed['state'],businessWrites=len(writes())-before)),ensure_ascii=False,indent=2)+'\n')
     finally:proxy.control('reset',{})
 
     s.call('PATCH','/accounts/'+actor['id'],{'role':'ADMIN'})
@@ -717,12 +722,53 @@ def deletion(s):
     original_namespace,original_name=s.targetns,s.crname
     s.prepare('-other');other=s.create();s.publish(other);s.runtime(other);other_cr=s.cr();other_sm=companion_contract(s,other,1);other_namespace=s.targetns;other_name=s.crname
     s.targetns,s.crname=original_namespace,original_name
+    proxy=s.setup_proxy()
     finalizers=original['metadata'].get('finalizers',[])+['phase1.fixture/hold']
     s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'add','path':'/metadata/finalizers','value':finalizers}]))
-    op=s.delete(i,False);s.state(op,'DELETION_BLOCKED','DELETION_VERIFYING');assert s.call('GET','/operations/'+op['operationId'])['state']!='SUCCEEDED'
+    op=s.delete(i,False)
+    # 关键：SM Foreground 删除也可能异步。先核验其消失，未发送组件只能重新预览后明确继续。
+    paths={'component':'/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+s.crname,
+           'service-monitor':'/apis/monitoring.coreos.com/v1/namespaces/'+original_namespace+'/servicemonitors/'+original_sm['metadata']['name']}
+    phases=[];continued=False
+    def snapshot(operation):
+        return dict(state=operation['state'],attemptId=operation['attemptId'],versionId=operation['versionId'],
+                    resources=[dict(key=r['target']['key'],state=r['state'],confirmedUid=r['confirmedUid'],possiblySent=r['possiblySent']) for r in operation['resources']])
+    def delete_counts():
+        events=s.capture_proxy()
+        return {key:len([e for e in events if e['stage']=='upstream_send_started' and e['method']=='DELETE' and e['path']==path]) for key,path in paths.items()}
+    def reach_component():
+        nonlocal continued
+        current=s.call('POST','/operations/'+op['operationId']+'/refresh',{})
+        progress={r['target']['key']:r for r in current['resources']};component,sm=progress['component'],progress['service-monitor']
+        assert component['confirmedUid']==uid and sm['confirmedUid']==original_sm['metadata']['uid']
+        if component['possiblySent']:
+            assert sm['state']=='SUCCEEDED' and current['state']!='SUCCEEDED'
+            return current
+        assert current['state'] not in ('FAILED','CANCELLED','IDENTITY_UNCERTAIN','SUCCEEDED'),current['state']
+        if current['state']=='WAITING_CONFIRMATION':
+            assert not continued and sm['state']=='SUCCEEDED' and sm['possiblySent']
+            s.by('I28-R04：配套资源已确认消失，重新预览并明确继续尚未发送的原组件删除')
+            phases.append(snapshot(current));assert delete_counts()=={'component':0,'service-monitor':1}
+            preview=s.call('POST','/instances/'+i['id']+'/deletion-previews',{'operationId':op['operationId']})
+            body=s.request_revision(op);body['deletePreviewId']=preview['previewId']
+            next_attempt=s.call('POST','/operations/'+op['operationId']+'/continue-unsent',body,status=202)
+            assert next_attempt['versionId']==current['versionId'] and next_attempt['attemptId']!=current['attemptId']
+            continued=True
+        return None
+    component_sent=wait(reach_component,message='原组件删除尚未到达已发送阶段');phases.append(snapshot(component_sent))
+    def original_deleting():
+        actual=s.cr();meta=actual['metadata'];assert meta['uid']==uid and 'phase1.fixture/hold' in meta.get('finalizers',[])
+        return actual if meta.get('deletionTimestamp') else None
+    deleting=wait(original_deleting,message='未证明原KSM已进入真实Foreground删除')
+    assert delete_counts()=={'component':1,'service-monitor':1}
+    assert s.call('GET','/operations/'+op['operationId'])['state']!='SUCCEEDED'
     s.call('POST','/clusters/'+s.cluster['id']+'/unregister',{},status=409);s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner},status=409)
     remove_fixture_finalizer(s,'kubestatemetrics',s.crname,uid,'phase1.fixture/hold')
-    wait(lambda:s.call('POST','/operations/'+op['operationId']+'/refresh',{}),lambda value:value['state']=='SUCCEEDED',message='前台删除原图未结束')
+    completed=wait(lambda:s.call('POST','/operations/'+op['operationId']+'/refresh',{}),lambda value:value['state']=='SUCCEEDED',message='前台删除原图未结束')
+    phases.append(snapshot(completed));assert delete_counts()=={'component':1,'service-monitor':1}
+    (s.env.public/'companion-deletion-recovery.json').write_text(json.dumps(dict(testedCommit=s.env.candidate,
+        operationId=op['operationId'],continuedUnsent=continued,phases=phases,deleteRequests=delete_counts(),
+        originalComponent=dict(uid=uid,deletionTimestamp=deleting['metadata']['deletionTimestamp'],fixtureFinalizerPresent=True)),ensure_ascii=False,indent=2)+'\n')
     assert not s.workloads() and s.k('get','kubestatemetrics',s.crname,check=False).returncode!=0
     assert s.k('get','servicemonitor',original_sm['metadata']['name'],'-n',original_namespace,check=False).returncode!=0
     assert s.get('kubestatemetrics',other_name)['metadata']['uid']==other_cr['metadata']['uid']
