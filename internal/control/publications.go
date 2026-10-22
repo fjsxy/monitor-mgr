@@ -422,6 +422,13 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 			return nil, Error("UNAVAILABLE", "受理事务失败，未受理")
 		}
 	}
+	if e = freezePublicationResources(ctx, tx, version, i, cfg, cfg.spec()); e != nil {
+		return nil, e
+	}
+	if e = freezeOperationResources(ctx, tx, o, i); e != nil {
+		return nil, e
+	}
+	enrichResourceProgress(ctx, tx, o)
 	if e = s.recordInstanceActivity(ctx, tx, i.Id); e != nil {
 		return nil, e
 	}
@@ -467,6 +474,14 @@ func versionByID(ctx context.Context, q clusterQuery, id, instance string) (*rpc
 	doc := cfg.document()
 	doc["spec"] = frozen
 	v.Yaml = yamlText(doc)
+	resources, err := readFrozenResources(ctx, q, id, false)
+	if err != nil {
+		return nil, err
+	}
+	v.Resources = []*rpc.FrozenResource{}
+	for _, r := range resources {
+		v.Resources = append(v.Resources, r.public())
+	}
 	return v, nil
 }
 func (s *Store) ListVersions(ctx context.Context, c *rpc.RequestContext, r *rpc.InstanceID) (*rpc.VersionsResult_, error) {
@@ -584,7 +599,18 @@ func (s *Store) GetAttempts(ctx context.Context, c *rpc.RequestContext, r *rpc.O
 		}
 		out = append(out, a)
 	}
-	return &rpc.AttemptsResult_{Attempts: out}, rows.Err()
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, e
+	}
+	for _, a := range out {
+		a.Resources, e = resourceProgressFor(ctx, s.DB, r.OperationId, a.AttemptId)
+		if e != nil {
+			return nil, e
+		}
+	}
+	return &rpc.AttemptsResult_{Attempts: out}, nil
 }
 
 // frozenVersionSpec 独立读取不可变有效映射，提供给实际依赖/策略、mutation和响应核验。

@@ -2,6 +2,7 @@
 import base64
 import copy
 import http.cookiejar
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -429,26 +430,113 @@ def faults(s):
     patch[-1]['value']=original;s.k('patch','pod',pod['metadata']['name'],'-n',s.targetns,'--type=json','-p',json.dumps(patch));s.runtime(j)
 
 
+def resource_progress(s, operation, state, uid):
+    """公开 HTTP 读取逐资源进度与版本，真实 Pod 重建/代理故障场景共用此断言。"""
+    current=s.call('GET','/operations/'+operation['operationId'])
+    progress=next(p for p in current['resources'] if p['target']['key']=='component')
+    target=progress['target'];version=s.call('GET','/instances/'+current['instanceId']+'/versions/'+current['versionId'])
+    frozen=next(r for r in version['resources'] if r['key']=='component')
+    assert target==frozen and target['kind']=='KubeStateMetrics'
+    assert progress['state']==state and progress['confirmedUid']==uid and progress['possiblySent'] is True
+    return dict(operationId=current['operationId'],attemptId=progress['attemptId'],resourceKey=target['key'],
+                kind=target['kind'],namespace=target['namespace'],name=target['name'],state=progress['state'],
+                confirmedUid=progress['confirmedUid'],possiblySent=progress['possiblySent'],
+                frozenSHA256=hashlib.sha256(target['yaml'].encode()).hexdigest())
+
+
 def recovery(s):
     s.prepare();i=s.create();s.publish(i);s.runtime(i);proxy=s.setup_proxy();cfg=s.cfg();cfg['resources']['requestCPU']='222m';s.save(i,cfg)
     s.by('真实更新完成后丢失响应并阻断读取，重建平台只核验原 UID')
     path='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+s.crname
     proxy.arm('PUT',path,'drop_and_block_reads');op=s.publish(i,wait=False);s.state(op,'RESULT_UNCERTAIN')
-    before=len(s.mutations(s.capture_proxy(),'PUT'));assert before==1;s.rebuild();proxy.control('reset',{})
+    s.by('I27-K01：记录该资源独立 UID、发送边界及冻结版本后重建真实平台 Pod')
+    original_uid=s.cr()['metadata']['uid'];before_progress=resource_progress(s,op,'RESULT_UNCERTAIN',original_uid)
+    before=len([event for event in s.mutations(s.capture_proxy(),'PUT') if event['path']==path]);assert before==1;s.rebuild();proxy.control('reset',{})
     s.call('POST','/operations/'+op['operationId']+'/refresh',{});s.state(op,'SUCCEEDED',timeout=60)
-    assert len(s.mutations(s.capture_proxy(),'PUT'))==before
+    assert len([event for event in s.mutations(s.capture_proxy(),'PUT') if event['path']==path])==before
+    after_progress=resource_progress(s,op,'SUCCEEDED',original_uid);assert after_progress['frozenSHA256']==before_progress['frozenSHA256']
+    instance_identity_authorization(s,proxy)
     s.by('首次创建丢响应且没有原 UID，禁止按同名对象补认或重建')
     s.crname='unknown-'+uuid.uuid4().hex[:8];unknown=s.create()
     # 关键：先登记明确的创建身份，代理才会在丢响应前保存原 API UID；不能事后按名字补认。
     proxy.control('register-create',{'intentId':uuid.uuid4().hex,'identity':{'apiVersion':'monitoring.fjsxy.github.io/v1alpha1','kind':'KubeStateMetrics','namespace':'','name':s.crname}})
+    unknown_posts_before=len(s.mutations(s.capture_proxy(),'POST'))
     proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics','drop_after_upstream');o=s.publish(unknown,wait=False);s.state(o,'IDENTITY_UNCERTAIN')
+    unknown_before=resource_progress(s,o,'IDENTITY_UNCERTAIN','')
     events=s.capture_proxy();created=[e for e in events if e['stage']=='original_create_response' and e['path'].endswith('/kubestatemetrics')];assert len(created)==1
-    s.track_cr(created[0]['originalCreate']['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['originalCreate']['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
+    s.track_cr(created[0]['originalCreate']['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['originalCreate']['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==unknown_posts_before+1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
+    unknown_after=resource_progress(s,o,'IDENTITY_UNCERTAIN','');assert unknown_before==unknown_after
     s.by('确定失败后显式 retry，保留原冻结版本并产生新 attempt')
     proxy.control('reset',{});s.crname='retry-'+uuid.uuid4().hex[:8];retry=s.create();p=s.preview(retry)
     writepath='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics';proxy.control('faults',{'readMode':'none','rejectWritePath':writepath})
     failure=s.publish(retry,preview=p,wait=False);s.state(failure,'FAILED');cfg=s.cfg();cfg['resources']['requestCPU']='999m';s.save(retry,cfg);proxy.control('reset',{})
     again=s.action(failure,'retry');s.state(again,'SUCCEEDED');assert again['versionId']==failure['versionId'] and again['attemptId']!=failure['attemptId'];assert s.cr()['spec']['podResources']['requests']['cpu']=='100m';s.track_cr(s.cr()['metadata']['uid'])
+    s.by('I27-K01：人工重试保存原资源结果，公开收据只含身份、状态、冻结摘要和真实写次数')
+    retry_progress=resource_progress(s,again,'SUCCEEDED',s.cr()['metadata']['uid']);attempts=s.call('GET','/operations/'+failure['operationId']+'/attempts')['attempts']
+    assert len(attempts)==2 and next(p for p in attempts[0]['resources'] if p['target']['key']=='component')['state']=='FAILED'
+    receipt=dict(testedCommit=s.env.candidate,beforeRebuild=before_progress,afterRebuild=after_progress,knownUIDWriteCount=before,unknownBefore=unknown_before,unknownAfter=unknown_after,unknownWriteCount=1,retry=retry_progress)
+    (s.env.public/'resource-progress-recovery.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+
+
+def instance_identity_authorization(s,proxy):
+    """I25-K01：通过真实 Helm Pod、HTTP→Kitex、mTLS API 代理验证实例写前授权。"""
+    username='dispatch-'+uuid.uuid4().hex[:12];temporary=secrets.token_urlsafe(24);personal=secrets.token_urlsafe(24)
+    actor=s.call('POST','/accounts',{'username':username,'password':temporary,'role':'ADMIN'},status=201)
+    opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    with s.using(opener):
+        s.call('POST','/sessions',{'username':username,'password':temporary},status=201)
+        s.call('POST','/session/password',{'currentPassword':temporary,'newPassword':personal})
+        s.call('POST','/sessions',{'username':username,'password':personal},status=201)
+    s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':actor['id']})
+    s.crname='auth-unsent-'+uuid.uuid4().hex[:8]
+    with s.using(opener):
+        instance=s.create();preview=s.preview(instance)
+    assert instance['creatorUserId']==actor['id'] and instance['creatorRole']=='ADMIN'
+    def writes():
+        return [event for event in s.capture_proxy() if event['stage']=='upstream_completed' and event['method'] in ('POST','PUT','PATCH','DELETE')
+                and ('kubestatemetrics' in event['path'] or 'servicemonitors' in event['path'])]
+    s.by('I25-K01.unsent：已受理且possiblySent=false时降级集群所属管理员，实际组件写入必须为零')
+    before=len(writes())
+    # 关键：暂停的是worker的SelfSubjectAccessReview只读预检，不能用已到代理的组件写请求冒充未发送边界。
+    proxy.arm('POST','/apis/authorization.k8s.io/v1/selfsubjectaccessreviews','pause_before_send')
+    try:
+        with s.using(opener):operation=s.publish(instance,preview=preview,wait=False)
+        paused=proxy.paused()['rule']
+        current=s.call('GET','/operations/'+operation['operationId'])
+        attempts=s.call('GET','/operations/'+operation['operationId']+'/attempts')['attempts']
+        attempt=next(value for value in attempts if value['attemptId']==current['attemptId'])
+        assert current['state']=='CHECKING' and attempt['possiblySent'] is False and attempt['actorId']==actor['id']
+        s.call('PATCH','/accounts/'+actor['id'],{'role':'USER'})
+        assert s.call('GET','/clusters/'+s.cluster['id'])['ownerId']==actor['id']
+        proxy.control('release',{'ruleId':paused['id']})
+        failed=s.state(operation,'FAILED')
+        assert '管理员创建' in failed['message'] and len(writes())==before
+        absent=s.k('get','kubestatemetrics',s.crname,target=s.target,check=False)
+        assert absent.returncode!=0 and b'(NotFound)' in absent.stderr
+    finally:proxy.control('reset',{})
+
+    s.call('PATCH','/accounts/'+actor['id'],{'role':'ADMIN'})
+    with s.using(opener):
+        s.call('POST','/sessions',{'username':username,'password':personal},status=201)
+        s.crname='auth-sent-'+uuid.uuid4().hex[:8];known=s.create();s.publish(known)
+        original=s.call('GET','/instances/'+known['id']);uid=original['uid'];assert uid
+        cfg=s.cfg();cfg['resources']['requestCPU']='244m';s.save(known,cfg);preview=s.preview(known)
+    s.by('I25-K01.sent：真实更新丢响应并阻读后停用发起账号，恢复时只读核验且禁止再次写入')
+    path='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+s.crname
+    written_before_update=len(writes())
+    proxy.arm('PUT',path,'drop_and_block_reads')
+    try:
+        with s.using(opener):operation=s.publish(known,preview=preview,wait=False)
+        s.state(operation,'RESULT_UNCERTAIN')
+        sent=len(writes());assert sent==written_before_update+1 and len([event for event in writes() if event['method']=='PUT' and event['path']==path])==1
+        s.call('PATCH','/accounts/'+actor['id'],{'enabled':False})
+        proxy.control('reset',{})
+        for _ in range(3):s.call('POST','/operations/'+operation['operationId']+'/refresh',{})
+        s.state(operation,'SUCCEEDED',timeout=60)
+        actual=s.cr();assert actual['metadata']['uid']==uid and actual['spec']['podResources']['requests']['cpu']=='244m'
+        assert s.call('GET','/instances/'+known['id'])['creatorUserId']==actor['id'] and len(writes())==sent
+    finally:proxy.control('reset',{})
+    s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner})
 
 
 def deletion(s):

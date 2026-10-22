@@ -138,10 +138,24 @@ func checkLegacyPublicationMigration(t ginkgo.GinkgoTInterface) {
 				t.Fatal("升级丢失版本历史")
 			}
 			version := clusterCall(t, p, "GET", "/instances/"+id+"/versions/"+pending["versionId"].(string), nil, c, "", 200)
+			resources, ok := version["resources"].([]any)
+			if !ok || len(resources) != 1 || resources[0].(map[string]any)["kind"] != "KubeStateMetrics" || !strings.Contains(resources[0].(map[string]any)["yaml"].(string), "300m") {
+				t.Fatal("I27-U09：旧版本资源被重映射或追加", version)
+			}
 			if !strings.Contains(version["yaml"].(string), "300m") {
 				t.Fatal("历史版本YAML被当前mapper重算", version["yaml"])
 			}
 			recovered := awaitLifecycleState(t, p, c, oid, "WAITING_CONFIRMATION")
+			progress := resourceProgress(t, p, c, oid)
+			if progress["state"] != "WAITING_CONFIRMATION" || progress["possiblySent"] != false || progress["confirmedUid"] != "created-uid" {
+				t.Fatal("I27-U09：旧任务资源身份或边界丢失", progress)
+			}
+			f.mu.Lock()
+			writes := f.writes
+			f.mu.Unlock()
+			if writes != 1 {
+				t.Fatal("I27-U09：升级重放了写入", writes)
+			}
 			if recovered["versionId"] != pending["versionId"] {
 				t.Fatal(recovered)
 			}

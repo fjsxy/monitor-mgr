@@ -295,7 +295,9 @@ func checkTestAgentStorageRetainedIdentitySurvivesParents(t ginkgo.GinkgoTInterf
 // storageVolumes把合法空列表作为空集断言，避免缺失字段导致测试panic。
 func storageVolumes(source map[string]any) []any { v, _ := source["volumes"].([]any); return v }
 
-const dropAgentStorageSchema = `ALTER TABLE publication_previews DROP COLUMN storage_fingerprint;DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
+const dropResourceProgressSchema = `DROP TABLE IF EXISTS resource_progress;DROP TABLE IF EXISTS operation_resources;DROP TABLE IF EXISTS version_resources;DROP TABLE IF EXISTS instance_resource_identities;`
+
+const dropAgentStorageSchema = dropResourceProgressSchema + `ALTER TABLE publication_previews DROP COLUMN storage_fingerprint;DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
 
 // A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。
 // 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
@@ -461,6 +463,10 @@ func checkTestAgentStorageResponsibilityOutlivesInstance(t ginkgo.GinkgoTInterfa
 					t.Fatal("实例删除未独立完成")
 				}
 				current = clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
+				progress := resourceProgress(t, p, c, oid)
+				if progress["state"] != "SUCCEEDED" || progress["target"].(map[string]any)["kind"] != "PrometheusAgent" {
+					t.Fatal("I27-U02：Agent删除资源状态不完整", progress)
+				}
 				if current["lifecycle"] != "DELETED" {
 					t.Fatal("卷任务延迟实例完成", current)
 				}

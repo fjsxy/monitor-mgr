@@ -3,7 +3,6 @@ package control
 
 import (
 	"context"
-	"encoding/json"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"sync"
 	"time"
@@ -116,37 +115,54 @@ func (s *Store) verifyLifecycle(ctx context.Context, id string) {
 		return
 	}
 	defer t.Close()
-	if o.Action == "DELETE" {
-		s.verifyDeletion(ctx, o, i, t)
-		return
-	}
-	// 关键：首次创建未保存 UID 时，同名、spec、labels 完全一致也不足以确认资源身份。
-	if i.Uid == "" {
-		return
-	}
-	cr, e := t.readComponent(ctx, i)
+	resources, e := readFrozenResources(ctx, s.DB, id, true)
 	if e != nil {
-		s.noteLifecycle(ctx, o, e)
 		return
 	}
-	if e = checkTarget(i, cr); e != nil {
-		s.noteLifecycle(ctx, o, e)
-		return
+	for _, r := range resources {
+		var state, uid string
+		var sent bool
+		if s.DB.QueryRowContext(ctx, `SELECT state,confirmed_uid,possibly_sent FROM resource_progress WHERE attempt_id=? AND resource_key=?`, o.GetAttemptId(), r.key).Scan(&state, &uid, &sent) != nil {
+			return
+		}
+		if state == "SUCCEEDED" || !sent {
+			continue
+		}
+		// 关键：没有已确认 UID 的资源绝不按同名、spec 或 labels 补认。
+		if uid == "" {
+			continue
+		}
+		step := *o
+		step.Resources = append([]*rpc.ResourceProgress{}, o.Resources...)
+		selectExecutionResource(&step, r.key)
+		identity := resourceInstance(i, r, uid)
+		if o.Action == "DELETE" {
+			if r.key == "component" {
+				s.verifyDeletion(ctx, &step, identity, t)
+			} else {
+				s.verifyAdditionalDeletion(ctx, &step, r, t)
+			}
+			continue
+		}
+		cr, readErr := readFrozenResource(ctx, t, r)
+		if readErr != nil {
+			s.noteLifecycle(ctx, &step, readErr)
+			continue
+		}
+		if cr == nil || objectString(objectMap(cr, "metadata"), "uid") != uid {
+			s.noteLifecycle(ctx, &step, Error("CONFLICT", "原资源 UID 缺失或已变化，禁止认领替代资源"))
+			continue
+		}
+		if !frozenResourceMatches(i, r, cr) {
+			s.noteLifecycle(ctx, &step, Error("CONFLICT", "原 UID 存在，冻结配置尚不能确认；仅继续读取，不重放"))
+			continue
+		}
+		s.finishPublication(&step, "SUCCEEDED", nil, cr)
+		if r.key == "component" {
+			s.refreshObserved(ctx, i.Id, t)
+		}
 	}
-	var spec []byte
-	if s.DB.QueryRowContext(ctx, `SELECT effective_spec FROM publication_versions WHERE id=? AND instance_id=?`, o.GetVersionId(), i.Id).Scan(&spec) != nil {
-		return
-	}
-	var desired map[string]any
-	if json.Unmarshal(spec, &desired) != nil {
-		return
-	}
-	if componentFor(i.Component).normalizeSpec(objectMap(cr, "spec")) != componentFor(i.Component).normalizeSpec(desired) {
-		s.noteLifecycle(ctx, o, Error("CONFLICT", "原 UID 存在，配置尚不能确认；仅继续读取，不重放"))
-		return
-	}
-	s.finishPublication(o, "SUCCEEDED", nil, cr)
-	s.refreshObserved(ctx, i.Id, t)
+
 }
 
 // noteLifecycle 保存安全的读取原因，未核实结果不会解除保护。
@@ -155,5 +171,17 @@ func (s *Store) noteLifecycle(ctx context.Context, o *rpc.Operation, cause error
 	if a, ok := cause.(*rpc.APIError); ok {
 		message = a.Message
 	}
-	s.DB.ExecContext(ctx, `UPDATE operations SET message=?,updated_at=? WHERE id=? AND state IN ('RESULT_UNCERTAIN','DELETION_VERIFYING','DELETION_BLOCKED')`, message, s.Now().UTC().Format(time.RFC3339Nano), o.OperationId)
+	tx, e := s.DB.BeginTx(ctx, nil)
+	if e != nil {
+		return
+	}
+	defer tx.Rollback()
+	now := s.Now().UTC().Format(time.RFC3339Nano)
+	if _, e = tx.ExecContext(ctx, `UPDATE resource_progress SET message=?,updated_at=? WHERE attempt_id=? AND resource_key=? AND state IN ('RESULT_UNCERTAIN','DELETION_VERIFYING','DELETION_BLOCKED')`, message, now, o.GetAttemptId(), executionResourceKey(o)); e != nil {
+		return
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE operations SET message=?,updated_at=? WHERE id=? AND state IN ('RESULT_UNCERTAIN','DELETION_VERIFYING','DELETION_BLOCKED')`, message, now, o.OperationId); e != nil {
+		return
+	}
+	tx.Commit()
 }

@@ -11,7 +11,7 @@ import (
 )
 
 // schemaVersion 定义本程序能够读取和升级到的数据库版本。
-const schemaVersion = 12
+const schemaVersion = 13
 
 // migrationSQL 按版本依次保存结构变更，不修改已经发布的旧版本语句。
 var migrationSQL = [][]string{
@@ -44,6 +44,7 @@ var migrationSQL = [][]string{
 	activitySchema,
 	append(append([]string{}, agentStorageSchema...), storageTasksSchema...),
 	instanceCreatorSchema,
+	resourceProgressSchema,
 	historicalManagementSchema,
 }
 
@@ -130,6 +131,11 @@ func migrate(db *sql.DB, dataDir string, key []byte) error {
 				}
 			}
 			if v == 12 {
+				if err = migrateResourceProgress(ctx, tx); err != nil {
+					return fmt.Errorf("逐资源进度迁移失败: %w", err)
+				}
+			}
+			if v == 13 {
 				if err = migrateHistoricalCreators(tx); err != nil {
 					return fmt.Errorf("历史创建证据迁移失败，原库与快照保留: %w", err)
 				}

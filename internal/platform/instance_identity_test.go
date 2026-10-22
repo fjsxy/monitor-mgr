@@ -297,7 +297,7 @@ func checkTestInstanceSentResultSurvivesRevocation(t ginkgo.GinkgoTInterface) {
 }
 
 // dropInstanceCreatorSchema 仅用于构造真实历史 schema；不能只改版本标记而保留新字段。
-const dropInstanceCreatorSchema = `DROP TABLE IF EXISTS instance_management_confirmations;ALTER TABLE instances DROP COLUMN creator_user_id;ALTER TABLE instances DROP COLUMN creator_role;`
+const dropInstanceCreatorSchema = dropResourceProgressSchema + `DROP TABLE IF EXISTS instance_management_confirmations;ALTER TABLE instances DROP COLUMN creator_user_id;ALTER TABLE instances DROP COLUMN creator_role;`
 
 // I25-11：真实 v10 数据库缺少创建角色，迁移不能用当前管理员身份倒推历史。
 func checkTestUnknownCreatorMigration(t ginkgo.GinkgoTInterface) {
@@ -323,7 +323,7 @@ func checkTestUnknownCreatorMigration(t ginkgo.GinkgoTInterface) {
 		t.Fatal(err)
 	}
 	// 关键：删除新版本才存在的字段与身份投影，旧证据缺失时只能保留未知，不能借当前角色补造。
-	_, err = db.Exec(dropInstanceCreatorSchema + `DELETE FROM schema_migrations WHERE version>10;DELETE FROM command_results WHERE action='CREATE_INSTANCE';`)
+	_, err = db.Exec(dropInstanceCreatorSchema + dropResourceProgressSchema + `DELETE FROM schema_migrations WHERE version>10;DELETE FROM command_results WHERE action='CREATE_INSTANCE';`)
 	db.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -339,6 +339,14 @@ func checkTestUnknownCreatorMigration(t ginkgo.GinkgoTInterface) {
 	}
 	readJSON(t, p, "/instances/"+id+"/draft", user)
 	version := readJSON(t, p, "/instances/"+id+"/versions/"+first["versionId"].(string), user)
+	resources, ok := version["resources"].([]any)
+	if !ok || len(resources) != 1 || resources[0].(map[string]any)["kind"] != "KubeStateMetrics" {
+		t.Fatal("I27-U09：真实v10版本被追加或丢失原资源", version)
+	}
+	progress := resourceProgress(t, p, user, first["operationId"].(string))
+	if progress["state"] != "SUCCEEDED" || progress["confirmedUid"] != "created-uid" || progress["possiblySent"] != true {
+		t.Fatal("I27-U09：真实v10迁移丢失已确认身份", progress)
+	}
 	if version["versionId"] != first["versionId"] {
 		t.Fatal("迁移改变版本")
 	}

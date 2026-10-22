@@ -131,6 +131,16 @@ func checkTestAgentRevisionNameBudgetLegacyAndWorker(t ginkgo.GinkgoTInterface) 
 	if _, err = db.Exec(`UPDATE instances SET uid=?,lifecycle='DEPLOYED',current_version_id=? WHERE id=?`, originalUID, version["versionId"], id); err != nil {
 		t.Fatal(err)
 	}
+	// 关键：移除 v10 以后关系后重启，按真实历史 schema 投影原名称，不能只改旧来源却遗留新冻结目标。
+	p.Close(context.Background())
+	if _, err = db.Exec(dropInstanceCreatorSchema + dropResourceProgressSchema + `DELETE FROM schema_migrations WHERE version>10;`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	p, err = platform.Start(context.Background(), platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	dp := clusterCall(t, p, "POST", "/instances/"+id+"/deletion-previews", map[string]any{}, cookie, "", 200)
 	del := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", map[string]any{"versionId": version["versionId"], "previewId": dp["previewId"]}, cookie, "delete-legacy", 202)
 	if awaitClusterOperation(t, p, cookie, del["operationId"].(string))["state"] != "SUCCEEDED" {

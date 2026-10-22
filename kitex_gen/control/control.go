@@ -1142,6 +1142,182 @@ var fieldIDToName_TransferClusterRequest = map[int16]string{
 	2: "ownerId",
 }
 
+type FrozenResource struct {
+	Key            string `thrift:"key,1,required" frugal:"1,required,string" json:"key"`
+	ApiVersion     string `thrift:"apiVersion,2,required" frugal:"2,required,string" json:"apiVersion"`
+	Kind           string `thrift:"kind,3,required" frugal:"3,required,string" json:"kind"`
+	Namespace      string `thrift:"namespace,4,required" frugal:"4,required,string" json:"namespace"`
+	Name           string `thrift:"name,5,required" frugal:"5,required,string" json:"name"`
+	Yaml           string `thrift:"yaml,6,required" frugal:"6,required,string" json:"yaml"`
+	_unknownFields unknown.Fields
+}
+
+func NewFrozenResource() *FrozenResource {
+	return &FrozenResource{}
+}
+
+func (p *FrozenResource) InitDefault() {
+}
+
+func (p *FrozenResource) GetKey() (v string) {
+	return p.Key
+}
+
+func (p *FrozenResource) GetApiVersion() (v string) {
+	return p.ApiVersion
+}
+
+func (p *FrozenResource) GetKind() (v string) {
+	return p.Kind
+}
+
+func (p *FrozenResource) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *FrozenResource) GetName() (v string) {
+	return p.Name
+}
+
+func (p *FrozenResource) GetYaml() (v string) {
+	return p.Yaml
+}
+func (p *FrozenResource) SetKey(val string) {
+	p.Key = val
+}
+func (p *FrozenResource) SetApiVersion(val string) {
+	p.ApiVersion = val
+}
+func (p *FrozenResource) SetKind(val string) {
+	p.Kind = val
+}
+func (p *FrozenResource) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *FrozenResource) SetName(val string) {
+	p.Name = val
+}
+func (p *FrozenResource) SetYaml(val string) {
+	p.Yaml = val
+}
+
+func (p *FrozenResource) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *FrozenResource) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("FrozenResource(%+v)", *p)
+}
+
+var fieldIDToName_FrozenResource = map[int16]string{
+	1: "key",
+	2: "apiVersion",
+	3: "kind",
+	4: "namespace",
+	5: "name",
+	6: "yaml",
+}
+
+type ResourceProgress struct {
+	Target         *FrozenResource `thrift:"target,1,required" frugal:"1,required,FrozenResource" json:"target"`
+	State          string          `thrift:"state,2,required" frugal:"2,required,string" json:"state"`
+	ConfirmedUid   string          `thrift:"confirmedUid,3,required" frugal:"3,required,string" json:"confirmedUid"`
+	PossiblySent   bool            `thrift:"possiblySent,4,required" frugal:"4,required,bool" json:"possiblySent"`
+	Message        string          `thrift:"message,5,required" frugal:"5,required,string" json:"message"`
+	UpdatedAt      string          `thrift:"updatedAt,6,required" frugal:"6,required,string" json:"updatedAt"`
+	AttemptId      string          `thrift:"attemptId,7,required" frugal:"7,required,string" json:"attemptId"`
+	_unknownFields unknown.Fields
+}
+
+func NewResourceProgress() *ResourceProgress {
+	return &ResourceProgress{}
+}
+
+func (p *ResourceProgress) InitDefault() {
+}
+
+var ResourceProgress_Target_DEFAULT *FrozenResource
+
+func (p *ResourceProgress) GetTarget() (v *FrozenResource) {
+	if !p.IsSetTarget() {
+		return ResourceProgress_Target_DEFAULT
+	}
+	return p.Target
+}
+
+func (p *ResourceProgress) GetState() (v string) {
+	return p.State
+}
+
+func (p *ResourceProgress) GetConfirmedUid() (v string) {
+	return p.ConfirmedUid
+}
+
+func (p *ResourceProgress) GetPossiblySent() (v bool) {
+	return p.PossiblySent
+}
+
+func (p *ResourceProgress) GetMessage() (v string) {
+	return p.Message
+}
+
+func (p *ResourceProgress) GetUpdatedAt() (v string) {
+	return p.UpdatedAt
+}
+
+func (p *ResourceProgress) GetAttemptId() (v string) {
+	return p.AttemptId
+}
+func (p *ResourceProgress) SetTarget(val *FrozenResource) {
+	p.Target = val
+}
+func (p *ResourceProgress) SetState(val string) {
+	p.State = val
+}
+func (p *ResourceProgress) SetConfirmedUid(val string) {
+	p.ConfirmedUid = val
+}
+func (p *ResourceProgress) SetPossiblySent(val bool) {
+	p.PossiblySent = val
+}
+func (p *ResourceProgress) SetMessage(val string) {
+	p.Message = val
+}
+func (p *ResourceProgress) SetUpdatedAt(val string) {
+	p.UpdatedAt = val
+}
+func (p *ResourceProgress) SetAttemptId(val string) {
+	p.AttemptId = val
+}
+
+func (p *ResourceProgress) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ResourceProgress) IsSetTarget() bool {
+	return p.Target != nil
+}
+
+func (p *ResourceProgress) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ResourceProgress(%+v)", *p)
+}
+
+var fieldIDToName_ResourceProgress = map[int16]string{
+	1: "target",
+	2: "state",
+	3: "confirmedUid",
+	4: "possiblySent",
+	5: "message",
+	6: "updatedAt",
+	7: "attemptId",
+}
+
 type Operation struct {
 	OperationId        string               `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
 	Action             string               `thrift:"action,2,required" frugal:"2,required,string" json:"action"`
@@ -1160,6 +1336,7 @@ type Operation struct {
 	Revision           *int64               `thrift:"revision,15,optional" frugal:"15,optional,i64" json:"revision,omitempty"`
 	StorageResult_     *string              `thrift:"storageResult,16,optional" frugal:"16,optional,string" json:"storageResult,omitempty"`
 	StorageVolumes     []*VolumeObservation `thrift:"storageVolumes,17,optional" frugal:"17,optional,list<VolumeObservation>" json:"storageVolumes,omitempty"`
+	Resources          []*ResourceProgress  `thrift:"resources,18,optional" frugal:"18,optional,list<ResourceProgress>" json:"resources,omitempty"`
 	_unknownFields     unknown.Fields
 }
 
@@ -1267,6 +1444,15 @@ func (p *Operation) GetStorageVolumes() (v []*VolumeObservation) {
 	}
 	return p.StorageVolumes
 }
+
+var Operation_Resources_DEFAULT []*ResourceProgress
+
+func (p *Operation) GetResources() (v []*ResourceProgress) {
+	if !p.IsSetResources() {
+		return Operation_Resources_DEFAULT
+	}
+	return p.Resources
+}
 func (p *Operation) SetOperationId(val string) {
 	p.OperationId = val
 }
@@ -1318,6 +1504,9 @@ func (p *Operation) SetStorageResult_(val *string) {
 func (p *Operation) SetStorageVolumes(val []*VolumeObservation) {
 	p.StorageVolumes = val
 }
+func (p *Operation) SetResources(val []*ResourceProgress) {
+	p.Resources = val
+}
 
 func (p *Operation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -1347,6 +1536,10 @@ func (p *Operation) IsSetStorageVolumes() bool {
 	return p.StorageVolumes != nil
 }
 
+func (p *Operation) IsSetResources() bool {
+	return p.Resources != nil
+}
+
 func (p *Operation) String() string {
 	if p == nil {
 		return "<nil>"
@@ -1372,6 +1565,7 @@ var fieldIDToName_Operation = map[int16]string{
 	15: "revision",
 	16: "storageResult",
 	17: "storageVolumes",
+	18: "resources",
 }
 
 type OperationID struct {
@@ -5126,6 +5320,7 @@ type PublicationVersion struct {
 	Yaml                string              `thrift:"yaml,5,required" frugal:"5,required,string" json:"yaml"`
 	CreatedAt           string              `thrift:"createdAt,6,required" frugal:"6,required,string" json:"createdAt"`
 	Agent               *AgentConfiguration `thrift:"agent,7,optional" frugal:"7,optional,AgentConfiguration" json:"agent,omitempty"`
+	Resources           []*FrozenResource   `thrift:"resources,8,optional" frugal:"8,optional,list<FrozenResource>" json:"resources,omitempty"`
 	_unknownFields      unknown.Fields
 }
 
@@ -5173,6 +5368,15 @@ func (p *PublicationVersion) GetAgent() (v *AgentConfiguration) {
 	}
 	return p.Agent
 }
+
+var PublicationVersion_Resources_DEFAULT []*FrozenResource
+
+func (p *PublicationVersion) GetResources() (v []*FrozenResource) {
+	if !p.IsSetResources() {
+		return PublicationVersion_Resources_DEFAULT
+	}
+	return p.Resources
+}
 func (p *PublicationVersion) SetVersionId(val string) {
 	p.VersionId = val
 }
@@ -5194,6 +5398,9 @@ func (p *PublicationVersion) SetCreatedAt(val string) {
 func (p *PublicationVersion) SetAgent(val *AgentConfiguration) {
 	p.Agent = val
 }
+func (p *PublicationVersion) SetResources(val []*FrozenResource) {
+	p.Resources = val
+}
 
 func (p *PublicationVersion) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -5205,6 +5412,10 @@ func (p *PublicationVersion) IsSetKsm() bool {
 
 func (p *PublicationVersion) IsSetAgent() bool {
 	return p.Agent != nil
+}
+
+func (p *PublicationVersion) IsSetResources() bool {
+	return p.Resources != nil
 }
 
 func (p *PublicationVersion) String() string {
@@ -5222,6 +5433,7 @@ var fieldIDToName_PublicationVersion = map[int16]string{
 	5: "yaml",
 	6: "createdAt",
 	7: "agent",
+	8: "resources",
 }
 
 type VersionsResult_ struct {
@@ -5345,16 +5557,17 @@ var fieldIDToName_OperationLookup = map[int16]string{
 }
 
 type ExecutionAttempt struct {
-	AttemptId      string  `thrift:"attemptId,1,required" frugal:"1,required,string" json:"attemptId"`
-	OperationId    string  `thrift:"operationId,2,required" frugal:"2,required,string" json:"operationId"`
-	State          string  `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
-	PossiblySent   bool    `thrift:"possiblySent,4,required" frugal:"4,required,bool" json:"possiblySent"`
-	CreatedAt      string  `thrift:"createdAt,5,required" frugal:"5,required,string" json:"createdAt"`
-	UpdatedAt      string  `thrift:"updatedAt,6,required" frugal:"6,required,string" json:"updatedAt"`
-	Revision       *int64  `thrift:"revision,7,optional" frugal:"7,optional,i64" json:"revision,omitempty"`
-	Sequence       *int64  `thrift:"sequence,8,optional" frugal:"8,optional,i64" json:"sequence,omitempty"`
-	ActorId        *string `thrift:"actorId,9,optional" frugal:"9,optional,string" json:"actorId,omitempty"`
-	Message        *string `thrift:"message,10,optional" frugal:"10,optional,string" json:"message,omitempty"`
+	AttemptId      string              `thrift:"attemptId,1,required" frugal:"1,required,string" json:"attemptId"`
+	OperationId    string              `thrift:"operationId,2,required" frugal:"2,required,string" json:"operationId"`
+	State          string              `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
+	PossiblySent   bool                `thrift:"possiblySent,4,required" frugal:"4,required,bool" json:"possiblySent"`
+	CreatedAt      string              `thrift:"createdAt,5,required" frugal:"5,required,string" json:"createdAt"`
+	UpdatedAt      string              `thrift:"updatedAt,6,required" frugal:"6,required,string" json:"updatedAt"`
+	Revision       *int64              `thrift:"revision,7,optional" frugal:"7,optional,i64" json:"revision,omitempty"`
+	Sequence       *int64              `thrift:"sequence,8,optional" frugal:"8,optional,i64" json:"sequence,omitempty"`
+	ActorId        *string             `thrift:"actorId,9,optional" frugal:"9,optional,string" json:"actorId,omitempty"`
+	Message        *string             `thrift:"message,10,optional" frugal:"10,optional,string" json:"message,omitempty"`
+	Resources      []*ResourceProgress `thrift:"resources,11,optional" frugal:"11,optional,list<ResourceProgress>" json:"resources,omitempty"`
 	_unknownFields unknown.Fields
 }
 
@@ -5424,6 +5637,15 @@ func (p *ExecutionAttempt) GetMessage() (v string) {
 	}
 	return *p.Message
 }
+
+var ExecutionAttempt_Resources_DEFAULT []*ResourceProgress
+
+func (p *ExecutionAttempt) GetResources() (v []*ResourceProgress) {
+	if !p.IsSetResources() {
+		return ExecutionAttempt_Resources_DEFAULT
+	}
+	return p.Resources
+}
 func (p *ExecutionAttempt) SetAttemptId(val string) {
 	p.AttemptId = val
 }
@@ -5454,6 +5676,9 @@ func (p *ExecutionAttempt) SetActorId(val *string) {
 func (p *ExecutionAttempt) SetMessage(val *string) {
 	p.Message = val
 }
+func (p *ExecutionAttempt) SetResources(val []*ResourceProgress) {
+	p.Resources = val
+}
 
 func (p *ExecutionAttempt) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -5475,6 +5700,10 @@ func (p *ExecutionAttempt) IsSetMessage() bool {
 	return p.Message != nil
 }
 
+func (p *ExecutionAttempt) IsSetResources() bool {
+	return p.Resources != nil
+}
+
 func (p *ExecutionAttempt) String() string {
 	if p == nil {
 		return "<nil>"
@@ -5493,6 +5722,7 @@ var fieldIDToName_ExecutionAttempt = map[int16]string{
 	8:  "sequence",
 	9:  "actorId",
 	10: "message",
+	11: "resources",
 }
 
 type LifecycleRequest struct {

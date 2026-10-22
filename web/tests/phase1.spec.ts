@@ -38,11 +38,14 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     expect(op.instanceId).toBe(fixture.largeId);await expect.poll(async()=> (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state,{timeout:45000}).toBe('SUCCEEDED');
     await drawer.getByRole('button',{name:'刷新当前状态',exact:true}).click();
     await expect(drawer.getByLabel('来源 CR',{exact:true})).toContainText('最后成功观察');
+    const progress=drawer.getByLabel('逐资源执行进度',{exact:true}).first();await expect(progress).toBeVisible();await expect(progress).toContainText('KubeStateMetrics');await expect(progress).toContainText('UID：');
+    await progress.getByText('查看冻结配置',{exact:true}).click();await expect(progress).toContainText('111m');await page.screenshot({path:info.outputPath('resource-progress.png')});
   });
   await test.step('版本入口回读冻结来源，明确删除原实例',async()=>{
     await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();await page.getByRole('button',{name:'刷新列表',exact:true}).click();
     await row().locator('.version-link').click();await expect(drawer.getByText('只读发布版本',{exact:true})).toBeVisible();
     await expect(drawer.getByLabel('通用 CPU request',{exact:true})).toHaveValue('111m');
+    await expect(drawer.getByLabel('冻结资源集合',{exact:true})).toContainText('KubeStateMetrics');
     await expect(drawer).toContainText('9007199254740994');await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
     await row().getByRole('button',{name:'删除',exact:true}).click();const modal=page.getByRole('dialog',{name:'删除实例',exact:true});
     await expect(modal).toContainText('原部署版本');const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${fixture.largeId}/deletions`&&r.request().method()==='POST');

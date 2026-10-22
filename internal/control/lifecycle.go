@@ -43,6 +43,7 @@ func (s *Store) enrichLifecycle(ctx context.Context, q clusterQuery, o *rpc.Oper
 	o.Revision = reference(rev)
 	o.AttemptId = &a.AttemptId
 	defer s.enrichStorageTask(ctx, q, o)
+	defer enrichResourceProgress(ctx, q, o)
 	var instance, version string
 	if q.QueryRowContext(ctx, `SELECT instance_id,version_id FROM deletion_operations WHERE operation_id=?`, o.OperationId).Scan(&instance, &version) == nil {
 		o.InstanceId = &instance
@@ -107,12 +108,12 @@ func (s *Store) lifecycleCommandObserved(ctx context.Context, c *rpc.RequestCont
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	if action == "CANCEL_LIFECYCLE" {
 		// 关键：派发标记先提交即可能已发送，之后任何取消都不能宣称集群写入被撤销。
-		if a.PossiblySent || (o.State != "QUEUED" && o.State != "CHECKING" && o.State != "WAITING_CONFIRMATION") {
+		if unresolvedResourceSent(ctx, tx, o) || (o.State != "QUEUED" && o.State != "CHECKING" && o.State != "WAITING_CONFIRMATION") {
 			return nil, Error("CONFLICT", "可能已发送或已结束，不能取消；请读取核验结果")
 		}
 		o.State = "CANCELLED"
-		o.Message = "已取消，未发送集群写请求"
-		if _, e = tx.ExecContext(ctx, `UPDATE execution_attempts SET state='CANCELLED',revision=revision+1,message=?,updated_at=? WHERE id=? AND possibly_sent=0`, o.Message, now, a.AttemptId); e != nil {
+		o.Message = "已取消未发送步骤；已经完成的资源保留"
+		if _, e = tx.ExecContext(ctx, `UPDATE execution_attempts SET state='CANCELLED',revision=revision+1,message=?,updated_at=? WHERE id=?`, o.Message, now, a.AttemptId); e != nil {
 			return nil, e
 		}
 		if _, e = tx.ExecContext(ctx, `DELETE FROM instance_protections WHERE instance_id=? AND operation_id=?`, i.Id, o.OperationId); e != nil {
@@ -122,7 +123,7 @@ func (s *Store) lifecycleCommandObserved(ctx context.Context, c *rpc.RequestCont
 		if action == "RETRY_LIFECYCLE" && o.State != "FAILED" {
 			return nil, Error("CONFLICT", "只有确定失败才能普通重试；待确认结果只能读取核验")
 		}
-		if action == "CONTINUE_LIFECYCLE" && (o.State != "WAITING_CONFIRMATION" || a.PossiblySent) {
+		if action == "CONTINUE_LIFECYCLE" && (o.State != "WAITING_CONFIRMATION" || unresolvedResourceSent(ctx, tx, o)) {
 			return nil, Error("CONFLICT", "仅明确未发送的重启任务可继续")
 		}
 		if i.Lifecycle == "DELETED" {
@@ -173,6 +174,16 @@ func (s *Store) lifecycleCommandObserved(ctx context.Context, c *rpc.RequestCont
 			return nil, e
 		}
 	}
+	if action == "CANCEL_LIFECYCLE" {
+		if _, e = tx.ExecContext(ctx, `UPDATE resource_progress SET state='CANCELLED',message=?,updated_at=? WHERE attempt_id=? AND possibly_sent=0 AND state<>'SUCCEEDED'`, o.Message, now, a.AttemptId); e != nil {
+			return nil, e
+		}
+	} else {
+		if _, e = tx.ExecContext(ctx, `INSERT INTO resource_progress SELECT ?,resource_key,confirmed_uid,CASE WHEN state='SUCCEEDED' THEN possibly_sent ELSE 0 END,CASE WHEN state='SUCCEEDED' THEN state ELSE 'QUEUED' END,CASE WHEN state='SUCCEEDED' THEN '沿用前次已确认结果，未重复写入' ELSE '新尝试，保留原冻结目标' END,? FROM resource_progress WHERE attempt_id=?`, o.GetAttemptId(), now, a.AttemptId); e != nil {
+			return nil, e
+		}
+	}
+	enrichResourceProgress(ctx, tx, o)
 	o.Revision = reference(rev + 1)
 	o.UpdatedAt = now
 	if _, e = tx.ExecContext(ctx, `UPDATE operations SET state=?,message=?,updated_at=? WHERE id=?`, o.State, o.Message, now, o.OperationId); e != nil {
@@ -301,6 +312,9 @@ func (s *Store) authorizeLifecycleDispatch(ctx context.Context, o *rpc.Operation
 		return fail(e)
 	}
 	if _, e = tx.ExecContext(ctx, `UPDATE operation_lifecycle SET revision=revision+1 WHERE operation_id=?`, o.OperationId); e != nil {
+		return fail(e)
+	}
+	if e = markResourceDispatch(ctx, tx, o, executionResourceKey(o), now); e != nil {
 		return fail(e)
 	}
 	if len(snapshots) > 0 {
