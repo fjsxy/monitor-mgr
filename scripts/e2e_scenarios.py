@@ -432,14 +432,16 @@ def recovery(s):
     s.call('POST','/operations/'+op['operationId']+'/refresh',{});s.state(op,'SUCCEEDED',timeout=60)
     assert len([event for event in s.mutations(s.capture_proxy(),'PUT') if event['path']==path])==before
     after_progress=resource_progress(s,op,'SUCCEEDED',original_uid);assert after_progress['frozenSHA256']==before_progress['frozenSHA256']
+    instance_identity_authorization(s,proxy)
     s.by('首次创建丢响应且没有原 UID，禁止按同名对象补认或重建')
     s.crname='unknown-'+uuid.uuid4().hex[:8];unknown=s.create()
     # 关键：先登记明确的创建身份，代理才会在丢响应前保存原 API UID；不能事后按名字补认。
     proxy.control('register-create',{'intentId':uuid.uuid4().hex,'identity':{'apiVersion':'monitoring.fjsxy.github.io/v1alpha1','kind':'KubeStateMetrics','namespace':'','name':s.crname}})
+    unknown_posts_before=len(s.mutations(s.capture_proxy(),'POST'))
     proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics','drop_after_upstream');o=s.publish(unknown,wait=False);s.state(o,'IDENTITY_UNCERTAIN')
     unknown_before=resource_progress(s,o,'IDENTITY_UNCERTAIN','')
     events=s.capture_proxy();created=[e for e in events if e['stage']=='original_create_response' and e['path'].endswith('/kubestatemetrics')];assert len(created)==1
-    s.track_cr(created[0]['originalCreate']['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['originalCreate']['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
+    s.track_cr(created[0]['originalCreate']['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['originalCreate']['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==unknown_posts_before+1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
     unknown_after=resource_progress(s,o,'IDENTITY_UNCERTAIN','');assert unknown_before==unknown_after
     s.by('确定失败后显式 retry，保留原冻结版本并产生新 attempt')
     proxy.control('reset',{});s.crname='retry-'+uuid.uuid4().hex[:8];retry=s.create();p=s.preview(retry)
@@ -451,6 +453,67 @@ def recovery(s):
     assert len(attempts)==2 and next(p for p in attempts[0]['resources'] if p['target']['key']=='component')['state']=='FAILED'
     receipt=dict(testedCommit=s.env.candidate,beforeRebuild=before_progress,afterRebuild=after_progress,knownUIDWriteCount=before,unknownBefore=unknown_before,unknownAfter=unknown_after,unknownWriteCount=1,retry=retry_progress)
     (s.env.public/'resource-progress-recovery.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+
+
+def instance_identity_authorization(s,proxy):
+    """I25-K01：通过真实 Helm Pod、HTTP→Kitex、mTLS API 代理验证实例写前授权。"""
+    username='dispatch-'+uuid.uuid4().hex[:12];temporary=secrets.token_urlsafe(24);personal=secrets.token_urlsafe(24)
+    actor=s.call('POST','/accounts',{'username':username,'password':temporary,'role':'ADMIN'},status=201)
+    opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    with s.using(opener):
+        s.call('POST','/sessions',{'username':username,'password':temporary},status=201)
+        s.call('POST','/session/password',{'currentPassword':temporary,'newPassword':personal})
+        s.call('POST','/sessions',{'username':username,'password':personal},status=201)
+    s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':actor['id']})
+    s.crname='auth-unsent-'+uuid.uuid4().hex[:8]
+    with s.using(opener):
+        instance=s.create();preview=s.preview(instance)
+    assert instance['creatorUserId']==actor['id'] and instance['creatorRole']=='ADMIN'
+    def writes():
+        return [event for event in s.capture_proxy() if event['stage']=='upstream_completed' and event['method'] in ('POST','PUT','PATCH','DELETE')
+                and ('kubestatemetrics' in event['path'] or 'servicemonitors' in event['path'])]
+    s.by('I25-K01.unsent：已受理且possiblySent=false时降级集群所属管理员，实际组件写入必须为零')
+    before=len(writes())
+    # 关键：暂停的是worker的SelfSubjectAccessReview只读预检，不能用已到代理的组件写请求冒充未发送边界。
+    proxy.arm('POST','/apis/authorization.k8s.io/v1/selfsubjectaccessreviews','pause_before_send')
+    try:
+        with s.using(opener):operation=s.publish(instance,preview=preview,wait=False)
+        paused=proxy.paused()['rule']
+        current=s.call('GET','/operations/'+operation['operationId'])
+        attempts=s.call('GET','/operations/'+operation['operationId']+'/attempts')['attempts']
+        attempt=next(value for value in attempts if value['attemptId']==current['attemptId'])
+        assert current['state']=='CHECKING' and attempt['possiblySent'] is False and attempt['actorId']==actor['id']
+        s.call('PATCH','/accounts/'+actor['id'],{'role':'USER'})
+        assert s.call('GET','/clusters/'+s.cluster['id'])['ownerId']==actor['id']
+        proxy.control('release',{'ruleId':paused['id']})
+        failed=s.state(operation,'FAILED')
+        assert '管理员创建' in failed['message'] and len(writes())==before
+        absent=s.k('get','kubestatemetrics',s.crname,target=s.target,check=False)
+        assert absent.returncode!=0 and b'(NotFound)' in absent.stderr
+    finally:proxy.control('reset',{})
+
+    s.call('PATCH','/accounts/'+actor['id'],{'role':'ADMIN'})
+    with s.using(opener):
+        s.call('POST','/sessions',{'username':username,'password':personal},status=201)
+        s.crname='auth-sent-'+uuid.uuid4().hex[:8];known=s.create();s.publish(known)
+        original=s.call('GET','/instances/'+known['id']);uid=original['uid'];assert uid
+        cfg=s.cfg();cfg['resources']['requestCPU']='244m';s.save(known,cfg);preview=s.preview(known)
+    s.by('I25-K01.sent：真实更新丢响应并阻读后停用发起账号，恢复时只读核验且禁止再次写入')
+    path='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+s.crname
+    written_before_update=len(writes())
+    proxy.arm('PUT',path,'drop_and_block_reads')
+    try:
+        with s.using(opener):operation=s.publish(known,preview=preview,wait=False)
+        s.state(operation,'RESULT_UNCERTAIN')
+        sent=len(writes());assert sent==written_before_update+1 and len([event for event in writes() if event['method']=='PUT' and event['path']==path])==1
+        s.call('PATCH','/accounts/'+actor['id'],{'enabled':False})
+        proxy.control('reset',{})
+        for _ in range(3):s.call('POST','/operations/'+operation['operationId']+'/refresh',{})
+        s.state(operation,'SUCCEEDED',timeout=60)
+        actual=s.cr();assert actual['metadata']['uid']==uid and actual['spec']['podResources']['requests']['cpu']=='244m'
+        assert s.call('GET','/instances/'+known['id'])['creatorUserId']==actor['id'] and len(writes())==sent
+    finally:proxy.control('reset',{})
+    s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner})
 
 
 def deletion(s):
