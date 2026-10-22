@@ -216,12 +216,12 @@ func checkTestPublicationUnknownOutcomeNeverReplays(t ginkgo.GinkgoTInterface) {
 			if !known {
 				awaitLifecycleState(t, p, c, oid, "IDENTITY_UNCERTAIN")
 			} else {
-				awaitLifecycleState(t, p, c, oid, "RESULT_UNCERTAIN", "SUCCEEDED")
+				awaitLifecycleState(t, p, c, oid, "RESULT_UNCERTAIN", "WAITING_CONFIRMATION")
 			}
 			clusterCall(t, p, "POST", "/operations/"+oid+"/retry", lifecycleRevision(t, p, c, oid), c, "forbidden-retry", 409)
 			clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "refresh", 200)
 			if known {
-				awaitLifecycleState(t, p, c, oid, "SUCCEEDED")
+				awaitLifecycleState(t, p, c, oid, "WAITING_CONFIRMATION")
 			} else {
 				awaitLifecycleState(t, p, c, oid, "IDENTITY_UNCERTAIN")
 			}

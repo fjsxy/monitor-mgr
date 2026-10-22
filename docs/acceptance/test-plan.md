@@ -230,3 +230,9 @@ UT 在本仓库指无需 Kubernetes 的本地测试：优先直接调用 Go 应�
 提供 `make ut`、`make e2e` 两个主入口。`make e2e` 自带环境生命周期；常规本地/CI 不要求先手工造环境 JSON。保留 candidate SHA、场景 ID、请求/操作关联信息、Ginkgo 报告、失败诊断及本 run 资源身份，移除只为旧 profile 矩阵服务的重复计数和多层包装。原始进程输出、kubeconfig 和认证材料仍留在私有目录；CI artifact 只包含可公开的场景报告、脱敏失败诊断和截图。
 
 进入实施时再同步修改旧规格、固定目录、校验器和 Issue 测试计划；新 case 的 `By` 步骤继续写中文说明。方案实施完应回读实际 Ginkgo 场景数并与本文核对；不能只改清单数字，也不能用本稿代替真实执行记录。
+
+## #28 配套采集配置扩展
+
+固定目录仍为18个UT/10个E2E；新增步骤接入UT-08/10/11/12/16及E2E-03/08/09/10，不另立未注册场景。详细五列输入和可复现步骤见[issue-28.md](../e2e/issue-28.md)，当前必要动作/预期以`cases.json`同步生成。
+
+ServiceMonitor使用锁定monitor-op 2b2a8b7的稳定Service实例标签（点号/长名规范化）、http-metrics端口，并覆盖DaemonSetSharded的node/control两个Service。两资源分别保存冻结配置、UID、发送标记与结果；确定拒绝后人工只补失败步骤，未知UID永不按name/spec/labels补认。组件只读确认成功后若SM仍未发，整体等待明确继续。真实Pod和浏览器计划不能替代实际执行证据。

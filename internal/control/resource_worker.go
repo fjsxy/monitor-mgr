@@ -92,6 +92,15 @@ func (s *Store) executeAdditionalResource(ctx context.Context, id string, r froz
 		s.finishExecution(ctx, o, "FAILED", Error("CONFLICT", "附加资源原 UID 缺失或已被替换"), nil)
 		return
 	}
+	if !deleting {
+		if e = s.validateCompanionDispatch(ctx, o, i, r, cr); e != nil {
+			s.finishExecution(ctx, o, "FAILED", e, nil)
+			return
+		}
+	} else if !frozenResourceMatches(i, r, cr) {
+		s.finishExecution(ctx, o, "FAILED", Error("CONFLICT", "配套资源配置已漂移，停止删除"), nil)
+		return
+	}
 	method, path, body := "POST", r.collection, resourceWriteDocument(r, cr)
 	if r.originalUID != "" {
 		method, path = "PUT", r.path
@@ -163,6 +172,11 @@ func checkResourceDependencies(ctx context.Context, t *Target, cl *rpc.Cluster, 
 		if e := t.Request(ctx, "GET", "/api/v1/namespaces/"+namespace, nil, &ns); e != nil {
 			return e
 		}
+	}
+	// 关键：读取集合同时证明 CRD 端点存在且有读取权限，不能让第二份资源在首份成功后才发现缺失。
+	var list any
+	if e := t.Request(ctx, "GET", r.collection+"?limit=1", nil, &list); e != nil {
+		return e
 	}
 	parts := strings.Split(r.collection, "/")
 	verb := "create"

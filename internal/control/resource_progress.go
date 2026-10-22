@@ -37,9 +37,17 @@ func (r frozenResource) public() *rpc.FrozenResource {
 	return &rpc.FrozenResource{Key: r.key, ApiVersion: objectString(r.document, "apiVersion"), Kind: objectString(r.document, "kind"), Namespace: objectString(m, "namespace"), Name: objectString(m, "name"), Yaml: yamlText(safeTargetDocument(r.document))}
 }
 
-// freezePublicationResources 是资源集合的构建接缝；这里只加入当前组件，旧版本绝不追加资源。
+// freezePublicationResources 仅为明确的新发布构建配套资源；旧冻结版本迁移不调用此入口。
 func freezePublicationResources(ctx context.Context, tx *sql.Tx, version string, i *rpc.ObservationInstance, cfg configuration, spec map[string]any) error {
-	return insertFrozenVersionResources(ctx, tx, version, []frozenResource{primaryFrozenResource(i, cfg, spec)})
+	resources := []frozenResource{primaryFrozenResource(i, cfg, spec)}
+	if i.Component == KSMComponent {
+		r, e := companionResource(i, spec)
+		if e != nil {
+			return e
+		}
+		resources = append(resources, r)
+	}
+	return insertFrozenVersionResources(ctx, tx, version, resources)
 }
 func insertFrozenVersionResources(ctx context.Context, tx *sql.Tx, version string, resources []frozenResource) error {
 	for position, r := range resources {

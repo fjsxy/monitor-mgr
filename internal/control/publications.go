@@ -186,6 +186,10 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if e = checkTarget(i, cr); e != nil {
 		return nil, e
 	}
+	companion, e := s.readCompanionSnapshot(ctx, i, t, cl, cfg.spec())
+	if e != nil {
+		return nil, e
+	}
 	storageSnapshot, e := s.readAgentStorageTransition(ctx, i, t, cr, cfg.spec(), false)
 	if e != nil {
 		return nil, e
@@ -212,6 +216,18 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	right := safeTargetDocument(publicationDocument(cfg, cr, cfg.spec()))
 	preview := &rpc.PublicationPreview{PreviewId: ID(), DraftRevision: rev, LeftYAML: left, RightYAML: yamlText(right), Drift: drift, Warnings: []string{}}
 	preview.Warnings = cfg.warnings(cr)
+	impact := s.agentStorageImpact(i, storageSnapshot)
+	if companion != nil {
+		impact = companion.fingerprint
+		preview.Drift = preview.Drift || companion.drift
+		previous := "# 首次创建：当前不存在配套 ServiceMonitor\n"
+		if companion.current != nil {
+			previous = yamlText(safeTargetDocument(companion.current))
+		}
+		preview.LeftYAML += "---\n" + previous
+		preview.RightYAML += "---\n" + yamlText(safeTargetDocument(resourceWriteDocument(companion.resource, companion.current)))
+		preview.Warnings = append(preview.Warnings, "本次明确下发同时管理 exporter 与配套 ServiceMonitor；部分失败保留已成功资源，人工重试补齐。")
+	}
 	if storageSnapshot != nil {
 		preview.StorageMode = reference(storageSnapshot.mode)
 		preview.StorageVolumes = snapshotVolumes(storageSnapshot, i.Uid)
@@ -236,7 +252,7 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if latest != rev {
 		return nil, Error("CONFLICT", "预览期间草稿已变化")
 	}
-	if _, e = tx.ExecContext(ctx, `INSERT INTO publication_previews(id,instance_id,draft_revision,uid,target_spec,desired_spec,drift,storage_fingerprint) VALUES(?,?,?,?,?,?,?,?)`, preview.PreviewId, i.Id, rev, uid, []byte(s.fingerprint(i, current)), []byte(componentFor(i.Component).normalizeSpec(cfg.spec())), drift, s.agentStorageImpact(i, storageSnapshot)); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO publication_previews(id,instance_id,draft_revision,uid,target_spec,desired_spec,drift,storage_fingerprint) VALUES(?,?,?,?,?,?,?,?)`, preview.PreviewId, i.Id, rev, uid, []byte(s.fingerprint(i, current)), []byte(componentFor(i.Component).normalizeSpec(cfg.spec())), preview.Drift, impact); e != nil {
 		return nil, Error("UNAVAILABLE", "预览无法保存")
 	}
 	if tx.Commit() != nil {
@@ -334,7 +350,21 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		return nil, e
 	}
 	var storageSnapshot *agentStorageSnapshot
-	var observedDraftRevision int64
+	var companion *companionSnapshot
+	originalDraft, observedDraftRevision, e := readDraft(ctx, s.DB, i.Id)
+	if e != nil {
+		return nil, e
+	}
+	if i.Component == KSMComponent {
+		cl, err := s.GetCluster(ctx, c, &rpc.ClusterID{Id: i.ClusterId})
+		if err != nil {
+			return nil, err
+		}
+		companion, e = s.readCompanionSnapshot(ctx, i, t, cl, originalDraft.spec())
+		if e != nil {
+			return nil, e
+		}
+	}
 	if i.Component == AgentComponent {
 		original, readRevision, readErr := readDraft(ctx, s.DB, i.Id)
 		if readErr != nil {
@@ -385,7 +415,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 			return nil, e
 		}
 	}
-	if i.Component == AgentComponent && rev != observedDraftRevision {
+	if rev != observedDraftRevision {
 		return nil, Error("CONFLICT", "存储预检期间草稿已变化，请重新预览")
 	}
 	baseline, e := readPreview(ctx, tx, r.PreviewId, i.Id)
@@ -394,6 +424,9 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	}
 	if e = validateFixedSpec(ctx, tx, i, cfg.spec()); e != nil {
 		return nil, e
+	}
+	if companion != nil && baseline.storage != companion.fingerprint {
+		return nil, Error("CONFLICT", "配套 ServiceMonitor 基线变化，请重新预览")
 	}
 	if e = s.validateAgentStorageImpact(i, baseline.storage, storageSnapshot); e != nil {
 		return nil, e

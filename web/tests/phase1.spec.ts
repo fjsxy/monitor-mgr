@@ -33,19 +33,29 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
   await test.step('查看 diff，明确确认后才发布到真实集群',async()=>{
     await drawer.getByRole('button',{name:'预览下发',exact:true}).click();await expect(page.getByRole('heading',{name:'CR YAML 对比',exact:true})).toBeVisible();
     const before=await (await page.request.get(`/api/v1/instances/${fixture.largeId}`)).json();expect(before.uid).toBe('');
+    const preview=page.getByRole('dialog',{name:/下发预览/});await expect(preview).toContainText('kind: ServiceMonitor');await expect(preview).toContainText('http-metrics');await expect(preview).toContainText('monitor-mgr.io/user-id');
+    // 第二资源由真实目标代理明确拒绝，页面须显示部分成功且可人工补齐。
+    expect((await page.request.post(`${fixture.proxyBase}/faults`,{headers:{'X-Fault-Control':fixture.proxyToken},data:{readMode:'none',rejectWritePath:`/apis/monitoring.coreos.com/v1/namespaces/${fixture.namespace}/servicemonitors`}})).ok()).toBeTruthy();
     const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${fixture.largeId}/publications`&&r.request().method()==='POST');
     await page.getByRole('button',{name:'确认下发',exact:true}).click();const op=await(await accepted).json();
-    expect(op.instanceId).toBe(fixture.largeId);await expect.poll(async()=> (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state,{timeout:45000}).toBe('SUCCEEDED');
+    expect(op.instanceId).toBe(fixture.largeId);await expect.poll(async()=> (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state,{timeout:45000}).toBe('FAILED');
     await drawer.getByRole('button',{name:'刷新当前状态',exact:true}).click();
     await expect(drawer.getByLabel('来源 CR',{exact:true})).toContainText('最后成功观察');
     const progress=drawer.getByLabel('逐资源执行进度',{exact:true}).first();await expect(progress).toBeVisible();await expect(progress).toContainText('KubeStateMetrics');await expect(progress).toContainText('UID：');
-    await progress.getByText('查看冻结配置',{exact:true}).click();await expect(progress).toContainText('111m');await page.screenshot({path:info.outputPath('resource-progress.png')});
+    await expect(progress).toContainText('ServiceMonitor');await expect(progress).toContainText('失败');
+    await progress.getByText('查看冻结配置',{exact:true}).first().click();await expect(progress).toContainText('111m');await page.screenshot({path:info.outputPath('companion-partial-failure.png')});
+    expect((await page.request.post(`${fixture.proxyBase}/reset`,{headers:{'X-Fault-Control':fixture.proxyToken},data:{}})).ok()).toBeTruthy();
+    const retrying=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/operations/${op.operationId}/retry`&&r.request().method()==='POST');
+    await drawer.getByRole('button',{name:'重试原版本',exact:true}).first().click();const retried=await(await retrying).json();expect(retried.versionId).toBe(op.versionId);expect(retried.attemptId).not.toBe(op.attemptId);
+    await expect.poll(async()=> (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state,{timeout:45000}).toBe('SUCCEEDED');
+    await drawer.getByRole('button',{name:'刷新当前状态',exact:true}).click();
+    await expect(drawer.getByLabel('逐资源执行进度',{exact:true}).first()).toContainText('ServiceMonitor');await page.screenshot({path:info.outputPath('resource-progress.png')});
   });
   await test.step('版本入口回读冻结来源，明确删除原实例',async()=>{
     await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();await page.getByRole('button',{name:'刷新列表',exact:true}).click();
     await row().locator('.version-link').click();await expect(drawer.getByText('只读发布版本',{exact:true})).toBeVisible();
     await expect(drawer.getByLabel('通用 CPU request',{exact:true})).toHaveValue('111m');
-    await expect(drawer.getByLabel('冻结资源集合',{exact:true})).toContainText('KubeStateMetrics');
+    await expect(drawer.getByLabel('冻结资源集合',{exact:true})).toContainText('KubeStateMetrics');await expect(drawer.getByLabel('冻结资源集合',{exact:true})).toContainText('ServiceMonitor');
     await expect(drawer).toContainText('9007199254740994');await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
     await row().getByRole('button',{name:'删除',exact:true}).click();const modal=page.getByRole('dialog',{name:'删除实例',exact:true});
     await expect(modal).toContainText('原部署版本');const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${fixture.largeId}/deletions`&&r.request().method()==='POST');

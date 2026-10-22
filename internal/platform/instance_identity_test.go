@@ -285,7 +285,10 @@ func checkTestInstanceSentResultSurvivesRevocation(t ginkgo.GinkgoTInterface) {
 	for n := 0; n < 5; n++ {
 		clusterCall(t, p, "POST", "/operations/"+op["operationId"].(string)+"/refresh", nil, demoted, "read-result", 200)
 	}
-	awaitLifecycleState(t, p, demoted, op["operationId"].(string), "SUCCEEDED")
+	awaitLifecycleState(t, p, demoted, op["operationId"].(string), "WAITING_CONFIRMATION")
+	if resourceProgress(t, p, demoted, op["operationId"].(string))["state"] != "SUCCEEDED" {
+		t.Fatal("已发组件未只读确认")
+	}
 	if readJSON(t, p, "/instances/"+id, demoted)["canManage"] != false {
 		t.Fatal("失权后仍可管理")
 	}

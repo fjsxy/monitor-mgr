@@ -1369,7 +1369,7 @@ function Editor({
               )}
               <h3>CR YAML 对比</h3>
               <p className="help">
-                左侧集群原 CR，右侧将下发 CR；红色为删除，绿色为新增。
+                左侧为集群原资源，右侧为本次 exporter 与配套 ServiceMonitor；红色为删除，绿色为新增。ServiceMonitor 使用实例创建用户标签，随实例更新和删除。
               </p>
               {preview.warnings.map((warning, index) => (
                 <p className="alert" key={index}>

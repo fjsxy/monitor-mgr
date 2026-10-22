@@ -96,17 +96,18 @@ class FaultState:
         self.creations = {}
 
     def register_creation(self, body):
-        """只登记本run预先声明的两类CR身份，不接受任意collection或对象内容。"""
+        """只登记本run预先声明的三类CR身份，不接受任意collection或对象内容。"""
         if not isinstance(body, dict) or set(body) != {"intentId", "identity"} or not re.fullmatch(r"[0-9a-f]{32}", body["intentId"]):
             raise RuleError("fixture creation intent rejected")
         info = body["identity"]
         if not isinstance(info, dict) or set(info) != {"apiVersion", "kind", "namespace", "name"}:
             raise RuleError("fixture creation identity rejected")
         supported = {("monitoring.fjsxy.github.io/v1alpha1", "KubeStateMetrics"): "kubestatemetrics",
-                     ("monitoring.coreos.com/v1alpha1", "PrometheusAgent"): "prometheusagents"}
+                     ("monitoring.coreos.com/v1alpha1", "PrometheusAgent"): "prometheusagents",
+                     ("monitoring.coreos.com/v1", "ServiceMonitor"): "servicemonitors"}
         if (info["apiVersion"], info["kind"]) not in supported or not re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,252}", info["name"]):
             raise RuleError("fixture creation kind rejected")
-        namespaced = info["kind"] == "PrometheusAgent"
+        namespaced = info["kind"] in ("PrometheusAgent", "ServiceMonitor")
         if (namespaced and not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", info["namespace"])) or (not namespaced and info["namespace"]):
             raise RuleError("fixture creation namespace rejected")
         path = "/apis/" + info["apiVersion"] + ("/namespaces/" + info["namespace"] if namespaced else "") + "/" + supported[(info["apiVersion"], info["kind"])]
@@ -152,7 +153,7 @@ class FaultState:
         if set(body) != {"action", "method", "path"}:
             raise RuleError("fixture rule fields rejected")
         action, method, path = body["action"], body["method"], body["path"]
-        if action not in {"drop_after_upstream", "drop_and_block_reads", "drop_and_block_aux", "pause_before_send"} or method not in METHODS:
+        if action not in {"drop_after_upstream", "drop_and_block_reads", "drop_and_block_aux", "pause_before_send", "pause_after_upstream"} or method not in METHODS:
             raise RuleError("fixture rule action or method rejected")
         if not isinstance(path, str) or clean_path(path) != path or "?" in path:
             raise RuleError("fixture rule requires an exact path without query")
@@ -184,7 +185,7 @@ class FaultState:
 
     def release(self, rule_id):
         with self.lock:
-            if not self.rule or self.rule.id != rule_id or self.rule.action != "pause_before_send" or self.rule.cancelled:
+            if not self.rule or self.rule.id != rule_id or self.rule.action not in {"pause_before_send","pause_after_upstream"} or self.rule.cancelled:
                 raise RuleError("fixture pause rule is not active")
             self.rule.released = True
             self.rule.event.set()
@@ -416,6 +417,13 @@ class APIHandler(QuietHandler):
             if original is not None:
                 # 关键：原响应UID事件先flush/fsync，随后才允许丢响应；产品IDENTITY_UNCERTAIN保持原样。
                 app.log.emit(number, self.command, path, "original_create_response", rule, response.status, uid, rv, original=original)
+            # 关键：先保存真实上游成功，再暂停返回；第二资源尚未派发，可检验跨步骤撤权。
+            if rule and rule.action == "pause_after_upstream":
+                with app.state.lock:rule.stage="paused_after_upstream"
+                app.log.emit(number,self.command,path,"paused_after_upstream",rule,response.status,uid,rv)
+                proceed,stage=app.state.wait(rule,app.limits["pause_timeout_seconds"])
+                if not proceed:
+                    self.json_response(503,{"code":"FIXTURE_RESPONSE_PAUSE_ENDED"});return
             drop = app.state.complete(rule, response.status)
             if drop:
                 app.log.emit(number, self.command, path, "response_dropped", rule, response.status, uid, rv)
