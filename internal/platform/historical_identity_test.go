@@ -107,7 +107,7 @@ func checkTestHistoricalCreatorEvidence(t ginkgo.GinkgoTInterface) {
 }
 
 // historicalFixture 保存真实旧库并重启，只有测试夹具变更 schema，不绕过公开业务入口。
-func historicalFixture(t ginkgo.GinkgoTInterface, boundary func(string, string) error) (*platform.Runtime, *http.Cookie, *http.Cookie, string, string, *ksmFixture, platform.Config) {
+func historicalFixture(t ginkgo.GinkgoTInterface, boundary func(string, string) error, knownCreator ...bool) (*platform.Runtime, *http.Cookie, *http.Cookie, string, string, *ksmFixture, platform.Config) {
 	t.Helper()
 	target, kubeconfig := ksmTarget(t)
 	cfg := platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", OperationBoundary: boundary}
@@ -126,7 +126,11 @@ func historicalFixture(t ginkgo.GinkgoTInterface, boundary func(string, string) 
 	if e != nil {
 		t.Fatal(e)
 	}
-	_, e = db.Exec(dropInstanceCreatorSchema + `DELETE FROM schema_migrations WHERE version>10;DELETE FROM command_results WHERE action='CREATE_INSTANCE';`)
+	legacySQL := dropInstanceCreatorSchema + `DELETE FROM schema_migrations WHERE version>10;`
+	if len(knownCreator) == 0 || !knownCreator[0] {
+		legacySQL += `DELETE FROM command_results WHERE action='CREATE_INSTANCE';`
+	}
+	_, e = db.Exec(legacySQL)
 	db.Close()
 	if e != nil {
 		t.Fatal(e)
@@ -185,7 +189,7 @@ func checkTestHistoricalManagementConfirmation(t ginkgo.GinkgoTInterface) {
 		t.Fatal("拒绝结果未保存", denied)
 	}
 	got = readJSON(t, p, "/instances/"+id, user)
-	if got["canManage"] != false {
+	if got["canManage"] != false || !strings.Contains(got["readOnlyReason"].(string), "管理员已确认") {
 		t.Fatal("撤销未限制普通用户", got)
 	}
 	clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 2, "ksm": ksmConfig("lifecycle")}, user, "revoked-save", 403)
@@ -228,7 +232,7 @@ func checkTestHistoricalManagementDispatchRevocation(t ginkgo.GinkgoTInterface) 
 			<-release
 		}
 		return nil
-	})
+	}, true)
 	path := "/instances/" + id + "/management-confirmations"
 	clusterCall(t, p, "POST", path, map[string]any{"allowClusterManagers": true}, admin, "allow-dispatch", 200)
 	op := lifecyclePublish(t, p, user, id)
@@ -252,7 +256,7 @@ func checkTestHistoricalManagementDispatchRevocation(t ginkgo.GinkgoTInterface) 
 
 func checkTestHistoricalMigrationRollback(t ginkgo.GinkgoTInterface) {
 	ginkgo.By("I26-08：新迁移失败保留真实旧 schema、原密文/UID/版本/任务/审计和一致快照")
-	p, admin, user, id, cluster, _, cfg := historicalFixture(t, nil)
+	p, admin, user, id, cluster, _, cfg := historicalFixture(t, nil, true)
 	op := lifecyclePublish(t, p, admin, id)
 	awaitLifecycleState(t, p, admin, op["operationId"].(string), "SUCCEEDED")
 	before := readJSON(t, p, "/instances/"+id, admin)
@@ -341,7 +345,7 @@ func checkTestHistoricalMigrationRollback(t ginkgo.GinkgoTInterface) {
 	}
 	defer restored.Close(context.Background())
 	got := readJSON(t, restored, "/instances/"+id, user)
-	if got["uid"] != before["uid"] || got["creatorUserId"] != "" || got["creatorRole"] != "" {
+	if got["uid"] != before["uid"] || got["creatorUserId"] != before["creatorUserId"] || got["creatorRole"] != "" {
 		t.Fatal("恢复改变实例事实", got)
 	}
 	afterVersion := readJSON(t, restored, "/instances/"+id+"/versions/"+op["versionId"].(string), user)

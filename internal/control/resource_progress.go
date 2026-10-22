@@ -170,7 +170,9 @@ func migrateResourceProgress(ctx context.Context, tx *sql.Tx) error {
 		return e
 	}
 	for _, v := range versions {
-		i, e := instanceByID(ctx, tx, v.instance)
+		// 关键：v12迁移只读取当时已有的身份字段，不调用依赖后续schema的运行时读模型。
+		i := new(rpc.ObservationInstance)
+		e := tx.QueryRowContext(ctx, `SELECT id,cluster_id,component,name,target_namespace,uid FROM instances WHERE id=?`, v.instance).Scan(&i.Id, &i.ClusterId, &i.Component, &i.Name, &i.TargetNamespace, &i.Uid)
 		if e != nil {
 			return e
 		}

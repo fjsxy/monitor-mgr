@@ -88,7 +88,7 @@ class Scenario(LifecycleSuite, AgentSuite):
                 for listener in reserved:listener.close()
         self.namespace(self.ns,'control')
         t=self.env.targets['control']
-        self.env.command(['helm','upgrade','--install','platform',ROOT/'charts/monitor-mgr','--kubeconfig',t['kubeconfig'],'--kube-context',t['context'],'--namespace',self.ns,
+        self.env.command(['helm','upgrade','--install','monitor-mgr',ROOT/'charts/monitor-mgr','--kubeconfig',t['kubeconfig'],'--kube-context',t['context'],'--namespace',self.ns,
                           '--set-string','image='+self.env.image,'--set-string','imagePullPolicy=Never','--set-string','source='+self.env.candidate,'--set-string','runId='+self.env.run_id,'--wait','--timeout','3m'], 'helm-platform',timeout=210)
         self.k('-n',self.ns,'rollout','status','deployment/monitor-mgr','--timeout=120s')
         pod=self.get('pods','-n',self.ns,'-l','app=monitor-mgr',target='control')['items'][0]
