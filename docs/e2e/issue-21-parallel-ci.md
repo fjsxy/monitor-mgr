@@ -1,4 +1,6 @@
-# #21 E2E 并行 CI 实施计划（修订1）
+# #21 E2E 并行 CI 实施计划（修订2）
+
+修订2：平台 Pod Ready 与 EndpointSlice Ready 属于不同观察，连接 Service 前须有界等待原 UID 的唯一 Ready endpoint；同名替代或多个 Ready endpoint 立即拒绝。E2E 失败摘要增加冻结脚本的文件/行号，HTTP 拒绝仅映射到冻结 Go 源码中的固定 Error 字面量位置，不公开原始错误消息/响应/凭据。E2E-04 的 preview 409 保留为待定位故障，禁止框架重试或泛化重试 preview。
 
 保持 18 UT / 10 E2E 及原业务断言。只改变 E2E 调度：三个独立 runner，每个 runner 独占 BuildKit、control/data 集群、私有目录和 public artifact；组内串行，组间并行。`make e2e` 默认仍运行全部10项；`--shard` 只允许固定组名。
 
@@ -14,7 +16,7 @@
 
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
-| UT-18 | 并行结果不能制造错误绿灯 | 既有结果可信边界组加入完整三组正控，以及缺组/多组/重复ID/错组/错候选/错run/失败/skip/retry/未执行/清理失败反例；同一控制入口运行。 | 仅同来源、固定分组、全部实际成功且清理完成通过；保留18个顶层UT，产品覆盖率≥70%。 | #21 |
+| UT-18 | 并行结果不能制造错误绿灯 | 既有结果可信边界组加入完整三组正控，以及缺组/多组/重复ID/错组/错候选/错run/失败/skip/retry/未执行/清理失败反例；同一控制入口运行；核验EndpointSlice从0 Ready到原Pod Ready、替代UID拒绝、多个Ready拒绝、等待超时；用固定错误正控和敏感哨兵验证安全定位。 | 仅同来源、固定分组、全部实际成功且清理完成通过；保留18个顶层UT，产品覆盖率≥70%。 | #21 |
 | E2E-01 | 平台部署、就绪与 Pod 重建 | 在 `topology` 独占双集群执行原步骤：Helm 部署平台到 control；经 Service HTTP 初始化并登录；保存一条管理记录；删除平台 Pod 并等待新 Pod Ready；用原 Cookie 读回记录；回读容器监听和 Service 端口。RPC/DB 故障由 UT-16/17 定向验证，避免再造一套集群故障前置。 | 新 Pod UID 不同，原 PVC/数据/有效 Session 保留；/readyz 真实检查 RPC 与数据库；RPC 仅 Pod loopback、不暴露 Service 端口；所有请求确实进入 Pod。 原生 Ginkgo 恰好执行一次，并进入全部10项汇总。 | #21 |
 | E2E-02 | 双集群登记、凭据与归属 | 在 `recovery` 独占双集群执行原步骤：从平台 Pod 登记 control/data；有效证书与 token 各用一个目标；同 UID 换 context 再登记；输入一个 TLS 错误；用受限 namespace 凭据登记后尝试预览/发布；为正常集群发布一个默认 KSM 作资源保留锚点，再验证凭据替换、归属转移、注销再启用。 | UID/身份由真实 API 确认；重复登记和非法身份拒绝；受限能力可登记，但对应 namespace 下发被阻止且无 CR 写；失败凭据不替换旧凭据；转移立即改变权限；注销后原受管 CR UID/配置与历史保留、访问凭据清除；重新启用不自动发布。 原生 Ginkgo 恰好执行一次，并进入全部10项汇总。 | #21 |
 | E2E-03 | KSM 从草稿到三种真实拓扑 | 在 `topology` 独占双集群执行原步骤：HTTP 保存后先确认无 CR 写入，再发布 control 上的 KSM，按 Deployment→StatefulSet(2 shards)→DaemonSet 执行替换；在同一流程检查资源覆盖、过滤、零匹配及运行/挂起/停用；data 再部署一个默认 KSM；预置一个外部只读 CR。 | 真实 CR、Deployment/StatefulSet/DaemonSet、三角色、Pod 数和参数匹配当前模式；两个集群均能运行；保存不部署；切换清理旧工作负载；外部 CR 不能编辑/发布/删除。 原生 Ginkgo 恰好执行一次，并进入全部10项汇总。 | #21 |
@@ -31,3 +33,5 @@
 本地通过 UT/race/覆盖率、固定分组校验和 Ginkgo 实际注册/调度验证后，推送 PR #24。远端实际运行三个集群组与汇总；比较同一 workflow 的 E2E 关键路径（首组开始至汇总完成）、各组准备/用例/清理时间与完整 CI 等待时间。结果写入单独结果文件，不以时间估算或调度模拟代替真实集群结果。
 
 计划发布并回读：https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6331066744。
+
+修订2发布并回读：https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6331530714。

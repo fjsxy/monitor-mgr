@@ -5,7 +5,7 @@
 | CI job | 执行入口与内容 | 通过标准 |
 | --- | --- | --- |
 | UT | `make ut`：18 个 Ginkgo UT，一次 race/覆盖率；生成一致性、vet、前端类型检查/构建 | 全部18项通过，无漏跑/skip/retry/race，手写产品语句覆盖率≥70% |
-| E2E | 三个 matrix runner 并行；各自 `make ci-builder` 和 `make e2e --shard`（通过 E2E_ARGS 传入）；独立 control(1cp+2worker)/data(1可调度cp)，Helm 部署固定依赖和平台；组内串行 | 三组 job 均成功；`make e2e-summary` 校验同候选/本次run、恰好10项各执行一次，无skip/retry，场景/原生Ginkgo/清理均成功；部分通过不是完整E2E通过 |
+| E2E | 三个 matrix runner 并行；各自 `make ci-builder` 和 `make e2e E2E_ARGS="--shard ..."`；独立 control(1cp+2worker)/data(1可调度cp)，Helm 部署固定依赖和平台；组内串行 | 三组 job 均成功；`make e2e-summary` 校验同候选/本次run、恰好10项各执行一次，无skip/retry，场景/原生Ginkgo/清理均成功；部分通过不是完整E2E通过 |
 
 两类 job 在可信同仓 PR 和 main 使用同一清单；E2E 依赖私有 Operator 源码，凭据仅在获取来源步骤使用。构建/生成检查不另算测试类型。
 
@@ -23,7 +23,7 @@
 | storage | E2E-05、E2E-09 |
 | recovery | E2E-02、E2E-06、E2E-07、E2E-08 |
 
-`make e2e` 默认仍执行全部10项；单组使用 `make e2e E2E_ARGS="--shard topology ..."`。单组报告标记 `e2e-shard`，只有三个组通过汇总才形成 `e2e-complete`。分组和完整结果分别保存，缺组/错组/错SHA/错run/失败/skip/retry/清理失败均不能通过。
+`make e2e` 默认仍执行全部10项；单组使用 `make e2e E2E_ARGS="--shard topology ..."`。Service 连接前有界等待原Pod的唯一Ready endpoint，替代UID和多个Ready仍立即拒绝。失败时只公开冻结脚本文件/行号及精确命中固定产品Error的源码位置，原始错误保持私有。单组报告标记 `e2e-shard`，只有三个组通过汇总才形成 `e2e-complete`。分组和完整结果分别保存，缺组/错组/错SHA/错run/失败/skip/retry/清理失败均不能通过。
 
 ## UT：18 个
 

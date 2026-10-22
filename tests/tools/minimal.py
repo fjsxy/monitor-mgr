@@ -1,11 +1,16 @@
 """UT-18 仅保留三组会使测试结论失真的风险。"""
 import copy
+import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from testing_contract import owned_identity, validate_specs
 from e2e_shards import SHARDS, aggregate, selection
+from e2e_diagnostics import failure_summary
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/acceptance'))
+from clusters import Suite as ClusterSuite
 
 
 class TrustBoundary(unittest.TestCase):
@@ -52,6 +57,13 @@ class TrustBoundary(unittest.TestCase):
                 elif kind == 'case-cleanup': first['results'][id]['cleanup']=['failure']
                 elif kind == 'full-report': first['kind']='e2e-full'
                 with self.assertRaises(ValueError): aggregate(broken, 'candidate', 'mm-ci-1-1', jobs)
+        # 固定产品错误只投影代码位置；未知消息即使含凭据也不能进入公开诊断。
+        known=failure_summary(AssertionError(('/ignored',409,'CONFLICT','原Operator进程未证明Agent controller及所需ScrapeConfig informer已就绪')))
+        self.assertEqual(known['apiCode'],'CONFLICT')
+        self.assertTrue(any(v['file']=='internal/control/agent_operator_metrics.go' for v in known['apiSites']))
+        sentinel='PRIVATE_PASSWORD_SENTINEL'
+        unknown=failure_summary(AssertionError(('/'+sentinel,409,sentinel,sentinel)))
+        self.assertNotIn(sentinel,json.dumps(unknown));self.assertNotIn('apiSites',unknown)
 
     def test_candidate(self):
         with self.assertRaises(ValueError):
@@ -62,6 +74,35 @@ class TrustBoundary(unittest.TestCase):
         self.assertTrue(owned_identity('this-run', recorded, recorded))
         for actual in [{'uid': 'replacement', 'runId': 'this-run'}, {'uid': 'original', 'runId': 'other'}]:
             self.assertFalse(owned_identity('this-run', recorded, actual))
+        # 用真实Service身份校验读取0→1 Ready快照；同名替代或多个endpoint仍须立即拒绝。
+        def fixture(states):
+            suite=object.__new__(ClusterSuite);suite.ns='owned';suite.pod='platform';suite.platform_pod_uid='pod-uid'
+            suite.a=SimpleNamespace(control_context='kind-owned');reads=[]
+            pod=dict(metadata=dict(uid='pod-uid',name='platform'),status=dict(podIP='10.0.0.1',conditions=[dict(type='Ready',status='True')]))
+            service=dict(metadata=dict(uid='service-uid'),spec=dict(selector=dict(app='platform')))
+            endpoint=dict(conditions=dict(ready=True),targetRef=dict(kind='Pod',namespace='owned',name='platform',uid='pod-uid'),addresses=['10.0.0.1'])
+            def k(*args):
+                resource=args[3]
+                if resource=='pod': value=pod
+                elif resource=='service': value=service
+                elif resource=='pods': value=dict(items=[pod])
+                else:
+                    state=states[min(len(reads),len(states)-1)];reads.append(state)
+                    pending=copy.deepcopy(endpoint);pending['conditions']['ready']=False;points=[pending]
+                    if state!='pending':
+                        point=copy.deepcopy(endpoint)
+                        if state=='replacement': point['targetRef']['uid']='replacement'
+                        points=[point]* (2 if state=='multiple' else 1)
+                    value=dict(items=[dict(metadata=dict(uid='slice-uid',ownerReferences=[dict(uid='service-uid',kind='Service')]),endpoints=points)])
+                return SimpleNamespace(stdout=json.dumps(value).encode())
+            suite.k=k
+            return suite,reads
+        suite,reads=fixture(['pending','ready'])
+        self.assertEqual(suite.wait_service_identity()['podUID'],'pod-uid');self.assertEqual(len(reads),2)
+        for state in ['replacement','multiple','pending']:
+            suite,reads=fixture([state])
+            with self.assertRaises(AssertionError): suite.wait_service_identity(timeout=0)
+            self.assertEqual(len(reads),1)
 
 
 if __name__ == '__main__': unittest.main()

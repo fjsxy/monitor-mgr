@@ -5,6 +5,9 @@ from transport import process as subprocess
 import yaml
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 CASES=['T04.loopback','T04.wrong-ca','T04.wrong-name','C01.client-cert','C01.token','C02.primary','C06.bad-candidate','C08.primary','T06.primary']
+class EndpointPending(AssertionError):
+ """原Pod身份已确认，但EndpointSlice控制器尚未发布Ready endpoint。"""
+
 class Suite:
  def __init__(self,args):
   self.a=args;self.session=getattr(args,'session',None);self.out=pathlib.Path(args.output);self.out.mkdir(parents=True,exist_ok=True);os.chmod(self.out,0o700)
@@ -122,12 +125,22 @@ class Suite:
    for endpoint in item.get('endpoints',[]):
     if endpoint.get('conditions',{}).get('ready') is True and not endpoint.get('conditions',{}).get('terminating'):
      ready.append((item,endpoint))
+  if not ready:raise EndpointPending('平台原Pod的Service endpoint尚未Ready')
   assert len(ready)==1,'平台Service必须唯一Ready endpoint'
   item,endpoint=ready[0];ref=endpoint['targetRef']
   assert ref.get('kind')=='Pod' and ref.get('namespace')==self.ns and ref.get('name')==self.pod and ref.get('uid')==pod['metadata']['uid'] and pod['status']['podIP'] in endpoint['addresses'],'EndpointSlice不属于本例原Pod'
   return {'namespace':self.ns,'service':'monitor-mgr','serviceUID':service['metadata']['uid'],'pod':self.pod,'podUID':pod['metadata']['uid'],'endpointSliceUID':item['metadata']['uid'],'context':self.a.control_context}
+ def wait_service_identity(self,timeout=20):
+  """Pod Ready不等于EndpointSlice Ready；只等待原身份的异步就绪，不重试身份冲突。"""
+  deadline=time.monotonic()+timeout
+  while True:
+   try:return self.service_identity()
+   except EndpointPending:
+    if time.monotonic()>=deadline:raise AssertionError('平台原Pod的Service endpoint等待超时') from None
+    time.sleep(.2)
  def connect(self):
-  identity=self.service_identity();self.base='http://127.0.0.1:'+str(self.port)
+  # 关键：唯一原Pod/Service/EndpointSlice的UID保护保持严格，只有零Ready endpoint可以等待。
+  identity=self.wait_service_identity();self.base='http://127.0.0.1:'+str(self.port)
   self.forward=subprocess.Popen([self.a.kubectl,'--kubeconfig',self.a.control_config,'--context',self.a.control_context,'-n',self.ns,'port-forward','service/monitor-mgr',str(self.port)+':8080'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
   end=time.monotonic()+20
   while time.monotonic()<end:

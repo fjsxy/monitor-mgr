@@ -16,6 +16,7 @@ import traceback
 from e2e_environment import Environment, ROOT, private_json
 from testing_contract import validate_specs
 from e2e_shards import SHARDS, selection
+from e2e_diagnostics import failure_summary
 
 
 def source():
@@ -87,6 +88,7 @@ def main():
                             CASES[id](scenario);result['outcome']='passed'
                         except Exception as error:
                             result['failedStep']=scenario.step;result['errorType']=type(error).__name__
+                            result['diagnostic']=failure_summary(error)
                             path=environment.private/(id+'-failure.txt');path.write_text(traceback.format_exc());os.chmod(path,0o600)
                         finally:
                             # 失败日志先落私有目录；公开报告只保留步骤/错误类别与关联 ID。
