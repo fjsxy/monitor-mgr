@@ -61,9 +61,9 @@
       "id": "UT-08",
       "type": "ut",
       "purpose": "保存、预览与版本冻结",
-      "steps": "保存草稿并读回；生成预览后分别修改草稿和目标配置；发布 v1 后编辑成 v2，再读 v1 来源；关闭高级选项后查看有效 CR。 经HTTP检查新exporter两资源预览/冻结；覆盖点号、长名称及Deployment/StatefulSetSharded/DaemonSetSharded的SM选择器，注入CRD/namespace/RBAC/同名变化。",
-      "expected": "仅保存/预览不产生 Kubernetes mutation；过期预览拒绝发布；发布版本和来源快照不被新草稿改写；未启用字段不进入有效 CR。 草稿零写；ServiceMonitor在指标Service部署namespace，使用锁定Operator规范化实例标签和http-metrics；预检失败零业务写。",
-      "issues": "#17、#19、#28"
+      "steps": "保存草稿并读回；生成预览后分别修改草稿和目标配置；发布 v1 后编辑成 v2，再读 v1 来源；关闭高级选项后查看有效 CR。 经HTTP检查新exporter两资源预览/冻结；覆盖点号、长名称及Deployment/StatefulSetSharded/DaemonSetSharded的SM选择器，注入CRD/namespace/RBAC/同名变化。 Agent通过公开HTTP/真实RPC保存固定creator user标签与自定义表达式，管理员编辑后回读发布版本；跨namespace预览动态匹配及零匹配/读取失败/权限不足。",
+      "expected": "仅保存/预览不产生 Kubernetes mutation；过期预览拒绝发布；发布版本和来源快照不被新草稿改写；未启用字段不进入有效 CR。 草稿零写；ServiceMonitor在指标Service部署namespace，使用锁定Operator规范化实例标签和http-metrics；预检失败零业务写。 Agent既有None不变，明确user标签在管理员编辑和冻结版本中固定；namespace独立，匹配失败不冒充空成功，关联不能绕过管理员实例保护。",
+      "issues": "#17、#19、#28、#30"
     },
     {
       "id": "UT-09",
@@ -141,9 +141,9 @@
       "id": "UT-18",
       "type": "ut",
       "purpose": "测试工具的最小可信边界",
-      "steps": "只验证三组结果：缺失/失败/跳过/重复事件不能通过；错误 candidate SHA 不能通过；清理不能操作非本 run 的资源或替代 UID。",
-      "expected": "报告不把缺例改绿；源码身份一致；清理范围明确且失败使 CI 失败。只保留这三组必要断言，不再把旧 254 项工具自测整套塞进本用例。",
-      "issues": "#21"
+      "steps": "只验证三组结果：缺失/失败/跳过/重复事件不能通过；错误 candidate SHA 不能通过；清理不能操作非本 run 的资源或替代 UID。 核对实际指标收据，分别删除样本/采用配置/原Pod身份，修改样本时间、receiver采集配置或动态前后版本。",
+      "expected": "报告不把缺例改绿；源码身份一致；清理范围明确且失败使 CI 失败。只保留这三组必要断言，不再把旧 254 项工具自测整套塞进本用例。 真实采集证据不完整、目标UID/来源/时间不符或receiver自行采集均拒绝通过。",
+      "issues": "#21、#30"
     },
     {
       "id": "E2E-01",
@@ -173,9 +173,9 @@
       "id": "E2E-04",
       "type": "e2e",
       "purpose": "Agent 采集关联与发送配置",
-      "steps": "HTTP 在 data 发布默认 Agent，核验默认 None/Own；再创建四类采集 CR 并一次发布各自的代表规则；增删一个匹配对象/namespace；同一 Agent 的多个 remoteWrite 分别引用 None、BasicAuth、Bearer 和 TLS；control 部署一个默认 Agent；删除一个被引用 key 作拒绝输入。",
-      "expected": "两个集群均有真实 StatefulSet；默认资源为 CPU 200m、memory request 512Mi/limit 1Gi，PVC 1Gi；四种资源都被实际识别，生成配置与 Secret 引用正确；缺依赖阻止写入；不据此宣称下游收到样本。",
-      "issues": "#18"
+      "steps": "HTTP 在 data 发布默认 Agent，核验默认 None/Own；再创建四类采集 CR 并一次发布各自的代表规则；增删一个匹配对象/namespace；同一 Agent 的多个 remoteWrite 分别引用 None、BasicAuth、Bearer 和 TLS；control 部署一个默认 Agent；删除一个被引用 key 作拒绝输入。 普通用户和管理员各发布exporter/Agent并保存creator user关联，Helm独占receiver关闭自身采集；从Agent运行API读取实际采用配置，receiver查询各目标kube_pod_info及实际样本时间；同creator新增exporter后不重新发布Agent取得新目标样本。",
+      "expected": "两个集群均有真实 StatefulSet；默认资源为 CPU 200m、memory request 512Mi/limit 1Gi，PVC 1Gi；四种资源都被实际识别，生成配置与 Secret 引用正确；缺依赖阻止写入； 必须取得与原Service/Endpoints/exporter Pod UID、原Agent及receiver容器/锁定来源对应的实际样本；用户组配置互不混入，namespace独立生效，动态发现保持原Agent UID和发布版本。缺样本不能通过完整E2E汇总。",
+      "issues": "#18、#30"
     },
     {
       "id": "E2E-05",
@@ -221,9 +221,9 @@
       "id": "E2E-10",
       "type": "e2e",
       "purpose": "唯一浏览器主流程",
-      "steps": "Playwright 登录→用表单创建一个 KSM 草稿→编辑测试夹具预置的 revision=9007199254740993 草稿→查看只读 YAML/diff→明确发布→工作台查看状态/版本→明确删除；前后通过后端读回确认操作对象与版本；不增加产品测试接口。 真实Chromium查看SM预览/冻结/逐资源结果；代理拒绝SM，页面点击重试原版本。 历史KSM/Agent明确管理员确认前、允许后、撤销后的普通用户页面交互。",
-      "expected": "关键控件可操作、确认后才发发布/删除；显示正确实例和状态，大 revision 经浏览器操作后不舍入；没有前端控制台致命错误；不逐字段/逐模式重复验证后端规则。 页面显示exporter成功与SM失败，人工补齐沿原版本、新attempt，两资源独立显示UID。 仅管理员可确认并展示actor/time/result；普通用户控件与真实保存权限同步，历史角色保持未知。",
-      "issues": "#14、#16、#19、#28、#26"
+      "steps": "Playwright 登录→用表单创建一个 KSM 草稿→编辑测试夹具预置的 revision=9007199254740993 草稿→查看只读 YAML/diff→明确发布→工作台查看状态/版本→明确删除；前后通过后端读回确认操作对象与版本；不增加产品测试接口。 真实Chromium查看SM预览/冻结/逐资源结果；代理拒绝SM，页面点击重试原版本。 历史KSM/Agent明确管理员确认前、允许后、撤销后的普通用户页面交互。 I30-B01/02验证按创建用户快捷操作、自定义表达式/namespace、保存重开与管理员编辑固定目标；可靠历史userId可快捷，未知创建用户禁用快捷但仍允许按既有权限手动配置。",
+      "expected": "关键控件可操作、确认后才发发布/删除；显示正确实例和状态，大 revision 经浏览器操作后不舍入；没有前端控制台致命错误；不逐字段/逐模式重复验证后端规则。 页面显示exporter成功与SM失败，人工补齐沿原版本、新attempt，两资源独立显示UID。 仅管理员可确认并展示actor/time/result；普通用户控件与真实保存权限同步，历史角色保持未知。 None默认不变；快捷操作仅明确点击后写入原生标签，目标userId不随管理员登录改变；创建角色未知不抹掉可靠userId，创建用户未知不fallback；最后才注销集群。",
+      "issues": "#14、#16、#19、#28、#26、#30"
     }
   ],
   "omitted": [

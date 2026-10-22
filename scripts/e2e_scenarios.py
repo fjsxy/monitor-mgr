@@ -452,7 +452,10 @@ def agent(s):
         cfg['associations'][key]=rule;obj=s.collection(kind,foreign if nm=='Labels' else s.targetns);originals[kind]=obj['metadata']['uid']
     ref=lambda k:{'name':'agent-auth','key':k}
     cfg['remoteWrite']=[{'url':'http://receiver.example.invalid/none','auth':{'mode':'None'}},{'url':'https://receiver.example.invalid/basic','auth':{'mode':'BasicAuth','username':ref('username'),'password':ref('password')}},{'url':'https://receiver.example.invalid/bearer','auth':{'mode':'Bearer','credentials':ref('credentials')},'tls':{'ca':ref('ca'),'cert':ref('cert'),'key':ref('key'),'serverName':'receiver.example.invalid'}}]
-    s.save(i,cfg);s.publish(i);s.runtime(i)
+    s.save(i,cfg)
+    from agent_collection import wait_associations
+    wait_associations(s,i)
+    s.publish(i);s.runtime(i)
     sources=s.association_preview(i)
     for kind,_,_ in kinds:assert originals[kind] in {v['uid'] for v in sources['association:'+kind]['matches']}
     added=s.collection('PodMonitor',s.targetns,'added');assert added['metadata']['uid'] in {v['uid'] for v in s.association_preview(i)['association:PodMonitor']['matches']}
@@ -467,6 +470,8 @@ def agent(s):
     s.k('patch','secret','agent-auth','-n',s.targetns,'--type=json','-p','[{"op":"remove","path":"/data/credentials"}]',target='data')
     s.preview(i,status=422)
     s.prepare('-control','control','agent');j=s.create();s.publish(j);s.runtime(j)
+    from agent_collection import creator_collection
+    creator_collection(s)
 
 
 def storage(s):
@@ -719,13 +724,15 @@ def deletion(s):
 def browser(s):
     s.prepare();proxy=s.setup_proxy();s.by('停止平台夹具，预置超出 JavaScript 安全整数范围的草稿 revision')
     i=s.create()
+    agent_namespace=s.a.prefix+'-browser-agent';s.fixture(agent_namespace,'control')
+    legacy_unknown=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='unknown-creator-agent',namespace=agent_namespace)},status=201)
     legacy_ksm=s.create(s.cfg(name='historical-'+s.crname))
     legacy_agent=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='historical-agent',namespace=s.targetns)},status=201)
     from historical_identity import upgrade_v10
-    upgrade_v10(s,draft_revisions={i['id']:9007199254740993})
+    upgrade_v10(s,missing_ids=[legacy_unknown['id']],draft_revisions={i['id']:9007199254740993})
     # 大revision主流程需要显式开放历史实例管理权限；创建事实仍保持未知角色。
     s.call('POST','/instances/'+i['id']+'/management-confirmations',{'allowClusterManagers':True})
-    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,largeId=i['id'],largeName=i['name'],proxyBase=proxy.base,proxyToken=proxy.token,historical=[{'id':x['id'],'name':x['name'],'component':x['component']} for x in [legacy_ksm,legacy_agent]])));os.chmod(fixture,0o600)
+    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,agentNamespace=agent_namespace,runId=s.env.run_id,unknownCreatorAgent={'id':legacy_unknown['id'],'name':legacy_unknown['name']},largeId=i['id'],largeName=i['name'],proxyBase=proxy.base,proxyToken=proxy.token,historical=[{'id':x['id'],'name':x['name'],'component':x['component']} for x in [legacy_ksm,legacy_agent]])));os.chmod(fixture,0o600)
     s.by('真实 Chromium 完成表单保存、精确大 revision、YAML/diff、发布、工作台与删除')
     out=s.out/'playwright';report_path=s.out/'playwright.json';env=dict(os.environ,BASE_URL=s.base,PHASE1_E2E_FIXTURE=str(fixture),PLAYWRIGHT_JSON_OUTPUT_FILE=str(report_path))
     r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)

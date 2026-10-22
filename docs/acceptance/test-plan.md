@@ -52,7 +52,7 @@ UT 在本仓库指无需 Kubernetes 的本地测试：优先直接调用 Go 应�
 | E2E-01 平台部署、就绪与 Pod 重建 | Helm 部署平台到 control；经 Service HTTP 初始化并登录；保存一条管理记录；删除平台 Pod 并等待新 Pod Ready；用原 Cookie 读回记录；回读容器监听和 Service 端口。RPC/DB 故障由 UT-16/17 定向验证，避免再造一套集群故障前置。 | 新 Pod UID 不同，原 PVC/数据/有效 Session 保留；/readyz 真实检查 RPC 与数据库；RPC 仅 Pod loopback、不暴露 Service 端口；所有请求确实进入 Pod。 | T01 T02 T05 T06 T07 T08 | #14、#21 |
 | E2E-02 双集群登记、凭据与归属 | 从平台 Pod 登记 control/data；有效证书与 token 各用一个目标；同 UID 换 context 再登记；输入一个 TLS 错误；用受限 namespace 凭据登记后尝试预览/发布；为正常集群发布一个默认 KSM 作资源保留锚点，再验证凭据替换、归属转移、注销再启用。 | UID/身份由真实 API 确认；重复登记和非法身份拒绝；受限能力可登记，但对应 namespace 下发被阻止且无 CR 写；失败凭据不替换旧凭据；转移立即改变权限；注销后原受管 CR UID/配置与历史保留、访问凭据清除；重新启用不自动发布。 | T04 I03 I04 C01 C02 C03 C04 C05 C06 C07 C08 C09 | #15 |
 | E2E-03 KSM 从草稿到三种真实拓扑 | HTTP 保存后先确认无 CR 写入，再发布 control 上的 KSM，按 Deployment→StatefulSet(2 shards)→DaemonSet 执行替换；在同一流程检查资源覆盖、过滤、零匹配及运行/挂起/停用；data 再部署一个默认 KSM；预置一个外部只读 CR。 | 真实 CR、Deployment/StatefulSet/DaemonSet、三角色、Pod 数和参数匹配当前模式；两个集群均能运行；保存不部署；切换清理旧工作负载；外部 CR 不能编辑/发布/删除。 | T03 K01 K02 K03 K04 K05 K06 K07 K08 K09 K10 P01 | #16 |
-| E2E-04 Agent 采集关联与发送配置 | HTTP 在 data 发布默认 Agent，核验默认 None/Own；再创建四类采集 CR 并一次发布各自的代表规则；增删一个匹配对象/namespace；同一 Agent 的多个 remoteWrite 分别引用 None、BasicAuth、Bearer 和 TLS；control 部署一个默认 Agent；删除一个被引用 key 作拒绝输入。 | 两个集群均有真实 StatefulSet；默认资源为 CPU 200m、memory request 512Mi/limit 1Gi，PVC 1Gi；四种资源都被实际识别，生成配置与 Secret 引用正确；缺依赖阻止写入；不据此宣称下游收到样本。 | T03 A01 A03 A04 A05 A06 A11 A12 A13 | #18 |
+| E2E-04 Agent 采集关联与发送配置 | HTTP 在 data 发布默认 Agent，核验默认 None/Own；再创建四类采集 CR 并一次发布各自的代表规则；增删一个匹配对象/namespace；同一 Agent 的多个 remoteWrite 分别引用 None、BasicAuth、Bearer 和 TLS；control 部署一个默认 Agent；删除一个被引用 key 作拒绝输入。 | 两个集群均有真实 StatefulSet；默认资源为 CPU 200m、memory request 512Mi/limit 1Gi，PVC 1Gi；四种资源都被实际识别，生成配置与 Secret 引用正确；缺依赖阻止写入；补充 #30 在独占空 scrape receiver 中查询实际 kube_pod_info 样本及时间，并绑定原 Agent/receiver/exporter Pod UID 与镜像来源；不能只凭匹配或生成配置通过。 | T03 A01 A03 A04 A05 A06 A11 A12 A13 | #18 |
 | E2E-05 Agent 分片与 PVC 完整生命周期 | 使用两个新 Agent：whenScaled=Retain/whenDeleted=Delete，以及反向配置；分别执行 shards 2→1→0→1，再删除；另发布一个 emptyDir 实例；尝试原实例扩容量或换 storage mode。 删除已保留的原 PVC，再以同名新 UID 重建并刷新原操作，核对历史仍绑定原 UID。 | 每一步回读实际 StatefulSet 策略与原 PVC UID；缩容/挂起/删除的保留和删除结果分别正确；emptyDir 无 PVC；固定容量/模式不原地变更；同名替代卷不接管。 | A02 A04 A05 A06 A07 A08 A09 A10 | #20 |
 | E2E-06 发布冻结、漂移与版本回看 | 先发布 v1，再编辑草稿 v2；重复提交同幂等键；外部修改 CR spec 并尝试普通发布，再明确覆盖；保留外部 annotation；单独更新 status/RV 作正控；从版本入口读取来源。 | 同键无第二次写；v1 来源不随草稿变化；漂移先冲突、确认后才覆盖；annotation/status 不被清除；纯 status/RV 不触发重复确认；版本入口返回原配置。 | P01 P02 P03 P04 P05 P06 U05 | #17、#19 |
 | E2E-07 真实目标故障与状态隔离 | 两个集群各运行一个实例；用独占代理阻断 data API，保留 control 可用；等待观测过期并回读两者；恢复代理；给一个工作负载制造一个未 Ready 副本。 | control 正常结果不被 data 错误覆盖；data 显示具体访问错误/历史/过期，不能当成 0 个对象或已删除；恢复后重新观察；部分 Ready 显示未就绪。 | R01 R02 R03 R04 R05 R07 R08 | #19 |
@@ -240,3 +240,7 @@ ServiceMonitor使用锁定monitor-op 2b2a8b7的稳定Service实例标签（点�
 # #26 历史身份与独立权限确认
 
 新增子行为复用 UT-07/10/16 与 E2E-01/10；详细五列计划见 `docs/e2e/issue-26.md`。真实旧结构裁去 v11+ 表和字段，可靠证据只补实际创建 user ID；管理员确认 actor/time/result 独立追加，未知历史角色不改写。浏览器沿唯一 test 的 I26-B01 step 检查确认、开放和撤销，真实 Pod 场景只操作本 run 独占 Helm/PVC。
+
+## #30 Agent 创建用户关联和实际采集
+
+五列计划见 `docs/e2e/issue-30.md`。UT-08接入 I30-U01/02/03：固定创建用户、管理员编辑、原生表达式、namespace、动态匹配和HTTP/RPC保护。UT-18额外拒绝缺样本/错误UID/旧样本/缺采用配置/receiver自行采集/动态版本变化的证据。E2E-04由本run Helm receiver读取实际remote_write样本，保存 `public/agent-collection.json`，完整汇总再次校验同candidate证据；E2E-10仍为唯一Playwright test，I30步骤放在最终集群注销之前。计划和脚本接线不等于真实集群或浏览器已通过。
