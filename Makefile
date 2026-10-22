@@ -86,3 +86,7 @@ ci-builder-cleanup: ## 按记录的原容器 ID 清理本 run 构建器
 .PHONY: ut-instance-identity
 ut-instance-identity: ## 实例创建身份、HTTP/RPC写保护、派发撤权与历史未知角色的Ginkgo验证
 	$(GO) test -count=1 -timeout 5m ./internal/platform -run TestPlatform -args -ginkgo.focus='UT-07|UT-10|UT-16' -ginkgo.no-color
+
+.PHONY: ut-historical-identity
+ut-historical-identity: ## 历史创建证据、管理员确认与撤销派发的 Ginkgo 定向验证
+	$(GO) test -count=1 -timeout 5m ./internal/platform -run TestPlatform -args -ginkgo.focus='UT-07|UT-10|UT-16' -ginkgo.no-color

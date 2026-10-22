@@ -455,7 +455,7 @@ func projectionSchema7Restart(t ginkgo.GinkgoTInterface, dir, id, outside string
 	}
 	assertProjectionSafe(t, "离线首次RPC旧cache", result, markers)
 	var afterEffective, afterHMAC string
-	if db.QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&version) != nil || version != 11 || db.QueryRow(`SELECT effective_spec FROM publication_versions WHERE instance_id=?`, id).Scan(&afterEffective) != nil || db.QueryRow(`SELECT target_spec FROM publication_previews WHERE instance_id=? ORDER BY id LIMIT 1`, id).Scan(&afterHMAC) != nil || effective != afterEffective || hmac != afterHMAC {
+	if db.QueryRow(`SELECT max(version) FROM schema_migrations`).Scan(&version) != nil || version != 12 || db.QueryRow(`SELECT effective_spec FROM publication_versions WHERE instance_id=?`, id).Scan(&afterEffective) != nil || db.QueryRow(`SELECT target_spec FROM publication_previews WHERE instance_id=? ORDER BY id LIMIT 1`, id).Scan(&afterHMAC) != nil || effective != afterEffective || hmac != afterHMAC {
 		t.Fatal("数据迁移改变历史effective_spec、HMAC或版本未提交")
 	}
 	for _, query := range []string{`SELECT cr FROM instance_observations`, `SELECT runtime FROM instance_observations`, `SELECT document FROM discovered_instances`} {

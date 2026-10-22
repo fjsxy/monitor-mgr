@@ -11,7 +11,7 @@ import (
 )
 
 // schemaVersion 定义本程序能够读取和升级到的数据库版本。
-const schemaVersion = 11
+const schemaVersion = 12
 
 // migrationSQL 按版本依次保存结构变更，不修改已经发布的旧版本语句。
 var migrationSQL = [][]string{
@@ -44,6 +44,7 @@ var migrationSQL = [][]string{
 	activitySchema,
 	append(append([]string{}, agentStorageSchema...), storageTasksSchema...),
 	instanceCreatorSchema,
+	historicalManagementSchema,
 }
 
 // migrate 配置 SQLite WAL，并在保留恢复依据的前提下原子升级数据库。
@@ -126,6 +127,11 @@ func migrate(db *sql.DB, dataDir string, key []byte) error {
 			for _, q := range migrationSQL[v-1] {
 				if _, err = tx.Exec(q); err != nil {
 					return fmt.Errorf("数据库迁移失败，原库与快照保留: %w", err)
+				}
+			}
+			if v == 12 {
+				if err = migrateHistoricalCreators(tx); err != nil {
+					return fmt.Errorf("历史创建证据迁移失败，原库与快照保留: %w", err)
 				}
 			}
 			if v == 9 {

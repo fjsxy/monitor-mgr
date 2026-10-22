@@ -92,6 +92,9 @@ struct CreateInstanceRequest { 1: required string clusterId, 2: required string 
 struct SaveDraftRequest { 1: required string id, 2: required i64 expectedDraftRevision, 3: optional KSMConfiguration ksm, 4: optional AgentConfiguration agent }
 struct ConfigurationDraft { 1: required i64 revision, 2: optional KSMConfiguration ksm, 3: required string yaml, 4: optional AgentConfiguration agent }
 struct InstanceRuntime { 1: required string summary, 2: required string desiredState, 3: required string deploymentMode, 4: optional i32 availablePods, 5: optional i32 desiredPods, 6: required string lastSuccessAt, 7: required string error, 8: required string observedAt, 9: optional i32 shards, 10: optional bool paused }
+// 管理权限确认独立于历史创建事实，保存当前明确结果及最后确认身份。
+struct InstanceManagementConfirmation { 1: required string actorId, 2: required string confirmedAt, 3: required bool allowClusterManagers }
+struct ConfirmInstanceManagementRequest { 1: required string id, 2: required bool allowClusterManagers }
 struct ObservationInstance {
  1: required string id, 2: required string clusterId, 3: required string name, 4: required string targetNamespace,
  5: required string component, 6: required string type, 7: required bool readOnly, 8: required string uid,
@@ -99,7 +102,8 @@ struct ObservationInstance {
  13: required string ownership, 14: optional string yaml, 15: optional string crNamespace, 16: optional string scope, 17: optional list<SourceObservation> sources,
  // 创建事实只在服务端创建事务写入；canManage 是当前操作者的动态权限，不改变平台纳管归属。
  18: required string creatorUserId, 19: required string creatorRole, 20: required bool creatorIdentityKnown,
- 21: required bool canManage, 22: required string readOnlyReason
+ 21: required bool canManage, 22: required string readOnlyReason,
+ 23: optional InstanceManagementConfirmation managementConfirmation
 }
 struct InstancesResult { 1: required list<ObservationInstance> instances }
 // 工作台查询以完整授权集合统计并在服务端过滤/分页；活动序号保持数据库内部i64。
@@ -123,6 +127,7 @@ struct DeletionPreviewRequest { 1: required string id, 2: optional string operat
 struct DeletionPreview { 1: required string previewId, 2: required string instanceId, 3: required string versionId, 4: required string uid, 5: required string name, 6: required string namespace, 7: required list<string> impactNamespaces, 8: optional list<VolumeObservation> storageVolumes, 9: optional list<AgentStatefulPolicy> policies, 10: optional string storageMode }
 struct AttemptsResult { 1: required list<ExecutionAttempt> attempts }
 service ControlService {
+ ObservationInstance ConfirmInstanceManagement(1: RequestContext ctx, 2: ConfirmInstanceManagementRequest request) throws (1: APIError error)
  AssociationPreview PreviewAssociations(1: RequestContext ctx, 2: AssociationPreviewRequest request) throws (1: APIError error)
  DeletionPreview PreviewDeletion(1: RequestContext ctx, 2: DeletionPreviewRequest request) throws (1: APIError error)
  Operation RetryLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)

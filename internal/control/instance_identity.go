@@ -23,7 +23,7 @@ func projectInstanceAccess(p *Principal, cl *rpc.Cluster, i *rpc.ObservationInst
 		i.ReadOnlyReason = "实例已删除，历史只读"
 	case p.Account.Role != "ADMIN" && i.CreatorRole == "ADMIN":
 		i.ReadOnlyReason = "管理员创建的实例对普通用户只读"
-	case p.Account.Role != "ADMIN" && i.CreatorRole != "USER":
+	case p.Account.Role != "ADMIN" && !unknownRoleManagementAllowed(i) && i.CreatorRole != "USER":
 		i.ReadOnlyReason = "创建时角色未知，须由管理员确认管理权限"
 	}
 	i.CanManage = i.ReadOnlyReason == ""
@@ -38,8 +38,13 @@ func instanceWritePermission(p *Principal, i *rpc.ObservationInstance) error {
 	if i.CreatorRole == "ADMIN" {
 		return Error("FORBIDDEN", "管理员创建的实例对普通用户只读")
 	}
-	if i.CreatorRole != "USER" {
+	if i.CreatorRole != "USER" && !unknownRoleManagementAllowed(i) {
 		return Error("FORBIDDEN", "创建时角色未知，须由管理员确认管理权限")
 	}
 	return nil
+}
+
+// unknownRoleManagementAllowed 只对历史未知角色应用明确允许；已知管理员创建保护永远优先。
+func unknownRoleManagementAllowed(i *rpc.ObservationInstance) bool {
+	return i.CreatorRole == "" && i.ManagementConfirmation != nil && i.ManagementConfirmation.AllowClusterManagers
 }

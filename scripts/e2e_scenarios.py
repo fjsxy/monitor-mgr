@@ -223,6 +223,29 @@ def platform(s):
     s.by('重建真实平台 Pod，沿用原 Cookie 读回管理状态')
     s.rebuild();assert s.proof('store-after')==proof;assert s.call('GET','/session')['expiresAt']==before['expiresAt'];assert s.call('GET','/clusters/'+cluster['id'])['uid']==cluster['uid']
     assert s.get('pvc','monitor-mgr-data','-n',s.ns,target='control')['metadata']['uid']==pvc
+    s.by('I26-K01：真实 v10 PVC 升级仅补可靠创建用户，历史角色保持未知')
+    s.prepare();known=s.create();missing=s.create(s.cfg(name='missing-'+s.crname))
+    original_actor=s.call('GET','/session')['account']['id']
+    from historical_identity import upgrade_v10
+    upgrade_v10(s,missing_ids=[missing['id']])
+    account,client=s.user('legacy');s.call('POST','/clusters/'+cluster['id']+'/transfer',{'ownerId':account['id']})
+    for instance,expected in [(known,original_actor),(missing,'')]:
+        with s.using(client):
+            current=s.call('GET','/instances/'+instance['id'])
+            assert current['creatorUserId']==expected and current['creatorRole']=='' and not current['canManage']
+            s.call('POST','/instances/'+instance['id']+'/management-confirmations',{'allowClusterManagers':True},status=403)
+    result=s.call('POST','/instances/'+known['id']+'/management-confirmations',{'allowClusterManagers':True})
+    assert result['managementConfirmation']['actorId']==original_actor and result['managementConfirmation']['confirmedAt'] and result['creatorRole']==''
+    s.by('I26-K01：确认后普通所属用户真实保存/发布，撤销后恢复只读')
+    with s.using(client):
+        s.save(known,s.cfg());s.publish(known);s.runtime(known)
+    assert s.call('GET','/instances/'+known['id'])['uid']==s.cr()['metadata']['uid']
+    s.call('POST','/instances/'+known['id']+'/management-confirmations',{'allowClusterManagers':False})
+    with s.using(client):
+        assert not s.call('GET','/instances/'+known['id'])['canManage']
+        draft=s.call('GET','/instances/'+known['id']+'/draft')
+        s.call('PUT','/instances/'+known['id']+'/draft',{'expectedDraftRevision':draft['revision'],'ksm':s.cfg()},status=403)
+    (s.env.public/'historical-identity.json').write_text(json.dumps({'testedCommit':s.env.candidate,'podUID':s.platform_pod_uid,'instanceId':known['id'],'creatorUserId':original_actor,'creatorRole':'','confirmation':s.call('GET','/instances/'+known['id'])['managementConfirmation'],'targetUID':s.cr()['metadata']['uid'],'missingCreatorUserId':s.call('GET','/instances/'+missing['id'])['creatorUserId']},ensure_ascii=False,indent=2)+'\n')
     s.by('核对 HTTP 唯一 Service 端口和容器 RPC loopback 监听')
     service=s.get('service','monitor-mgr','-n',s.ns,target='control');assert [p['port'] for p in service['spec']['ports']]==[8080]
     pod=s.get('pod',s.pod,'-n',s.ns,target='control');container=pod['spec']['containers'][0]
@@ -453,12 +476,14 @@ def deletion(s):
 
 def browser(s):
     s.prepare();s.by('停止平台夹具，预置超出 JavaScript 安全整数范围的草稿 revision')
-    i=s.create();cookies=s.cookies;s.forward.terminate();s.forward.wait(timeout=5);del s.forward
-    s.k('scale','deployment/monitor-mgr','-n',s.ns,'--replicas=0');s.k('wait','--for=delete','pods','-l','app=monitor-mgr','-n',s.ns,'--timeout=60s')
-    script="import json,sqlite3;c=sqlite3.connect('/data/platform.db');c.execute('update drafts set revision=? where instance_id=?',(9007199254740993,"+repr(i['id'])+"));c.commit();print(json.dumps({'ok':True}))"
-    assert s.job('large-revision',script)['ok'];s.k('scale','deployment/monitor-mgr','-n',s.ns,'--replicas=1');s.k('rollout','status','deployment/monitor-mgr','-n',s.ns,'--timeout=120s')
-    pod=s.get('pods','-n',s.ns,'-l','app=monitor-mgr',target='control')['items'][0];s.pod=pod['metadata']['name'];s.platform_pod_uid=pod['metadata']['uid'];s.cookies=cookies;s.connect()
-    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,largeId=i['id'],largeName=i['name'])));os.chmod(fixture,0o600)
+    i=s.create()
+    legacy_ksm=s.create(s.cfg(name='historical-'+s.crname))
+    legacy_agent=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='historical-agent',namespace=s.targetns)},status=201)
+    from historical_identity import upgrade_v10
+    upgrade_v10(s,draft_revisions={i['id']:9007199254740993})
+    # 大revision主流程需要显式开放历史实例管理权限；创建事实仍保持未知角色。
+    s.call('POST','/instances/'+i['id']+'/management-confirmations',{'allowClusterManagers':True})
+    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,largeId=i['id'],largeName=i['name'],historical=[{'id':x['id'],'name':x['name'],'component':x['component']} for x in [legacy_ksm,legacy_agent]])));os.chmod(fixture,0o600)
     s.by('真实 Chromium 完成表单保存、精确大 revision、YAML/diff、发布、工作台与删除')
     out=s.out/'playwright';report_path=s.out/'playwright.json';env=dict(os.environ,BASE_URL=s.base,PHASE1_E2E_FIXTURE=str(fixture),PLAYWRIGHT_JSON_OUTPUT_FILE=str(report_path))
     r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)
