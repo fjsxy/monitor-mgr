@@ -28,6 +28,11 @@ spec:
         monitor-mgr.test/run: {{ .Values.runId | quote }}
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
       containers:
         - name: prometheus
           image: {{ required "必须指定已锁定 image" .Values.image | quote }}

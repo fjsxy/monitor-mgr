@@ -13,7 +13,7 @@ export function AgentExporterAssociation({creatorUserId,object,disabled,onChange
       // 关键：使用实例的可靠创建用户，不依据当前登录账号或创建时角色推测身份。
       onChange({mode:"Labels",selector:{...object.selector,matchLabels:{...object.selector?.matchLabels,[userLabel]:creatorUserId}}});
     }}>按创建用户关联 exporter</button>
-    {!creatorUserId && <p role="status" className="help">实例创建用户未知，无法使用快捷关联。保存实例并取得可靠创建用户后可用；仍可按现有权限手动配置自定义标签规则。</p>}
+    {!creatorUserId && <p role="status" className="help">实例创建用户未知，无法使用快捷关联。取得可靠创建用户后可用；尚未保存的新实例请先保存草稿。仍可按现有权限手动配置自定义标签规则。</p>}
     <p className="help">可继续编辑下方 matchLabels / matchExpressions；标签用于采集分组，实例管理权限单独检查。匹配不代表已采到指标。</p>
   </section>;
 }
