@@ -103,3 +103,7 @@ ut-agent-creator: ## Agent固定创建用户关联、namespace/匹配、HTTP/RPC
 	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 4m -args -ginkgo.focus='UT-08|UT-18' -ginkgo.no-color -ginkgo.fail-on-empty
 receiver-chart-check: ## 校验独占remote_write接收端Helm夹具，显式读取source-lock锁定镜像
 	$(HELM) lint charts/test-receiver --set-string runId=chart-check --set-string image="$$($(PYTHON) -c 'import json;print(json.load(open("scripts/acceptance/source-lock.json"))["images"]["prometheus"]["image"])')"
+
+.PHONY: ut-historical-exporter
+ut-historical-exporter: ## 历史exporter真实v10升级零写、明确补建、旧操作和身份恢复边界
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-12|UT-16' -ginkgo.no-color -ginkgo.fail-on-empty
