@@ -97,3 +97,7 @@ ut-exporter-companion: ## exporter 配套ServiceMonitor冻结、预检、部分�
 .PHONY: ut-historical-identity
 ut-historical-identity: ## 历史创建证据、管理员确认与撤销派发的 Ginkgo 定向验证
 	$(GO) test -count=1 -timeout 5m ./internal/platform -run TestPlatform -args -ginkgo.focus='UT-07|UT-10|UT-16' -ginkgo.no-color
+
+.PHONY: ut-historical-exporter
+ut-historical-exporter: ## 历史exporter真实v10升级零写、明确补建、旧操作和身份恢复边界
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-12|UT-16' -ginkgo.no-color -ginkgo.fail-on-empty
