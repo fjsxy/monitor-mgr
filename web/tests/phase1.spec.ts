@@ -18,7 +18,7 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(drawer.getByText('草稿 v1 已保存',{exact:true})).toBeVisible();
     await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
   });
-  const row=()=>page.getByRole('row').filter({hasText:fixture.largeName});
+  const row=()=>page.getByRole('row').filter({has:page.getByText(fixture.largeName,{exact:true})});
   await row().getByRole('button',{name:'编辑',exact:true}).click();
   const drawer=page.getByRole('dialog',{name:'实例详情',exact:true});
   await test.step('大 revision 在保存和 YAML 预览中保持精确',async()=>{
