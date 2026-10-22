@@ -5,11 +5,16 @@
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
 | I28-U01 | 草稿零写、两资源预览与冻结 | 经公开 HTTP 创建 KSM 并保存草稿；读取目标写计数；预览；发布并读取版本/操作资源 | 草稿0写；预览包含KSM与ServiceMonitor；冻结两资源；SM namespace等于部署namespace，user-id等于实际creator | #28 |
-| I28-U02.deployment | Operator标签与端口契约 | 以 Deployment、含点CR名发布；读SM selector/endpoint | instance标签使用锁定Operator规范化值，http-metrics与/metrics；不写Service | #28 |
-| I28-U02.stateful | StatefulSet分片选择 | 以StatefulSetSharded发布；读取SM | selector覆盖本实例分片Service，独立实例不匹配 | #28 |
-| I28-U02.daemon | DaemonSet多Service选择 | 以DaemonSetSharded发布；读取SM | selector同时匹配node/control Service，不限定role/endpoint-group，不匹配其他实例 | #28 |
+| I28-U02.deployment | Operator标签与端口契约 | 以 Deployment、含点CR名预览；读SM有效YAML中的selector/endpoint | instance标签使用锁定Operator规范化值，http-metrics与/metrics；不写Service | #28 |
+| I28-U02.stateful | StatefulSet分片选择 | 以StatefulSetSharded预览；读取SM有效YAML | selector覆盖本实例分片Service，独立实例不匹配 | #28 |
+| I28-U02.daemon | DaemonSet多Service选择 | 以DaemonSetSharded预览；读取SM有效YAML | selector同时匹配node/control Service，不限定role/endpoint-group，不匹配其他实例 | #28 |
 | I28-U02.long | 长名称规范化 | 以超过43字符合法CR名预览；核对规范化已知literal | selector使用Operator截断+SHA256摘要规范，SM名称稳定合法 | #28 |
-| I28-U03 | 发布前依赖和同名保护 | 分别令SM CRD/list不可用、namespace缺失、create/update权限不足、同名外部SM存在；预览/受理 | 拒绝并0组件写；不按name/spec/label接管；预览后目标变化拒绝受理 | #28 |
+| I28-U03.crd | CRD读取端点预检 | 令SM CRD/list不可用再预览 | 预览失败，0组件/SM业务写 | #28 |
+| I28-U03.namespace | 部署namespace预检 | 令指标Service部署namespace缺失再预览 | 预览失败，0组件/SM业务写 | #28 |
+| I28-U03.create | 新SM创建权限预检 | 令SM create SSAR拒绝再预览 | 返回403，0组件/SM业务写 | #28 |
+| I28-U03.update | 已有SM更新权限预检 | 先成功发布，再令SM update SSAR拒绝并预览 | 返回403，成功资源保留且无新增组件写 | #28 |
+| I28-U03.foreign | 同名外部SM不可接管 | 预置同名外部SM再预览 | 返回409，0业务写，不按name/spec/labels认领 | #28 |
+| I28-U03.race | 预览后同名变化拒绝受理 | 先预览，再预置同名外部SM，然后提交原预览 | 返回409且0业务写，必须重新确认 | #28 |
 | I28-U04 | 部分成功及人工原版本补齐 | 第二资源明确拒绝；读进度；编辑草稿；人工retry | exporter保留且SUCCEEDED；SM失败；retry先核验exporter原UID/冻结配置，只补SM且不采用新草稿 | #28 |
 | I28-U04.uid | 补齐前核验 exporter UID | SM失败后替换已成功exporter UID，再显式retry | 新尝试只读核验失败、0新增SM写，历史成功事实保留 | #28 |
 | I28-U04.drift | 补齐前核验 exporter 配置 | SM失败后改已成功exporter spec，再显式retry | 新尝试结果待确认、0新增SM写，不回滚或覆盖漂移 | #28 |

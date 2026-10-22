@@ -369,13 +369,18 @@ def companion_recovery(s,proxy):
         state={'reject':'FAILED','known':'RESULT_UNCERTAIN','unknown':'IDENTITY_UNCERTAIN'}[variant];before=s.state(op,state)
         component=next(p for p in before['resources'] if p['target']['key']=='component');sm=next(p for p in before['resources'] if p['target']['key']=='service-monitor')
         assert component['state']=='SUCCEEDED' and component['confirmedUid'] and sm['state']==state
-        counts=lambda:{'component':len([e for e in s.capture_proxy() if e['stage']=='upstream_completed' and e['method'] in ('POST','PUT') and e['path'] in (component_path,component_path.rsplit('/',1)[0])]),'sm':len([e for e in s.capture_proxy() if e['stage']=='upstream_completed' and e['method'] in ('POST','PUT') and e['path'] in (collection,path)])}
-        before_count=counts();original_uid=sm['confirmedUid']
+        original_uid=sm['confirmedUid'];observed_sm_uid=original_uid
         if variant=='unknown':
             assert not original_uid
-            creates=[e for e in s.capture_proxy() if e['stage']=='original_create_response' and e['path']==collection and e['originalCreate']['name']==name];assert len(creates)==1
-            s.owned_crs[(s.target,'servicemonitor',namespace,name)]=creates[0]['originalCreate']['uid']
+            creates=[e for e in s.capture_proxy() if e['stage']=='original_create_response' and e['path']==collection and e['originalCreate']['identity']['name']==name];assert len(creates)==1
+            observed_sm_uid=creates[0]['originalCreate']['uid']
+            s.owned_crs[(s.target,'servicemonitor',namespace,name)]=observed_sm_uid
         elif original_uid:s.owned_crs[(s.target,'servicemonitor',namespace,name)]=original_uid
+        def counts():
+            events=s.capture_proxy()
+            return {'component':len([e for e in events if e['stage']=='upstream_completed' and e['method'] in ('POST','PUT') and e['path'] in (component_path,component_path.rsplit('/',1)[0]) and e.get('metadataUID')==component['confirmedUid']]),
+                    'sm':len([e for e in events if e['stage']=='upstream_completed' and e['method'] in ('POST','PUT') and e['path'] in (collection,path) and (not observed_sm_uid or e.get('metadataUID')==observed_sm_uid)])}
+        before_count=counts()
         s.rebuild();proxy.control('reset',{})
         s.call('POST','/operations/'+op['operationId']+'/refresh',{})
         if variant=='reject':
@@ -656,6 +661,32 @@ def instance_identity_authorization(s,proxy):
     s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner})
 
 
+def remove_fixture_finalizer(s,resource,name,uid,finalizer):
+    """仅移除本例finalizer；只对明确RV test/修改冲突且同UID新RV的情况最多尝试三次。"""
+    current=s.get(resource,name);records=[]
+    for attempt in range(3):
+        meta=current['metadata'];assert meta['uid']==uid,'fixture拒绝修改替代UID'
+        if finalizer not in meta.get('finalizers',[]):return
+        rv=meta['resourceVersion']
+        patch=[{'op':'test','path':'/metadata/uid','value':uid},{'op':'test','path':'/metadata/resourceVersion','value':rv},{'op':'replace','path':'/metadata/finalizers','value':[f for f in meta['finalizers'] if f!=finalizer]}]
+        result=s.k('patch',resource,name,'--type=json','-p',json.dumps(patch),target=s.target,check=False)
+        if not result.returncode:
+            records.append({'attempt':attempt+1,'result':'SUCCEEDED','uid':uid,'resourceVersion':rv})
+            (s.env.public/'fixture-finalizer.json').write_text(json.dumps({'testedCommit':s.env.candidate,'records':records},ensure_ascii=False,indent=2)+'\n');return
+        # 关键：不能仅凭观察到RV变化重试任意拒绝；必须先从原错误确认RV test或标准修改冲突。
+        error=result.stderr.decode(errors='replace')
+        rv_test='testing value /metadata/resourceVersion failed' in error and 'test failed' in error
+        rv_conflict='(Conflict)' in error and 'the object has been modified' in error
+        category='JSON_PATCH_RV_TEST' if rv_test else 'RV_MODIFIED_CONFLICT' if rv_conflict else 'NON_RV_REJECTED'
+        records.append({'attempt':attempt+1,'result':category,'uid':uid,'resourceVersion':rv})
+        (s.env.public/'fixture-finalizer.json').write_text(json.dumps({'testedCommit':s.env.candidate,'records':records},ensure_ascii=False,indent=2)+'\n')
+        if not (rv_test or rv_conflict):raise RuntimeError('fixture finalizer非RV失败；保留私有原stderr，不重试')
+        fresh=s.get(resource,name);latest=fresh['metadata']
+        if latest['uid']!=uid or latest['resourceVersion']==rv:raise RuntimeError('fixture finalizer错误无法确认同原UID的新RV，不重试')
+        if attempt==2:raise RuntimeError('fixture finalizer同原UID的RV冲突达到三次上限')
+        current=fresh
+
+
 def deletion(s):
     s.prepare();unrelated=s.a.prefix+'-unrelated';s.namespace(unrelated)
     kept={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'keep','namespace':unrelated},'data':{'marker':'owned-fixture'}}
@@ -669,7 +700,7 @@ def deletion(s):
     s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'add','path':'/metadata/finalizers','value':finalizers}]))
     op=s.delete(i,False);s.state(op,'DELETION_BLOCKED','DELETION_VERIFYING');assert s.call('GET','/operations/'+op['operationId'])['state']!='SUCCEEDED'
     s.call('POST','/clusters/'+s.cluster['id']+'/unregister',{},status=409);s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner},status=409)
-    cr=s.cr();s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'test','path':'/metadata/resourceVersion','value':cr['metadata']['resourceVersion']},{'op':'replace','path':'/metadata/finalizers','value':[f for f in cr['metadata'].get('finalizers',[]) if f!='phase1.fixture/hold']}]))
+    remove_fixture_finalizer(s,'kubestatemetrics',s.crname,uid,'phase1.fixture/hold')
     wait(lambda:s.call('POST','/operations/'+op['operationId']+'/refresh',{}),lambda value:value['state']=='SUCCEEDED',message='前台删除原图未结束')
     assert not s.workloads() and s.k('get','kubestatemetrics',s.crname,check=False).returncode!=0
     assert s.k('get','servicemonitor',original_sm['metadata']['name'],'-n',original_namespace,check=False).returncode!=0
