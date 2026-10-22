@@ -102,6 +102,7 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 var _ = ginkgo.It("UT-12 预览与删除保护", func() {
 	t := ginkgo.GinkgoT()
 	checkCompanionIdentityAndDeletion(t)
+	checkHistoricalCompanionProtection(t)
 	checkTestDeletionPreviewBindsTargetAndImpact(t)
 	checkTestP05DriftOverwritePreservesMetadataAndP06Equivalent(t)
 	checkPublicationStatusConflict(t)
@@ -149,6 +150,9 @@ var _ = ginkgo.It("UT-16 数据库主密钥与敏感投影", func() {
 	t := ginkgo.GinkgoT()
 	checkTestUnknownCreatorMigration(t)
 	checkTestHistoricalCreatorEvidence(t)
+	checkHistoricalCompanionPublication(t)
+	checkHistoricalCompanionUnknownCreator(t)
+	checkHistoricalCompanionOldOperations(t)
 	checkTestHistoricalMigrationRollback(t)
 	checkTestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL(t)
 	checkLegacyPublicationMigration(t)

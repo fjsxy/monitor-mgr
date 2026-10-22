@@ -229,10 +229,16 @@ def platform(s):
     s.rebuild();assert s.proof('store-after')==proof;assert s.call('GET','/session')['expiresAt']==before['expiresAt'];assert s.call('GET','/clusters/'+cluster['id'])['uid']==cluster['uid']
     assert s.get('pvc','monitor-mgr-data','-n',s.ns,target='control')['metadata']['uid']==pvc
     s.by('I26-K01：真实 v10 PVC 升级仅补可靠创建用户，历史角色保持未知')
-    s.prepare();known=s.create();missing=s.create(s.cfg(name='missing-'+s.crname))
+    s.prepare();proxy=s.setup_proxy();known=s.create();missing=s.create(s.cfg(name='missing-'+s.crname))
+    from historical_exporter import remove_fixture_companion, publication_counts, legacy_single_resource
+    old_publication=s.publish(known);original_uid=s.cr()['metadata']['uid'];old_sm=remove_fixture_companion(s,old_publication)
+    legacy_counts=publication_counts(s,s.crname,old_sm)
     original_actor=s.call('GET','/session')['account']['id']
     from historical_identity import upgrade_v10
     upgrade_v10(s,missing_ids=[missing['id']])
+    old_frozen=legacy_single_resource(s,known,old_publication)
+    assert publication_counts(s,s.crname,old_sm)==legacy_counts
+    assert s.cr()['metadata']['uid']==original_uid
     account,client=s.user('legacy');s.call('POST','/clusters/'+cluster['id']+'/transfer',{'ownerId':account['id']})
     for instance,expected in [(known,original_actor),(missing,'')]:
         with s.using(client):
@@ -241,9 +247,22 @@ def platform(s):
             s.call('POST','/instances/'+instance['id']+'/management-confirmations',{'allowClusterManagers':True},status=403)
     result=s.call('POST','/instances/'+known['id']+'/management-confirmations',{'allowClusterManagers':True})
     assert result['managementConfirmation']['actorId']==original_actor and result['managementConfirmation']['confirmedAt'] and result['creatorRole']==''
+    s.by('I29-K01：升级、补齐、管理员确认和轮询零SM写，明确发布新版本才补建')
+    for _ in range(3):
+        s.call('POST','/instances/'+known['id']+'/refresh',{})
+        s.call('POST','/operations/'+old_publication['operationId']+'/refresh',{})
+    assert publication_counts(s,s.crname,old_sm)==legacy_counts
     s.by('I26-K01：确认后普通所属用户真实保存/发布，撤销后恢复只读')
     with s.using(client):
-        s.save(known,s.cfg());s.publish(known);s.runtime(known)
+        s.save(known,s.cfg());backfilled=s.publish(known);s.runtime(known)
+    assert backfilled['versionId']!=old_publication['versionId'] and len(backfilled['resources'])==2
+    after_counts=publication_counts(s,s.crname,old_sm)
+    assert after_counts['componentPOST']==legacy_counts['componentPOST'] and after_counts['componentPUT']==legacy_counts['componentPUT']+1
+    assert after_counts['smPOST']==legacy_counts['smPOST']+1 and after_counts['smPUT']==legacy_counts['smPUT'] and after_counts['smMutation']==legacy_counts['smMutation']+1
+    sm=s.get('servicemonitor',old_sm['name'],'-n',old_sm['namespace'])
+    assert sm['metadata']['labels']['monitor-mgr.io/user-id']==original_actor and s.cr()['metadata']['uid']==original_uid
+    assert legacy_single_resource(s,known,old_publication)==old_frozen
+    (s.env.public/'historical-exporter.json').write_text(json.dumps({'testedCommit':s.env.candidate,'podUID':s.platform_pod_uid,'legacy':old_frozen,'newVersionId':backfilled['versionId'],'componentUID':original_uid,'serviceMonitorUID':sm['metadata']['uid'],'creatorUserId':original_actor,'before':legacy_counts,'after':after_counts},ensure_ascii=False,indent=2)+'\n')
     assert s.call('GET','/instances/'+known['id'])['uid']==s.cr()['metadata']['uid']
     s.call('POST','/instances/'+known['id']+'/management-confirmations',{'allowClusterManagers':False})
     with s.using(client):
@@ -593,6 +612,8 @@ def recovery(s):
     assert len(attempts)==2 and next(p for p in attempts[0]['resources'] if p['target']['key']=='component')['state']=='FAILED'
     receipt=dict(testedCommit=s.env.candidate,beforeRebuild=before_progress,afterRebuild=after_progress,knownUIDWriteCount=before,unknownBefore=unknown_before,unknownAfter=unknown_after,unknownWriteCount=1,retry=retry_progress)
     (s.env.public/'resource-progress-recovery.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+    from historical_exporter import recovery as historical_exporter_recovery
+    historical_exporter_recovery(s,proxy)
 
 
 def instance_identity_authorization(s,proxy):
@@ -722,10 +743,12 @@ def browser(s):
     legacy_ksm=s.create(s.cfg(name='historical-'+s.crname))
     legacy_agent=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='historical-agent',namespace=s.targetns)},status=201)
     from historical_identity import upgrade_v10
+    from historical_exporter import remove_fixture_companion
+    historical_publication=s.publish(legacy_ksm);remove_fixture_companion(s,historical_publication)
     upgrade_v10(s,draft_revisions={i['id']:9007199254740993})
     # 大revision主流程需要显式开放历史实例管理权限；创建事实仍保持未知角色。
     s.call('POST','/instances/'+i['id']+'/management-confirmations',{'allowClusterManagers':True})
-    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,largeId=i['id'],largeName=i['name'],proxyBase=proxy.base,proxyToken=proxy.token,historical=[{'id':x['id'],'name':x['name'],'component':x['component']} for x in [legacy_ksm,legacy_agent]])));os.chmod(fixture,0o600)
+    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,largeId=i['id'],largeName=i['name'],proxyBase=proxy.base,proxyToken=proxy.token,historicalPublication={'instanceId':legacy_ksm['id'],'name':legacy_ksm['name'],'versionId':historical_publication['versionId'],'operationId':historical_publication['operationId']},historical=[{'id':x['id'],'name':x['name'],'component':x['component']} for x in [legacy_ksm,legacy_agent]])));os.chmod(fixture,0o600)
     s.by('真实 Chromium 完成表单保存、精确大 revision、YAML/diff、发布、工作台与删除')
     out=s.out/'playwright';report_path=s.out/'playwright.json';env=dict(os.environ,BASE_URL=s.base,PHASE1_E2E_FIXTURE=str(fixture),PLAYWRIGHT_JSON_OUTPUT_FILE=str(report_path))
     r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)

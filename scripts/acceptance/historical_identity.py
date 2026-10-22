@@ -28,6 +28,8 @@ for actor,action,target,key,raw in c.execute("SELECT actor_id,action,target_id,c
     c.execute('UPDATE command_results SET result_json=? WHERE actor_id=? AND action=? AND target_id=? AND command_key=?',(json.dumps(value),actor,action,target,key))
 for instance,revision in REVISIONS.items():
     c.execute('UPDATE drafts SET revision=? WHERE instance_id=?',(revision,instance))
+# v10的KSM预览没有新SM基线；Agent原存储指纹仍保留。
+c.execute("UPDATE publication_previews SET storage_fingerprint='' WHERE instance_id IN (SELECT id FROM instances WHERE component='kube-state-metrics')")
 c.execute('DELETE FROM schema_migrations WHERE version>10');c.commit()
 assert c.execute('SELECT max(version) FROM schema_migrations').fetchone()[0]==10
 assert not {'creator_user_id','creator_role'} & {r[1] for r in c.execute('PRAGMA table_info(instances)')}

@@ -62,6 +62,36 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     await modal.getByRole('button',{name:'确认删除实例',exact:true}).click();const op=await(await accepted).json();
     await expect.poll(async()=>{await page.request.post(`/api/v1/operations/${op.operationId}/refresh`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data:{}});return (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state;},{timeout:90000}).toBe('SUCCEEDED');
   });
+  await test.step('I29-B01 历史单资源版本只读，新明确发布才补建并展示独立进度',async()=>{
+    const legacy=fixture.historicalPublication;
+    const legacyRow=()=>page.getByRole('row').filter({has:page.getByText(legacy.name,{exact:true})});
+    await page.getByRole('button',{name:'刷新列表',exact:true}).click();
+    await legacyRow().locator('.version-link').click();
+    const frozen=drawer.getByLabel('冻结资源集合',{exact:true});
+    await expect(frozen).toContainText('冻结资源（1）');await expect(frozen).toContainText('KubeStateMetrics');await expect(frozen).not.toContainText('ServiceMonitor');
+    await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+    await legacyRow().getByRole('button',{name:'编辑',exact:true}).click();
+    await drawer.getByRole('tab',{name:'运行信息',exact:true}).click();
+    const oldProgress=drawer.getByLabel('逐资源执行进度',{exact:true}).first();
+    await expect(oldProgress).toContainText('KubeStateMetrics');await expect(oldProgress).not.toContainText('ServiceMonitor');
+    await drawer.getByRole('tab',{name:'配置草稿',exact:true}).click();
+    await drawer.getByRole('button',{name:'预览下发',exact:true}).click();
+    const preview=page.getByRole('dialog',{name:/下发预览/});await expect(preview).toContainText('kind: ServiceMonitor');
+    const before=await(await page.request.get(`/api/v1/instances/${legacy.instanceId}`)).json();
+    await expect(preview).toContainText(`monitor-mgr.io/user-id: ${before.creatorUserId}`);
+    const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${legacy.instanceId}/publications`&&r.request().method()==='POST');
+    await preview.getByRole('button',{name:'确认下发',exact:true}).click();const op=await(await accepted).json();
+    expect(op.versionId).not.toBe(legacy.versionId);
+    await expect.poll(async()=> (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state,{timeout:45000}).toBe('SUCCEEDED');
+    await drawer.getByRole('button',{name:'刷新当前状态',exact:true}).click();
+    const progress=drawer.getByLabel('逐资源执行进度',{exact:true}).first();await expect(progress).toContainText('KubeStateMetrics');await expect(progress).toContainText('ServiceMonitor');await expect(progress).toContainText('UID：');
+    const after=await(await page.request.get(`/api/v1/instances/${legacy.instanceId}`)).json();expect(after.uid).toBe(before.uid);
+    const old=await(await page.request.get(`/api/v1/instances/${legacy.instanceId}/versions/${legacy.versionId}`)).json();expect(old.resources).toHaveLength(1);
+    await page.screenshot({path:info.outputPath('historical-explicit-companion.png')});
+    await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();await page.getByRole('button',{name:'刷新列表',exact:true}).click();
+    await legacyRow().locator('.version-link').click();await expect(frozen).toContainText('冻结资源（2）');await expect(frozen).toContainText('ServiceMonitor');
+    await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+  });
   await test.step('I25-B01 管理员与普通用户创建的 exporter/collector 显示不同管理权限',async()=>{
     const send=async(path:string,data:unknown,status=200)=>{
       const response=await page.request.post(`/api/v1${path}`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data});
