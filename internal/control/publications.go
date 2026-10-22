@@ -146,6 +146,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if e != nil {
 		return nil, e
 	}
+	if !i.CanManage {
+		return nil, Error("FORBIDDEN", i.ReadOnlyReason)
+	}
 	if i.ReadOnly {
 		return nil, Error("FORBIDDEN", "未纳管实例只读")
 	}

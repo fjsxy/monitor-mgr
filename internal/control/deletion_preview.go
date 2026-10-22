@@ -135,6 +135,9 @@ func (s *Store) PreviewDeletion(ctx context.Context, c *rpc.RequestContext, r *r
 	if e != nil {
 		return nil, e
 	}
+	if !i.CanManage {
+		return nil, Error("FORBIDDEN", i.ReadOnlyReason)
+	}
 	if e = rejectUnknownFields(r, "request"); e != nil {
 		return nil, e
 	}

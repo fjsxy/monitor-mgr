@@ -70,7 +70,7 @@ func checkTestWorkbenchActivitySequencePersists(t ginkgo.GinkgoTInterface) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.Exec(dropAgentStorageSchema + `DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DELETE FROM schema_migrations WHERE version>8`); err != nil {
+	if _, err = db.Exec(dropInstanceCreatorSchema + dropAgentStorageSchema + `DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DELETE FROM schema_migrations WHERE version>8`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = db.Exec(`UPDATE instances SET activity_at='2026-10-19T01:01:00Z' WHERE id=?`, b); err != nil {
@@ -93,7 +93,7 @@ func checkTestWorkbenchActivitySequencePersists(t ginkgo.GinkgoTInterface) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.Exec(dropAgentStorageSchema + `DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DELETE FROM schema_migrations WHERE version>8`); err != nil {
+	if _, err = db.Exec(dropInstanceCreatorSchema + dropAgentStorageSchema + `DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DELETE FROM schema_migrations WHERE version>8`); err != nil {
 		t.Fatal(err)
 	}
 	earlier, later := a, b

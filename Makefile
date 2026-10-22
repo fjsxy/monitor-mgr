@@ -82,3 +82,7 @@ ci-builder: ## CI 创建本 run 独占、固定版本的 BuildKit；须指定 BU
 	$(PYTHON) scripts/ci-builder.py create --name "$(BUILDX_BUILDER)"
 ci-builder-cleanup: ## 按记录的原容器 ID 清理本 run 构建器
 	$(PYTHON) scripts/ci-builder.py cleanup --name "$(BUILDX_BUILDER)"
+
+.PHONY: ut-instance-identity
+ut-instance-identity: ## 实例创建身份、HTTP/RPC写保护、派发撤权与历史未知角色的Ginkgo验证
+	$(GO) test -count=1 -timeout 5m ./internal/platform -run TestPlatform -args -ginkgo.focus='UT-07|UT-10|UT-16' -ginkgo.no-color
