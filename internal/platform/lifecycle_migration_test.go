@@ -69,7 +69,7 @@ func checkLegacyPublicationMigration(t ginkgo.GinkgoTInterface) {
 				t.Fatal(e)
 			}
 			// 关键：裁除所有v6及后续关系/字段，留下精确v5形状；不把新schema残余伪装成旧库。
-			_, e = db.Exec(dropAgentStorageSchema + `PRAGMA foreign_keys=OFF;DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DROP TABLE deletion_previews;DROP TABLE seen_resources;DROP TABLE deletion_operations;DROP TABLE operation_lifecycle;ALTER TABLE execution_attempts DROP COLUMN revision;ALTER TABLE execution_attempts DROP COLUMN sequence;ALTER TABLE execution_attempts DROP COLUMN actor_id;ALTER TABLE execution_attempts DROP COLUMN message;DELETE FROM schema_migrations WHERE version>5;`)
+			_, e = db.Exec(dropInstanceCreatorSchema + dropAgentStorageSchema + `PRAGMA foreign_keys=OFF;DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DROP TABLE deletion_previews;DROP TABLE seen_resources;DROP TABLE deletion_operations;DROP TABLE operation_lifecycle;ALTER TABLE execution_attempts DROP COLUMN revision;ALTER TABLE execution_attempts DROP COLUMN sequence;ALTER TABLE execution_attempts DROP COLUMN actor_id;ALTER TABLE execution_attempts DROP COLUMN message;DELETE FROM schema_migrations WHERE version>5;`)
 			if e != nil {
 				t.Fatal(e)
 			}

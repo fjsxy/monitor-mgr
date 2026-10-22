@@ -133,7 +133,7 @@ func checkTestAgentRevisionNameBudgetLegacyAndWorker(t ginkgo.GinkgoTInterface) 
 	}
 	// 关键：移除 v10 以后关系后重启，按真实历史 schema 投影原名称，不能只改旧来源却遗留新冻结目标。
 	p.Close(context.Background())
-	if _, err = db.Exec(dropResourceProgressSchema + `DELETE FROM schema_migrations WHERE version>10;`); err != nil {
+	if _, err = db.Exec(dropInstanceCreatorSchema + dropResourceProgressSchema + `DELETE FROM schema_migrations WHERE version>10;`); err != nil {
 		t.Fatal(err)
 	}
 	db.Close()

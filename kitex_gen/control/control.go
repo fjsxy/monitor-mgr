@@ -4327,24 +4327,29 @@ var fieldIDToName_InstanceRuntime = map[int16]string{
 }
 
 type ObservationInstance struct {
-	Id               string               `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	ClusterId        string               `thrift:"clusterId,2,required" frugal:"2,required,string" json:"clusterId"`
-	Name             string               `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
-	TargetNamespace  string               `thrift:"targetNamespace,4,required" frugal:"4,required,string" json:"targetNamespace"`
-	Component        string               `thrift:"component,5,required" frugal:"5,required,string" json:"component"`
-	Type             string               `thrift:"type,6,required" frugal:"6,required,string" json:"type"`
-	ReadOnly         bool                 `thrift:"readOnly,7,required" frugal:"7,required,bool" json:"readOnly"`
-	Uid              string               `thrift:"uid,8,required" frugal:"8,required,string" json:"uid"`
-	Lifecycle        string               `thrift:"lifecycle,9,required" frugal:"9,required,string" json:"lifecycle"`
-	CurrentVersionId string               `thrift:"currentVersionId,10,required" frugal:"10,required,string" json:"currentVersionId"`
-	ActivityAt       string               `thrift:"activityAt,11,required" frugal:"11,required,string" json:"activityAt"`
-	Runtime          *InstanceRuntime     `thrift:"runtime,12,optional" frugal:"12,optional,InstanceRuntime" json:"runtime,omitempty"`
-	Ownership        string               `thrift:"ownership,13,required" frugal:"13,required,string" json:"ownership"`
-	Yaml             *string              `thrift:"yaml,14,optional" frugal:"14,optional,string" json:"yaml,omitempty"`
-	CrNamespace      *string              `thrift:"crNamespace,15,optional" frugal:"15,optional,string" json:"crNamespace,omitempty"`
-	Scope            *string              `thrift:"scope,16,optional" frugal:"16,optional,string" json:"scope,omitempty"`
-	Sources          []*SourceObservation `thrift:"sources,17,optional" frugal:"17,optional,list<SourceObservation>" json:"sources,omitempty"`
-	_unknownFields   unknown.Fields
+	Id                   string               `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	ClusterId            string               `thrift:"clusterId,2,required" frugal:"2,required,string" json:"clusterId"`
+	Name                 string               `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
+	TargetNamespace      string               `thrift:"targetNamespace,4,required" frugal:"4,required,string" json:"targetNamespace"`
+	Component            string               `thrift:"component,5,required" frugal:"5,required,string" json:"component"`
+	Type                 string               `thrift:"type,6,required" frugal:"6,required,string" json:"type"`
+	ReadOnly             bool                 `thrift:"readOnly,7,required" frugal:"7,required,bool" json:"readOnly"`
+	Uid                  string               `thrift:"uid,8,required" frugal:"8,required,string" json:"uid"`
+	Lifecycle            string               `thrift:"lifecycle,9,required" frugal:"9,required,string" json:"lifecycle"`
+	CurrentVersionId     string               `thrift:"currentVersionId,10,required" frugal:"10,required,string" json:"currentVersionId"`
+	ActivityAt           string               `thrift:"activityAt,11,required" frugal:"11,required,string" json:"activityAt"`
+	Runtime              *InstanceRuntime     `thrift:"runtime,12,optional" frugal:"12,optional,InstanceRuntime" json:"runtime,omitempty"`
+	Ownership            string               `thrift:"ownership,13,required" frugal:"13,required,string" json:"ownership"`
+	Yaml                 *string              `thrift:"yaml,14,optional" frugal:"14,optional,string" json:"yaml,omitempty"`
+	CrNamespace          *string              `thrift:"crNamespace,15,optional" frugal:"15,optional,string" json:"crNamespace,omitempty"`
+	Scope                *string              `thrift:"scope,16,optional" frugal:"16,optional,string" json:"scope,omitempty"`
+	Sources              []*SourceObservation `thrift:"sources,17,optional" frugal:"17,optional,list<SourceObservation>" json:"sources,omitempty"`
+	CreatorUserId        string               `thrift:"creatorUserId,18,required" frugal:"18,required,string" json:"creatorUserId"`
+	CreatorRole          string               `thrift:"creatorRole,19,required" frugal:"19,required,string" json:"creatorRole"`
+	CreatorIdentityKnown bool                 `thrift:"creatorIdentityKnown,20,required" frugal:"20,required,bool" json:"creatorIdentityKnown"`
+	CanManage            bool                 `thrift:"canManage,21,required" frugal:"21,required,bool" json:"canManage"`
+	ReadOnlyReason       string               `thrift:"readOnlyReason,22,required" frugal:"22,required,string" json:"readOnlyReason"`
+	_unknownFields       unknown.Fields
 }
 
 func NewObservationInstance() *ObservationInstance {
@@ -4446,6 +4451,26 @@ func (p *ObservationInstance) GetSources() (v []*SourceObservation) {
 	}
 	return p.Sources
 }
+
+func (p *ObservationInstance) GetCreatorUserId() (v string) {
+	return p.CreatorUserId
+}
+
+func (p *ObservationInstance) GetCreatorRole() (v string) {
+	return p.CreatorRole
+}
+
+func (p *ObservationInstance) GetCreatorIdentityKnown() (v bool) {
+	return p.CreatorIdentityKnown
+}
+
+func (p *ObservationInstance) GetCanManage() (v bool) {
+	return p.CanManage
+}
+
+func (p *ObservationInstance) GetReadOnlyReason() (v string) {
+	return p.ReadOnlyReason
+}
 func (p *ObservationInstance) SetId(val string) {
 	p.Id = val
 }
@@ -4497,6 +4522,21 @@ func (p *ObservationInstance) SetScope(val *string) {
 func (p *ObservationInstance) SetSources(val []*SourceObservation) {
 	p.Sources = val
 }
+func (p *ObservationInstance) SetCreatorUserId(val string) {
+	p.CreatorUserId = val
+}
+func (p *ObservationInstance) SetCreatorRole(val string) {
+	p.CreatorRole = val
+}
+func (p *ObservationInstance) SetCreatorIdentityKnown(val bool) {
+	p.CreatorIdentityKnown = val
+}
+func (p *ObservationInstance) SetCanManage(val bool) {
+	p.CanManage = val
+}
+func (p *ObservationInstance) SetReadOnlyReason(val string) {
+	p.ReadOnlyReason = val
+}
 
 func (p *ObservationInstance) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -4547,6 +4587,11 @@ var fieldIDToName_ObservationInstance = map[int16]string{
 	15: "crNamespace",
 	16: "scope",
 	17: "sources",
+	18: "creatorUserId",
+	19: "creatorRole",
+	20: "creatorIdentityKnown",
+	21: "canManage",
+	22: "readOnlyReason",
 }
 
 type InstancesResult_ struct {

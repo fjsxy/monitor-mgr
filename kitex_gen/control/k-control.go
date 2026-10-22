@@ -15889,6 +15889,11 @@ func (p *ObservationInstance) FastRead(buf []byte) (int, error) {
 	var issetCurrentVersionId bool = false
 	var issetActivityAt bool = false
 	var issetOwnership bool = false
+	var issetCreatorUserId bool = false
+	var issetCreatorRole bool = false
+	var issetCreatorIdentityKnown bool = false
+	var issetCanManage bool = false
+	var issetReadOnlyReason bool = false
 	for {
 		var isUnknownField bool
 		var beginOff int = offset
@@ -16151,6 +16156,81 @@ func (p *ObservationInstance) FastRead(buf []byte) (int, error) {
 					goto SkipFieldError
 				}
 			}
+		case 18:
+			if fieldTypeId == thrift.STRING {
+				l, err = p.FastReadField18(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetCreatorUserId = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 19:
+			if fieldTypeId == thrift.STRING {
+				l, err = p.FastReadField19(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetCreatorRole = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 20:
+			if fieldTypeId == thrift.BOOL {
+				l, err = p.FastReadField20(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetCreatorIdentityKnown = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 21:
+			if fieldTypeId == thrift.BOOL {
+				l, err = p.FastReadField21(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetCanManage = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 22:
+			if fieldTypeId == thrift.STRING {
+				l, err = p.FastReadField22(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetReadOnlyReason = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
 		default:
 			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
 			offset += l
@@ -16221,6 +16301,31 @@ func (p *ObservationInstance) FastRead(buf []byte) (int, error) {
 
 	if !issetOwnership {
 		fieldId = 13
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetCreatorUserId {
+		fieldId = 18
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetCreatorRole {
+		fieldId = 19
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetCreatorIdentityKnown {
+		fieldId = 20
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetCanManage {
+		fieldId = 21
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetReadOnlyReason {
+		fieldId = 22
 		goto RequiredFieldNotSetError
 	}
 	return offset, nil
@@ -16481,6 +16586,76 @@ func (p *ObservationInstance) FastReadField17(buf []byte) (int, error) {
 	return offset, nil
 }
 
+func (p *ObservationInstance) FastReadField18(buf []byte) (int, error) {
+	offset := 0
+
+	var _field string
+	if v, l, err := thrift.Binary.ReadString(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.CreatorUserId = _field
+	return offset, nil
+}
+
+func (p *ObservationInstance) FastReadField19(buf []byte) (int, error) {
+	offset := 0
+
+	var _field string
+	if v, l, err := thrift.Binary.ReadString(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.CreatorRole = _field
+	return offset, nil
+}
+
+func (p *ObservationInstance) FastReadField20(buf []byte) (int, error) {
+	offset := 0
+
+	var _field bool
+	if v, l, err := thrift.Binary.ReadBool(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.CreatorIdentityKnown = _field
+	return offset, nil
+}
+
+func (p *ObservationInstance) FastReadField21(buf []byte) (int, error) {
+	offset := 0
+
+	var _field bool
+	if v, l, err := thrift.Binary.ReadBool(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.CanManage = _field
+	return offset, nil
+}
+
+func (p *ObservationInstance) FastReadField22(buf []byte) (int, error) {
+	offset := 0
+
+	var _field string
+	if v, l, err := thrift.Binary.ReadString(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.ReadOnlyReason = _field
+	return offset, nil
+}
+
 func (p *ObservationInstance) FastWrite(buf []byte) int {
 	return p.FastWriteNocopy(buf, nil)
 }
@@ -16489,6 +16664,8 @@ func (p *ObservationInstance) FastWriteNocopy(buf []byte, w thrift.NocopyWriter)
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField7(buf[offset:], w)
+		offset += p.fastWriteField20(buf[offset:], w)
+		offset += p.fastWriteField21(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
@@ -16505,6 +16682,9 @@ func (p *ObservationInstance) FastWriteNocopy(buf []byte, w thrift.NocopyWriter)
 		offset += p.fastWriteField15(buf[offset:], w)
 		offset += p.fastWriteField16(buf[offset:], w)
 		offset += p.fastWriteField17(buf[offset:], w)
+		offset += p.fastWriteField18(buf[offset:], w)
+		offset += p.fastWriteField19(buf[offset:], w)
+		offset += p.fastWriteField22(buf[offset:], w)
 		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
@@ -16531,6 +16711,11 @@ func (p *ObservationInstance) BLength() int {
 		l += p.field15Length()
 		l += p.field16Length()
 		l += p.field17Length()
+		l += p.field18Length()
+		l += p.field19Length()
+		l += p.field20Length()
+		l += p.field21Length()
+		l += p.field22Length()
 		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
@@ -16673,6 +16858,41 @@ func (p *ObservationInstance) fastWriteField17(buf []byte, w thrift.NocopyWriter
 	return offset
 }
 
+func (p *ObservationInstance) fastWriteField18(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 18)
+	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.CreatorUserId)
+	return offset
+}
+
+func (p *ObservationInstance) fastWriteField19(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 19)
+	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.CreatorRole)
+	return offset
+}
+
+func (p *ObservationInstance) fastWriteField20(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.BOOL, 20)
+	offset += thrift.Binary.WriteBool(buf[offset:], p.CreatorIdentityKnown)
+	return offset
+}
+
+func (p *ObservationInstance) fastWriteField21(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.BOOL, 21)
+	offset += thrift.Binary.WriteBool(buf[offset:], p.CanManage)
+	return offset
+}
+
+func (p *ObservationInstance) fastWriteField22(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 22)
+	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.ReadOnlyReason)
+	return offset
+}
+
 func (p *ObservationInstance) field1Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
@@ -16803,6 +17023,41 @@ func (p *ObservationInstance) field17Length() int {
 			l += v.BLength()
 		}
 	}
+	return l
+}
+
+func (p *ObservationInstance) field18Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.StringLengthNocopy(p.CreatorUserId)
+	return l
+}
+
+func (p *ObservationInstance) field19Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.StringLengthNocopy(p.CreatorRole)
+	return l
+}
+
+func (p *ObservationInstance) field20Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.BoolLength()
+	return l
+}
+
+func (p *ObservationInstance) field21Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.BoolLength()
+	return l
+}
+
+func (p *ObservationInstance) field22Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.StringLengthNocopy(p.ReadOnlyReason)
 	return l
 }
 

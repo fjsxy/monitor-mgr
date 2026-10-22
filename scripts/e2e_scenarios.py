@@ -428,9 +428,9 @@ def recovery(s):
     proxy.arm('PUT',path,'drop_and_block_reads');op=s.publish(i,wait=False);s.state(op,'RESULT_UNCERTAIN')
     s.by('I27-K01：记录该资源独立 UID、发送边界及冻结版本后重建真实平台 Pod')
     original_uid=s.cr()['metadata']['uid'];before_progress=resource_progress(s,op,'RESULT_UNCERTAIN',original_uid)
-    before=len(s.mutations(s.capture_proxy(),'PUT'));assert before==1;s.rebuild();proxy.control('reset',{})
+    before=len([event for event in s.mutations(s.capture_proxy(),'PUT') if event['path']==path]);assert before==1;s.rebuild();proxy.control('reset',{})
     s.call('POST','/operations/'+op['operationId']+'/refresh',{});s.state(op,'SUCCEEDED',timeout=60)
-    assert len(s.mutations(s.capture_proxy(),'PUT'))==before
+    assert len([event for event in s.mutations(s.capture_proxy(),'PUT') if event['path']==path])==before
     after_progress=resource_progress(s,op,'SUCCEEDED',original_uid);assert after_progress['frozenSHA256']==before_progress['frozenSHA256']
     s.by('首次创建丢响应且没有原 UID，禁止按同名对象补认或重建')
     s.crname='unknown-'+uuid.uuid4().hex[:8];unknown=s.create()
