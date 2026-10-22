@@ -256,11 +256,17 @@ func checkTestHistoricalManagementDispatchRevocation(t ginkgo.GinkgoTInterface) 
 
 func checkTestHistoricalMigrationRollback(t ginkgo.GinkgoTInterface) {
 	ginkgo.By("I26-08：新迁移失败保留真实旧 schema、原密文/UID/版本/任务/审计和一致快照")
-	p, admin, user, id, cluster, _, cfg := historicalFixture(t, nil, true)
+	p, admin, user, id, cluster, target, cfg := historicalFixture(t, nil, true)
 	op := lifecyclePublish(t, p, admin, id)
 	awaitLifecycleState(t, p, admin, op["operationId"].(string), "SUCCEEDED")
 	before := readJSON(t, p, "/instances/"+id, admin)
 	version := readJSON(t, p, "/instances/"+id+"/versions/"+op["versionId"].(string), admin)
+	// 旧v10契约只冻结组件；当前产品先建出的SM属于夹具转换，不能留在目标冒充旧部署。
+	originalComponent := version["resources"].([]any)[0]
+	delete(version, "resources")
+	target.mu.Lock()
+	target.sm = nil
+	target.mu.Unlock()
 	p.Close(context.Background())
 	path := filepath.Join(cfg.DataDir, "platform.db")
 	db, e := sql.Open("sqlite", path)
@@ -349,6 +355,13 @@ func checkTestHistoricalMigrationRollback(t ginkgo.GinkgoTInterface) {
 		t.Fatal("恢复改变实例事实", got)
 	}
 	afterVersion := readJSON(t, restored, "/instances/"+id+"/versions/"+op["versionId"].(string), user)
+	resources := afterVersion["resources"].([]any)
+	expectedResource, _ := json.Marshal(originalComponent)
+	actualResource, _ := json.Marshal(resources[0])
+	if len(resources) != 1 || !bytes.Equal(expectedResource, actualResource) {
+		t.Fatal("旧冻结版本偷偷追加配套资源", afterVersion)
+	}
+	delete(afterVersion, "resources")
 	a, _ := json.Marshal(version)
 	b, _ := json.Marshal(afterVersion)
 	if !bytes.Equal(a, b) {

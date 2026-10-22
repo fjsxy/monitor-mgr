@@ -366,12 +366,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		}
 	}
 	if i.Component == AgentComponent {
-		original, readRevision, readErr := readDraft(ctx, s.DB, i.Id)
-		if readErr != nil {
-			return nil, readErr
-		}
-		observedDraftRevision = readRevision
-		if storageSnapshot, e = s.readAgentStorageTransition(ctx, i, t, cr, original.spec(), false); e != nil {
+		if storageSnapshot, e = s.readAgentStorageTransition(ctx, i, t, cr, originalDraft.spec(), false); e != nil {
 			return nil, e
 		}
 	}
@@ -416,7 +411,7 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 		}
 	}
 	if rev != observedDraftRevision {
-		return nil, Error("CONFLICT", "存储预检期间草稿已变化，请重新预览")
+		return nil, Error("CONFLICT", "依赖预检期间草稿已变化，请重新预览")
 	}
 	baseline, e := readPreview(ctx, tx, r.PreviewId, i.Id)
 	if e != nil {
