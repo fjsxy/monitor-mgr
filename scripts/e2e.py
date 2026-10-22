@@ -105,6 +105,8 @@ def main():
                             except Exception:
                                 failures=['cleanup-exception'];path=environment.private/(id+'-cleanup-failure.txt');path.write_text(traceback.format_exc());os.chmod(path,0o600)
                             result['cleanup']=failures
+                            result['cleanupDetails']=getattr(scenario,'cleanup_details',[])
+                            if hasattr(scenario,'cleanup_registration'):result['cleanupRegistration']=scenario.cleanup_registration
                             result['durationSeconds']=round(time.monotonic()-case_started,3)
                             if failures:result['outcome']='failed'
                             result['requests']=scenario.traces;result['platformContainers']=scenario.platform_proofs

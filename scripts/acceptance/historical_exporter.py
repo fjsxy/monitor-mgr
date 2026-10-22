@@ -14,6 +14,11 @@ def remove_fixture_companion(s, operation):
     path = '/apis/monitoring.coreos.com/v1/namespaces/' + target['namespace'] + '/servicemonitors/' + target['name']
     s.delete_uid(s.target, path, uid)
     s.k('wait', '--for=delete', 'servicemonitor/' + target['name'], '-n', target['namespace'], '--timeout=30s', target=s.target)
+    # 关键：wait 成功后仍须证明 NotFound；仅退休匹配的旧 UID，不能遗忘后续新建对象。
+    gone = s.k('get', 'servicemonitor', target['name'], '-n', target['namespace'], '-o', 'json', target=s.target, check=False)
+    assert gone.returncode and b'(NotFound)' in gone.stderr
+    key = (s.target, 'servicemonitor', target['namespace'], target['name'])
+    if s.owned_crs.get(key) == uid: del s.owned_crs[key]
     return {'namespace': target['namespace'], 'name': target['name'], 'removedFixtureUID': uid}
 
 

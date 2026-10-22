@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {readFileSync} from 'node:fs';
+import {appendFileSync, readFileSync} from 'node:fs';
 
 // 唯一浏览器场景只验证关键交互与精确对象身份；字段矩阵归后端 UT。
 test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async ({page, baseURL}, info) => {
@@ -7,6 +7,10 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
   const path=process.env.PHASE1_E2E_FIXTURE;
   expect(path,'必须提供真实平台 Pod 的私有夹具').toBeTruthy();
   const fixture=JSON.parse(readFileSync(path!, 'utf8'));
+  // 关键：只交接本次明确受理的操作 ID；Python 逐操作回读已确认 UID 后才拥有清理依据。
+  const rememberPublication=(op:{operationId:string;instanceId:string;versionId:string})=>{
+    appendFileSync(fixture.publicationLedger,JSON.stringify({operationId:op.operationId,instanceId:op.instanceId,versionId:op.versionId})+'\n',{mode:0o600});
+  };
   let browserOwner:{id:string;password:string};
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await test.step('登录并用表单创建 KSM 草稿',async()=>{
@@ -38,7 +42,7 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     // 第二资源由真实目标代理明确拒绝，页面须显示部分成功且可人工补齐。
     expect((await page.request.post(`${fixture.proxyBase}/faults`,{headers:{'X-Fault-Control':fixture.proxyToken},data:{readMode:'none',rejectWritePath:`/apis/monitoring.coreos.com/v1/namespaces/${fixture.namespace}/servicemonitors`}})).ok()).toBeTruthy();
     const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${fixture.largeId}/publications`&&r.request().method()==='POST');
-    await page.getByRole('button',{name:'确认下发',exact:true}).click();const op=await(await accepted).json();
+    await page.getByRole('button',{name:'确认下发',exact:true}).click();const op=await(await accepted).json();rememberPublication(op);
     expect(op.instanceId).toBe(fixture.largeId);await expect.poll(async()=> (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state,{timeout:45000}).toBe('FAILED');
     await drawer.getByRole('button',{name:'刷新当前状态',exact:true}).click();
     await expect(drawer.getByLabel('来源 CR',{exact:true})).toContainText('最后成功观察');
@@ -86,7 +90,7 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     const before=await(await page.request.get(`/api/v1/instances/${legacy.instanceId}`)).json();
     await expect(preview).toContainText(`monitor-mgr.io/user-id: ${before.creatorUserId}`);
     const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${legacy.instanceId}/publications`&&r.request().method()==='POST');
-    await preview.getByRole('button',{name:'确认下发',exact:true}).click();const op=await(await accepted).json();
+    await preview.getByRole('button',{name:'确认下发',exact:true}).click();const op=await(await accepted).json();rememberPublication(op);
     expect(op.versionId).not.toBe(legacy.versionId);
     await expect.poll(async()=> (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state,{timeout:45000}).toBe('SUCCEEDED');
     await drawer.getByRole('button',{name:'刷新当前状态',exact:true}).click();

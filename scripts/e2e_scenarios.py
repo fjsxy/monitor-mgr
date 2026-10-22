@@ -162,7 +162,9 @@ class Scenario(LifecycleSuite, AgentSuite):
         self.cookies=cookies;self.connect();return self.platform_pod_uid
 
     def cleanup(self):
-        failures=[]
+        registration=getattr(self,'cleanup_registration',dict(failures=[]))
+        failures=['browser-publication-cleanup'] if registration['failures'] else []
+        self.cleanup_details=[dict(scope='publication',stage='register',reason=reason) for reason in registration['failures']]
         for proxy in self.proxies:
             try: proxy.close()
             except Exception: failures.append('proxy-cleanup')
@@ -170,21 +172,27 @@ class Scenario(LifecycleSuite, AgentSuite):
             self.forward.terminate();self.forward.wait(timeout=5)
         # 关键：仅清理原 UID；替代 CR 如果由本例显式构造，会另外保存自己的创建身份。
         for (target,kind,namespace,name),uid in reversed(list(self.owned_crs.items())):
+            stage='read'
             try:
                 args=['get',kind,name,'-o','json']+(['-n',namespace] if namespace else [])
                 r=self.k(*args,target=target,check=False)
                 if r.returncode:
                     assert b'(NotFound)' in r.stderr;continue
-                obj=json.loads(r.stdout);assert obj['metadata']['uid']==uid
+                obj=json.loads(r.stdout);stage='identity';assert obj['metadata']['uid']==uid
                 finalizers=obj['metadata'].get('finalizers',[])
                 ours=[f for f in finalizers if f in ('phase1.fixture/hold','fixture.monitor-mgr/hold')]
                 if ours:
+                    stage='finalizers'
                     patch=[{'op':'test','path':'/metadata/uid','value':uid},{'op':'test','path':'/metadata/resourceVersion','value':obj['metadata']['resourceVersion']},{'op':'replace','path':'/metadata/finalizers','value':[f for f in finalizers if f not in ours]}]
                     self.k('patch',kind,name,*(['-n',namespace] if namespace else []),'--type=json','-p',json.dumps(patch),target=target)
                 # DELETE precondition 由原 UID 的 JSON DeleteOptions 提供，避免 GET/DELETE 间同名替换。
                 path=('/apis/monitoring.coreos.com/v1/namespaces/'+namespace+'/servicemonitors/'+name if kind=='servicemonitor' else '/apis/monitoring.coreos.com/v1alpha1/namespaces/'+namespace+'/prometheusagents/'+name if kind=='prometheusagent' else '/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/'+name)
-                self.delete_uid(target,path,uid)
-            except Exception: failures.append('original-cr-cleanup')
+                stage='delete';self.delete_uid(target,path,uid)
+            except Exception:
+                failures.append('original-cr-cleanup')
+                # 关键：仅公开固定资源种类/阶段/原因，不公开异常、stderr、路径或对象正文。
+                reason={'read':'read-failed','identity':'uid-mismatch','finalizers':'finalizer-patch-failed','delete':'delete-failed'}[stage]
+                self.cleanup_details.append(dict(scope='cr',resource=kind if kind in ('servicemonitor','prometheusagent','kubestatemetrics') else 'unknown',stage=stage,reason=reason))
         for (target,namespace),uid in reversed(list(self.namespace_uids.items())):
             try:
                 actual=self.get('namespace',namespace,target=target)
@@ -801,10 +809,18 @@ def browser(s):
     upgrade_v10(s,missing_ids=[legacy_unknown['id']],draft_revisions={i['id']:9007199254740993})
     # 大revision主流程需要显式开放历史实例管理权限；创建事实仍保持未知角色。
     s.call('POST','/instances/'+i['id']+'/management-confirmations',{'allowClusterManagers':True})
-    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,agentNamespace=agent_namespace,runId=s.env.run_id,unknownCreatorAgent={'id':legacy_unknown['id'],'name':legacy_unknown['name']},largeId=i['id'],largeName=i['name'],proxyBase=proxy.base,proxyToken=proxy.token,historicalPublication={'instanceId':legacy_ksm['id'],'name':legacy_ksm['name'],'versionId':historical_publication['versionId'],'operationId':historical_publication['operationId']},historical=[{'id':x['id'],'name':x['name'],'component':x['component']} for x in [legacy_ksm,legacy_agent]])));os.chmod(fixture,0o600)
+    publication_ledger=s.out/'browser-publications.jsonl';publication_ledger.write_text('');os.chmod(publication_ledger,0o600)
+    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(publicationLedger=str(publication_ledger),password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,agentNamespace=agent_namespace,runId=s.env.run_id,unknownCreatorAgent={'id':legacy_unknown['id'],'name':legacy_unknown['name']},largeId=i['id'],largeName=i['name'],proxyBase=proxy.base,proxyToken=proxy.token,historicalPublication={'instanceId':legacy_ksm['id'],'name':legacy_ksm['name'],'versionId':historical_publication['versionId'],'operationId':historical_publication['operationId']},historical=[{'id':x['id'],'name':x['name'],'component':x['component']} for x in [legacy_ksm,legacy_agent]])));os.chmod(fixture,0o600)
     s.by('真实 Chromium 完成表单保存、精确大 revision、YAML/diff、发布、工作台与删除')
     out=s.out/'playwright';report_path=s.out/'playwright.json';env=dict(os.environ,BASE_URL=s.base,PHASE1_E2E_FIXTURE=str(fixture),PLAYWRIGHT_JSON_OUTPUT_FILE=str(report_path))
-    r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)
+    browser_succeeded=False
+    try:
+        r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)
+        browser_succeeded=r.returncode==0
+    finally:
+        # 关键：浏览器失败也须交接已受理资源；只从精确操作 confirmedUid 登记，不能回读同名对象认领。
+        from e2e_cleanup import register_browser_publications
+        register_browser_publications(s,publication_ledger,{i['id'],legacy_ksm['id']},require_complete=browser_succeeded)
     report=json.loads(report_path.read_text()) if report_path.is_file() else {}
     # 关键：私有报告可含凭据和DOM；只公开固定步骤/合法源码坐标/数字统计，不能复制错误正文。
     from e2e_diagnostics import browser_result_summary
