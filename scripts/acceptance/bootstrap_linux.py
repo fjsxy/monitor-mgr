@@ -290,7 +290,8 @@ def install(prefix, record_path, *, browsers=False, diagnostic=None):
     if kubectl['clientVersion']['gitVersion'] != 'v1.28.15':
         raise BootstrapError('BOOTSTRAP_TOOL_VERSION_MISMATCH')
     record['tools']['kubectl']['actualVersion'] = 'v1.28.15'
-    run(['npm', '--prefix', str(ROOT / 'web'), 'ci'], 'npm-ci', timeout=300)
+    # 包仍按lockfile/integrity安装；外部audit请求不作为UT/E2E环境准备的隐含依赖。
+    run(['npm', '--prefix', str(ROOT / 'web'), 'ci', '--no-audit'], 'npm-ci', timeout=300)
     if browsers:
         mark('browser-source-check')
         for key in ('PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST', 'PLAYWRIGHT_DOWNLOAD_HOST'):

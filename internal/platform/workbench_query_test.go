@@ -1,16 +1,15 @@
 package platform_test
 
 import (
-	"context"
-	"errors"
-	"github.com/cloudwego/kitex/client"
-	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
-	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
-	"testing"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // U04的后端契约：完整授权集合先过滤/排序再分页，统计独立于过滤。
-func TestWorkbenchQueryFiltersAndStatistics(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestWorkbenchQueryFiltersAndStatistics(t ginkgo.GinkgoTInterface) {
+	// 接下来U04的后端契约：完整授权集合先过滤/排序再分页，统计独立于过滤。
+	ginkgo.By("U04的后端契约：完整授权集合先过滤/排序再分页，统计独立于过滤。")
+
 	p, c, id, f, _ := workbenchSourceFixture(t)
 	cl := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["clusterId"].(string)
 	for _, name := range []string{"alpha.one", "alpha-two"} {
@@ -47,32 +46,4 @@ func TestWorkbenchQueryFiltersAndStatistics(t *testing.T) {
 	}
 	clusterCall(t, p, "GET", "/clusters/"+cl+"/instances?page=0&pageSize=100", nil, c, "", 422)
 	clusterCall(t, p, "GET", "/clusters/"+cl+"/instances?page=1&pageSize=101", nil, c, "", 422)
-}
-
-func TestWorkbenchQueryCurrentAuthorization(t *testing.T) {
-	p, c, cl := ksmCluster(t)
-	clusterCall(t, p, "POST", "/accounts", map[string]any{"username": "query-user", "password": "temporary-password", "role": "USER"}, c, "new-user", 201)
-	user := request(t, p, "POST", "/sessions", `{"username":"query-user","password":"temporary-password"}`, nil, 201).Cookies()[0]
-	request(t, p, "POST", "/session/password", `{"currentPassword":"temporary-password","newPassword":"personal-password"}`, user, 200)
-	user = request(t, p, "POST", "/sessions", `{"username":"query-user","password":"personal-password"}`, nil, 201).Cookies()[0]
-	clusterCall(t, p, "GET", "/clusters/"+cl+"/instances?page=1", nil, user, "", 403)
-	cli, e := controlservice.NewClient("workbench-query", client.WithHostPorts(p.RPCAddress()))
-	if e != nil {
-		t.Fatal(e)
-	}
-	_, e = cli.QueryInstances(context.Background(), &rpc.RequestContext{}, &rpc.QueryInstancesRequest{ClusterId: cl})
-	var denied *rpc.APIError
-	if !errors.As(e, &denied) || denied.Code != "UNAUTHENTICATED" {
-		t.Fatal("直接RPC绕过当前授权", e)
-	}
-	token := user.Value
-	_, e = cli.QueryInstances(context.Background(), &rpc.RequestContext{SessionToken: &token}, &rpc.QueryInstancesRequest{ClusterId: cl})
-	if !errors.As(e, &denied) || denied.Code != "FORBIDDEN" {
-		t.Fatal("直接RPC暴露他人集合/统计", e)
-	}
-	token = c.Value
-	result, e := cli.QueryInstances(context.Background(), &rpc.RequestContext{SessionToken: &token}, &rpc.QueryInstancesRequest{ClusterId: cl})
-	if e != nil || result.Statistics.Managed != 0 {
-		t.Fatal("管理员真实RPC查询失败", e)
-	}
 }

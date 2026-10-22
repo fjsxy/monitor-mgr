@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import ginkgo_events
 """#18真实Agent门禁：每例独立平台Pod和目标fixture，完整批次持有跨票API互斥锁。"""
 import argparse,base64,copy,datetime,fcntl,gzip,hashlib,http.cookiejar,json,os,pathlib,platform,re,secrets,sys,tarfile,tempfile,time,traceback,urllib.error,urllib.request,uuid
 from transport import process as subprocess
@@ -60,16 +61,13 @@ def run_regressions(a):
   cells=[c.strip() for c in line.strip('|').split('|')]
   if len(cells)==5 and cells[0] in REGCASES:contracts[cells[0]]={'variantId':cells[0],'purpose':cells[1],'steps':cells[2],'expected':cells[3]}
  assert set(contracts)==set(REGCASES),'补充计划与runner不一致'
- selected=a.cases or list(REGCASES);roots=sorted({s.split('/')[0] for v in selected for s in REGCASES[v]});command=['go','test','./internal/platform','-count=1','-json','-run','^('+'|'.join(roots)+')$'];started=stamp();r=subprocess.run(command,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
- out=pathlib.Path(a.output);out.mkdir(parents=True,exist_ok=True);os.chmod(out,0o700);log=out/'go-test.jsonl';log.write_bytes(r.stdout);passed=set()
- for line in r.stdout.splitlines():
-  try:
-   event=json.loads(line)
-   if event.get('Action')=='pass':passed.add(event.get('Test'))
-  except ValueError:pass
+ selected=a.cases or list(REGCASES)
+ out=pathlib.Path(a.output);out.mkdir(parents=True,exist_ok=True)
+ started=stamp();command,r,events=ginkgo_events.run([s for v in selected for s in REGCASES[v]],out/'.private'/'ginkgo.json',subprocess.run,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+ log=out/'go-test.jsonl';raw=('\n'.join(json.dumps(e) for e in events)+'\n').encode();log.write_bytes(raw);passed=ginkgo_events.passed(events)
  records=[]
  for variant in selected:
-  selectors=REGCASES[variant];record={**contracts[variant],'kind':'supplementary','layer':'Q','profile':'LOCAL_FULL','source':source,'testedCommit':source['commit'],'testedTree':source['tree'],'runnerCommit':source['commit'],'testSelectors':selectors,'executionBoundary':'实际HTTP/Kitex/SQLite；受控TLS目标API/metrics/派发屏障','runtimeOS':sys.platform,'runtimeArch':platform.machine(),'contractFingerprint':fingerprint(contracts[variant]),'command':command,'commandExitCode':r.returncode,'startedAt':started,'finishedAt':stamp(),'outcome':'passed' if r.returncode==0 and all(s in passed for s in selectors) else 'failed','evidenceRefs':[{'path':log.name,'sha256':hashlib.sha256(r.stdout).hexdigest()}],'cleanup':{'success':True,'scope':'Go t.TempDir及测试listeners/屏障按测试finally关闭'}}
+  selectors=REGCASES[variant];record={**contracts[variant],'kind':'supplementary','layer':'Q','profile':'LOCAL_FULL','source':source,'testedCommit':source['commit'],'testedTree':source['tree'],'runnerCommit':source['commit'],'testSelectors':selectors,'executionBoundary':'实际HTTP/Kitex/SQLite；受控TLS目标API/metrics/派发屏障','runtimeOS':sys.platform,'runtimeArch':platform.machine(),'contractFingerprint':fingerprint(contracts[variant]),'command':command,'commandExitCode':r.returncode,'startedAt':started,'finishedAt':stamp(),'outcome':'passed' if r.returncode==0 and all(s in passed for s in selectors) else 'failed','evidenceRefs':[{'path':log.name,'sha256':hashlib.sha256(raw).hexdigest()}],'cleanup':{'success':True,'scope':'Go t.TempDir及测试listeners/屏障按测试finally关闭'}}
   (out/(variant+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2));records.append(record)
  (out/'results.json').write_text(json.dumps(records,ensure_ascii=False,indent=2));print(json.dumps({'supplementary':len(records),'passed':sum(r['outcome']=='passed' for r in records),'ownedCountUnaffected':69}));return 0 if all(r['outcome']=='passed' for r in records) else 1
 

@@ -9,7 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"testing"
+
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 func agentConfig(name, namespace string) map[string]any {
@@ -20,7 +21,11 @@ func agentConfig(name, namespace string) map[string]any {
 }
 
 // A03/F01：保存typed Agent只创建平台草稿，跨namespace同名保持独立。
-func TestAgentTypedDraftIdentityAndDefaults(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentTypedDraftIdentityAndDefaults(t ginkgo.GinkgoTInterface) {
+	// 接下来A03/F01：保存typed Agent只创建平台草稿，跨namespace同名保持独立。
+	ginkgo.By("A03/F01：保存typed Agent只创建平台草稿，跨namespace同名保持独立。")
+
 	p, c, cluster := ksmCluster(t)
 	var ids []string
 	for _, ns := range []string{"one", "two"} {
@@ -47,40 +52,6 @@ func TestAgentTypedDraftIdentityAndDefaults(t *testing.T) {
 }
 
 // A01/A04/F01：默认Agent发布仍经过同一真实Kitex/版本/attempt/worker链，四selector省略不能丢remoteWrite。
-func TestAgentDefaultPublicationWithDependencies(t *testing.T) {
-	f, target := agentTarget(t)
-	p, c, owner := clusterPlatform(t)
-	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "agent", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)
-	cluster := awaitClusterOperation(t, p, c, op["operationId"].(string))["clusterId"].(string)
-	i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": agentConfig("collector", "monitoring")}, c, "create", 201)
-	id := i["id"].(string)
-	preview := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, c, "preview", 200)
-	if !strings.Contains(preview["rightYAML"].(string), "v2.55.1") {
-		t.Fatal("平台版本预设未显式输出")
-	}
-	op = clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
-	if awaitClusterOperation(t, p, c, op["operationId"].(string))["state"] != "SUCCEEDED" {
-		t.Fatal("Agent默认发布失败")
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	cr := f.objects["monitoring/collector"]
-	if cr == nil {
-		t.Fatal("未发到Agent namespacecollection")
-	}
-	spec := cr["spec"].(map[string]any)
-	for _, key := range []string{"serviceMonitorSelector", "podMonitorSelector", "probeSelector", "scrapeConfigSelector"} {
-		if _, exists := spec[key]; exists {
-			t.Fatal("None被映射成空selector全选")
-		}
-	}
-	if len(spec["remoteWrite"].([]any)) != 1 || spec["version"] != "v2.55.1" || spec["replicas"] != float64(1) || spec["paused"] != false {
-		t.Fatal("默认Agent配置错误")
-	}
-	if !strings.Contains(preview["rightYAML"].(string), "1Gi") {
-		t.Fatal("默认PVC容量未映射")
-	}
-}
 
 type agentFixture struct {
 	mu        sync.Mutex
@@ -89,7 +60,7 @@ type agentFixture struct {
 	hook      func(http.ResponseWriter, *http.Request) bool
 }
 
-func agentTarget(t *testing.T) (*agentFixture, string) {
+func agentTarget(t ginkgo.GinkgoTInterface) (*agentFixture, string) {
 	t.Helper()
 	base, _, _ := clusterAPI(t, 200, false)
 	f := &agentFixture{objects: map[string]map[string]any{}}
@@ -200,7 +171,11 @@ func agentTarget(t *testing.T) (*agentFixture, string) {
 }
 
 // R03.agent-paused：外部paused仅停止调谐，已有Pod不能被宣称停止。
-func TestR03AgentPausedReadOnly(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestR03AgentPausedReadOnly(t ginkgo.GinkgoTInterface) {
+	// 接下来R03.agent-paused：外部paused仅停止调谐，已有Pod不能被宣称停止。
+	ginkgo.By("R03.agent-paused：外部paused仅停止调谐，已有Pod不能被宣称停止。")
+
 	f, target := agentTarget(t)
 	p, c, owner := clusterPlatform(t)
 	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "agent", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register", 202)

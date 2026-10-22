@@ -6,14 +6,18 @@ import (
 	"net/http"
 	"path/filepath"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // REG19-ACTIVITY-001：真实入口上的活动顺序独立于墙钟，并跨原目录重启保留。
-func TestWorkbenchActivitySequencePersists(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestWorkbenchActivitySequencePersists(t ginkgo.GinkgoTInterface) {
+	// 接下来REG19-ACTIVITY-001：真实入口上的活动顺序独立于墙钟，并跨原目录重启保留。
+	ginkgo.By("REG19-ACTIVITY-001：真实入口上的活动顺序独立于墙钟，并跨原目录重启保留。")
+
 	_, target := ksmTarget(t)
 	var stamp atomic.Int64
 	stamp.Store(time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC).UnixNano())

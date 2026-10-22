@@ -182,6 +182,8 @@ class ProcessRunner:
         item = {**intent, "stage": "started", "pid": child.pid, "birth": birth}
         self.children.append((child, item))
         self.event(item)
+        # 调用者可核对该 child 自己的监听就绪记录；路径仅指向私有捕获，不转发原文。
+        child.private_stdout_path=outpath
         return child
 
     def close_auxiliary(self):

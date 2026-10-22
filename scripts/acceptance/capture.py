@@ -17,7 +17,7 @@ from session import atomic_json
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 # 仅覆盖固定workflow的质量命令及其静态依赖；不按前缀认领动态target。
-QUALITY_MAKE_TARGETS = frozenset(('acceptance-plan', 'acceptance-host-check', 'test-race', 'vet',
+QUALITY_MAKE_TARGETS = frozenset(('ut', 'ci-cases-check', 'acceptance-plan', 'acceptance-host-check', 'test-race', 'vet',
                                  'web-build', 'generate', 'check-generated'))
 # 固定Go1.27.1 testing.runningList使用time.Duration.String；只识别格式，不公开动态时长。
 GO_DURATION = r'(?:[0-9]+(?:\.[0-9]+)?(?:ns|us|µs|ms|s|m|h))+'
@@ -135,6 +135,25 @@ class _FrozenSources:
             return dict(file='Makefile', line=line, function='<make-recipe>', target=target, sourceBlobSHA256=digest)
         except Exception:self.unknown = True;return None
 
+    def ginkgo_case(self, case_id):
+        """只公开固定源码中唯一注册的 UT 编号；动态 It 文案与断言消息不进入诊断。"""
+        matches = []
+        if not re.fullmatch(r'UT-[0-9]{2}', case_id):
+            self.unknown = True;return None
+        pattern = r'\bginkgo\.It\("' + re.escape(case_id) + r' '
+        for name in sorted(self.paths):
+            if not name.endswith('_test.go'):continue
+            try:
+                if not re.search(pattern, (self.root / name).read_text()):continue
+                data, digest = self.load(name)
+                found = re.search(pattern, data.decode())
+                if found:
+                    matches.append(dict(testId=name + '::' + case_id, caseId=case_id, file=name,
+                        line=data.decode()[:found.start()].count('\n') + 1, function='<ginkgo.It>', sourceBlobSHA256=digest))
+            except Exception:self.unknown = True
+        if len(matches) != 1:self.unknown = True;return None
+        return matches[0]
+
     def test(self, method, identity=None):
         matches = []
         for name in sorted(self.paths):
@@ -172,6 +191,16 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
     if result.returncode == 0:return value
     try:
         source = _FrozenSources(candidate, root, private_root)
+        # 只投影固定工具错误类别，不复制包含模块 URL、代理认证或系统路径的原文。
+        lower = result.stderr.lower()
+        for marker, tokens in [('go-dependency-network-error', (b'proxy.golang.org', b'502 bad gateway')),
+                ('go-dependency-network-error', (b'proxy.golang.org', b'connection reset')),
+                ('go-dependency-network-error', (b'proxy.golang.org', b'no such host')),
+                ('go-build-disk-full', (b'no space left on device',)),
+                ('go-compiler-killed', (b'signal: killed',)),
+                ('go-build-process-limit', (b'resource temporarily unavailable',))]:
+            if all(token in lower for token in tokens) and marker not in value['observedMarkers']:
+                value['observedMarkers'].append(marker)
         # 只读有界前缀；完整原bytes/hash仍在上面的私有捕获摘要中，截断明确unknown。
         limit = 1024 * 1024;attempts = 0
         source.unknown = len(result.stdout) > limit or len(result.stderr) > limit
@@ -199,11 +228,14 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
                 else:source.unknown = True
                 continue
             timeout_stage = 0
+            ginkgo_failure = re.fullmatch(r'\s*\[FAIL\]\s+\[[^\]]+\]\s+(UT-[0-9]{2})(?:\s.*)?', line)
+            if ginkgo_failure:
+                queue(2, ('ginkgo', ginkgo_failure[1]));continue
             unit = re.fullmatch(r'(?:FAIL|ERROR): (test_[A-Za-z0-9_]+) \(([A-Za-z0-9_.]+)\)', line)
             go = re.fullmatch(r'--- FAIL: (Test[A-Za-z0-9_]+) \([0-9.]+s\)', line)
             frame = re.fullmatch(r'\s*File "([^"]+)", line ([0-9]+), in [^\r\n]+', line)
             # 关键：仅消费Go行的静态basename/行号；冒号后的原断言、子例和动态路径一律不投影。
-            go_location = re.match(r'[ \t]+([A-Za-z_][A-Za-z0-9_]*_test\.go):([0-9]+):', line)
+            go_location = re.search(r'(?:^|[ \t/])([A-Za-z_][A-Za-z0-9_]*_test\.go):([0-9]+)(?::|[ \t]|$)', line)
             if not (unit or go or frame or go_location):
                 if (line.startswith(('FAIL: ', 'ERROR: ', '--- FAIL: ')) or line.lstrip().startswith('File "') or
                         re.match(r'[ \t]+\S.*_test\.go:[0-9]+:', line) or
@@ -220,6 +252,11 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
             if kind == 'timeout':
                 if 'go-test-timeout' not in value['observedMarkers']:value['observedMarkers'].append('go-test-timeout')
                 continue
+            if kind == 'ginkgo':
+                item = source.ginkgo_case(*args)
+                if item and item not in value['testFailures']:
+                    value['testFailures'].append(item)
+                continue
             if kind in ('failed', 'running'):
                 item = source.test(*args);field = 'runningTests' if kind == 'running' else 'testFailures'
                 if item and item not in value[field]:
@@ -230,7 +267,7 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
                 if item and item not in value['repoFrames']:
                     if len(value['repoFrames']) < 8:value['repoFrames'].append(item)
                     else:source.unknown = True
-        value['unknown'] = source.unknown or not (value['testFailures'] or value['runningTests'] or value['repoFrames'])
+        value['unknown'] = source.unknown or not (value['testFailures'] or value['runningTests'] or value['repoFrames'] or value['observedMarkers'])
     except Exception:pass
     return value
 

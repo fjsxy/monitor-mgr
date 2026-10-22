@@ -3,14 +3,19 @@ package control
 import (
 	"errors"
 	"strings"
-	"testing"
 
 	"github.com/cloudwego/gopkg/protocol/thrift"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // 使用生成类型真实保留的未知 wire 字段，验证递归 guard 的容器边界及错误路径。
-func TestUnknownFieldGuardContainersAndNil(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestUnknownFieldGuardContainersAndNil(t ginkgo.GinkgoTInterface) {
+	// 接下来使用生成类型真实保留的未知 wire 字段，验证递归 guard 的容器边界及错误路径。
+	ginkgo.By("使用生成类型真实保留的未知 wire 字段，验证递归 guard 的容器边界及错误路径。")
+
 	unknown := &rpc.ContainerResources{}
 	raw := thrift.Binary.AppendFieldBegin(nil, thrift.STRING, 32000)
 	raw = thrift.Binary.AppendString(raw, "sensitive-unknown-value")
@@ -39,7 +44,7 @@ func TestUnknownFieldGuardContainersAndNil(t *testing.T) {
 		{"map-key", map[*rpc.ContainerResources]string{unknown: "sensitive-value"}, "request[*]"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		teststeps.Step(tc.name, func() {
 			err := rejectUnknownFields(tc.value, "request")
 			if tc.field == "" {
 				if err != nil {

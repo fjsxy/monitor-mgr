@@ -1,79 +1,21 @@
 package platform_test
 
 import (
-	"context"
-	"fmt"
-	"github.com/cloudwego/kitex/client"
-	"github.com/cloudwego/kitex/pkg/transmeta"
-	"github.com/cloudwego/kitex/transport"
-	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
-	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
 	"net/http"
 	"sync"
-	"testing"
 	"time"
 
-	"github.com/fjsxy/monitor-mgr/internal/platform"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // R01.intervals：服务端调度不依赖页面，默认10秒；公开启动配置精确限定1–20秒。
-func TestR01WorkbenchIntervals(t *testing.T) {
-	for _, seconds := range []int{0, 21, -1} {
-		interval := time.Duration(seconds) * time.Second
-		p, e := platform.Start(context.Background(), platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", ObservationInterval: &interval})
-		if e == nil {
-			p.Close(context.Background())
-			t.Fatalf("越界轮询间隔被接受:%d", seconds)
-		}
-	}
-	for _, seconds := range []int{1, 10, 20} {
-		t.Run(fmt.Sprint(seconds), func(t *testing.T) {
-			ticks := make(chan time.Time, 1)
-			p, c, id, f, clock := workbenchSourceFixture(t, func(cfg *platform.Config) {
-				cfg.ObservationTicks = ticks
-				if seconds != 10 {
-					d := time.Duration(seconds) * time.Second
-					cfg.ObservationInterval = &d
-				}
-			})
-			f.mu.Lock()
-			before := f.crReads
-			f.mu.Unlock()
-			start := clock.Load()
-			clock.Store(start + int64(time.Duration(seconds-1)*time.Second))
-			ticks <- time.Unix(0, clock.Load())
-			time.Sleep(30 * time.Millisecond)
-			f.mu.Lock()
-			early := f.crReads
-			f.mu.Unlock()
-			if early != before {
-				t.Fatal("后台早于配置周期读取CR")
-			}
-			clock.Store(start + int64(time.Duration(seconds)*time.Second))
-			ticks <- time.Unix(0, clock.Load())
-			deadline := time.Now().Add(2 * time.Second)
-			for {
-				f.mu.Lock()
-				n := f.crReads
-				f.mu.Unlock()
-				if n > before {
-					break
-				}
-				if time.Now().After(deadline) {
-					t.Fatal("未打开页面时后台周期没有读取CR")
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
-			instance := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
-			if workbenchSource(t, instance, "CR")["lastSuccessAt"] != time.Unix(0, clock.Load()).UTC().Format(time.RFC3339Nano) {
-				t.Fatal("后台来源时间未更新")
-			}
-		})
-	}
-}
 
 // R06：并发手动读取同一真实目标只产生一个GET；每个HTTP调用仍独立鉴权。
-func TestR06WorkbenchCoalescesReads(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestR06WorkbenchCoalescesReads(t ginkgo.GinkgoTInterface) {
+	// 接下来R06：并发手动读取同一真实目标只产生一个GET；每个HTTP调用仍独立鉴权。
+	ginkgo.By("R06：并发手动读取同一真实目标只产生一个GET；每个HTTP调用仍独立鉴权。")
+
 	p, c, id, f, _ := workbenchSourceFixture(t)
 	gate := make(chan struct{})
 	entered := make(chan struct{})
@@ -94,6 +36,7 @@ func TestR06WorkbenchCoalescesReads(t *testing.T) {
 	for n := 0; n < 16; n++ {
 		wg.Add(1)
 		go func() {
+			defer ginkgo.GinkgoRecover()
 			defer wg.Done()
 			req, _ := http.NewRequest("POST", p.URL()+"/api/v1/instances/"+id+"/refresh", nil)
 			req.Header.Set("Origin", p.URL())
@@ -130,31 +73,3 @@ func TestR06WorkbenchCoalescesReads(t *testing.T) {
 }
 
 // R06：下游不得使用超过短调用方剩余预算的8秒新预算。
-func TestR06WorkbenchRemainingBudget(t *testing.T) {
-	p, c, id, f, _ := workbenchSourceFixture(t)
-	gate, entered, canceled := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	f.mu.Lock()
-	f.observationGate = gate
-	f.observationEntered = entered
-	f.observationCanceled = canceled
-	f.mu.Unlock()
-	defer close(gate)
-	cli, e := controlservice.NewClient("workbench-short-budget", client.WithHostPorts(p.RPCAddress()), client.WithRPCTimeout(250*time.Millisecond), client.WithTransportProtocol(transport.TTHeader), client.WithMetaHandler(transmeta.ClientTTHeaderHandler))
-	if e != nil {
-		t.Fatal(e)
-	}
-	token := c.Value
-	if _, e = cli.RefreshInstance(context.Background(), &rpc.RequestContext{SessionToken: &token}, &rpc.InstanceID{Id: id}); e == nil {
-		t.Fatal("阻塞RPC未受短预算限制")
-	}
-	select {
-	case <-entered:
-	default:
-		t.Fatal("未进入真实目标读取")
-	}
-	select {
-	case <-canceled:
-	case <-time.After(750 * time.Millisecond):
-		t.Fatal("下游忽略调用方剩余预算，仍占用目标请求")
-	}
-}

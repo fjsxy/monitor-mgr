@@ -6,16 +6,21 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"testing"
 	"time"
+
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // REG20-STORAGE-005：只经公开入口产生Delete责任，原UID未独立核销前不允许重新挂载。
-func TestAgentStoragePendingDeleteBlocksRestore(t *testing.T) {
+func checkTestAgentStoragePendingDeleteBlocksRestore(t ginkgo.GinkgoTInterface) {
+	// 接下来REG20-STORAGE-005：只经公开入口产生Delete责任，原UID未独立核销前不允许重新挂载。
+	ginkgo.By("REG20-STORAGE-005：只经公开入口产生Delete责任，原UID未独立核销前不允许重新挂载。")
+
 	for _, action := range []string{"suspend", "shard"} {
-		t.Run(action, func(t *testing.T) {
+		teststeps.Step(action, func() {
 			for _, policy := range []string{"Delete", "Retain"} {
-				t.Run(policy, func(t *testing.T) {
+				teststeps.Step(policy, func() {
 					p, c, cluster, _, f := agentSafetyFixture(t, nil)
 					name := "restore-" + action
 					cfg := agentConfig(name, "monitoring")

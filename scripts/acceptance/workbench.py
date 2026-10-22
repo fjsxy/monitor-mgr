@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import ginkgo_events
 """#19工作台逐稳定子例入口；Q经真实HTTP/Kitex，K/B只在显式独占API lane下运行。"""
 import argparse,datetime,fcntl,hashlib,json,os,pathlib,platform,re,sys
 from transport import process as subprocess
@@ -47,20 +48,14 @@ def run_q(a,contracts,selected,case_tests=None,owned_count=15):
  source=source_state();assert not source['dirty'] or a.allow_dirty_runner,'正式Q来源必须干净'
  if a.profile=='CI_FAST':assert sys.platform=='linux' and platform.machine() in ['amd64','x86_64'],'CI_FAST必须在实际Linux amd64运行'
  selected_tests={v:(case_tests if case_tests is not None else REGCASES if a.layer=='REG' else QCASES)[v] for v in selected}
- roots=sorted({test.split('/')[0] for tests in selected_tests.values() for test in tests})
- command=['go','test','./internal/platform','-count=1','-json','-run','^('+'|'.join(roots)+')$']
- out=pathlib.Path(a.output);out.mkdir(parents=True,exist_ok=True);os.chmod(out,0o700)
- started=stamp();result=subprocess.run(command,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);log=out/'go-test.jsonl';log.write_bytes(result.stdout)
- passed,skipped=set(),set()
- for line in result.stdout.splitlines():
-  try:event=json.loads(line)
-  except ValueError:continue
-  if event.get('Action')=='pass':passed.add(event.get('Test'))
-  if event.get('Action')=='skip':skipped.add(event.get('Test'))
+ out=pathlib.Path(a.output);out.mkdir(parents=True,exist_ok=True)
+ started=stamp();command,result,events=ginkgo_events.run([s for v in selected for s in selected_tests[v]],out/'.private'/'ginkgo.json',subprocess.run,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+ log=out/'go-test.jsonl';raw=('\n'.join(json.dumps(e) for e in events)+'\n').encode();log.write_bytes(raw);passed=ginkgo_events.passed(events)
+ skipped={event['Test'] for event in events if event['Action']=='skip'}
  records=[]
  for variant,selectors in selected_tests.items():
   no_skip=not any(test==root or test.startswith(root+'/') for test in skipped if test for root in {s.split('/')[0] for s in selectors})
-  record={**contracts[variant],'profile':a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(contracts[variant]),'source':source,'testedCommit':source['commit'],'testedTree':source['tree'],'runnerCommit':source['commit'],'processLocation':'host','runtimeOS':sys.platform,'runtimeArch':platform.machine(),'startedAt':started,'finishedAt':stamp(),'testSelectors':selectors,'command':command,'commandExitCode':result.returncode,'noSkippedRequiredTests':no_skip,'outcome':'passed' if result.returncode==0 and no_skip and all(s in passed for s in selectors) else 'failed','evidenceRefs':[{'path':log.name,'sha256':hashlib.sha256(result.stdout).hexdigest()}],'cleanup':{'success':True,'scope':'Go测试finally关闭真实HTTP/Kitex/TLS listeners及t.TempDir'}}
+  record={**contracts[variant],'profile':a.profile,'manifestHash':hashlib.sha256((ROOT/'docs/acceptance/phase1.json').read_bytes()).hexdigest(),'contractFingerprint':fingerprint(contracts[variant]),'source':source,'testedCommit':source['commit'],'testedTree':source['tree'],'runnerCommit':source['commit'],'processLocation':'host','runtimeOS':sys.platform,'runtimeArch':platform.machine(),'startedAt':started,'finishedAt':stamp(),'testSelectors':selectors,'command':command,'commandExitCode':result.returncode,'noSkippedRequiredTests':no_skip,'outcome':'passed' if result.returncode==0 and no_skip and all(s in passed for s in selectors) else 'failed','evidenceRefs':[{'path':log.name,'sha256':hashlib.sha256(raw).hexdigest()}],'cleanup':{'success':True,'scope':'Go测试finally关闭真实HTTP/Kitex/TLS listeners及t.TempDir'}}
   if variant=='REG19-HTTP-I64-001':record.update({'executionScope':'Q协议子步骤；完整REG另需真实浏览器B保留值证据','fullRegressionComplete':False})
   (out/(variant+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n');records.append(record)
  (out/'results.json').write_text(json.dumps(records,ensure_ascii=False,indent=2)+'\n')

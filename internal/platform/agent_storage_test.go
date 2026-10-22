@@ -5,12 +5,18 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"testing"
 	"time"
+
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // P14.policy-pending：真实HTTP/Kitex读取实际ST采用状态，不能仅凭CR策略打开删除预览。
-func TestAgentStorageDeletePreviewRequiresAdoptedPolicy(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageDeletePreviewRequiresAdoptedPolicy(t ginkgo.GinkgoTInterface) {
+	// 接下来P14.policy-pending：真实HTTP/Kitex读取实际ST采用状态，不能仅凭CR策略打开删除预览。
+	ginkgo.By("P14.policy-pending：真实HTTP/Kitex读取实际ST采用状态，不能仅凭CR策略打开删除预览。")
+
 	p, c, cluster, _, f := agentSafetyFixture(t, nil)
 	cfg := agentConfig("storage-policy", "monitoring")
 	i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
@@ -66,7 +72,11 @@ func TestAgentStorageDeletePreviewRequiresAdoptedPolicy(t *testing.T) {
 }
 
 // 不完整的辅助列表必须保存读取错误，不能把缺items当成已经没有卷。
-func TestAgentStorageIncompleteListRemainsUnknown(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageIncompleteListRemainsUnknown(t ginkgo.GinkgoTInterface) {
+	// 接下来不完整的辅助列表必须保存读取错误，不能把缺items当成已经没有卷。
+	ginkgo.By("不完整的辅助列表必须保存读取错误，不能把缺items当成已经没有卷。")
+
 	p, c, cluster, _, f := agentSafetyFixture(t, nil)
 	cfg := agentConfig("storage-incomplete", "monitoring")
 	i := clusterCall(t, p, "POST", "/clusters/"+cluster+"/instances", map[string]any{"component": "Prometheus Agent", "agent": cfg}, c, "create", 201)
@@ -100,7 +110,11 @@ func TestAgentStorageIncompleteListRemainsUnknown(t *testing.T) {
 }
 
 // A06：首次emptyDir不依赖StorageClass，也不能把PVC模板或保留策略写入CR。
-func TestAgentStorageEmptyDirDoesNotRequirePVCClass(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageEmptyDirDoesNotRequirePVCClass(t ginkgo.GinkgoTInterface) {
+	// 接下来A06：首次emptyDir不依赖StorageClass，也不能把PVC模板或保留策略写入CR。
+	ginkgo.By("A06：首次emptyDir不依赖StorageClass，也不能把PVC模板或保留策略写入CR。")
+
 	p, c, cluster, _, f := agentSafetyFixture(t, nil)
 	f.mu.Lock()
 	f.hook = func(w http.ResponseWriter, r *http.Request) bool {
@@ -136,7 +150,11 @@ func TestAgentStorageEmptyDirDoesNotRequirePVCClass(t *testing.T) {
 }
 
 // REG20-STORAGE-001.orphan：孤卷没有ownerRef也不能被新Agent确定名称自动挂载。
-func TestAgentStorageNewInstanceRejectsOrphanClaim(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageNewInstanceRejectsOrphanClaim(t ginkgo.GinkgoTInterface) {
+	// 接下来REG20-STORAGE-001.orphan：孤卷没有ownerRef也不能被新Agent确定名称自动挂载。
+	ginkgo.By("REG20-STORAGE-001.orphan：孤卷没有ownerRef也不能被新Agent确定名称自动挂载。")
+
 	p, c, cluster, _, f := agentSafetyFixture(t, nil)
 	claim := "prom-agent-orphan-candidate-db-prom-agent-orphan-candidate-0"
 	f.mu.Lock()
@@ -161,9 +179,13 @@ func TestAgentStorageNewInstanceRejectsOrphanClaim(t *testing.T) {
 }
 
 // R03.agent-zero：适用当前generation的零副本status可合法省略计数字段，不能推断仍在运行。
-func TestR03AgentZeroUsesApplicableStatus(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestR03AgentZeroUsesApplicableStatus(t ginkgo.GinkgoTInterface) {
+	// 接下来R03.agent-zero：适用当前generation的零副本status可合法省略计数字段，不能推断仍在运行。
+	ginkgo.By("R03.agent-zero：适用当前generation的零副本status可合法省略计数字段，不能推断仍在运行。")
+
 	for _, variant := range []string{"valid-zero", "missing-status", "old-generation"} {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			p, c, cluster, _, f := agentSafetyFixture(t, nil)
 			cr := map[string]any{"apiVersion": "monitoring.coreos.com/v1alpha1", "kind": "PrometheusAgent", "metadata": map[string]any{"name": "zero-agent", "namespace": "monitoring", "uid": "zero-agent-uid", "generation": 2}, "spec": map[string]any{"replicas": 0, "shards": 3, "paused": false, "mode": "StatefulSet"}}
 			if variant != "missing-status" {
@@ -190,7 +212,11 @@ func TestR03AgentZeroUsesApplicableStatus(t *testing.T) {
 }
 
 // 已确认原UID卷在父资源消失后仍单独读取；同名新UID不能取代历史身份。
-func TestAgentStorageRetainedIdentitySurvivesParents(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageRetainedIdentitySurvivesParents(t ginkgo.GinkgoTInterface) {
+	// 接下来已确认原UID卷在父资源消失后仍单独读取；同名新UID不能取代历史身份。
+	ginkgo.By("已确认原UID卷在父资源消失后仍单独读取；同名新UID不能取代历史身份。")
+
 	p, c, cluster, _, f := agentSafetyFixture(t, nil)
 	name := "history-agent"
 	cfg := agentConfig(name, "monitoring")
@@ -272,9 +298,13 @@ func storageVolumes(source map[string]any) []any { v, _ := source["volumes"].([]
 const dropAgentStorageSchema = `ALTER TABLE publication_previews DROP COLUMN storage_fingerprint;DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
 
 // A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。
-func TestAgentStorageDangerRequiresAdoptedPolicy(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageDangerRequiresAdoptedPolicy(t ginkgo.GinkgoTInterface) {
+	// 接下来A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。
+	ginkgo.By("A02/P14：开放类型化多shard和挂起，但危险预览必须读取每个相关ST的实际策略。")
+
 	for _, action := range []string{"suspend", "shard"} {
-		t.Run(action, func(t *testing.T) {
+		teststeps.Step(action, func() {
 			p, c, cluster, _, f := agentSafetyFixture(t, nil)
 			name := "danger-" + action
 			cfg := agentConfig(name, "monitoring")
@@ -335,10 +365,14 @@ func TestAgentStorageDangerRequiresAdoptedPolicy(t *testing.T) {
 }
 
 // REG20-STORAGE-002：实例完成与逐卷任务独立；未知/Delete待核验保留凭据责任，合法Retain不阻塞集群变更。
-func TestAgentStorageResponsibilityOutlivesInstance(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageResponsibilityOutlivesInstance(t ginkgo.GinkgoTInterface) {
+	// 接下来REG20-STORAGE-002：实例完成与逐卷任务独立；未知/Delete待核验保留凭据责任，合法Retain不阻塞集群变更。
+	ginkgo.By("REG20-STORAGE-002：实例完成与逐卷任务独立；未知/Delete待核验保留凭据责任，合法Retain不阻塞集群变更。")
+
 	for _, action := range []string{"transfer", "unregister"} {
 		for _, policy := range []string{"Delete", "Retain"} {
-			t.Run(action+"-"+policy, func(t *testing.T) {
+			teststeps.Step(action+"-"+policy, func() {
 				p, c, cluster, _, f := agentSafetyFixture(t, nil)
 				name := "storage-duty"
 				cfg := agentConfig(name, "monitoring")
@@ -469,10 +503,14 @@ func TestAgentStorageResponsibilityOutlivesInstance(t *testing.T) {
 }
 
 // REG20-STORAGE-003：每种影响事实独立注入，ST新UID负例保持安全guard仍可通过。
-func TestAgentStoragePreviewImpact(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStoragePreviewImpact(t ginkgo.GinkgoTInterface) {
+	// 接下来REG20-STORAGE-003：每种影响事实独立注入，ST新UID负例保持安全guard仍可通过。
+	ginkgo.By("REG20-STORAGE-003：每种影响事实独立注入，ST新UID负例保持安全guard仍可通过。")
+
 	variants := []string{"st-uid-accept", "st-uid-dispatch", "pvc-uid-accept", "pvc-uid-dispatch", "policy-accept", "policy-dispatch", "status-rv", "same-st-pod-roll"}
 	for _, variant := range variants {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			var mu sync.Mutex
 			armed := false
 			entered, release := make(chan struct{}), make(chan struct{})
@@ -584,9 +622,13 @@ func TestAgentStoragePreviewImpact(t *testing.T) {
 }
 
 // REG20-STORAGE-004：ST ownerRef在保留ST的挂起中合法，删ST时却明确受whenDeleted=Delete控制。
-func TestAgentStorageIndependentOwnerPolicy(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestAgentStorageIndependentOwnerPolicy(t ginkgo.GinkgoTInterface) {
+	// 接下来REG20-STORAGE-004：ST ownerRef在保留ST的挂起中合法，删ST时却明确受whenDeleted=Delete控制。
+	ginkgo.By("REG20-STORAGE-004：ST ownerRef在保留ST的挂起中合法，删ST时却明确受whenDeleted=Delete控制。")
+
 	for _, variant := range []string{"scaled-retain-deleted-delete", "delete-with-st-owner"} {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			p, c, cluster, _, f := agentSafetyFixture(t, nil)
 			name := "owner-policy"
 			cfg := agentConfig(name, "monitoring")

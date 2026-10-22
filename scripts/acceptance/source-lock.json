@@ -36,6 +36,11 @@
       "version": "26.2.1",
       "url": "https://files.pythonhosted.org/packages/f3/6e/1736e5b4ae2b778ef2f81c47d797de9f891d4d8acb047a24ca37a60294dd/pip-26.2.1-py3-none-any.whl",
       "sha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e"
+    },
+    "Helm": {
+      "version": "v4.3.0",
+      "url": "https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz",
+      "sha256": "86584a54def73570558f66f5111cc53dfed56689637ae32c1201205d494f54fb"
     }
   },
   "actions": {
@@ -130,6 +135,14 @@
       "amd64Config": "sha256:e0566e0d46dcfa5a8b8ada82bba53d8f84d0629d8460d1d41197e4c66bc24a51",
       "arm64Manifest": "sha256:91f983b2a023903433f6227b6c6056cedda4a335f1348d4ffbede021ab11602b",
       "arm64Config": "sha256:dc9f1382ab7d1e9b9c42b37c96e6637aed45e1323a8fb0a79ba7f98681621632"
+    },
+    "buildkit": {
+      "image": "moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a",
+      "tag": "moby/buildkit:v0.31.1",
+      "indexDigest": "sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a",
+      "amd64Manifest": "sha256:2caaaf9bc673a82d5b0a87824f8375e6b2b36b55001dad611230516c724e9fba",
+      "amd64Config": "sha256:61b4b32fef9693ecf4c9759ec1bd50f64eeffab59676a4f00a1b124df5fad249",
+      "version": "v0.31.1"
     }
   },
   "monitorOp": {
@@ -164,7 +177,7 @@
       },
       {
         "name": "ffmpeg",
-        "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1013/ffmpeg-linux.zip",
+        "url": "https://cdn.playwright.dev/builds/ffmpeg/1013/ffmpeg-linux.zip",
         "headStatus": 200,
         "officialSha256": null
       }

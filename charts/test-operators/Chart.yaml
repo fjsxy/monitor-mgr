@@ -1,0 +1,5 @@
+apiVersion: v2
+name: test-operators
+description: 从 source-lock 核验后注入 Operator 与 CRD，不复制私有源码
+version: 0.1.0
+type: application

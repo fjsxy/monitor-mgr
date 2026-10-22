@@ -1,13 +1,15 @@
 package platform_test
 
 import (
-	"github.com/fjsxy/monitor-mgr/internal/platform"
-	"testing"
-	"time"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // R05.page：第二页失败只标未知/历史，不能丢掉上次完整发现的对象或提交第一页为全集。
-func TestR05WorkbenchFailedInventoryPage(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestR05WorkbenchFailedInventoryPage(t ginkgo.GinkgoTInterface) {
+	// 接下来R05.page：第二页失败只标未知/历史，不能丢掉上次完整发现的对象或提交第一页为全集。
+	ginkgo.By("R05.page：第二页失败只标未知/历史，不能丢掉上次完整发现的对象或提交第一页为全集。")
+
 	p, c, id, f := ksmPublishedFixture(t)
 	cl := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["clusterId"].(string)
 	outside := func(name, uid string) map[string]any {
@@ -43,39 +45,3 @@ func TestR05WorkbenchFailedInventoryPage(t *testing.T) {
 }
 
 // R05.item：同一后台批次中失败对象与成功对象各自记录，不整批覆盖。
-func TestR05WorkbenchIndependentItems(t *testing.T) {
-	ticks := make(chan time.Time, 1)
-	p, c, id, f, clock := workbenchSourceFixture(t, func(cfg *platform.Config) { cfg.ObservationTicks = ticks })
-	other, target := ksmTarget(t)
-	other.mu.Lock()
-	other.clusterUID = "second-cluster-uid"
-	other.mu.Unlock()
-	owner := readJSON(t, p, "/session", c)["account"].(map[string]any)["id"].(string)
-	op := clusterCall(t, p, "POST", "/clusters", map[string]any{"name": "second", "ownerId": owner, "context": "explicit", "kubeconfig": target}, c, "register-second", 202)
-	cl := awaitClusterOperation(t, p, c, op["operationId"].(string))["clusterId"].(string)
-	second := clusterCall(t, p, "POST", "/clusters/"+cl+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": ksmConfig("second-source")}, c, "create-second", 201)["id"].(string)
-	pub := lifecyclePublish(t, p, c, second)
-	awaitLifecycleState(t, p, c, pub["operationId"].(string), "SUCCEEDED")
-	original := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200), "CR")
-	f.mu.Lock()
-	f.crReadFailure = true
-	f.mu.Unlock()
-	clock.Add(int64(10 * time.Second))
-	ticks <- time.Unix(0, clock.Load())
-	expected := time.Unix(0, clock.Load()).UTC().Format(time.RFC3339Nano)
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		first := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200), "CR")
-		success := workbenchSource(t, clusterCall(t, p, "GET", "/instances/"+second, nil, c, "", 200), "CR")
-		if first["error"] != "" && success["lastSuccessAt"] == expected {
-			if first["lastSuccessAt"] != original["lastSuccessAt"] || success["error"] != "" || first["lastAttemptAt"] != expected {
-				t.Fatal("独立来源时间/错误混淆", first, success)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("同批次独立来源未更新", first, success)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}

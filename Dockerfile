@@ -1,7 +1,8 @@
 FROM node:26.4.0-bookworm-slim@sha256:ec82d089a8ae2cf02628da7b34ea57dc357b24db724d557fe2d240e6beb659c1 AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
-RUN npm ci
+# 按lockfile/integrity安装；构建不隐式等待外部审计服务。
+RUN npm ci --no-audit
 COPY web/ ./
 RUN npm run build
 FROM golang:1.27.1-bookworm@sha256:8d48e12ec56735e9358640898b9d9b9fcca110612ed8a5567438c0a1baa24e66 AS go

@@ -5,24 +5,30 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/remote"
 	headermeta "github.com/cloudwego/kitex/pkg/remote/transmeta"
 	"github.com/cloudwego/kitex/pkg/transmeta"
 	"github.com/cloudwego/kitex/transport"
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"sync"
-	"testing"
-	"time"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // R06：三个真实TLS边界同时阻塞，断言全局8/集群4及排队也计入8秒，不用私有limiter断言。
-func TestR06WorkbenchConcurrentBudgets(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestR06WorkbenchConcurrentBudgets(t ginkgo.GinkgoTInterface) {
+	// 接下来R06：三个真实TLS边界同时阻塞，断言全局8/集群4及排队也计入8秒，不用私有limiter断言。
+	ginkgo.By("R06：三个真实TLS边界同时阻塞，断言全局8/集群4及排队也计入8秒，不用私有limiter断言。")
+
 	p, c, owner := clusterPlatform(t)
 	var mu sync.Mutex
 	active, maximum, calls := 0, 0, 0
@@ -84,6 +90,7 @@ func TestR06WorkbenchConcurrentBudgets(t *testing.T) {
 	for group, cluster := range clusters {
 		for n := 0; n < 5; n++ {
 			go func(cluster string, group, n int) {
+				defer ginkgo.GinkgoRecover()
 				start := time.Now()
 				req, _ := http.NewRequest("GET", p.URL()+fmt.Sprintf("/api/v1/clusters/%s/references?kind=ServiceAccount&namespace=q-%d-%d", cluster, group, n), nil)
 				req.AddCookie(c)
@@ -150,14 +157,15 @@ func (h wireTimeoutMeta) WriteMeta(ctx context.Context, msg remote.Message) (con
 }
 
 // R06：请求方缺失/异常/零或夸大metadata也不能把服务端总预算扩大到10秒以上。
-func TestR06WorkbenchServerBudgetMaximum(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestR06WorkbenchServerBudgetMaximum(t ginkgo.GinkgoTInterface) {
+	// 接下来复用一个平台和目标适配器，对四类 metadata 走实际 Kitex 编解码。
+	p, c, id, f, _ := workbenchSourceFixture(t, func(cfg *platform.Config) { cfg.ObservationTicks = make(chan time.Time) })
+	f.mu.Lock()
+	f.readDelay = 4 * time.Second
+	f.mu.Unlock()
 	for _, metadata := range []string{"missing", "100000", "0", "invalid"} {
-		t.Run(metadata, func(t *testing.T) {
-			t.Parallel()
-			p, c, id, f, _ := workbenchSourceFixture(t, func(cfg *platform.Config) { cfg.ObservationTicks = make(chan time.Time) })
-			f.mu.Lock()
-			f.readDelay = 4 * time.Second
-			f.mu.Unlock()
+		teststeps.Step(metadata, func() {
 			options := []client.Option{client.WithHostPorts(p.RPCAddress()), client.WithRPCTimeout(15 * time.Second)}
 			if metadata != "missing" {
 				options = append(options, client.WithTransportProtocol(transport.TTHeader), client.WithMetaHandler(wireTimeoutMeta{transmeta.ClientTTHeaderHandler, metadata}))
@@ -166,12 +174,19 @@ func TestR06WorkbenchServerBudgetMaximum(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
+			if _, e = cli.Probe(context.Background(), &rpc.RequestContext{RequestId: "metadata-" + metadata}); e != nil {
+				t.Fatal("metadata 编解码失败", metadata, e)
+			}
+			// 关键：服务端上限与继承预算已在纯边界断言；只保留一次完整 10 秒网络计时。
+			if metadata != "missing" {
+				return
+			}
 			token := c.Value
 			start := time.Now()
 			cli.RefreshInstance(context.Background(), &rpc.RequestContext{SessionToken: &token}, &rpc.InstanceID{Id: id})
 			elapsed := time.Since(start)
 			if elapsed < 9500*time.Millisecond || elapsed > 11500*time.Millisecond {
-				t.Fatalf("服务端没有按当前剩余预算限制为10秒: metadata=%s duration=%s", metadata, elapsed)
+				t.Fatalf("服务端总预算未限制为10秒：%s", elapsed)
 			}
 		})
 	}

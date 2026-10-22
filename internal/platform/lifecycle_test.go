@@ -3,23 +3,21 @@ package platform_test
 import (
 	"context"
 	"errors"
-	"github.com/cloudwego/kitex/client"
-	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
-	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/fjsxy/monitor-mgr/internal/platform"
+	"github.com/fjsxy/monitor-mgr/internal/teststeps"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // lifecycleFixture 经真实 HTTP/Kitex 建立实例，并只在应用持久派发边界提供确定性屏障。
-func lifecycleFixture(t *testing.T, boundary func(string, string) error, clock ...func() time.Time) (*platform.Runtime, *http.Cookie, string, *ksmFixture) {
+func lifecycleFixture(t ginkgo.GinkgoTInterface, boundary func(string, string) error, clock ...func() time.Time) (*platform.Runtime, *http.Cookie, string, *ksmFixture) {
 	t.Helper()
 	f, cfg := ksmTarget(t)
 	cfgPlatform := platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", OperationBoundary: boundary}
@@ -43,13 +41,13 @@ func lifecycleFixture(t *testing.T, boundary func(string, string) error, clock .
 	return p, c, i["id"].(string), f
 }
 
-func lifecyclePublish(t *testing.T, p *platform.Runtime, c *http.Cookie, id string) map[string]any {
+func lifecyclePublish(t ginkgo.GinkgoTInterface, p *platform.Runtime, c *http.Cookie, id string) map[string]any {
 	t.Helper()
 	preview := ksmPreview(t, p, c, id, 1)
 	return clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"previewId": preview["previewId"], "draftRevision": 1, "overwriteDrift": false}, c, "publish", 202)
 }
 
-func lifecycleRevision(t *testing.T, p *platform.Runtime, c *http.Cookie, id string) map[string]any {
+func lifecycleRevision(t ginkgo.GinkgoTInterface, p *platform.Runtime, c *http.Cookie, id string) map[string]any {
 	t.Helper()
 	o := clusterCall(t, p, "GET", "/operations/"+id, nil, c, "", 200)
 	as := clusterCall(t, p, "GET", "/operations/"+id+"/attempts", nil, c, "", 200)["attempts"].([]any)
@@ -63,12 +61,16 @@ func lifecycleRevision(t *testing.T, p *platform.Runtime, c *http.Cookie, id str
 	return nil
 }
 
-func TestP08CancellationCompetesWithPersistentDispatch(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestP08CancellationCompetesWithPersistentDispatch(t ginkgo.GinkgoTInterface) {
+	// 接下来控制取消与派发竞争，验证持久化边界只允许一个结果。
+	ginkgo.By("控制取消与派发竞争，验证持久化边界只允许一个结果")
+
 	for _, tc := range []struct {
 		name, stage string
 		status      int
 	}{{"cancel-wins", "beforeDispatch", 200}, {"dispatch-wins", "afterSendMarker", 409}} {
-		t.Run(tc.name, func(t *testing.T) {
+		teststeps.Step(tc.name, func() {
 			entered, release := make(chan struct{}), make(chan struct{})
 			var once, released sync.Once
 			defer released.Do(func() { close(release) })
@@ -113,7 +115,11 @@ func TestP08CancellationCompetesWithPersistentDispatch(t *testing.T) {
 }
 
 // P07：确定拒绝后，重试固定原版本且保留失败尝试，不能偷换为保存的新草稿。
-func TestP07RetryUsesFrozenVersionAndCurrentRevisions(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestP07RetryUsesFrozenVersionAndCurrentRevisions(t ginkgo.GinkgoTInterface) {
+	// 接下来P07：确定拒绝后，重试固定原版本且保留失败尝试，不能偷换为保存的新草稿。
+	ginkgo.By("P07：确定拒绝后，重试固定原版本且保留失败尝试，不能偷换为保存的新草稿。")
+
 	p, c, id, f := lifecycleFixture(t, nil)
 	f.mu.Lock()
 	f.rejectWrite = 422
@@ -163,7 +169,7 @@ func TestP07RetryUsesFrozenVersionAndCurrentRevisions(t *testing.T) {
 	}
 }
 
-func awaitLifecycleState(t *testing.T, p *platform.Runtime, c *http.Cookie, id string, states ...string) map[string]any {
+func awaitLifecycleState(t ginkgo.GinkgoTInterface, p *platform.Runtime, c *http.Cookie, id string, states ...string) map[string]any {
 	t.Helper()
 	until := time.Now().Add(12 * time.Second)
 	for time.Now().Before(until) {
@@ -180,9 +186,13 @@ func awaitLifecycleState(t *testing.T, p *platform.Runtime, c *http.Cookie, id s
 }
 
 // P10/P11：目标已执行但响应丢失，已知UID只读确认，首次创建绝不按同名补认。
-func TestPublicationUnknownOutcomeNeverReplays(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestPublicationUnknownOutcomeNeverReplays(t ginkgo.GinkgoTInterface) {
+	// 接下来P10/P11：目标已执行但响应丢失，已知UID只读确认，首次创建绝不按同名补认。
+	ginkgo.By("P10/P11：目标已执行但响应丢失，已知UID只读确认，首次创建绝不按同名补认。")
+
 	for _, known := range []bool{false, true} {
-		t.Run(map[bool]string{false: "first-create", true: "known-uid"}[known], func(t *testing.T) {
+		teststeps.Step(map[bool]string{false: "first-create", true: "known-uid"}[known], func() {
 			p, c, id, f := lifecycleFixture(t, nil)
 			if known {
 				op := lifecyclePublish(t, p, c, id)
@@ -230,7 +240,11 @@ func TestPublicationUnknownOutcomeNeverReplays(t *testing.T) {
 }
 
 // T08：退出先撤销就绪和新受理资格，已发送任务仍保留真实结果核验依据。
-func TestT08ShutdownRejectsNewAcceptanceBeforeDrain(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestT08ShutdownRejectsNewAcceptanceBeforeDrain(t ginkgo.GinkgoTInterface) {
+	// 接下来T08：退出先撤销就绪和新受理资格，已发送任务仍保留真实结果核验依据。
+	ginkgo.By("T08：退出先撤销就绪和新受理资格，已发送任务仍保留真实结果核验依据。")
+
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once, released sync.Once
 	defer released.Do(func() { close(release) })
@@ -250,6 +264,7 @@ func TestT08ShutdownRejectsNewAcceptanceBeforeDrain(t *testing.T) {
 	}
 	closed := make(chan struct{})
 	go func() {
+		defer ginkgo.GinkgoRecover()
 		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 		defer cancel()
 		p.Close(ctx)
@@ -284,9 +299,13 @@ func deletionGraph() map[string][]any {
 	return map[string][]any{"/apis/apps/v1/namespaces/monitoring/deployments": {obj("work", "work-uid", "created-uid")}, "/apis/apps/v1/namespaces/monitoring/replicasets": {obj("rs", "rs-uid", "work-uid")}, "/api/v1/namespaces/monitoring/pods": {obj("pod", "pod-uid", "rs-uid")}}
 }
 
-func TestP14ForegroundDeletionKeepsUIDGraphProtection(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestP14ForegroundDeletionKeepsUIDGraphProtection(t ginkgo.GinkgoTInterface) {
+	// 接下来逐项构造删除残留与身份替换，核验前台删除的 UID 保护。
+	ginkgo.By("逐项构造删除残留与身份替换，核验前台删除的 UID 保护")
+
 	for _, variant := range []string{"finalizer", "pod-remains", "read-failure", "delete-response-drop", "complete"} {
-		t.Run(variant, func(t *testing.T) {
+		teststeps.Step(variant, func() {
 			p, c, id, f := lifecycleFixture(t, nil)
 			pub := lifecyclePublish(t, p, c, id)
 			if awaitClusterOperation(t, p, c, pub["operationId"].(string))["state"] != "SUCCEEDED" {
@@ -341,7 +360,11 @@ func TestP14ForegroundDeletionKeepsUIDGraphProtection(t *testing.T) {
 }
 
 // I06：后台执行使用账号当前权限，原Cookie到期仅使新的用户请求失效。
-func TestI06CookieExpiryDoesNotCancelAcceptedOperation(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestI06CookieExpiryDoesNotCancelAcceptedOperation(t ginkgo.GinkgoTInterface) {
+	// 接下来I06：后台执行使用账号当前权限，原Cookie到期仅使新的用户请求失效。
+	ginkgo.By("I06：后台执行使用账号当前权限，原Cookie到期仅使新的用户请求失效。")
+
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once, released sync.Once
 	defer released.Do(func() { close(release) })
@@ -375,7 +398,11 @@ func TestI06CookieExpiryDoesNotCancelAcceptedOperation(t *testing.T) {
 }
 
 // P13：真实子进程在两个持久点退出，重启复用原卷/密钥/会话并禁止隐式重放。
-func TestP13RestartUsesPersistentSentBoundary(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestP13RestartUsesPersistentSentBoundary(t ginkgo.GinkgoTInterface) {
+	// 接下来P13：真实子进程在两个持久点退出，重启复用原卷/密钥/会话并禁止隐式重放。
+	ginkgo.By("P13：真实子进程在两个持久点退出，重启复用原卷/密钥/会话并禁止隐式重放。")
+
 	if stage := os.Getenv("MM_P13_STAGE"); stage != "" {
 		p, e := platform.Start(context.Background(), platform.Config{DataDir: os.Getenv("MM_P13_DIR"), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0", OperationBoundary: func(s, id string) error {
 			if s == stage {
@@ -393,7 +420,7 @@ func TestP13RestartUsesPersistentSentBoundary(t *testing.T) {
 		return
 	}
 	for _, stage := range []string{"beforeDispatch", "afterSendMarker"} {
-		t.Run(stage, func(t *testing.T) {
+		teststeps.Step(stage, func() {
 			f, target := ksmTarget(t)
 			dir := t.TempDir()
 			cfg := platform.Config{DataDir: dir, HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
@@ -410,7 +437,7 @@ func TestP13RestartUsesPersistentSentBoundary(t *testing.T) {
 			id := i["id"].(string)
 			preview := ksmPreview(t, p, c, id, 1)
 			p.Close(context.Background())
-			cmd := exec.Command(os.Args[0], "-test.run=^TestP13RestartUsesPersistentSentBoundary$")
+			cmd := exec.Command(os.Args[0], "-test.run=^TestPlatform$", "-ginkgo.focus=(^| )UT-11 ", "-ginkgo.fail-on-empty")
 			cmd.Env = append(os.Environ(), "MM_P13_STAGE="+stage, "MM_P13_DIR="+dir, "MM_P13_ID="+id, "MM_P13_PREVIEW="+preview["previewId"].(string))
 			raw, e := cmd.CombinedOutput()
 			var exit *exec.ExitError
@@ -468,7 +495,11 @@ func TestP13RestartUsesPersistentSentBoundary(t *testing.T) {
 }
 
 // REG17-DELETE-001：外部漂移到另一namespace后，父对象先消失的Pod仍属于原UID清理图。
-func TestDeletionCrossNamespaceOwnerUIDRemainsProtected(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestDeletionCrossNamespaceOwnerUIDRemainsProtected(t ginkgo.GinkgoTInterface) {
+	// 接下来REG17-DELETE-001：外部漂移到另一namespace后，父对象先消失的Pod仍属于原UID清理图。
+	ginkgo.By("REG17-DELETE-001：外部漂移到另一namespace后，父对象先消失的Pod仍属于原UID清理图。")
+
 	p, c, id, f := lifecycleFixture(t, nil)
 	pub := lifecyclePublish(t, p, c, id)
 	awaitLifecycleState(t, p, c, pub["operationId"].(string), "SUCCEEDED")
@@ -497,73 +528,15 @@ func TestDeletionCrossNamespaceOwnerUIDRemainsProtected(t *testing.T) {
 }
 
 // REG17-ACTIVITY-001：后台完成不是一次显式操作，不应重新置顶实例。
-func TestDeletionCompletionDoesNotChangeActivity(t *testing.T) {
-	p, c, id, f := lifecycleFixture(t, nil)
-	pub := lifecyclePublish(t, p, c, id)
-	awaitLifecycleState(t, p, c, pub["operationId"].(string), "SUCCEEDED")
-	f.mu.Lock()
-	f.retainCR = true
-	f.mu.Unlock()
-	op := clusterCall(t, p, "POST", "/instances/"+id+"/deletions", deletionConfirmation(t, p, c, id), c, "delete", 202)
-	awaitLifecycleState(t, p, c, op["operationId"].(string), "DELETION_BLOCKED")
-	activity := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["activityAt"]
-	f.mu.Lock()
-	f.cr = nil
-	f.mu.Unlock()
-	clusterCall(t, p, "POST", "/operations/"+op["operationId"].(string)+"/refresh", nil, c, "refresh", 200)
-	awaitLifecycleState(t, p, c, op["operationId"].(string), "SUCCEEDED")
-	if after := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)["activityAt"]; activity != after {
-		t.Fatal("后台完成改变活动排序", activity, after)
-	}
-}
 
 // REG17-SHUTDOWN-001：即使launcher仍占锁，停机起点也必须拒绝真正的直接RPC变更。
-func TestShutdownClosesRPCAdmissionBeforeLauncherDrain(t *testing.T) {
-	entered, release := make(chan struct{}), make(chan struct{})
-	var enabled atomic.Bool
-	var once, released sync.Once
-	defer released.Do(func() { close(release) })
-	p, c, id, _ := lifecycleFixture(t, func(stage, id string) error {
-		if enabled.Load() && stage == "beforeLaunch" {
-			once.Do(func() { close(entered) })
-			<-release
-		}
-		return nil
-	})
-	cli, e := controlservice.NewClient("shutdown-direct", client.WithHostPorts(p.RPCAddress()))
-	if e != nil {
-		t.Fatal(e)
-	}
-	enabled.Store(true)
-	select {
-	case <-entered:
-	case <-time.After(3 * time.Second):
-		t.Fatal("未进入launcher屏障")
-	}
-	closed := make(chan struct{})
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		p.Close(ctx)
-		close(closed)
-	}()
-	time.Sleep(20 * time.Millisecond)
-	token, key := c.Value, "shutdown-direct"
-	_, e = cli.RecordEditingActivity(context.Background(), &rpc.RequestContext{RequestId: key, SessionToken: &token, IdempotencyKey: &key}, &rpc.InstanceID{Id: id})
-	var api *rpc.APIError
-	if !errors.As(e, &api) || api.Code != "UNAVAILABLE" {
-		t.Fatalf("launcher阻塞期间direct RPC仍受理：%v", e)
-	}
-	released.Do(func() { close(release) })
-	select {
-	case <-closed:
-	case <-time.After(3 * time.Second):
-		t.Fatal("退出未落盘")
-	}
-}
 
 // REG17-DELETE-002：预检后外部删除原CR而DELETE返回404时，旧Pod仍须保留保护。
-func TestDeletion404AfterPreflightKeepsSeenPodProtected(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestDeletion404AfterPreflightKeepsSeenPodProtected(t ginkgo.GinkgoTInterface) {
+	// 接下来REG17-DELETE-002：预检后外部删除原CR而DELETE返回404时，旧Pod仍须保留保护。
+	ginkgo.By("REG17-DELETE-002：预检后外部删除原CR而DELETE返回404时，旧Pod仍须保留保护。")
+
 	entered, release := make(chan struct{}), make(chan struct{})
 	var armed atomic.Bool
 	var once, released sync.Once

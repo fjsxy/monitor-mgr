@@ -4,16 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
-	"testing"
 
 	"github.com/cloudwego/kitex/client"
 	"github.com/fjsxy/monitor-mgr/internal/platform"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"github.com/fjsxy/monitor-mgr/kitex_gen/control/controlservice"
+	ginkgo "github.com/onsi/ginkgo/v2"
 )
 
 // REG19-HTTP-I64-001：HTTP不安全修订以字符串精确往返，真实RPC保留i64。
-func TestWorkbenchHTTPInt64RoundTrip(t *testing.T) {
+// 此断言阶段由合并后的业务场景调用；复用已有受控目标与协议夹具。
+func checkTestWorkbenchHTTPInt64RoundTrip(t ginkgo.GinkgoTInterface) {
+	// 接下来REG19-HTTP-I64-001：HTTP不安全修订以字符串精确往返，真实RPC保留i64。
+	ginkgo.By("REG19-HTTP-I64-001：HTTP不安全修订以字符串精确往返，真实RPC保留i64。")
+
 	_, target := ksmTarget(t)
 	cfg := platform.Config{DataDir: t.TempDir(), HTTPAddr: "127.0.0.1:0", RPCAddr: "127.0.0.1:0"}
 	p, e := platform.Start(context.Background(), cfg)
