@@ -10,10 +10,12 @@ import signal
 import socket
 import sys
 import tempfile
+import time
 import traceback
 
 from e2e_environment import Environment, ROOT, private_json
 from testing_contract import validate_specs
+from e2e_shards import SHARDS, selection
 
 
 def source():
@@ -26,6 +28,7 @@ def source():
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-id',default='mm-e2e-'+datetime.datetime.now().strftime('%m%d%H%M%S'))
+    parser.add_argument('--shard',choices=list(SHARDS),help='仅运行固定 CI 组；省略时运行全部10项')
     parser.add_argument('--cleanup',help='独立按已保存的原身份清理中断运行');parser.add_argument('--output');parser.add_argument('--monitor-op-source');parser.add_argument('--candidate')
     args=parser.parse_args()
     if args.cleanup:
@@ -44,20 +47,27 @@ def main():
     from transport import ACTIVE
     token=ACTIVE.set(environment)
     from e2e_scenarios import Scenario, CASES
-    results={id:dict(id=id,outcome='not_run',steps=[]) for id in CASES};required=list(CASES)
-    summary=dict(candidate=candidate,runId=args.run_id,results=results,environment='preparing',cleanup=False,passed=False)
+    required=selection(args.shard)
+    assert set(selection())==set(CASES)
+    results={id:dict(id=id,outcome='not_run',steps=[]) for id in required}
+    summary=dict(schemaVersion=3,kind='e2e-shard' if args.shard else 'e2e-full',shard=args.shard,assigned=required,
+                 candidate=candidate,runId=args.run_id,results=results,environment='preparing',cleanup=False,passed=False,timingsSeconds={})
+    started=time.monotonic()
     child=None
     def stop(signum,frame):
         signal.signal(signal.SIGTERM,signal.SIG_IGN);signal.signal(signal.SIGINT,signal.SIG_IGN)
         raise InterruptedError('收到停止信号')
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     try:
-        environment.build();environment.prepare_clusters();environment.load_images();environment.operators();summary['environment']='ready'
+        # 分阶段记录耗时，后续调整分组可依据公开实测，而不依赖敏感原始日志。
+        for name,operation in [('build',environment.build),('clusters',environment.prepare_clusters),('images',environment.load_images),('operators',environment.operators)]:
+            stage=time.monotonic();operation();summary['timingsSeconds'][name]=round(time.monotonic()-stage,3)
+        summary['environment']='ready'
         with tempfile.TemporaryDirectory(prefix='mm-e2e-') as temporary:
             address=str(Path(temporary)/'scheduler.sock')
             with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
                 server.bind(address);os.chmod(address,0o600);server.listen(1);server.settimeout(.2)
-                env=dict(os.environ,MONITOR_MGR_E2E_SOCKET=address)
+                env=dict(os.environ,MONITOR_MGR_E2E_SOCKET=address,MONITOR_MGR_E2E_CASES=json.dumps(required))
                 report=environment.private/'ginkgo.json'
                 child=environment.processes.popen(['go','test','./tests/e2e','-count=1','-timeout=120m','-args','-ginkgo.no-color','-ginkgo.fail-on-empty','-ginkgo.json-report='+str(report)],label='ginkgo-e2e',cwd=ROOT,env=env)
                 seen=set()
@@ -66,12 +76,12 @@ def main():
                     except socket.timeout:continue
                     with connection,connection.makefile('rwb') as stream:
                         request=json.loads(stream.readline(4097));id=request.get('id')
-                        if id not in CASES or id in seen:raise ValueError('unregistered-or-duplicate-case')
+                        if id not in required or id in seen:raise ValueError('unregistered-or-duplicate-case')
                         seen.add(id);result=results[id];result['outcome']='failed'
                         def emit(event):
                             if event['type']=='step':result['steps'].append(event['text'])
                             stream.write(json.dumps(event,ensure_ascii=False).encode()+b'\n');stream.flush()
-                        scenario=Scenario(environment,int(id[-2:]),emit)
+                        case_started=time.monotonic();scenario=Scenario(environment,int(id[-2:]),emit)
                         try:
                             scenario.by('Helm 部署本例独立平台与 PVC，并经 Service 初始化登录');scenario.deploy()
                             CASES[id](scenario);result['outcome']='passed'
@@ -89,6 +99,7 @@ def main():
                             except Exception:
                                 failures=['cleanup-exception'];path=environment.private/(id+'-cleanup-failure.txt');path.write_text(traceback.format_exc());os.chmod(path,0o600)
                             result['cleanup']=failures
+                            result['durationSeconds']=round(time.monotonic()-case_started,3)
                             if failures:result['outcome']='failed'
                             result['requests']=scenario.traces;result['platformContainers']=scenario.platform_proofs
                             private_json(environment.public/'results.json',summary)
@@ -107,6 +118,7 @@ def main():
         if child and child.poll() is None:child.terminate();child.wait(timeout=15)
         failures=environment.processes.close_auxiliary()
         failures+=environment.cleanup_clusters();summary['cleanup']=not failures;summary['passed']=summary['passed'] and not failures
+        summary['timingsSeconds']['total']=round(time.monotonic()-started,3)
         private_json(environment.public/'results.json',summary);ACTIVE.reset(token)
         print(json.dumps(dict(candidate=candidate,passed=sum(r['outcome']=='passed' for r in results.values()),failed=sum(r['outcome']=='failed' for r in results.values()),not_run=sum(r['outcome']=='not_run' for r in results.values()),cleanup=summary['cleanup'],report=str(environment.public/'results.json')),ensure_ascii=False),flush=True)
     return 0 if summary['passed'] else 1

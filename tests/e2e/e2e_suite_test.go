@@ -23,8 +23,29 @@ func TestE2E(t *testing.T) {
 
 var _ = ginkgo.Describe("独占双集群", ginkgo.Ordered, ginkgo.ContinueOnFailure, func() {
 	titles := []string{"平台部署与 Pod 重建", "双集群登记凭据与归属", "KSM 三种真实拓扑", "Agent 关联与发送配置", "分片与 PVC 完整生命周期", "发布冻结漂移与版本", "目标故障与状态隔离", "写响应丢失与重启禁重放", "前台删除与 UID 保护", "唯一浏览器主流程"}
+	// 关键：父进程传入固定分组，只注册本组 It；不使用 skip/focus 将漏跑掩盖为成功。
+	selected := map[string]bool{}
+	if raw := os.Getenv("MONITOR_MGR_E2E_CASES"); raw != "" {
+		var ids []string
+		if err := json.Unmarshal([]byte(raw), &ids); err != nil || len(ids) == 0 {
+			panic("E2E 分组为空或格式错误")
+		}
+		for _, id := range ids {
+			valid := false
+			for n := range titles {
+				valid = valid || id == fmt.Sprintf("E2E-%02d", n+1)
+			}
+			if !valid || selected[id] {
+				panic("E2E 分组包含未知或重复 ID")
+			}
+			selected[id] = true
+		}
+	}
 	for n, title := range titles {
 		id := fmt.Sprintf("E2E-%02d", n+1)
+		if len(selected) > 0 && !selected[id] {
+			continue
+		}
 		ginkgo.It(id+" "+title, func() {
 			conn, err := net.DialTimeout("unix", os.Getenv("MONITOR_MGR_E2E_SOCKET"), 5*time.Second)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())

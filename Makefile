@@ -4,6 +4,7 @@ GO ?= go
 NPM ?= npm
 PYTHON ?= python3
 E2E_ARGS ?=
+E2E_SUMMARY_ARGS ?=
 BUILDX_BUILDER ?=
 COVERAGE_FILE ?= .scratch/coverage.out
 HTTP_ADDR ?= 127.0.0.1:18080
@@ -13,7 +14,7 @@ IMAGE ?= monitor-mgr:development
 SOURCE_SHA ?= $(shell git rev-parse HEAD)
 PLATFORM ?= linux/arm64
 
-.PHONY: help ut e2e check test test-race generate check-generated vet web-install web-build build run image ci-cases ci-cases-check ci-builder ci-builder-cleanup
+.PHONY: help ut e2e e2e-summary check test test-race generate check-generated vet web-install web-build build run image ci-cases ci-cases-check ci-builder ci-builder-cleanup
 help: ## 查看常用命令
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 ut: ci-cases-check check-generated vet web-build ## 18 个 Ginkgo UT，一次 race 与不少于70%的产品语句覆盖率
@@ -21,8 +22,10 @@ ut: ci-cases-check check-generated vet web-build ## 18 个 Ginkgo UT，一次 ra
 	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -race -count=1 -timeout 15m -coverpkg=./internal/control,./internal/platform -coverprofile="$(COVERAGE_FILE)" ./internal/control ./internal/platform -args -ginkgo.no-color -ginkgo.json-report=.scratch/ut.json
 	$(PYTHON) scripts/check-coverage.py "$(COVERAGE_FILE)" --minimum 70
 	$(PYTHON) scripts/check-tests.py
-e2e: ## 自动拉起独占双集群并运行10个Ginkgo E2E，最后按原身份清理；可用E2E_ARGS指定output/run-id/monitor-op-source
+e2e: ## 自动拉起独占双集群，默认运行10项；E2E_ARGS可指定--shard topology/storage/recovery，最后按原身份清理
 	$(PYTHON) scripts/e2e.py $(E2E_ARGS)
+e2e-summary: ## 严格汇总三个CI组为完整10项；E2E_SUMMARY_ARGS指定input/output/candidate/run-id/jobs-result
+	$(PYTHON) scripts/e2e_shards.py $(E2E_SUMMARY_ARGS)
 check: ut ## 完整本地 UT 质量检查；真实集群另执行 make e2e
 test: ut ## 与 make ut 一致，避免旧入口重复运行相同用例
 test-race: ut ## race 已包含在唯一 UT 入口中
