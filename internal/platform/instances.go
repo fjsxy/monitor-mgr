@@ -113,6 +113,23 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	}
 	if len(parts) == 3 {
 		switch parts[2] {
+		case "management-confirmations":
+			if r.Method == "POST" {
+				var b struct {
+					AllowClusterManagers *bool `json:"allowClusterManagers"`
+				}
+				if e := decode(r, &b); e != nil {
+					p.writeError(w, e, id)
+					return true
+				}
+				if b.AllowClusterManagers == nil {
+					p.writeError(w, control.Error("BAD_REQUEST", "必须明确确认是否允许现有集群管理用户"), id)
+					return true
+				}
+				v, e := p.client.ConfirmInstanceManagement(r.Context(), c, &rpc.ConfirmInstanceManagementRequest{Id: req.Id, AllowClusterManagers: *b.AllowClusterManagers})
+				p.respond(w, 200, v, e, id)
+				return true
+			}
 		case "deletion-previews":
 			if r.Method == "POST" {
 				var b struct {

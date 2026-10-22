@@ -236,3 +236,7 @@ UT 在本仓库指无需 Kubernetes 的本地测试：优先直接调用 Go 应�
 固定目录仍为18个UT/10个E2E；新增步骤接入UT-08/10/11/12/16及E2E-03/08/09/10，不另立未注册场景。详细五列输入和可复现步骤见[issue-28.md](../e2e/issue-28.md)，当前必要动作/预期以`cases.json`同步生成。
 
 ServiceMonitor使用锁定monitor-op 2b2a8b7的稳定Service实例标签（点号/长名规范化）、http-metrics端口，并覆盖DaemonSetSharded的node/control两个Service。两资源分别保存冻结配置、UID、发送标记与结果；确定拒绝后人工只补失败步骤，未知UID永不按name/spec/labels补认。组件只读确认成功后若SM仍未发，整体等待明确继续。真实Pod和浏览器计划不能替代实际执行证据。
+
+# #26 历史身份与独立权限确认
+
+新增子行为复用 UT-07/10/16 与 E2E-01/10；详细五列计划见 `docs/e2e/issue-26.md`。真实旧结构裁去 v11+ 表和字段，可靠证据只补实际创建 user ID；管理员确认 actor/time/result 独立追加，未知历史角色不改写。浏览器沿唯一 test 的 I26-B01 step 检查确认、开放和撤销，真实 Pod 场景只操作本 run 独占 Helm/PVC。

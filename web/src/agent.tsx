@@ -1,3 +1,4 @@
+import { InstanceManagement } from "./instance-management";
 import {FrozenResources,type FrozenResource} from "./lifecycle";
 import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
@@ -126,6 +127,7 @@ type Reference = {
 };
 type Tab = "draft" | "runtime" | "history" | "yaml";
 type Props = {
+  isAdmin: boolean;
   selection: {
     instance?: Instance;
     agentTemplate?: AgentConfiguration;
@@ -221,6 +223,7 @@ function canonical(config: AgentConfiguration): AgentConfiguration {
 
 // 编辑草稿独立于运行/来源刷新，避免轮询回填未保存编辑或重建控件。
 export function AgentEditor({
+  isAdmin,
   selection,
   cluster,
   onAction,
@@ -590,7 +593,7 @@ export function AgentEditor({
               实例详情 · {cluster.name} · collector / Prometheus Agent
             </p>
             <h2>{current?.name || config.name || "新 Agent 实例"}</h2>
-            {current && <InstanceIdentity value={current} />}
+            {current && <><InstanceIdentity value={current} /><InstanceManagement value={current} clusterActive={cluster.state === "ACTIVE"} isAdmin={isAdmin} onConfirmed={next => { setCurrent(next); onChange(); }} /></>}
             <span className={`badge ${readOnly ? "gray" : "ok"}`}>
               {readOnly
                 ? "平台未纳管 · 只读"

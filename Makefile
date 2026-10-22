@@ -93,3 +93,7 @@ ut-instance-identity: ## 实例创建身份、HTTP/RPC写保护、派发撤权�
 .PHONY: ut-exporter-companion
 ut-exporter-companion: ## exporter 配套ServiceMonitor冻结、预检、部分失败、恢复、失权和删除的Ginkgo验证
 	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test ./internal/platform -count=1 -timeout 8m -args -ginkgo.focus='UT-08|UT-10|UT-11|UT-12|UT-16' -ginkgo.no-color -ginkgo.fail-on-empty
+
+.PHONY: ut-historical-identity
+ut-historical-identity: ## 历史创建证据、管理员确认与撤销派发的 Ginkgo 定向验证
+	$(GO) test -count=1 -timeout 5m ./internal/platform -run TestPlatform -args -ginkgo.focus='UT-07|UT-10|UT-16' -ginkgo.no-color

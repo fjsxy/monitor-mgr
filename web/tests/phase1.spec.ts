@@ -106,5 +106,77 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
       await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
     }
   });
+  await test.step('I26-B01 历史 KSM/Agent 由管理员明确确认，普通用户权限随允许和撤销变化',async()=>{
+    const send=async(path:string,data:unknown,status=200)=>{
+      const response=await page.request.post(`/api/v1${path}`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data});
+      expect(response.status(),path).toBe(status);return response.json();
+    };
+    const loginAdmin=async()=>{await send('/sessions',{username:'admin',password:fixture.password},201);};
+    await loginAdmin();
+    const actor=(await(await page.request.get('/api/v1/session')).json()).account.id;
+    const temporary=crypto.randomUUID(),personal=crypto.randomUUID();
+    const user=await send('/accounts',{username:'historical-browser-owner',password:temporary,role:'USER'},201);
+    await send(`/clusters/${fixture.clusterId}/transfer`,{ownerId:user.id});
+    await send('/sessions',{username:'historical-browser-owner',password:temporary},201);
+    await send('/session/password',{currentPassword:temporary,newPassword:personal});
+    const loginUser=async()=>{await send('/sessions',{username:'historical-browser-owner',password:personal},201);};
+    const open=async(instance:{name:string},manage:boolean)=>{
+      await page.reload();await page.getByRole('button',{name:'观测配置',exact:true}).click();
+      const row=page.getByRole('row').filter({has:page.getByText(instance.name,{exact:true})});
+      await row.getByRole('button',{name:manage?'编辑':'查看',exact:true}).click();
+      await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('创建时角色：未知');
+    };
+    const checkUser=async(manage:boolean)=>{
+      await loginUser();
+      for(const instance of fixture.historical){
+        await open(instance,manage);
+        await expect(drawer.getByRole('button',{name:'确认历史实例管理权限',exact:true})).toHaveCount(0);
+        if(manage){
+          await expect(drawer.getByLabel('名称',{exact:true})).toBeEnabled();
+          await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('允许现有集群管理用户');
+          await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();
+          await expect(drawer.getByText('草稿 v2 已保存',{exact:true})).toBeVisible();
+        }else{
+          await expect(drawer.getByLabel('名称',{exact:true})).toBeDisabled();
+          await expect(drawer.getByRole('button',{name:'保存草稿',exact:true})).toHaveCount(0);
+          await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('创建时角色未知');
+        }
+        await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+      }
+    };
+    await checkUser(false);
+    for(const result of ['allow','restrict']){
+      await loginAdmin();
+      for(const instance of fixture.historical){
+        await open(instance,true);
+        await drawer.getByRole('button',{name:'确认历史实例管理权限',exact:true}).click();
+        const confirm=page.getByRole('dialog',{name:'确认历史实例管理权限',exact:true});
+        await expect(confirm.getByRole('button',{name:'确认管理权限',exact:true})).toBeDisabled();
+        await confirm.getByLabel('管理权限结果',{exact:true}).selectOption(result);
+        await confirm.getByRole('button',{name:'确认管理权限',exact:true}).click();
+        await expect(confirm).toHaveCount(0);
+        await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText(`确认用户：${actor}`);
+        await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('确认时间：');
+        const detail=await(await page.request.get(`/api/v1/instances/${instance.id}`)).json();
+        expect(detail.creatorRole).toBe('');expect(detail.managementConfirmation.allowClusterManagers).toBe(result==='allow');
+        await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+      }
+      await checkUser(result==='allow');
+    }
+    await loginAdmin();await open(fixture.historical[0],true);
+    await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+    await send(`/clusters/${fixture.clusterId}/unregister`,{});
+    await page.getByRole('button',{name:'刷新列表',exact:true}).click();
+    // 不重载整个工作台，验证已打开页面刷新后即遵守注销状态，同时继续展示原确认记录。
+    for(const instance of fixture.historical){
+      const row=page.getByRole('row').filter({has:page.getByText(instance.name,{exact:true})});
+      await row.getByRole('button',{name:'查看',exact:true}).click();
+      await expect(drawer.getByRole('button',{name:'确认历史实例管理权限',exact:true})).toHaveCount(0);
+      await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('集群已注销');
+      await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText(`确认用户：${actor}`);
+      await expect(drawer.getByLabel('名称',{exact:true})).toBeDisabled();
+      await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+    }
+  });
   expect(errors).toEqual([]);await page.screenshot({path:info.outputPath('main-flow.png')});
 });
