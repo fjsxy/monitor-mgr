@@ -20,5 +20,5 @@
 | #26 | [issue-26.md](issue-26.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/26#issuecomment-6339463762) |
 | #27 | [issue-27.md](issue-27.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/27#issuecomment-6338083215) |
 | #28 | [issue-28.md](issue-28.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/28#issuecomment-6338844553) |
-| #29 | [issue-29.md](issue-29.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/29#issuecomment-6337439176) |
+| #29 | [issue-29.md](issue-29.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/29#issuecomment-6340305094) |
 | #30 | [issue-30.md](issue-30.md) | [已发布并回读](https://github.com/fjsxy/monitor-mgr/issues/30#issuecomment-6337276378) |
