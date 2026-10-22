@@ -1,4 +1,6 @@
-# #21 E2E 并行 CI 实施计划（修订2）
+# #21 E2E 并行 CI 实施计划（修订3）
+
+修订3：UT、E2E与平台镜像构建的依赖安装统一使用 `npm ci --no-audit`；仍严格使用package-lock/integrity，安装不隐式等待外部审计服务；28项业务覆盖和通过标准保持不变。验证实际安装入口及前端构建，再跑同候选完整CI。
 
 修订2：平台 Pod Ready 与 EndpointSlice Ready 属于不同观察，连接 Service 前须有界等待原 UID 的唯一 Ready endpoint；同名替代或多个 Ready endpoint 立即拒绝。E2E 失败摘要增加冻结脚本的文件/行号，HTTP 拒绝仅映射到冻结 Go 源码中的固定 Error 字面量位置，不公开原始错误消息/响应/凭据。E2E-04 的 preview 409 保留为待定位故障，禁止框架重试或泛化重试 preview。
 
@@ -35,3 +37,5 @@
 计划发布并回读：https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6331066744。
 
 修订2发布并回读：https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6331530714。
+
+修订3发布并回读：https://github.com/fjsxy/monitor-mgr/issues/21#issuecomment-6331681524。

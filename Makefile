@@ -36,7 +36,7 @@ check-generated: generate ## 检查生成文件一致
 vet: ## Go 静态检查
 	$(GO) vet ./...
 web-install: ## 按 lockfile 安装前端依赖
-	$(NPM) --prefix web ci
+	$(NPM) --prefix web ci --no-audit
 web-build: ## 前端只做类型检查和构建
 	$(NPM) --prefix web run build
 build: ## 构建平台
