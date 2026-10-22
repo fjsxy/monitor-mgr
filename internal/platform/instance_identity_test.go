@@ -297,7 +297,7 @@ func checkTestInstanceSentResultSurvivesRevocation(t ginkgo.GinkgoTInterface) {
 }
 
 // dropInstanceCreatorSchema 仅用于构造真实历史 schema；不能只改版本标记而保留新字段。
-const dropInstanceCreatorSchema = `ALTER TABLE instances DROP COLUMN creator_user_id;ALTER TABLE instances DROP COLUMN creator_role;`
+const dropInstanceCreatorSchema = dropResourceProgressSchema + `DROP TABLE IF EXISTS instance_management_confirmations;ALTER TABLE instances DROP COLUMN creator_user_id;ALTER TABLE instances DROP COLUMN creator_role;`
 
 // I25-11：真实 v10 数据库缺少创建角色，迁移不能用当前管理员身份倒推历史。
 func checkTestUnknownCreatorMigration(t ginkgo.GinkgoTInterface) {

@@ -9,11 +9,18 @@ import (
 	"time"
 )
 
-const instanceColumns = `id,cluster_id,component,name,target_namespace,uid,lifecycle,current_version_id,activity_at,creator_user_id,creator_role`
+const instanceColumns = `id,cluster_id,component,name,target_namespace,uid,lifecycle,current_version_id,activity_at,creator_user_id,creator_role,
+ coalesce((SELECT actor_id FROM instance_management_confirmations WHERE instance_id=instances.id ORDER BY sequence DESC LIMIT 1),''),
+ coalesce((SELECT confirmed_at FROM instance_management_confirmations WHERE instance_id=instances.id ORDER BY sequence DESC LIMIT 1),''),
+ coalesce((SELECT allow_cluster_managers FROM instance_management_confirmations WHERE instance_id=instances.id ORDER BY sequence DESC LIMIT 1),0)`
 
 func scanInstance(row interface{ Scan(...any) error }) (*rpc.ObservationInstance, error) {
 	i := new(rpc.ObservationInstance)
-	e := row.Scan(&i.Id, &i.ClusterId, &i.Component, &i.Name, &i.TargetNamespace, &i.Uid, &i.Lifecycle, &i.CurrentVersionId, &i.ActivityAt, &i.CreatorUserId, &i.CreatorRole)
+	confirmation := new(rpc.InstanceManagementConfirmation)
+	e := row.Scan(&i.Id, &i.ClusterId, &i.Component, &i.Name, &i.TargetNamespace, &i.Uid, &i.Lifecycle, &i.CurrentVersionId, &i.ActivityAt, &i.CreatorUserId, &i.CreatorRole, &confirmation.ActorId, &confirmation.ConfirmedAt, &confirmation.AllowClusterManagers)
+	if confirmation.ActorId != "" {
+		i.ManagementConfirmation = confirmation
+	}
 	i.CreatorIdentityKnown = i.CreatorUserId != "" && i.CreatorRole != ""
 	i.Type = "exporter"
 	scope, ns := "Cluster", ""
