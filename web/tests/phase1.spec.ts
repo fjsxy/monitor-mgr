@@ -62,6 +62,8 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     await expect(modal).toContainText('原部署版本');const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${fixture.largeId}/deletions`&&r.request().method()==='POST');
     await modal.getByRole('button',{name:'确认删除实例',exact:true}).click();const op=await(await accepted).json();
     await expect.poll(async()=>{await page.request.post(`/api/v1/operations/${op.operationId}/refresh`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data:{}});return (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state;},{timeout:90000}).toBe('SUCCEEDED');
+    // 删除会自动打开运行抽屉；关闭并确认遮罩消失后，后续历史实例验收才可操作列表。
+    await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();await expect(drawer).toBeHidden();
   });
   await test.step('I29-B01 历史单资源版本只读，新明确发布才补建并展示独立进度',async()=>{
     const legacy=fixture.historicalPublication;
