@@ -106,11 +106,13 @@ def creator_collection(s):
     def sample(group,exported,not_before):
         labels={'namespace':exported['namespace'],'service':exported['service'],'exported_pod':exported['pod'],'uid':exported['podUID'],'prometheus':group['externalPrometheus']}
         expression='kube_pod_info{'+','.join(k+'='+json.dumps(v) for k,v in labels.items())+'}'
-        def query(expr):
-            response=_api(s,collector_ns,receiver_name,'/api/v1/query?'+urllib.parse.urlencode({'query':expr}));assert response['status']=='success' and response['data']['resultType']=='vector';return response['data']['result']
+        def query(expr,at=None):
+            params={'query':expr}
+            if at is not None:params['time']=at
+            response=_api(s,collector_ns,receiver_name,'/api/v1/query?'+urllib.parse.urlencode(params));assert response['status']=='success' and response['data']['resultType']=='vector';return response['data']['result']
         result=wait(lambda:query(expression),lambda values:len(values)==1,message='receiver未收到本例Agent/exporter实际kube_pod_info样本')
         value=result[0];assert float(value['value'][1])==1 and value['metric']['instance']==exported['instance']
-        timestamps=query('timestamp('+expression+')');assert len(timestamps)==1
+        timestamps=query('timestamp('+expression+')',value['value'][0]);assert len(timestamps)==1
         sample_time=float(timestamps[0]['value'][1]);assert not_before<=sample_time<=time.time()+5
         return dict(metric=value['metric'],value=float(value['value'][1]),sampleTime=sample_time,queryTime=float(value['value'][0]),notBefore=not_before,receiverPodUID=receiver_proof['podUID'])
 
@@ -162,6 +164,25 @@ def creator_collection(s):
     receiver_after=s.get('pod',receiver_name,'-n',collector_ns,target='data');assert s.env.verify_container(receiver_after,'prometheus',s.env.official_configs['prometheus'])==receiver_proof
     assert not _adopted(s,collector_ns,receiver_name).get('scrape_configs')
     receipt['operator']=_operator_proof(s)
-    validate_agent_collection(receipt,s.env.candidate)
+    admin_group=next(g for g in receipt['groups'] if g['role']=='admin')
+    admin_export=exports['admin']
+    adopted(admin_group,'serviceMonitor/'+admin_export['namespace']+'/'+admin_export['serviceMonitor']+'/0',user_group['adoptedJobs'])
+    s.by('I30-K03：零匹配、真实读取失败与实际ServiceMonitor权限不足分别返回独立结果')
+    proxy=s.setup_proxy()
+    try:
+        proxy.control('faults',{'readMode':'all','rejectWritePath':''})
+        failed=s.association_preview(user_instance)['association:ServiceMonitor']
+        assert failed.get('error','').startswith('TARGET_ERROR') and not failed.get('lastSuccessAt')
+    finally:
+        proxy.control('reset',{})
+    s.restricted_credentials('servicemonitors')
+    try:
+        forbidden=s.association_preview(user_instance)['association:ServiceMonitor']
+        assert forbidden.get('error','').startswith('TARGET_FORBIDDEN') and not forbidden.get('lastSuccessAt')
+        assert forbidden['error']!=failed['error']
+    finally:
+        s.restore_credentials()
+    receipt['previewBoundaries']=dict(zeroMatchSuccessful=True,readFailureObserved=True,permissionFailureObserved=True,distinctReasons=True)
+    validate_agent_collection(receipt,s.env.candidate,s.env.run_id)
     (s.env.public/'agent-collection.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
     s.agent_collection=receipt

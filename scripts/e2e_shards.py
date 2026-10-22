@@ -49,7 +49,7 @@ def aggregate(reports, candidate, run_id, jobs_result):
         if any(c.get('id') != id or c.get('outcome') != 'passed' or c.get('cleanup') != [] for id, c in cases.items()):
             raise ValueError('scenario-not-passed')
         if 'E2E-04' in cases:
-            validate_agent_collection(cases['E2E-04'].get('agentCollection'),candidate)
+            validate_agent_collection(cases['E2E-04'].get('agentCollection'),candidate,report['runId'])
         combined.update(cases)
     if Counter(combined.keys()) != Counter(expected):
         raise ValueError('incomplete-e2e')

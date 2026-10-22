@@ -26,7 +26,7 @@ def owned_identity(run_id, recorded, actual):
             and actual.get('runId') == recorded.get('runId') == run_id)
 
 
-def validate_agent_collection(receipt, candidate):
+def validate_agent_collection(receipt, candidate, run_id=None):
     """关键：来源、采用配置及真实目标样本同时成立，Ready/匹配或缺失证据不能补成采集通过。"""
     def require(value):
         if not value:
@@ -34,6 +34,9 @@ def validate_agent_collection(receipt, candidate):
     def process(value):
         require(all(value.get(k) for k in ('podUID','containerID','configDigest')))
     require(isinstance(receipt,dict) and receipt.get('testedCommit')==candidate and receipt.get('metric')=='kube_pod_info')
+    require(receipt.get('runId') and (run_id is None or receipt['runId']==run_id))
+    boundaries=receipt.get('previewBoundaries',{})
+    require(all(boundaries.get(k) is True for k in ('zeroMatchSuccessful','readFailureObserved','permissionFailureObserved','distinctReasons')))
     receiver=receipt.get('receiver',{});process(receiver)
     require(receiver.get('scrapeConfigs')==[] and receiver.get('configSHA256') and receiver.get('image'))
     operator=receipt.get('operator',{});process(operator)
@@ -42,7 +45,7 @@ def validate_agent_collection(receipt, candidate):
     require(len({g.get('creatorUserId') for g in groups})==2)
     all_jobs={g['role']:{'serviceMonitor/'+e['namespace']+'/'+e['serviceMonitor']+'/0' for e in g.get('exports',[])} for g in groups}
     for group in groups:
-        process(group.get('container',{}));creator=group.get('creatorUserId');require(creator and group.get('uid') and group.get('configSHA256'))
+        process(group.get('container',{}));require(group['container']['configDigest']==receiver['configDigest']);creator=group.get('creatorUserId');require(creator and group.get('uid') and group.get('configSHA256'))
         require(group.get('selector',{}).get('object',{}).get('selector',{}).get('matchLabels',{}).get('monitor-mgr.io/user-id')==creator)
         exports=group.get('exports',[]);samples=group.get('samples',[]);require(len(exports)==(2 if group['role']=='user' else 1) and len(samples)==len(exports))
         jobs=set(group.get('adoptedJobs',[]));require(all_jobs[group['role']]<=jobs and not jobs&all_jobs['admin' if group['role']=='user' else 'user'])

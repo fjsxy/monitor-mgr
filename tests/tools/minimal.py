@@ -69,7 +69,7 @@ class TrustBoundary(unittest.TestCase):
 
     def collection(self):
         # 独立固定收据只验证证据门禁，真实样本仍须由E2E读取原进程和receiver API。
-        receiver=dict(podUID='receiver-pod',containerID='receiver-container',configDigest='sha256:receiver',scrapeConfigs=[],image='locked',configSHA256='r')
+        receiver=dict(podUID='receiver-pod',containerID='receiver-container',configDigest='sha256:prom',scrapeConfigs=[],image='locked',configSHA256='r')
         groups=[]
         for role,n in [('user',2),('admin',1)]:
             exports=[];samples=[];jobs=[]
@@ -78,11 +78,11 @@ class TrustBoundary(unittest.TestCase):
                 exports.append(e);jobs.append(f'serviceMonitor/{role}/sm{i}/0')
                 samples.append(dict(metric=dict(__name__='kube_pod_info',namespace=role,service=f'service{i}',exported_pod=f'pod{i}',uid=f'{role}-pod{i}',instance=f'10.0.0.{i+1}:8080',prometheus='collectors/'+role),value=1,sampleTime=101,queryTime=102,notBefore=100,receiverPodUID='receiver-pod'))
             groups.append(dict(role=role,creatorUserId=role,name=role,uid=role+'-agent',container=dict(podUID=role+'-agent-pod',containerID=role+'-agent-container',configDigest='sha256:prom'),externalPrometheus='collectors/'+role,configSHA256='after-'+role,initialConfigSHA256='before-'+role,adoptedJobs=jobs,selector=dict(object=dict(mode='Labels',selector=dict(matchLabels={'monitor-mgr.io/user-id':role}))),exports=exports,samples=samples,versionId=role+'-v1'))
-        return dict(testedCommit='candidate',metric='kube_pod_info',receiver=receiver,operator=dict(podUID='op',containerID='op-container',configDigest='sha256:op',agentControllerReady=True,scrapeConfigInformerObserved=True),groups=groups,dynamic=dict(agentUID='user-agent',versionBefore='user-v1',versionAfter='user-v1',oldConfigSHA256='before-user',newConfigSHA256='after-user',newExporterUID='user-cr1',newServiceMonitorUID='user-sm1',jobsBefore=['serviceMonitor/user/sm0/0'],jobsAfter=['serviceMonitor/user/sm0/0','serviceMonitor/user/sm1/0'],unchangedPublication=True))
+        return dict(testedCommit='candidate',runId='mm-ci-1-1-topology',previewBoundaries=dict(zeroMatchSuccessful=True,readFailureObserved=True,permissionFailureObserved=True,distinctReasons=True),metric='kube_pod_info',receiver=receiver,operator=dict(podUID='op',containerID='op-container',configDigest='sha256:op',agentControllerReady=True,scrapeConfigInformerObserved=True),groups=groups,dynamic=dict(agentUID='user-agent',versionBefore='user-v1',versionAfter='user-v1',oldConfigSHA256='before-user',newConfigSHA256='after-user',newExporterUID='user-cr1',newServiceMonitorUID='user-sm1',jobsBefore=['serviceMonitor/user/sm0/0'],jobsAfter=['serviceMonitor/user/sm0/0','serviceMonitor/user/sm1/0'],unchangedPublication=True))
 
     def test_collection_evidence(self):
         validate_agent_collection(self.collection(),'candidate')
-        for variant in ['missing-sample','wrong-pod','old-sample','missing-adoption','receiver-scrape','wrong-creator','changed-version','same-config','wrong-candidate','missing-informer']:
+        for variant in ['missing-sample','wrong-pod','old-sample','missing-adoption','receiver-scrape','wrong-creator','changed-version','same-config','wrong-candidate','missing-informer','missing-boundaries','wrong-run']:
             with self.subTest(collection=variant):
                 receipt=self.collection();g=receipt['groups'][0]
                 if variant=='missing-sample': g['samples'].pop()
@@ -95,7 +95,9 @@ class TrustBoundary(unittest.TestCase):
                 elif variant=='same-config': receipt['dynamic']['newConfigSHA256']='before-user'
                 elif variant=='wrong-candidate': receipt['testedCommit']='other'
                 elif variant=='missing-informer': receipt['operator']['scrapeConfigInformerObserved']=False
-                with self.assertRaises(ValueError): validate_agent_collection(receipt,'candidate')
+                elif variant=='missing-boundaries': del receipt['previewBoundaries']
+                elif variant=='wrong-run': receipt['runId']='other-run'
+                with self.assertRaises(ValueError): validate_agent_collection(receipt,'candidate','mm-ci-1-1-topology')
 
     def test_candidate(self):
         with self.assertRaises(ValueError):

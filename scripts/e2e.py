@@ -88,7 +88,7 @@ def main():
                             CASES[id](scenario)
                             if id=='E2E-04':
                                 from testing_contract import validate_agent_collection
-                                result['agentCollection']=validate_agent_collection(getattr(scenario,'agent_collection',None),candidate)
+                                result['agentCollection']=validate_agent_collection(getattr(scenario,'agent_collection',None),candidate,environment.run_id)
                             result['outcome']='passed'
                         except Exception as error:
                             result['failedStep']=scenario.step;result['errorType']=type(error).__name__
