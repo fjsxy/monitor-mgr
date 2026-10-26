@@ -7,7 +7,7 @@
 | UT | `make ut`：18 个 Ginkgo UT，一次 race/覆盖率；生成一致性、vet、前端类型检查/构建 | 全部18项通过，无漏跑/skip/retry/race，手写产品语句覆盖率≥70% |
 | E2E | 三个 matrix runner 并行；各自 `make ci-builder` 和 `make e2e E2E_ARGS="--shard ..."`；独立 control(1cp+2worker)/data(1可调度cp)，Helm 部署固定依赖和平台；组内串行 | 三组 job 均成功；`make e2e-summary` 校验同候选/本次run、恰好10项各执行一次，无skip/retry，场景/原生Ginkgo/清理均成功；部分通过不是完整E2E通过 |
 
-两类 job 在可信同仓 PR 和 main 使用同一清单；E2E 依赖私有 Operator 源码，凭据仅在获取来源步骤使用。构建/生成检查不另算测试类型。依赖安装统一使用 `npm ci --no-audit`，保留 lockfile/integrity 校验，测试准备不隐式等待外部审计服务；npm audit 不在本清单28项用例之内。
+两类 job 在可信同仓 PR 和 main 使用同一清单；E2E 的 Operator 发布 CLI 源码和原资产按固定 SHA/摘要匿名 HTTPS 获取，不依赖源码或 release 下载 secret。构建/生成检查不另算测试类型。依赖安装统一使用 `npm ci --no-audit`，保留 lockfile/integrity 校验，测试准备不隐式等待外部审计服务；npm audit 不在本清单28项用例之内。
 
 选取标准：UT 覆盖授权、凭据、UID/PVC、事务、恢复和协议的独立规则；E2E 只保留 Kubernetes/RBAC/Operator/真实卷和浏览器接线才能证明的行为。等价输入合并复用前置，后端接口优先；浏览器仅 E2E-10。
 
@@ -15,7 +15,7 @@
 
 ## E2E 并行分配
 
-按 run 39620800818 的逐例实测分组，三组用例本身约308/296/271秒；每组重新准备环境，增加 runner 总用量以减少等待。组名进入 runId、集群名、BuildKit 名和 artifact；私有源码/镜像不跨 job 上传或缓存。某组失败不取消其他组，最后汇总不能跳过失败组。
+按 run 39620800818 的逐例实测分组，三组用例本身约308/296/271秒；每组重新准备环境，增加 runner 总用量以减少等待。组名进入 runId、集群名、BuildKit 名和 artifact；源码/镜像不跨 job 上传或缓存。某组失败不取消其他组，最后汇总不能跳过失败组。
 
 | matrix.shard | 固定用例 |
 | --- | --- |
@@ -69,4 +69,4 @@
 
 `make ut` 生成 `.scratch/ut-results.json` 和 `.scratch/coverage.out`；`make e2e` 输出 `.scratch/e2e/<runId>/public/results.json`（含阶段/逐例耗时）、`cleanup.json` 和浏览器截图。CI 三组 artifact 为 `e2e-<runId>-<attempt>-<shard>`，完整汇总为 `e2e-complete-<runId>-<attempt>`。原始日志/报告、kubeconfig、数据库、证书、私有源码仅在同 run 的 `.private/`。CI 只上传 public 和 UT 安全摘要。
 
-入口摘要：`Makefile` SHA256=c1896f0e49dcbbc9e2d0cecad6bf3aecbf1847672480647e2f96fc6dca9c4cd4；workflow SHA256=7ac2c364a9d2a1b5fd3614d20d6fe343af63e3cd2495cb920335f5b8d58c8bcd。
+入口摘要：`Makefile` SHA256=c1896f0e49dcbbc9e2d0cecad6bf3aecbf1847672480647e2f96fc6dca9c4cd4；workflow SHA256=65d10bb9d09409587e33b43627b03a5ef7d88d562eaab9810317a798c765b98f。
