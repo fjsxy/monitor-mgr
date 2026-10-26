@@ -232,6 +232,13 @@ func (s *Store) observeOwnerGraphRecords(ctx context.Context, i *rpc.Observation
 	if e != nil {
 		return nil, e
 	}
+	if i.Component == KSMComponent {
+		companion, err := s.companionGraphCandidates(ctx, i, t)
+		if err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, companion...)
+	}
 	rows, e := s.DB.QueryContext(ctx, `SELECT uid FROM seen_resources WHERE instance_id=?`, i.Id)
 	if e != nil {
 		return nil, e
@@ -426,10 +433,10 @@ func (s *Store) verifyDeletion(ctx context.Context, o *rpc.Operation, i *rpc.Obs
 		return
 	}
 	if cr != nil || live > 0 {
-		s.finishDeletion(o, "DELETION_BLOCKED", "原 CR、workload 或 Pod 仍存在；等待清理，不移除 finalizer")
+		s.finishDeletion(o, "DELETION_BLOCKED", "原 CR、workload、Pod 或配套 ServiceMonitor 仍存在；等待 Operator 清理，不移除 finalizer")
 		return
 	}
-	s.finishDeletion(o, "SUCCEEDED", "原 CR、对应 workload 与 Pod 已全部核验消失")
+	s.finishDeletion(o, "SUCCEEDED", "原 CR、对应 workload、Pod 与配套 ServiceMonitor 已全部只读核验消失")
 }
 
 // finishDeletion 保留历史身份和发布版本，只有完整清理核验成功才解除删除保护。

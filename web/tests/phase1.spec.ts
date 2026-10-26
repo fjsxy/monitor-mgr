@@ -16,6 +16,8 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     await page.getByRole('button',{name:'添加',exact:true}).click();await page.getByRole('button',{name:'配置实例',exact:true}).click();
     const drawer=page.getByRole('dialog',{name:'实例详情',exact:true});await drawer.getByLabel('名称',{exact:true}).fill('browser-draft');
     await drawer.getByLabel('部署命名空间',{exact:true}).selectOption(fixture.namespace);
+    await expect(drawer.getByLabel('启用配套采集',{exact:true})).toBeChecked();
+    await drawer.getByLabel('采集间隔',{exact:true}).fill('40s');await drawer.getByLabel('采集超时',{exact:true}).fill('8s');
     await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(drawer.getByText('草稿 v1 已保存',{exact:true})).toBeVisible();
     await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
   });
@@ -25,6 +27,7 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
   await test.step('大 revision 在保存和 YAML 预览中保持精确',async()=>{
     await expect(drawer.getByText('草稿 v9007199254740993 已保存',{exact:true})).toBeVisible();
     await drawer.getByLabel('通用 CPU request',{exact:true}).fill('111m');
+    await drawer.getByLabel('采集间隔',{exact:true}).fill('45s');await drawer.getByLabel('采集超时',{exact:true}).fill('12s');
     const saving=page.waitForRequest(r=>new URL(r.url()).pathname===`/api/v1/instances/${fixture.largeId}/draft`&&r.method()==='PUT');
     await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();expect((await saving).postDataJSON().expectedDraftRevision).toBe('9007199254740993');
     await expect(drawer.getByText('草稿 v9007199254740994 已保存',{exact:true})).toBeVisible();
@@ -39,11 +42,16 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     expect(op.instanceId).toBe(fixture.largeId);await expect.poll(async()=> (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state,{timeout:45000}).toBe('SUCCEEDED');
     await drawer.getByRole('button',{name:'刷新当前状态',exact:true}).click();
     await expect(drawer.getByLabel('来源 CR',{exact:true})).toContainText('最后成功观察');
+    await expect.poll(async()=>{await page.request.post(`/api/v1/instances/${fixture.largeId}/refresh`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data:{}});const current=await(await page.request.get(`/api/v1/instances/${fixture.largeId}`)).json();return current.sources?.find((source:any)=>source.source==='ServiceMonitor'&&!source.historical)?.companion?.state;},{timeout:60000}).toBe('Ready');
+    await drawer.getByRole('button',{name:'刷新当前状态',exact:true}).click();
+    const companion=drawer.getByLabel('来源 ServiceMonitor',{exact:true});await expect(companion).toContainText('配套收敛：已收敛');await expect(companion).toContainText('平台仅只读观察');
+
   });
   await test.step('版本入口回读冻结来源，明确删除原实例',async()=>{
     await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();await page.getByRole('button',{name:'刷新列表',exact:true}).click();
     await row().locator('.version-link').click();await expect(drawer.getByText('只读发布版本',{exact:true})).toBeVisible();
     await expect(drawer.getByLabel('通用 CPU request',{exact:true})).toHaveValue('111m');
+    await expect(drawer.getByLabel('启用配套采集',{exact:true})).toBeChecked();await expect(drawer.getByLabel('采集间隔',{exact:true})).toHaveValue('45s');await expect(drawer.getByLabel('采集超时',{exact:true})).toHaveValue('12s');
     await expect(drawer).toContainText('9007199254740994');await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
     await row().getByRole('button',{name:'删除',exact:true}).click();const modal=page.getByRole('dialog',{name:'删除实例',exact:true});
     await expect(modal).toContainText('原部署版本');const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${fixture.largeId}/deletions`&&r.request().method()==='POST');

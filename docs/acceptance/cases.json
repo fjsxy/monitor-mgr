@@ -61,9 +61,9 @@
       "id": "UT-08",
       "type": "ut",
       "purpose": "保存、预览与版本冻结",
-      "steps": "保存草稿并读回；生成预览后分别修改草稿和目标配置；发布 v1 后编辑成 v2，再读 v1 来源；关闭高级选项后查看有效 CR。",
-      "expected": "仅保存/预览不产生 Kubernetes mutation；过期预览拒绝发布；发布版本和来源快照不被新草稿改写；未启用字段不进入有效 CR。",
-      "issues": "#17、#19"
+      "steps": "保存草稿并读回；生成预览后分别修改草稿和目标配置；发布 v1 后编辑成 v2，再读 v1 来源；关闭高级选项后查看有效 CR。 I28-U01/U02/U03/R01/R02/R05：新草稿默认采集且零写、父 CR 单资源冻结与creator标签；缺失/错误 served schema、enabled默认值、status enum/UID和非法duration、任意labels逐项输入。",
+      "expected": "仅保存/预览不产生 Kubernetes mutation；过期预览拒绝发布；发布版本和来源快照不被新草稿改写；未启用字段不进入有效 CR。 只冻结父spec.serviceMonitor，不生成独立SM；旧schema在写前拒绝，固定creator投影且参数契约严格。",
+      "issues": "#17、#19、#28"
     },
     {
       "id": "UT-09",
@@ -77,25 +77,25 @@
       "id": "UT-10",
       "type": "ut",
       "purpose": "派发、取消与任务授权",
-      "steps": "用派发屏障分别让取消获胜、派发获胜；队列内撤销角色或转移归属；另让 Cookie 到期而账号仍有权限。 通过 I25-09/disabled/DELETE/RV 在受理后降级、停用、删除派发前及 409 后重试前撤权；I25-10 在已发送后降级并丢响应。",
-      "expected": "取消与派发只有一个结果；当前失权时不发集群写；仅 Cookie 到期不取消已受理任务；HTTP 断开不删除持久化任务。 每次实际写前复核实例权限；失权后零新增写入；已发结果仅只读确认，不重放或回滚。",
-      "issues": "#17"
+      "steps": "用派发屏障分别让取消获胜、派发获胜；队列内撤销角色或转移归属；另让 Cookie 到期而账号仍有权限。 通过 I25-09/disabled/DELETE/RV 在受理后降级、停用、删除派发前及 409 后重试前撤权；I25-10 在已发送后降级并丢响应。 I28-U06：采集意图仍走同一父CR发送前当前授权边界。",
+      "expected": "取消与派发只有一个结果；当前失权时不发集群写；仅 Cookie 到期不取消已受理任务；HTTP 断开不删除持久化任务。 每次实际写前复核实例权限；失权后零新增写入；已发结果仅只读确认，不重放或回滚。 父已发结果只读恢复，失权不产生新父写或任何SM写。",
+      "issues": "#17、#28"
     },
     {
       "id": "UT-11",
       "type": "ut",
       "purpose": "重试与重启恢复",
-      "steps": "针对未提交、已受理未发、可能已发三个持久状态重开平台；对确定失败做显式 retry；创建新草稿后继续原操作。",
-      "expected": "未提交没有半条操作；未发任务待人工继续；可能已发只读核验，不自动补写；retry 保留原固定版本/actor，形成新 attempt。",
-      "issues": "#17"
+      "steps": "针对未提交、已受理未发、可能已发三个持久状态重开平台；对确定失败做显式 retry；创建新草稿后继续原操作。 I28-U05/U08/R04：父丢响应恢复；加载旧SM成功/unknown及不同冻结名称，尝试新启用。",
+      "expected": "未提交没有半条操作；未发任务待人工继续；可能已发只读核验，不自动补写；retry 保留原固定版本/actor，形成新 attempt。 原UID未知不认领/重放；全部仍可能存在的旧SM阻断新采集，旧事实不被新观察覆盖。",
+      "issues": "#17、#28"
     },
     {
       "id": "UT-12",
       "type": "ut",
       "purpose": "预览与删除保护",
-      "steps": "修改 preview 绑定的 UID、配置或 namespace 影响；在 Worker 读取后、条件写入前用屏障只改 status/RV，并分别改变 spec、UID、当前权限或凭据 revision；持续制造 RV 冲突；构造同名新 UID、跨 namespace owner、CR 已消失但旧 Pod 尚在。",
-      "expected": "纯 status/RV 冲突可重新读取后在原 attempt 内完成（最多 3 次条件写）；spec/UID/权限/凭据变化或持续冲突停止；不确定响应绝不重放；真正影响变化需重新预览；仍有原工作负载时不报删除完成。",
-      "issues": "#17"
+      "steps": "修改 preview 绑定的 UID、配置或 namespace 影响；在 Worker 读取后、条件写入前用屏障只改 status/RV，并分别改变 spec、UID、当前权限或凭据 revision；持续制造 RV 冲突；构造同名新 UID、跨 namespace owner、CR 已消失但旧 Pod 尚在。 I28-U07：父删除后保留配套原UID，再移除配套并refresh。",
+      "expected": "纯 status/RV 冲突可重新读取后在原 attempt 内完成（最多 3 次条件写）；spec/UID/权限/凭据变化或持续冲突停止；不确定响应绝不重放；真正影响变化需重新预览；仍有原工作负载时不报删除完成。 平台仅删除父原UID/RV；配套与原资源图未消失不能完成，SM DELETE请求始终为0。",
+      "issues": "#17、#28"
     },
     {
       "id": "UT-13",
@@ -109,9 +109,9 @@
       "id": "UT-14",
       "type": "ut",
       "purpose": "状态与工作台查询",
-      "steps": "用同一批对象覆盖缺 status、旧 generation、部分 Ready、合法 0/0；独立推进 CR/Pod/PVC/关联来源时钟至 30 秒前后；某页读取失败；测试名称/类型/组件 AND 筛选和活动排序。",
-      "expected": "未知、挂起、未就绪、过期分别可判；403/超时不是空集；一来源成功不刷新其他来源；筛选、统计、最近操作排序符合后端契约，轮询不篡改活动顺序。",
-      "issues": "#19"
+      "steps": "用同一批对象覆盖缺 status、旧 generation、部分 Ready、合法 0/0；独立推进 CR/Pod/PVC/关联来源时钟至 30 秒前后；某页读取失败；测试名称/类型/组件 AND 筛选和活动排序。 I28-U04/U03.foreign/R03：按完整Operator status引用核子对象、parent/controller UID；子UID重建、旧generation、Degraded、Forbidden及错误引用。",
+      "expected": "未知、挂起、未就绪、过期分别可判；403/超时不是空集；一来源成功不刷新其他来源；筛选、统计、最近操作排序符合后端契约，轮询不篡改活动顺序。 配套与CR发布独立；合法子重建不改父身份，错误/未知/未收敛/历史/过期分开；不按labels认领。",
+      "issues": "#19、#28"
     },
     {
       "id": "UT-15",
@@ -133,9 +133,9 @@
       "id": "UT-17",
       "type": "ut",
       "purpose": "HTTP/Kitex 协议契约",
-      "steps": "仅选一条受保护 RPC 验证未认证拒绝；阻断真实 Kitex 连接再请求 HTTP；测试未知字段、optional/空对象/空集合、非法枚举；让 revision 从 9007199254740992 增至 9007199254740993。",
-      "expected": "HTTP 不能旁路 RPC 或弱化校验，真实 RPC 不可用时 /readyz 失败；未知字段不被幂等吞掉；大 revision 在 HTTP 为精确字符串、RPC 保持 i64；错误结构稳定。不再把全部业务再走一遍直接 RPC。",
-      "issues": "#14、#16、#18、#19"
+      "steps": "仅选一条受保护 RPC 验证未认证拒绝；阻断真实 Kitex 连接再请求 HTTP；测试未知字段、optional/空对象/空集合、非法枚举；让 revision 从 9007199254740992 增至 9007199254740993。 I28-U01/R01/R02 的采集字段通过真实HTTP/Kitex往返，并拒绝客户端labels。",
+      "expected": "HTTP 不能旁路 RPC 或弱化校验，真实 RPC 不可用时 /readyz 失败；未知字段不被幂等吞掉；大 revision 在 HTTP 为精确字符串、RPC 保持 i64；错误结构稳定。不再把全部业务再走一遍直接 RPC。 可选字段保持旧冻结缺省语义，新建缺省只在Create生效。",
+      "issues": "#14、#16、#18、#19、#28"
     },
     {
       "id": "UT-18",
@@ -165,9 +165,9 @@
       "id": "E2E-03",
       "type": "e2e",
       "purpose": "KSM 从草稿到三种真实拓扑",
-      "steps": "HTTP 保存后先确认无 CR 写入，再发布 control 上的 KSM，按 Deployment→StatefulSet(2 shards)→DaemonSet 执行替换；在同一流程检查资源覆盖、过滤、零匹配及运行/挂起/停用；data 再部署一个默认 KSM；预置一个外部只读 CR。",
-      "expected": "真实 CR、Deployment/StatefulSet/DaemonSet、三角色、Pod 数和参数匹配当前模式；两个集群均能运行；保存不部署；切换清理旧工作负载；外部 CR 不能编辑/发布/删除。",
-      "issues": "#16"
+      "steps": "HTTP 保存后先确认无 CR 写入，再发布 control 上的 KSM，按 Deployment→StatefulSet(2 shards)→DaemonSet 执行替换；在同一流程检查资源覆盖、过滤、零匹配及运行/挂起/停用；data 再部署一个默认 KSM；预置一个外部只读 CR。 I28-K01/K02：锁定原RC4发布品；真实SM read/no-write SA发布两个exporter，修改参数、子UID重建、外部冲突及读取Forbidden后修复，挂起/关闭/停用/恢复/父删除；返回API Metadata原始审计给Ginkgo。",
+      "expected": "真实 CR、Deployment/StatefulSet/DaemonSet、三角色、Pod 数和参数匹配当前模式；两个集群均能运行；保存不部署；切换清理旧工作负载；外部 CR 不能编辑/发布/删除。 配套按实际status/owner和Service/Endpoints核验；Operator独立SA创建修复，另一实例不变；平台父写/SM读正控存在，所有SM写尝试0；Go断言原始证据及testedCommit。",
+      "issues": "#16、#28"
     },
     {
       "id": "E2E-04",
@@ -205,25 +205,25 @@
       "id": "E2E-08",
       "type": "e2e",
       "purpose": "真实写响应丢失与重启禁重放",
-      "steps": "代理让真实 API 完成一次已知 UID 更新后丢响应；在确认前重建平台 Pod并恢复读取；再对首次创建丢响应、未保存 UID 的情况执行一次同名资源检查；对一个确定失败操作显式 retry。",
-      "expected": "已有 UID 只核验原资源，原 API 写次数不增加；首次创建身份不明不按名字补认/重建/删除；retry 使用原固定版本和新 attempt；重启不自动重放。",
-      "issues": "#17"
+      "steps": "代理让真实 API 完成一次已知 UID 更新后丢响应；在确认前重建平台 Pod并恢复读取；再对首次创建丢响应、未保存 UID 的情况执行一次同名资源检查；对一个确定失败操作显式 retry。 I28-U05：有配套采集意图的父CR同样遵守未知UID和恢复禁重放。",
+      "expected": "已有 UID 只核验原资源，原 API 写次数不增加；首次创建身份不明不按名字补认/重建/删除；retry 使用原固定版本和新 attempt；重启不自动重放。 只冻结/恢复父资源，不引入独立SM派发。",
+      "issues": "#17、#28"
     },
     {
       "id": "E2E-09",
       "type": "e2e",
       "purpose": "真实前台删除与阻塞保护",
-      "steps": "为受管 CR/子资源添加一个测试 finalizer 后从 HTTP 删除；确认仍受阻；移除自己的 finalizer 并等原 UID 图消失；另将同名 CR 替换为新 UID 后尝试删除；检查无关 namespace/对象。",
-      "expected": "只有原 CR、workload、Pod 全消失才完成；阻塞期间不能解除保护/转移集群；新 UID 和无关对象未被平台删除；PVC 结果与 E2E-05 独立确认。",
-      "issues": "#17、#20"
+      "steps": "为受管 CR/子资源添加一个测试 finalizer 后从 HTTP 删除；确认仍受阻；移除自己的 finalizer 并等原 UID 图消失；另将同名 CR 替换为新 UID 后尝试删除；检查无关 namespace/对象。 I28-U07：删除同时只读核实Operator配套清理。",
+      "expected": "只有原 CR、workload、Pod 全消失才完成；阻塞期间不能解除保护/转移集群；新 UID 和无关对象未被平台删除；PVC 结果与 E2E-05 独立确认。 不按标签或同名替代UID误删配套。",
+      "issues": "#17、#20、#28"
     },
     {
       "id": "E2E-10",
       "type": "e2e",
       "purpose": "唯一浏览器主流程",
-      "steps": "Playwright 登录→用表单创建一个 KSM 草稿→编辑测试夹具预置的 revision=9007199254740993 草稿→查看只读 YAML/diff→明确发布→工作台查看状态/版本→明确删除；前后通过后端读回确认操作对象与版本；不增加产品测试接口。",
-      "expected": "关键控件可操作、确认后才发发布/删除；显示正确实例和状态，大 revision 经浏览器操作后不舍入；没有前端控制台致命错误；不逐字段/逐模式重复验证后端规则。",
-      "issues": "#14、#16、#19"
+      "steps": "Playwright 登录→用表单创建一个 KSM 草稿→编辑测试夹具预置的 revision=9007199254740993 草稿→查看只读 YAML/diff→明确发布→工作台查看状态/版本→明确删除；前后通过后端读回确认操作对象与版本；不增加产品测试接口。 I28-B01：表单保存采集开关、interval/timeout，查看只读配套状态与不可变父CR来源。",
+      "expected": "关键控件可操作、确认后才发发布/删除；显示正确实例和状态，大 revision 经浏览器操作后不舍入；没有前端控制台致命错误；不逐字段/逐模式重复验证后端规则。 配套收敛/故障与发布分别显示，无SM独立发布或修复按钮。",
+      "issues": "#14、#16、#19、#28"
     }
   ],
   "omitted": [

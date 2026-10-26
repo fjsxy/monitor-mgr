@@ -114,6 +114,9 @@ func (s *Store) refreshObserved(ctx context.Context, id string, t *Target) (*rpc
 		cause = Error("CONFLICT", "资源身份无法确认")
 	}
 	s.saveSourceObservation(ctx, i, "CR", &rpc.SourceObservation{Source: "CR", RuntimeSnapshot: out}, cause)
+	if i.Component == KSMComponent {
+		s.refreshExporterCompanion(ctx, i, t, projected, cause)
+	}
 	raw, _ := json.Marshal(savedObservation{Epoch: s.observationEpoch, Runtime: out})
 	obj, _ := json.Marshal(projected)
 	if cause == nil {

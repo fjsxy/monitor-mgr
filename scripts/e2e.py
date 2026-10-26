@@ -68,7 +68,7 @@ def main():
             address=str(Path(temporary)/'scheduler.sock')
             with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
                 server.bind(address);os.chmod(address,0o600);server.listen(1);server.settimeout(.2)
-                env=dict(os.environ,MONITOR_MGR_E2E_SOCKET=address,MONITOR_MGR_E2E_CASES=json.dumps(required))
+                env=dict(os.environ,MONITOR_MGR_E2E_SOCKET=address,MONITOR_MGR_E2E_CASES=json.dumps(required),MONITOR_MGR_E2E_CANDIDATE=candidate)
                 report=environment.private/'ginkgo.json'
                 child=environment.processes.popen(['go','test','./tests/e2e','-count=1','-timeout=120m','-args','-ginkgo.no-color','-ginkgo.fail-on-empty','-ginkgo.json-report='+str(report)],label='ginkgo-e2e',cwd=ROOT,env=env)
                 seen=set()
@@ -104,11 +104,18 @@ def main():
                             result['durationSeconds']=round(time.monotonic()-case_started,3)
                             if failures:result['outcome']='failed'
                             result['requests']=scenario.traces;result['platformContainers']=scenario.platform_proofs
+                            result['evidence']=scenario.acceptance_evidence
                             private_json(environment.public/'results.json',summary)
-                            emit(dict(type='result',id=id,outcome=result['outcome']))
+                            emit(dict(type='result',id=id,outcome=result['outcome'],evidence=scenario.acceptance_evidence))
                             print(id+' '+result['outcome'],flush=True)
                 raw=json.loads(report.read_text());specs=[s for suite in raw for s in suite.get('SpecReports',[]) if s.get('LeafNodeType')=='It']
                 summary['ginkgo']=[dict(id=s['LeafNodeText'].split(' ')[0],state=s['State'],attempts=s['NumAttempts']) for s in specs]
+                # Go 的原始证据断言也决定单例结果，不能保留 Python passed 造成部分结果误报。
+                for spec in specs:
+                    if spec['State'] != 'passed':
+                        item=results[spec['LeafNodeText'].split(' ')[0]]
+                        item['outcome']='failed';item['failedStep']='Ginkgo 原始证据断言';item['errorType']='GinkgoAssertionFailure'
+
                 validate_specs(raw,required,candidate,source())
                 summary['passed']=child.returncode==0 and all(r['outcome']=='passed' for r in results.values())
     except Exception as error:

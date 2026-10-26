@@ -67,6 +67,9 @@ func (s *Store) launchObservations(life context.Context) {
 			target, _, err := s.targetForRecovery(ctx, i.cluster)
 			if err != nil {
 				s.saveSourceObservation(failedScope, instance, "CR", nil, err)
+				if instance.Component == KSMComponent {
+					s.saveSourceObservation(failedScope, instance, companionSource, nil, err)
+				}
 				return
 			}
 			defer target.Close()

@@ -1,0 +1,91 @@
+# 平台公开配套契约的最小独立 schema 夹具；不代表 Operator 发布原包或完整 CRD。
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: kubestatemetrics.monitoring.fjsxy.github.io
+spec:
+  group: monitoring.fjsxy.github.io
+  names:
+    kind: KubeStateMetrics
+    plural: kubestatemetrics
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              serviceMonitor:
+                properties:
+                  enabled:
+                    default: false
+                    type: boolean
+                  interval:
+                    type: string
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  scrapeTimeout:
+                    type: string
+                type: object
+          status:
+            type: object
+            properties:
+              serviceMonitor:
+                properties:
+                  message:
+                    type: string
+                  observedGeneration:
+                    format: int64
+                    type: integer
+                  reason:
+                    type: string
+                  resource:
+                    properties:
+                      apiVersion:
+                        type: string
+                      kind:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      uid:
+                        type: string
+                    required:
+                    - apiVersion
+                    - kind
+                    - name
+                    - namespace
+                    type: object
+                  state:
+                    enum:
+                    - Unknown
+                    - Disabled
+                    - Ready
+                    - Degraded
+                    - Deleting
+                    type: string
+                required:
+                - message
+                - observedGeneration
+                - reason
+                - state
+                type: object
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                    observedGeneration:
+                      type: integer

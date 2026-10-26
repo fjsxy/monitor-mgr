@@ -18,6 +18,7 @@ import (
 	"github.com/fjsxy/monitor-mgr/internal/platform"
 	"github.com/fjsxy/monitor-mgr/internal/teststeps"
 	ginkgo "github.com/onsi/ginkgo/v2"
+	"gopkg.in/yaml.v3"
 )
 
 // The controlled TLS API is the external system boundary; every platform call still crosses generated Kitex.
@@ -28,6 +29,8 @@ func clusterAPI(t ginkgo.GinkgoTInterface, ssrCode int, anonymous bool, beforeSS
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/apis/apiextensions.k8s.io/v1/customresourcedefinitions/kubestatemetrics.monitoring.fjsxy.github.io":
+			json.NewEncoder(w).Encode(collectionCRDFixture(t))
 		case "/apis/authentication.k8s.io/v1/selfsubjectreviews":
 			for _, f := range beforeSSR {
 				f(r)
@@ -412,4 +415,18 @@ func checkTestClusterCanRegisterWithRestrictedComponentCapabilities(t ginkgo.Gin
 		}
 	}
 	clusterCall(t, p, "GET", "/clusters/"+done["clusterId"].(string)+"/namespaces", nil, c, "", 403)
+}
+
+// 使用已公开契约的最小独立 schema 夹具；完整原发布包只由真实 E2E 私有读取。
+func collectionCRDFixture(t ginkgo.GinkgoTInterface) map[string]any {
+	t.Helper()
+	data, e := os.ReadFile("testdata/ksm-companion-capability.yaml")
+	if e != nil {
+		t.Fatal(e)
+	}
+	var out map[string]any
+	if e = yaml.Unmarshal(data, &out); e != nil {
+		t.Fatal(e)
+	}
+	return out
 }
