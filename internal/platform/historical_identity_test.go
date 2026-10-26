@@ -419,10 +419,42 @@ func checkTestHistoricalV13Confirmation(t ginkgo.GinkgoTInterface) {
 	}
 	_, e = db.Exec(`INSERT INTO schema_migrations VALUES(12),(13);INSERT INTO instance_management_confirmations(instance_id,actor_id,confirmed_at,allow_cluster_managers) VALUES(?,?,?,1)`, id, confirmation["actorId"], confirmation["confirmedAt"])
 	Expect(e).NotTo(HaveOccurred())
+	// 关键：这是离线夹具转换，不是产品迁移；旧 v13 结构及所有冻结来源都应在启动前没有新采集意图。
+	// target_spec 是原目标 HMAC，不是 JSON；必须原样保留，只有 desired_spec 可按旧契约裁剪。
+	for _, statement := range []string{
+		`UPDATE drafts SET config=json_remove(config,'$.serviceMonitor')`,
+		`UPDATE publication_versions SET config=json_remove(config,'$.serviceMonitor'),effective_spec=json_remove(effective_spec,'$.serviceMonitor')`,
+		`UPDATE publication_previews SET desired_spec=json_remove(desired_spec,'$.serviceMonitor')`,
+		`UPDATE version_resources SET document=json_remove(document,'$.spec.serviceMonitor')`,
+		`UPDATE operation_resources SET document=json_remove(document,'$.spec.serviceMonitor')`,
+	} {
+		_, e = db.Exec(statement)
+		Expect(e).NotTo(HaveOccurred())
+	}
+	// 关键：必须先证明升级输入本身符合旧契约，不能把新版 Create 默认值当成迁移副作用。
+	for _, query := range []string{
+		`SELECT count(*) FROM drafts WHERE json_type(config,'$.serviceMonitor') IS NOT NULL`,
+		`SELECT count(*) FROM publication_versions WHERE json_type(config,'$.serviceMonitor') IS NOT NULL OR json_type(effective_spec,'$.serviceMonitor') IS NOT NULL`,
+		`SELECT count(*) FROM publication_previews WHERE json_type(desired_spec,'$.serviceMonitor') IS NOT NULL`,
+		`SELECT count(*) FROM version_resources WHERE json_type(document,'$.spec.serviceMonitor') IS NOT NULL`,
+		`SELECT count(*) FROM operation_resources WHERE json_type(document,'$.spec.serviceMonitor') IS NOT NULL`,
+	} {
+		var count int
+		Expect(db.QueryRow(query).Scan(&count)).To(Succeed())
+		Expect(count).To(BeZero(), "升级前旧 schema 输入不可携带新采集字段")
+	}
 	db.Close()
 	target.mu.Lock()
-	writes, smWrites := target.writes, target.smWrites
+	// 目标也是旧 CR；不能把本轮默认开启后的 fake CR 当作旧部署，再错误归因给迁移。
+	delete(target.cr["spec"].(map[string]any), "serviceMonitor")
+	oldSpec, e := json.Marshal(target.cr["spec"])
+	oldUID := target.cr["metadata"].(map[string]any)["uid"]
+	writes, mutations, smWrites := target.writes, target.mutationRequests, target.smWrites
 	target.mu.Unlock()
+	Expect(e).NotTo(HaveOccurred())
+	Expect(oldUID).To(Equal(before["uid"]))
+	Expect(string(oldSpec)).NotTo(ContainSubstring("serviceMonitor"))
+	Expect(mutations).To(BeNumerically(">", 0), "基线必须来自真实公开发布链路")
 	restored, e := platform.Start(context.Background(), cfg)
 	Expect(e).NotTo(HaveOccurred())
 	defer restored.Close(context.Background())
@@ -432,11 +464,24 @@ func checkTestHistoricalV13Confirmation(t ginkgo.GinkgoTInterface) {
 	Expect(got["creatorUserId"]).To(Equal(before["creatorUserId"]))
 	Expect(got["canManage"]).To(BeTrue())
 	Expect(got["uid"]).To(Equal(before["uid"]))
+	draft := readJSON(t, restored, "/instances/"+id+"/draft", user)
+	Expect(draft["ksm"].(map[string]any)).NotTo(HaveKey("serviceMonitor"))
+	frozen := readJSON(t, restored, "/instances/"+id+"/versions/"+op["versionId"].(string), user)
+	Expect(frozen["ksm"].(map[string]any)).NotTo(HaveKey("serviceMonitor"))
+	Expect(frozen["yaml"]).NotTo(ContainSubstring("serviceMonitor:"))
+	for _, raw := range frozen["resources"].([]any) {
+		Expect(raw.(map[string]any)["yaml"]).NotTo(ContainSubstring("serviceMonitor:"))
+	}
+	clusterCall(t, restored, "POST", "/instances/"+id+"/management-confirmations", map[string]any{"allowClusterManagers": true}, admin, "confirm-after-upgrade", 200)
 	clusterCall(t, restored, "POST", "/instances/"+id+"/refresh", map[string]any{}, user, "poll", 200)
 	target.mu.Lock()
 	defer target.mu.Unlock()
 	Expect(target.writes).To(Equal(writes))
+	Expect(target.mutationRequests).To(Equal(mutations), "升级、权限确认和轮询不能新增任何实际 CR 写请求")
 	Expect(target.smWrites).To(Equal(smWrites))
 	Expect(target.cr["spec"].(map[string]any)).NotTo(HaveKey("serviceMonitor"))
+	afterSpec, e := json.Marshal(target.cr["spec"])
+	Expect(e).NotTo(HaveOccurred())
+	Expect(afterSpec).To(Equal(oldSpec))
 	ginkgo.AddReportEntry("I26-01.v13", "独立旧 v13 DDL 迁移保留确认，公开轮询没有 exporter 或 ServiceMonitor 新写入")
 }
