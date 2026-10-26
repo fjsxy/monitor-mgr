@@ -17,8 +17,9 @@ func assertIssue25Evidence(evidence map[string]json.RawMessage) {
 		Unsent       struct {
 			ActorID, CreatorUserID, CreatorRole, OwnerAfterRevocation      string
 			PausedResource, StateBefore, AttemptActor, StateAfter, Message string
-			PossiblySent, NotFound                                         bool
-			BusinessWrites                                                 int
+			PossiblySent                                                   *bool
+			NotFound                                                       bool
+			BusinessWrites                                                 *int
 		}
 		Sent struct {
 			StateUncertain, StateAfter, OriginalUID, ActualUID, InstanceUID string
@@ -27,7 +28,7 @@ func assertIssue25Evidence(evidence map[string]json.RawMessage) {
 			PossiblySent                                                    bool
 			Resources                                                       []struct{ Key, State string }
 		}
-		ServiceMonitorMutations []struct{ Method, Path string }
+		ServiceMonitorMutations *[]struct{ Method, Path string }
 	}
 	gomega.Expect(json.Unmarshal(raw, &proof)).To(gomega.Succeed())
 	gomega.Expect(proof.TestedCommit).To(gomega.MatchRegexp("^[0-9a-f]{40}$"))
@@ -41,10 +42,13 @@ func assertIssue25Evidence(evidence map[string]json.RawMessage) {
 	gomega.Expect(u.AttemptActor).To(gomega.Equal(u.ActorID))
 	gomega.Expect(u.PausedResource).To(gomega.Equal("kubestatemetrics"))
 	gomega.Expect(u.StateBefore).To(gomega.Equal("CHECKING"))
-	gomega.Expect(u.PossiblySent).To(gomega.BeFalse())
+	// 关键：缺字段或 null 不能被零值解释为未发送、零写入。
+	gomega.Expect(u.PossiblySent).NotTo(gomega.BeNil())
+	gomega.Expect(*u.PossiblySent).To(gomega.BeFalse())
 	gomega.Expect(u.StateAfter).To(gomega.Equal("FAILED"))
 	gomega.Expect(u.Message).To(gomega.ContainSubstring("管理员创建"))
-	gomega.Expect(u.BusinessWrites).To(gomega.BeZero())
+	gomega.Expect(u.BusinessWrites).NotTo(gomega.BeNil())
+	gomega.Expect(*u.BusinessWrites).To(gomega.BeZero())
 	gomega.Expect(u.NotFound).To(gomega.BeTrue())
 	ginkgo.By("I25-K01.sent：停用发起账号后原 UID 只读恢复，不回滚或重放已发更新")
 	s := proof.Sent
@@ -61,5 +65,6 @@ func assertIssue25Evidence(evidence map[string]json.RawMessage) {
 	gomega.Expect(s.Resources).To(gomega.HaveLen(1))
 	gomega.Expect(s.Resources[0].Key).To(gomega.Equal("component"))
 	gomega.Expect(s.Resources[0].State).To(gomega.Equal("SUCCEEDED"))
-	gomega.Expect(proof.ServiceMonitorMutations).To(gomega.BeEmpty())
+	gomega.Expect(proof.ServiceMonitorMutations).NotTo(gomega.BeNil())
+	gomega.Expect(*proof.ServiceMonitorMutations).To(gomega.BeEmpty())
 }
