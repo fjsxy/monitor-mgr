@@ -239,6 +239,10 @@ func (s *Store) authorizeLifecycleDispatch(ctx context.Context, o *rpc.Operation
 	if e != nil {
 		return fail(e)
 	}
+	// 关键：每次真实写入（包括明确拒绝后的 RV 重试）都在撤权串行边界重验实例权限。
+	if e = actorInstancePermission(ctx, tx, actor, o.GetInstanceId()); e != nil {
+		return fail(e)
+	}
 	if cl.CredentialRevision != credentialRevision {
 		return fail(Error("CONFLICT", "预检期间凭据已变化，请重新核验"))
 	}

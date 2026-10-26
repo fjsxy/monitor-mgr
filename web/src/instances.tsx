@@ -1,3 +1,4 @@
+import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
 import { useDraftBookmark } from "./draft-bookmark";
 import {StorageImpact} from "./agent-storage";
@@ -43,7 +44,7 @@ type Runtime = {
   error: string;
   observedAt: string;
 };
-type Instance = {
+type Instance = InstanceIdentityValue & {
   id: string;
   clusterId: string;
   name: string;
@@ -493,6 +494,7 @@ export function Instances({
                 <td>
                   <strong>{item.name}</strong>
                   <div className="help">{item.targetNamespace}</div>
+                  <InstanceIdentity value={item} compact />
                   {item.readOnly && (
                     <span className="badge gray">平台未纳管 · 只读</span>
                   )}
@@ -544,19 +546,19 @@ export function Instances({
                 <td>
                   <div className="row-actions">
                     <button onClick={() => open(item)}>
-                      {item.readOnly ? "查看" : "编辑"}
+                      {item.canManage ? "编辑" : "查看"}
                     </button>
                     <button
                       onClick={() => open(item, "draft")}
-                      disabled={item.readOnly}
-                      title={item.readOnly ? "平台未纳管实例只读" : ""}
+                      disabled={!item.canManage}
+                      title={item.readOnlyReason}
                     >
                       下发
                     </button>
                     <button
                       className="danger"
-                      disabled={item.readOnly || item.lifecycle==="DELETED"}
-                      title={item.readOnly?"平台未纳管实例只读":"删除原 UID 对应的实例"}
+                      disabled={!item.canManage || item.lifecycle==="DELETED"}
+                      title={item.readOnlyReason || "删除原 UID 对应的实例"}
                       onClick={() => void openDeletion(item)}
                     >
                       删除
@@ -764,6 +766,7 @@ function Editor({
     [versions, setVersions] = useState<Version[]>([]),
     [viewedVersion, setViewedVersion] = useState<Version | null>(null),
     [namespaceOpen, setNamespaceOpen] = useState(false);
+  const canManage = !current || current.canManage;
   const readOnly = Boolean(current?.readOnly);
   const fixed = Boolean(current?.uid);
   const dirty = JSON.stringify(requestConfig(config)) !== saved;
@@ -907,7 +910,7 @@ function Editor({
     setConfig(next);
     setNotice("");
     setPreview(null);
-    if (currentRef.current && !readOnly) {
+    if (currentRef.current && canManage) {
       if (editingTimer.current) clearTimeout(editingTimer.current);
       editingTimer.current = setTimeout(() => {
         void api(
@@ -920,6 +923,7 @@ function Editor({
   }
   async function save(event?: FormEvent) {
     event?.preventDefault();
+    if (!canManage) return;
     await run(async () => {
       const value = requestConfig(config);
       let id = current?.id;
@@ -1037,6 +1041,7 @@ function Editor({
           <div>
             <p className="help">实例详情 · {cluster.name}</p>
             <h2>{current?.name || config.name || "新 KSM 实例"}</h2>
+            {current && <InstanceIdentity value={current} />}
             <span className={"badge " + (readOnly ? "gray" : "ok")}>
               {readOnly
                 ? "平台未纳管 · 只读"
@@ -1126,7 +1131,7 @@ function Editor({
                   <Configuration
                     config={config}
                     onChange={change}
-                    disabled={busy}
+                    disabled={busy || !canManage}
                     fixed={fixed}
                     namespaces={effectiveNamespaces}
                     namespacesError={namespaceError}
@@ -1185,7 +1190,7 @@ function Editor({
                         {operation.attemptId &&
                           ` · 执行尝试 ${operation.attemptId}`}
                       </p>
-                      <LifecycleActions operation={operation} onOperation={async next=>{setOperation(next);setTab("runtime");await refreshRuntime();if(current)await loadHistory(current.id)}}/>
+                      <LifecycleActions canManage={canManage} operation={operation} onOperation={async next=>{setOperation(next);setTab("runtime");await refreshRuntime();if(current)await loadHistory(current.id)}}/>
                     </div>
                   )}
                   <div className="row-actions">
@@ -1245,7 +1250,7 @@ function Editor({
                             </button>
                           )}
                           <p className="help">{item.action==="DELETE"?"删除":"下发"}操作 {item.operationId}</p>
-                          <LifecycleActions operation={item} onOperation={async next=>{setOperation(next);setTab("runtime");if(current)await loadHistory(current.id);onChange()}}/>
+                          <LifecycleActions canManage={canManage} operation={item} onOperation={async next=>{setOperation(next);setTab("runtime");if(current)await loadHistory(current.id);onChange()}}/>
                         </article>
                       ))}
                       <h3>发布版本</h3>
@@ -1290,7 +1295,7 @@ function Editor({
             </>
           )}
         </div>
-        {!viewedVersion && !readOnly && tab === "draft" && (
+        {!viewedVersion && canManage && tab === "draft" && (
           <div className="drawer-footer">
             <div>
               <span className={"badge " + (dirty ? "warn" : "gray")}>
@@ -1396,7 +1401,7 @@ function Editor({
                 <button
                   className="primary"
                   onClick={() => void confirmPublication()}
-                  disabled={busy || (preview.drift && !overwrite)}
+                  disabled={busy || !canManage || (preview.drift && !overwrite)}
                 >
                   确认下发
                 </button>

@@ -157,6 +157,7 @@ type ksmFixture struct {
 	mu                  sync.Mutex
 	cr                  map[string]any
 	writes              int
+	mutationRequests    int
 	lastWrite           []byte
 	rejectWrite         int
 	dropResponse        bool
@@ -317,6 +318,8 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 			json.NewEncoder(w).Encode(f.cr)
 			return
 		}
+		// 记录进入外部 API 的全部组件写请求，包含被拒绝的请求。
+		f.mutationRequests++
 		if f.rejectWrite != 0 {
 			w.WriteHeader(f.rejectWrite)
 			io.WriteString(w, `{}`)
