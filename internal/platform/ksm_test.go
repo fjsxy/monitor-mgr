@@ -145,47 +145,52 @@ func checkTestF04EncryptedSchema3WrongKeyDoesNotMigrate(t ginkgo.GinkgoTInterfac
 }
 
 type ksmFixture struct {
-	legacySM            map[string]any
-	crd                 map[string]any
-	smReadFailure       bool
-	smReads             int
-	smReadPaths         []string
-	smWrites            int
-	identityGate        chan struct{}
-	identityEntered     chan struct{}
-	identityOnce        sync.Once
-	identityFailure     bool
-	readDelay           time.Duration
-	clusterUID          string
-	targetConfiguration string
-	inventoryPages      map[string]map[string]any
-	inventoryFailure    string
-	mu                  sync.Mutex
-	cr                  map[string]any
-	writes              int
-	mutationRequests    int
-	lastWrite           []byte
-	rejectWrite         int
-	dropResponse        bool
-	owned               map[string][]any
-	deleteCount         int
-	deleteRequests      int
-	lastDelete          map[string]any
-	retainCR            bool
-	retainPod           bool
-	crReadFailure       bool
-	crReads             int
-	observationGate     chan struct{}
-	observationEntered  chan struct{}
-	observationCanceled chan struct{}
-	observationOnce     sync.Once
-	readFailure         bool
-	readFailureOnDelete bool
-	block               chan struct{}
-	entered             chan struct{}
-	readGate            chan struct{}
-	readEntered         chan struct{}
-	readOnce            sync.Once
+	migrationNamespaces     []any
+	migrationAgentPages     map[string]map[string]any
+	migrationAgentFailToken string
+	migrationAgents         []any
+	migrationAgentFailure   bool
+	legacySM                map[string]any
+	crd                     map[string]any
+	smReadFailure           bool
+	smReads                 int
+	smReadPaths             []string
+	smWrites                int
+	identityGate            chan struct{}
+	identityEntered         chan struct{}
+	identityOnce            sync.Once
+	identityFailure         bool
+	readDelay               time.Duration
+	clusterUID              string
+	targetConfiguration     string
+	inventoryPages          map[string]map[string]any
+	inventoryFailure        string
+	mu                      sync.Mutex
+	cr                      map[string]any
+	writes                  int
+	mutationRequests        int
+	lastWrite               []byte
+	rejectWrite             int
+	dropResponse            bool
+	owned                   map[string][]any
+	deleteCount             int
+	deleteRequests          int
+	lastDelete              map[string]any
+	retainCR                bool
+	retainPod               bool
+	crReadFailure           bool
+	crReads                 int
+	observationGate         chan struct{}
+	observationEntered      chan struct{}
+	observationCanceled     chan struct{}
+	observationOnce         sync.Once
+	readFailure             bool
+	readFailureOnDelete     bool
+	block                   chan struct{}
+	entered                 chan struct{}
+	readGate                chan struct{}
+	readEntered             chan struct{}
+	readOnce                sync.Once
 }
 
 func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
@@ -194,6 +199,47 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 	f := &ksmFixture{crd: collectionCRDFixture(t)}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(r.URL.Path, "/api/v1/namespaces") {
+			f.mu.Lock()
+			namespaces := f.migrationNamespaces
+			f.mu.Unlock()
+			if namespaces != nil {
+				if r.URL.Path == "/api/v1/namespaces" {
+					json.NewEncoder(w).Encode(map[string]any{"items": namespaces})
+					return
+				}
+				for _, raw := range namespaces {
+					ns := raw.(map[string]any)
+					if r.URL.Path == "/api/v1/namespaces/"+ns["metadata"].(map[string]any)["name"].(string) {
+						json.NewEncoder(w).Encode(ns)
+						return
+					}
+				}
+			}
+		}
+		if r.URL.Path == "/apis/monitoring.coreos.com/v1alpha1/prometheusagents" {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.migrationAgentFailure {
+				w.WriteHeader(403)
+				return
+			}
+			if f.migrationAgentPages != nil {
+				token := r.URL.Query().Get("continue")
+				if token != "" && token == f.migrationAgentFailToken {
+					w.WriteHeader(403)
+					return
+				}
+				json.NewEncoder(w).Encode(f.migrationAgentPages[token])
+				return
+			}
+			items := f.migrationAgents
+			if items == nil {
+				items = []any{}
+			}
+			json.NewEncoder(w).Encode(map[string]any{"items": items})
+			return
+		}
 		if r.URL.Path == "/apis/apiextensions.k8s.io/v1/customresourcedefinitions/kubestatemetrics.monitoring.fjsxy.github.io" {
 			f.mu.Lock()
 			defer f.mu.Unlock()

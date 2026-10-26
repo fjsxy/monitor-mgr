@@ -193,7 +193,7 @@ func checkLegacySMNeverDispatches(t ginkgo.GinkgoTInterface) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			if _, e = db.Exec(`DROP TABLE IF EXISTS instance_management_confirmations;DROP TABLE historical_resource_observations;DROP TABLE resource_progress;DROP TABLE operation_resources;DROP TABLE version_resources;DROP TABLE instance_resource_identities;DELETE FROM schema_migrations WHERE version>11;`); e != nil {
+			if _, e = db.Exec(`DROP TABLE IF EXISTS instance_management_confirmations;DROP TABLE IF EXISTS historical_operation_releases;DROP TABLE IF EXISTS historical_servicemonitor_resolutions;DROP TABLE IF EXISTS historical_migration_snapshots;DROP TABLE historical_resource_observations;DROP TABLE resource_progress;DROP TABLE operation_resources;DROP TABLE version_resources;DROP TABLE instance_resource_identities;DELETE FROM schema_migrations WHERE version>11;`); e != nil {
 				t.Fatal(e)
 			}
 			var creatorColumns int

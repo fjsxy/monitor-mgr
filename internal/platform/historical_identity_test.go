@@ -351,7 +351,7 @@ func checkTestHistoricalMigrationRollback(t ginkgo.GinkgoTInterface) {
 			Expect(count).To(BeZero())
 		}
 		verify(path)
-		backups, e := filepath.Glob(filepath.Join(cfg.DataDir, "backups", fmt.Sprintf("schema-%d-to-15-*.db", legacyVersion)))
+		backups, e := filepath.Glob(filepath.Join(cfg.DataDir, "backups", fmt.Sprintf("schema-%d-to-16-*.db", legacyVersion)))
 		Expect(e).NotTo(HaveOccurred())
 		Expect(backups).NotTo(BeEmpty())
 		latest := ""

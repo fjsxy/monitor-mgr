@@ -93,6 +93,12 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 		checkTestP13RestartUsesPersistentSentBoundary(t)
 		return
 	}
+	checkHistoricalMigrationInventory(t)
+	checkHistoricalMigrationResolutions(t)
+	checkHistoricalParentRelease(t)
+	checkHistoricalMigrationBoundaries(t)
+	checkHistoricalAgentImpact(t)
+	checkHistoricalNewPublicationRecovery(t)
 	checkLegacySMNeverDispatches(t)
 	checkSingleCRResourceProgress(t)
 	checkAgentSingleCRResourceProgress(t)
@@ -155,6 +161,8 @@ var _ = ginkgo.It("UT-16 数据库主密钥与敏感投影", func() {
 	checkTestUnknownCreatorMigration(t)
 	checkTestHistoricalCreatorEvidence(t)
 	checkTestHistoricalMigrationRollback(t)
+	checkHistoricalMigrationRollback(t)
+	checkHistoricalSingleCR(t)
 	checkTestHistoricalV13Confirmation(t)
 	checkTestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL(t)
 	checkLegacyPublicationMigration(t)

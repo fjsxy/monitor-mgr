@@ -11,7 +11,7 @@ import (
 )
 
 // schemaVersion 定义本程序能够读取和升级到的数据库版本。
-const schemaVersion = 15
+const schemaVersion = 16
 
 // migrationSQL 按版本依次保存结构变更，不修改已经发布的旧版本语句。
 var migrationSQL = [][]string{
@@ -48,6 +48,7 @@ var migrationSQL = [][]string{
 	nil, // v13 兼容旧权限确认历史，新库在 v15 建表。
 	historicalResourceSchema,
 	historicalManagementSchema, // v15 独立权限确认及可靠历史创建用户补齐。
+	historicalMigrationSchema,  // v16 保存只读迁移盘点快照。
 }
 
 // migrate 配置 SQLite WAL，并在保留恢复依据的前提下原子升级数据库。
