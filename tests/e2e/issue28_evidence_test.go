@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
+// init 将采集意图和配套观察的原始证据断言绑定稳定用例。
 func init() {
 	registerIssueEvidence("issue28", assertIssue28Evidence)
 	requireIssueEvidence("E2E-03", "issue28")
@@ -61,8 +62,11 @@ type collectionSnapshot struct {
 	}
 }
 
+// cm 读取证据中的对象，缺失保留 nil 交由断言拒绝。
 func cm(m map[string]any, key string) map[string]any { v, _ := m[key].(map[string]any); return v }
-func cs(m map[string]any, key string) string         { v, _ := m[key].(string); return v }
+
+// cs 读取证据中的字符串，不从其他字段补造。
+func cs(m map[string]any, key string) string { v, _ := m[key].(string); return v }
 
 // assertCompanion 不复制任何 Operator 名称/端口/labels 算法，只核公开引用和原父所有权。
 func assertCompanion(s collectionSnapshot) {

@@ -2,6 +2,7 @@
 export type ExporterRule = {mode: string; selector?: {matchLabels?: Record<string,string>; matchExpressions?: {key:string;operator:string;values?:string[]}[]}};
 const userLabel = "monitor-mgr.io/user-id";
 
+// 展示固定创建用户的快捷关联，并保留原生 selector 编辑。
 export function AgentExporterAssociation({creatorUserId,object,disabled,onChange}:{creatorUserId?:string;object:ExporterRule;disabled:boolean;onChange:(rule:ExporterRule)=>void}) {
   const target = object.mode === "Labels" ? object.selector?.matchLabels?.[userLabel] : undefined;
   return <section className="publication-item" aria-label="按用户关联 exporter">

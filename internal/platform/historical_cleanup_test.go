@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 )
 
+// checkHistoricalCleanup 通过真实 HTTP 清理夹具验证原 UID、失败阶段与零误删。
 func checkHistoricalCleanup(t ginkgo.GinkgoTInterface) {
 	python := os.Getenv("MONITOR_MGR_PYTHON")
 	if python == "" {

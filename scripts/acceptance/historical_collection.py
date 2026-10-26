@@ -7,11 +7,13 @@ from agent_storage import wait
 from e2e_environment import ROOT, LOCK
 
 
+# 读取 Agent 实际采用的旧/新 exporter 目标。
 def _targets(s, namespace, pod):
     result=json.loads(s.k('get','--raw','/api/v1/namespaces/'+namespace+'/pods/'+pod+':9090/proxy/api/v1/targets?state=active',target=s.target).stdout)
     return [{'scrapePool':item.get('scrapePool'),'labels':{key:value for key,value in item.get('labels',{}).items() if key in ('job','instance','service','namespace','endpoint','pod')},'health':item.get('health'),'lastScrape':item.get('lastScrape')} for item in result.get('data',{}).get('activeTargets',[])]
 
 
+# 在显式切换前记录旧采集基线和真实样本。
 def begin(s, records):
     from agent_collection import observe_agent, adopted_configuration
     exporter_ns=s.targetns;collector_ns=exporter_ns+'-agent';s.fixture(collector_ns,s.target)
@@ -34,6 +36,7 @@ def begin(s, records):
     return {'namespace':collector_ns,'receiverPod':receiver_pod,'receiverBefore':receiver_before,'agent':agent,'agentName':name,'agentPod':pod,'agentBefore':identity,'adoptedBefore':adopted,'targetsBefore':targets,'cutoverStarted':time.time()}
 
 
+# 核实迁移后旧目标消失、新目标及实际样本存在。
 def finish(s, records, observation):
     from agent_collection import exporter_targets, receiver_query, observe_agent, adopted_configuration
     ns=observation['namespace'];pod=observation['agentPod'];exports=[exporter_targets(s,record['instance'],observation['cutoverStarted']) for record in records]

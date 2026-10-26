@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// init 将历史迁移证据绑定既有稳定 E2E 用例。
 func init() {
 	registerIssueEvidence("issue29", assertIssue29Evidence)
 	for _, id := range []string{"E2E-01", "E2E-08", "E2E-10"} {
@@ -30,12 +31,16 @@ func migrationFields(raw any, keys ...string) map[string]any {
 	}
 	return m
 }
+
+// migrationResources 验证并返回旧操作的独立资源事实。
 func migrationResources(raw any) []any {
 	m := migrationFields(raw, "resources")
 	resources, ok := m["resources"].([]any)
 	Expect(ok).To(BeTrue())
 	return resources
 }
+
+// migrationSingleParent 核实新发布只冻结一份父 CR。
 func migrationSingleParent(raw any) {
 	resources := migrationResources(raw)
 	Expect(resources).To(HaveLen(1))
@@ -45,6 +50,8 @@ func migrationSingleParent(raw any) {
 	}
 	Expect(item["kind"]).To(Equal("KubeStateMetrics"))
 }
+
+// migrationSMFact 提取旧 SM 原执行事实，防止外部处理覆盖未知结果。
 func migrationSMFact(raw any) map[string]any {
 	for _, resource := range migrationResources(raw) {
 		r := migrationFields(resource, "target", "state", "confirmedUid", "possiblySent")
@@ -57,6 +64,7 @@ func migrationSMFact(raw any) map[string]any {
 	return nil
 }
 
+// assertIssue29Evidence 逐项断言历史迁移原始证据，不能信任 Python passed 字符串。
 func assertIssue29Evidence(evidence map[string]json.RawMessage) {
 	var value any
 	Expect(json.Unmarshal(evidence["issue29"], &value)).To(Succeed())

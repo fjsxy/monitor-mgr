@@ -23,6 +23,8 @@ RELEASE ?= monitor-mgr
 IMAGE_TAG ?= development
 VM_RELEASE ?= vmcluster
 VM_NAMESPACE ?= monitoring
+OPERATOR_SOURCE_DESTINATION ?=
+OPERATOR_RELEASE_BUNDLE ?=
 
 .PHONY: help ut e2e e2e-summary check test test-race generate check-generated vet web-install web-build build run image ci-cases ci-cases-check ci-builder ci-builder-cleanup
 help: ## 查看常用命令
@@ -82,6 +84,17 @@ ci-builder: ## CI 创建本 run 独占、固定版本的 BuildKit；须指定 BU
 	$(PYTHON) scripts/ci-builder.py create --name "$(BUILDX_BUILDER)"
 ci-builder-cleanup: ## 按记录的原容器 ID 清理本 run 构建器
 	$(PYTHON) scripts/ci-builder.py cleanup --name "$(BUILDX_BUILDER)"
+
+.PHONY: operator-release-source operator-release-fetch operator-release-verify
+operator-release-source: ## 匿名获取锁定 Operator CLI 源码；显式指定 OPERATOR_SOURCE_DESTINATION
+	@test -n "$(OPERATOR_SOURCE_DESTINATION)" || (echo '必须指定 OPERATOR_SOURCE_DESTINATION' >&2; exit 1)
+	$(PYTHON) scripts/acceptance/operator_release.py source --destination "$(OPERATOR_SOURCE_DESTINATION)"
+operator-release-fetch: ## 匿名获取并核验原发布资产；显式指定 OPERATOR_RELEASE_BUNDLE
+	@test -n "$(OPERATOR_RELEASE_BUNDLE)" || (echo '必须指定 OPERATOR_RELEASE_BUNDLE' >&2; exit 1)
+	$(PYTHON) scripts/acceptance/operator_release.py fetch --bundle "$(OPERATOR_RELEASE_BUNDLE)"
+operator-release-verify: ## 逐字节核验本地原发布资产；显式指定 OPERATOR_RELEASE_BUNDLE
+	@test -n "$(OPERATOR_RELEASE_BUNDLE)" || (echo '必须指定 OPERATOR_RELEASE_BUNDLE' >&2; exit 1)
+	$(PYTHON) scripts/acceptance/operator_release.py verify --bundle "$(OPERATOR_RELEASE_BUNDLE)"
 
 .PHONY: test-issue27
 test-issue27: ## #27 单 CR、旧 SM 只读、冻结身份、删除与持久化 Ginkgo 回归，不启动 kind

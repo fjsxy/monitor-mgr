@@ -14,7 +14,7 @@ export function HistoricalMigration({instanceId,isAdmin,active,onUpdated}:{insta
  }catch(e){setError(e instanceof APIError?e.message:'确认失败，请重新盘点')}finally{setBusy(false)}}
  function download(){if(!value)return;const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=`historical-migration-${value.snapshotId}.json`;link.click();URL.revokeObjectURL(url)}
  return <section className="publication-item" aria-label="历史采集迁移">
- <h4>历史 exporter 显式迁移</h4><p className="help">先保存父 CR、旧 ServiceMonitor 与 Agent 选择范围快照。由集群管理员核实 UID/RV、所有权和采集空窗后在平台外处理旧对象；平台仅记录处理事实，新明确发布才启用 Operator 采集。</p>
+ <h4>历史 exporter 显式迁移</h4><p className="help">先保存父 CR、旧 ServiceMonitor 与 Agent 选择范围快照。由集群管理员核实 UID/RV、所有权和采集空窗后在平台外处理旧对象；平台仅记录处理事实，新明确发布才启用 Operator 采集。旧删除须先确认原父 CR、旧 SM 与全部 workload/Pod 已在平台外清理，随后明确收尾；原发送结果保持原样。</p>
  <button disabled={busy||!active} onClick={()=>void load()}>盘点历史采集迁移</button>
  {error&&<p role="alert" className="alert error">{error}</p>}
  {value&&<><p>快照 {value.snapshotId} · {new Date(value.observedAt).toLocaleString()}</p><button onClick={download}>保存迁移快照</button><p>{value.impactComplete?'Agent 选择范围已完整读取':'Agent 影响范围未确认'} {value.error}</p>

@@ -165,6 +165,7 @@ const stateName = (value: string) =>
       Missing: "原 CR 不存在",
       Deleted:"已删除",
       DELETION_VERIFYING:"清理核验中",
+      HISTORICAL_RESOLVED:"历史删除已显式收尾",
       DELETION_BLOCKED:"清理受阻",
       QUEUED: "已受理",
       CHECKING: "检查中",

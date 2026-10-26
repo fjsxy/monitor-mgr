@@ -211,6 +211,7 @@ func (s *Store) ReleaseHistoricalOperation(ctx context.Context, c *rpc.RequestCo
 	return s.confirmHistoricalMigration(ctx, c, r, true)
 }
 
+// confirmHistoricalMigration 管理员确认独立留痕；在同一事务核对当前权限、原快照及互斥。
 func (s *Store) confirmHistoricalMigration(ctx context.Context, c *rpc.RequestContext, r *rpc.HistoricalMigrationConfirmationRequest, parent bool) (*rpc.HistoricalMigrationConfirmation, error) {
 	i, e := s.authorizedInstanceForWrite(ctx, c, r.Id)
 	if e != nil {
@@ -223,7 +224,7 @@ func (s *Store) confirmHistoricalMigration(ctx context.Context, c *rpc.RequestCo
 	if e = requireAdmin(p); e != nil {
 		return nil, e
 	}
-	if i.ReadOnly || i.Component != KSMComponent || i.Lifecycle == "DELETED" {
+	if i.ReadOnly || i.Component != KSMComponent {
 		return nil, Error("CONFLICT", "仅有效纳管 exporter 可确认迁移")
 	}
 	t, e := s.TargetForCluster(ctx, c, i.ClusterId)
@@ -256,6 +257,9 @@ func (s *Store) confirmHistoricalMigration(ctx context.Context, c *rpc.RequestCo
 	}
 	if hit {
 		return &replay, nil
+	}
+	if i.Lifecycle == "DELETED" {
+		return nil, Error("CONFLICT", "已删除实例仅可回读原显式收尾结果，不能新增处理")
 	}
 	item, doc, e := migrationConfirmationTarget(ctx, tx, i.Id, r)
 	if e != nil {
@@ -338,8 +342,14 @@ func (s *Store) releaseHistoricalParent(ctx context.Context, tx *sql.Tx, t *Targ
 	if tx.QueryRowContext(ctx, `SELECT operation_id FROM instance_protections WHERE instance_id=?`, i.Id).Scan(&protected) != nil || protected != item.OperationId {
 		return nil, Error("CONFLICT", "实例保护已变化，不能解除其他操作")
 	}
-	if tx.QueryRowContext(ctx, `SELECT o.action,p.version_id FROM operations o JOIN publication_operations p ON p.operation_id=o.id WHERE o.id=? AND p.instance_id=?`, item.OperationId, i.Id).Scan(&action, &version) != nil || action != "PUBLISH" {
-		return nil, Error("CONFLICT", "旧删除或非发布操作不能从此入口解除")
+	if tx.QueryRowContext(ctx, `SELECT action FROM operations WHERE id=?`, item.OperationId).Scan(&action) != nil {
+		return nil, Error("CONFLICT", "原操作不存在")
+	}
+	if action == "DELETE" {
+		return s.releaseHistoricalDeletion(ctx, tx, t, p, i, r, item, doc, cmd)
+	}
+	if action != "PUBLISH" || tx.QueryRowContext(ctx, `SELECT version_id FROM publication_operations WHERE operation_id=? AND instance_id=?`, item.OperationId, i.Id).Scan(&version) != nil {
+		return nil, Error("CONFLICT", "只有旧发布或删除操作可以显式收尾")
 	}
 	if i.CurrentVersionId != "" && i.CurrentVersionId != version {
 		return nil, Error("CONFLICT", "已有较新发布基线，不允许回退旧任务身份")
@@ -374,10 +384,6 @@ func (s *Store) releaseHistoricalParent(ctx context.Context, tx *sql.Tx, t *Targ
 	if e = validateHistoricalCollection(ctx, tx, i, map[string]any{"serviceMonitor": map[string]any{"enabled": true}}, t); e != nil {
 		return nil, e
 	}
-	now := s.Now().UTC().Format(time.RFC3339Nano)
-	if _, e = tx.ExecContext(ctx, `INSERT INTO historical_operation_releases VALUES(?,?,?,?,?,?,?,?,?)`, i.Id, item.OperationId, item.ObjectPath, item.OriginalUid, item.DocumentFingerprint, disposition, p.Account.Id, now, r.SnapshotId); e != nil {
-		return nil, e
-	}
 	if item.OriginalUid != "" && i.Uid == "" {
 		// 关键：空实例 UID 仅从已持久确认的父步骤恢复，CAS 不覆盖后来已知身份，且不提升 current_version_id。
 		result, e := tx.ExecContext(ctx, `UPDATE instances SET uid=? WHERE id=? AND uid='' AND current_version_id=?`, item.OriginalUid, i.Id, i.CurrentVersionId)
@@ -391,6 +397,15 @@ func (s *Store) releaseHistoricalParent(ctx context.Context, tx *sql.Tx, t *Targ
 		if e = audit(ctx, tx, p.Account.Id, "RESTORE_CONFIRMED_COMPONENT_UID", item.OperationId, s.Now()); e != nil {
 			return nil, e
 		}
+	}
+	return s.completeHistoricalRelease(ctx, tx, p, i, r, item, cmd, disposition)
+}
+
+// completeHistoricalRelease 同一事务保存独立处理事实并释放精确互斥，不改写旧操作的执行结果。
+func (s *Store) completeHistoricalRelease(ctx context.Context, tx *sql.Tx, p *Principal, i *rpc.ObservationInstance, r *rpc.HistoricalMigrationConfirmationRequest, item *rpc.HistoricalMigrationResource, cmd *command, disposition string) (*rpc.HistoricalMigrationConfirmation, error) {
+	now := s.Now().UTC().Format(time.RFC3339Nano)
+	if _, e := tx.ExecContext(ctx, `INSERT INTO historical_operation_releases VALUES(?,?,?,?,?,?,?,?,?)`, i.Id, item.OperationId, item.ObjectPath, item.OriginalUid, item.DocumentFingerprint, disposition, p.Account.Id, now, r.SnapshotId); e != nil {
+		return nil, e
 	}
 	deleted, e := tx.ExecContext(ctx, `DELETE FROM instance_protections WHERE instance_id=? AND operation_id=?`, i.Id, item.OperationId)
 	if e != nil {
@@ -411,4 +426,89 @@ func (s *Store) releaseHistoricalParent(ctx context.Context, tx *sql.Tx, t *Targ
 		return nil, e
 	}
 	return result, nil
+}
+
+// releaseHistoricalDeletion 仅记录管理员外部清理完成；旧 DELETE/SM 的发送与未知事实绝不伪造成功。
+func (s *Store) releaseHistoricalDeletion(ctx context.Context, tx *sql.Tx, t *Target, p *Principal, i *rpc.ObservationInstance, r *rpc.HistoricalMigrationConfirmationRequest, item *rpc.HistoricalMigrationResource, doc map[string]any, cmd *command) (*rpc.HistoricalMigrationConfirmation, error) {
+	var uid, path, namespace, version string
+	e := tx.QueryRowContext(ctx, `SELECT original_uid,cr_path,target_namespace,version_id FROM deletion_operations WHERE operation_id=? AND instance_id=?`, item.OperationId, i.Id).Scan(&uid, &path, &namespace, &version)
+	if e != nil || uid == "" || uid != item.OriginalUid || i.Uid != uid || path != item.ObjectPath || namespace != objectString(objectMap(doc, "spec"), "targetNamespace") || version != i.CurrentVersionId {
+		return nil, Error("CONFLICT", "原删除身份、冻结目标或发布基线不一致，不能显式收尾")
+	}
+	resources, e := readFrozenResources(ctx, tx, item.OperationId, true)
+	if e != nil {
+		return nil, e
+	}
+	for _, resource := range resources {
+		if !migrationPath(resource.path, resource.document) {
+			return nil, Error("CONFLICT", "原删除冻结资源图不能安全核验")
+		}
+		var actual map[string]any
+		if e = t.Request(ctx, "GET", resource.path, nil, &actual); apiCode(e) != "TARGET_NOT_FOUND" {
+			return nil, Error("CONFLICT", "原删除冻结资源路径仍有对象或读取未知")
+		}
+	}
+	// 关键：过去的 SM 处理记录不代表当前路径不存在；每个旧路径仍须重新确认404。
+	if e = validateHistoricalCollection(ctx, tx, i, map[string]any{"serviceMonitor": map[string]any{"enabled": true}}, t); e != nil {
+		return nil, e
+	}
+	var current map[string]any
+	if e = t.Request(ctx, "GET", item.ObjectPath, nil, &current); apiCode(e) != "TARGET_NOT_FOUND" {
+		return nil, Error("CONFLICT", "原删除父 CR 路径仍存在对象或读取未知")
+	}
+	if e = historicalDeletionGraphAbsent(ctx, tx, t, i, uid); e != nil {
+		return nil, e
+	}
+	result, e := tx.ExecContext(ctx, `UPDATE instances SET lifecycle='DELETED' WHERE id=? AND uid=? AND current_version_id=? AND lifecycle<>'DELETED'`, i.Id, uid, version)
+	if e != nil {
+		return nil, e
+	}
+	n, _ := result.RowsAffected()
+	if n != 1 {
+		return nil, Error("CONFLICT", "实例删除收尾条件已变化")
+	}
+	return s.completeHistoricalRelease(ctx, tx, p, i, r, item, cmd, "EXPLICIT_DELETION_ABSENT")
+}
+
+// historicalDeletionGraphAbsent 复用完整分页读取，从原父 UID 和持久见过的 UID 求闭包，残存后代一律阻止收尾。
+func historicalDeletionGraphAbsent(ctx context.Context, tx *sql.Tx, t *Target, i *rpc.ObservationInstance, uid string) error {
+	candidates, e := t.listOwnedCandidates(ctx, "")
+	if e != nil {
+		return Error("CONFLICT", "原删除 workload/Pod 资源图读取不完整")
+	}
+	rows, e := tx.QueryContext(ctx, `SELECT uid FROM seen_resources WHERE instance_id=?`, i.Id)
+	if e != nil {
+		return e
+	}
+	seen := map[string]bool{uid: true}
+	for rows.Next() {
+		var id string
+		if e = rows.Scan(&id); e != nil {
+			rows.Close()
+			return e
+		}
+		seen[id] = true
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return e
+	}
+	// 关键：即使中间父对象已消失，持久 seen UID 仍能追到原 Pod；同名新 UID 不成为归属根。
+	changed := true
+	for changed {
+		changed = false
+		for _, candidate := range candidates {
+			if !seen[candidate.uid] && seen[candidate.ownerUID] {
+				seen[candidate.uid] = true
+				changed = true
+			}
+		}
+	}
+	for _, candidate := range candidates {
+		if seen[candidate.uid] {
+			return Error("CONFLICT", "原删除 workload 或 Pod 尚未完全消失")
+		}
+	}
+	return nil
 }

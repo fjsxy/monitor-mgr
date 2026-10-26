@@ -25,21 +25,25 @@ def _explicit(config):
     return value
 
 
+# 读取 Agent 自身 HTTP API，结果仅供当前验收步骤核验。
 def _api(s, namespace, pod, path, target='data'):
     return json.loads(s.k('get', '--raw', '/api/v1/namespaces/'+namespace+'/pods/'+pod+':9090/proxy'+path, target=target).stdout)
 
 
+# 读取实际 Agent 已采用的目标列表，不能以 selector 匹配代替。
 def _adopted(s, namespace, pod, target='data'):
     value = _api(s, namespace, pod, '/api/v1/status/config', target=target)
     if value.get('status') != 'success': raise RuntimeError('实际Prometheus进程配置不可读')
     return yaml.safe_load(value['data']['yaml'])
 
 
+# 记录 Agent 当前进程身份与启动时间，识别配置变化期间的重启。
 def _process(s, namespace, pod, target='data'):
     actual = s.get('pod', pod, '-n', namespace, target=target)
     return s.env.verify_container(actual, 'prometheus', s.env.official_configs['prometheus'])
 
 
+# 读取 Agent 已加载配置并抽取本例关联证据。
 def _configuration(s, namespace, pod, target='data'):
     actual = _adopted(s, namespace, pod, target)
     targets = _api(s, namespace, pod, '/api/v1/targets?state=active', target)
@@ -58,11 +62,13 @@ def _configuration(s, namespace, pod, target='data'):
             'scrapeConfigs': actual.get('scrape_configs', []), 'activeTargets': active}
 
 
+# 从公开实例读模型提取 Agent 关联来源。
 def _source(value):
     # HTTP对空matches省略optional字段；proof显式保留空数组，使Go可拒绝缺失/null证据。
     return dict(value, matches=value.get('matches', []))
 
 
+# 等待公开关联观察收敛，保留超时失败而不推测成功。
 def wait_associations(s, instance, timeout=90):
     return wait(lambda: s.association_preview(instance), lambda sources: not any(value.get('error') for value in sources.values()),
                 timeout=timeout, message='公开Agent依赖预检在有限时间内未收敛')
@@ -79,6 +85,7 @@ def _selector(selector):
     return ','.join(values)
 
 
+# 核实原 Agent Pod、容器与实际镜像身份。
 def _agent_identity(s, instance, namespace, name, target='data'):
     current = s.call('GET', '/instances/'+instance['id'])
     cr = s.get('prometheusagent', name, '-n', namespace, target=target)
@@ -92,11 +99,13 @@ def _agent_identity(s, instance, namespace, name, target='data'):
             'container': s.env.verify_container(pods[0], 'prometheus', s.env.official_configs['prometheus'])}
 
 
+# 核实真实 Prometheus Operator 进程，采集采用证据仍独立验证。
 def _operator(s):
     dep = s.get('deployment', 'prometheus-operator', '-n', 'mm-operators', target='data')
     selector = _selector(dep['spec']['selector'])
     pod = next(value for value in s.get('pods', '-n', 'mm-operators', '-l', selector, target='data')['items'] if not value['metadata'].get('deletionTimestamp'))
     before = s.env.verify_container(pod, 'prometheus-operator', s.env.official_configs['promop'])
+    # 读取原 Operator Pod 的运行指标。
     def metrics():
         raw = s.k('get', '--raw', '/api/v1/namespaces/mm-operators/pods/'+pod['metadata']['name']+':8080/proxy/metrics', target='data').stdout.decode()
         out = []
@@ -156,6 +165,7 @@ def receiver_query(s, namespace, receiver_pod, expression, at=None, target='data
     return [{'metric': {key: value for key, value in row['metric'].items() if key in allowed}, 'value': row['value']} for row in response['data']['result']]
 
 
+# 按创建用户分组验证实际 targets、样本及零误采集边界。
 def creator_collection(s):
     s.by('I30-K01：独占空scrape receiver、真实SM只读平台SA与两个创建用户')
     s.prepare('-creator-collection', 'data', 'agent')
@@ -171,9 +181,11 @@ def creator_collection(s):
     s.env.command(['helm', 'upgrade', '--install', receiver, ROOT/'charts/test-receiver', '--kubeconfig', target['kubeconfig'], '--kube-context', target['context'], '--namespace', namespace, '--set-string', 'image='+LOCK['images']['prometheus']['image'], '--set-string', 'runId='+s.env.run_id, '--wait', '--timeout', '120s'], 'helm-creator-receiver', timeout=150)
     receiver_pod = s.get('pods', '-n', namespace, '-l', 'app='+receiver, target='data')['items'][0]
     receiver_name = receiver_pod['metadata']['name']
+    # 记录空 scrape receiver 的原进程及配置。
     def receiver_state():
         cfg = _adopted(s, namespace, receiver_name)
         return {'process': _process(s, namespace, receiver_name), 'scrapeConfigs': cfg.get('scrape_configs', []), 'remoteWrite': cfg.get('remote_write', []), 'configSHA256': hashlib.sha256(yaml.safe_dump(cfg).encode()).hexdigest(), 'args': receiver_pod['spec']['containers'][0]['args']}
+    # 在关联变化前后核对原 Operator 身份。
     def monitor_operator():
         deployment = s.env.operator_deployments['data']
         dep = s.get('deployment', deployment['name'], '-n', deployment['namespace'], target='data')
@@ -186,8 +198,10 @@ def creator_collection(s):
     admin_id = s.call('GET', '/session')['account']['id']; admin_client = s.http
     user, user_client = s.user('creator-collection')
     s.call('POST', '/clusters/'+cluster['id']+'/transfer', {'ownerId': user['id']})
+    # 组合显式目标集群与当前实例的验收上下文。
     def context(component, ns, name):
         s.component = component; s.target = 'data'; s.targetns = ns; s.crname = name; s.cluster = cluster
+    # 创建并发布当前用户的 exporter，保留原资源 UID。
     def exporter(role, number, client):
         ns = s.a.prefix+'-'+role+'-export'+str(number); s.namespace(ns, 'data')
         s.k('label', 'namespace', ns, SCOPE_LABEL+'='+s.a.prefix, target='data')
@@ -198,14 +212,18 @@ def creator_collection(s):
         started = time.time()
         with s.using(client): instance = s.create(cfg); s.publish(instance)
         return exporter_targets(s, instance, started)
+    # 从独占 receiver 查询真实收到的样本。
     def query(expression, at=None): return receiver_query(s, namespace, receiver_name, expression, at)
+    # 将固定标签安全编码为 PromQL 查询表达式。
     def expression(labels): return 'kube_pod_info{'+','.join(key+'='+json.dumps(value) for key, value in labels.items())+'}'
+    # 等待当前分组目标被原 Agent 实际采用。
     def adopted(group):
         jobs = {target['job'] for exported in group['exports'] for target in exported['targets']}
         count = sum(len(exported['targets']) for exported in group['exports'])
         return wait(lambda: _configuration(s, namespace, group['identity']['pod']['metadata']['name']),
                     lambda value: set(value['jobs']) == jobs and len(value['activeTargets']) == count and all(t['health'] == 'up' for t in value['activeTargets']),
                     timeout=120, message='Agent原进程未采用精确配套jobs或实际targets未收敛')
+    # 验证当前分组的真实 exporter 样本。
     def samples(group):
         prometheus = group['adopted']['externalLabels']['prometheus']; observations = []
         for exported in group['exports']:
@@ -217,6 +235,7 @@ def creator_collection(s):
                     times = query('timestamp('+expr+')', rows[0]['value'][0])
                     observations.append({'query': labels, 'results': rows, 'timestampResults': times, 'notBefore': max(group['publishedAt'], exported['startedAt']), 'receiverPodUID': proof['receiverBefore']['process']['podUID']})
         return observations
+    # 独立验证其他用户目标和样本没有进入当前分组。
     def negatives(group, other):
         # 关键：动态前后分别实际查询，不能用最终负样本倒推新增前的隔离结果。
         identity = group['adopted']['externalLabels']['prometheus']
@@ -272,6 +291,7 @@ def creator_collection(s):
     for rule in rules:
         if 'servicemonitors' in rule.get('resources', []): rule['resources'].remove('servicemonitors')
     rules = [r for r in rules if r.get('resources') or r.get('nonResourceURLs')]
+    # 通过公开草稿/发布入口切换选择规则。
     def set_rules(value):
         current = s.get('clusterrole', role['name'], target='data')
         s.k('patch', 'clusterrole', role['name'], '--type=json', '-p', json.dumps([{'op': 'test', 'path': '/metadata/uid', 'value': original['metadata']['uid']}, {'op': 'test', 'path': '/metadata/resourceVersion', 'value': current['metadata']['resourceVersion']}, {'op': 'replace', 'path': '/rules', 'value': value}]), target='data')

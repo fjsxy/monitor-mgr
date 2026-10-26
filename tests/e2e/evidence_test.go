@@ -9,9 +9,12 @@ import (
 var issueEvidenceAssertions = map[string]func(map[string]json.RawMessage){}
 var requiredIssueEvidence = map[string][]string{}
 
+// registerIssueEvidence 登记 Issue 证据对应的 Ginkgo 断言入口。
 func registerIssueEvidence(key string, assertion func(map[string]json.RawMessage)) {
 	issueEvidenceAssertions[key] = assertion
 }
+
+// requireIssueEvidence 为稳定用例登记不可遗漏的 Issue 原始证据。
 func requireIssueEvidence(caseID, key string) {
 	requiredIssueEvidence[caseID] = append(requiredIssueEvidence[caseID], key)
 }
@@ -28,6 +31,7 @@ func assertIssueEvidence(caseID string, evidence map[string]json.RawMessage) {
 	}
 }
 
+// init 将创建身份与历史身份断言绑定既有稳定 E2E 用例。
 func init() {
 	registerIssueEvidence("issue25", assertIssue25Evidence)
 	requireIssueEvidence("E2E-08", "issue25")

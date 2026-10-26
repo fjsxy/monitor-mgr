@@ -645,3 +645,91 @@ func checkHistoricalSingleCR(t ginkgo.GinkgoTInterface) {
 		ginkgo.AddReportEntry(idCase, "原版本单CR恢复不依赖新SM能力，不混入新草稿")
 	}
 }
+
+// checkHistoricalDeletionRelease 将独立旧删除夹具从外部清理核验到明确收尾，未知发送事实仍原样保留。
+func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
+	for _, variant := range []string{"clear", "replacement-parent", "replacement-sm", "workload", "read-denied", "wrong-snapshot", "wrong-uid", "unresolved-sm", "ordinary"} {
+		ginkgo.By("I23-R10.delete-" + variant)
+		p, a, u, id, f, cfg, op := migrationFixture(t, "IDENTITY_UNCERTAIN")
+		Expect(p.Close(context.Background())).To(Succeed())
+		db, e := sql.Open("sqlite", filepath.Join(cfg.DataDir, "platform.db"))
+		Expect(e).NotTo(HaveOccurred())
+		_, e = db.Exec(`INSERT INTO deletion_operations(operation_id,instance_id,version_id,original_uid,cr_path,target_namespace,preview_id) SELECT operation_id,instance_id,version_id,'created-uid','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/lifecycle','monitoring','' FROM publication_operations WHERE operation_id=$operation; DELETE FROM publication_operations WHERE operation_id=$operation; UPDATE operations SET action='DELETE',state='DELETION_VERIFYING' WHERE id=$operation; UPDATE resource_progress SET state='DELETION_VERIFYING',possibly_sent=1 WHERE attempt_id=(SELECT current_attempt_id FROM operation_lifecycle WHERE operation_id=$operation)`, sql.Named("operation", op["operationId"]))
+		Expect(e).NotTo(HaveOccurred())
+		Expect(db.Close()).To(Succeed())
+		f.mu.Lock()
+		f.cr = nil
+		f.legacySM = nil
+		f.owned = map[string][]any{}
+		f.mu.Unlock()
+		p, e = platform.Start(context.Background(), cfg)
+		Expect(e).NotTo(HaveOccurred())
+		t.Cleanup(func() { p.Close(context.Background()) })
+		inv := clusterCall(t, p, "GET", "/instances/"+id+"/historical-migration", nil, a, "", 200)
+		rs := inv["resources"].([]any)
+		bodyFor := func(v map[string]any) map[string]any {
+			return map[string]any{"snapshotId": inv["snapshotId"], "operationId": v["operationId"], "resourceKey": v["resourceKey"], "objectPath": v["objectPath"], "originalUid": v["originalUid"], "documentFingerprint": v["documentFingerprint"], "confirmExternalHandling": true}
+		}
+		if variant != "unresolved-sm" {
+			clusterCall(t, p, "POST", "/instances/"+id+"/historical-servicemonitor-resolutions", bodyFor(rs[1].(map[string]any)), a, "resolve-old-delete-sm", 200)
+		}
+		before := clusterCall(t, p, "GET", "/operations/"+op["operationId"].(string), nil, a, "", 200)
+		f.mu.Lock()
+		switch variant {
+		case "replacement-parent":
+			f.cr = map[string]any{"metadata": map[string]any{"uid": "replacement"}}
+		case "replacement-sm":
+			f.legacySM = map[string]any{"metadata": map[string]any{"uid": "replacement-sm"}}
+		case "workload":
+			f.owned["/apis/apps/v1/namespaces/monitoring/deployments"] = []any{map[string]any{"metadata": map[string]any{"name": "leftover", "namespace": "monitoring", "uid": "leftover", "ownerReferences": []any{map[string]any{"uid": "created-uid", "controller": true}}}}}
+		case "read-denied":
+			f.readFailure = true
+		}
+		f.mu.Unlock()
+		body := bodyFor(rs[0].(map[string]any))
+		if variant == "wrong-uid" {
+			body["originalUid"] = "replacement"
+		}
+		if variant == "wrong-snapshot" {
+			body["snapshotId"] = "unknown-snapshot"
+		}
+		status := 409
+		client := a
+		if variant == "clear" {
+			status = 200
+		}
+		if variant == "ordinary" {
+			status = 403
+			client = u
+		}
+		result := clusterCall(t, p, "POST", "/instances/"+id+"/historical-operation-releases", body, client, "release-old-delete", status)
+		if variant == "clear" {
+			Expect(result["parentReleased"]).To(BeTrue())
+			current := clusterCall(t, p, "GET", "/instances/"+id, nil, a, "", 200)
+			Expect(current["lifecycle"]).To(Equal("DELETED"))
+			Expect(clusterCall(t, p, "POST", "/instances/"+id+"/historical-operation-releases", body, a, "release-old-delete", 200)).To(Equal(result))
+		}
+		current := clusterCall(t, p, "GET", "/instances/"+id, nil, a, "", 200)
+		inventory := clusterCall(t, p, "GET", "/instances/"+id+"/historical-migration", nil, a, "", 200)
+		if variant == "clear" {
+			Expect(inventory["protectionOperationId"]).To(Equal(""))
+		} else {
+			Expect(current["lifecycle"]).NotTo(Equal("DELETED"))
+			Expect(inventory["protectionOperationId"]).To(Equal(op["operationId"]))
+		}
+		after := clusterCall(t, p, "GET", "/operations/"+op["operationId"].(string), nil, a, "", 200)
+		if variant == "clear" {
+			Expect(after["state"]).To(Equal("HISTORICAL_RESOLVED"))
+		}
+		for n, raw := range before["resources"].([]any) {
+			old := raw.(map[string]any)
+			now := after["resources"].([]any)[n].(map[string]any)
+			for _, key := range []string{"state", "possiblySent", "confirmedUid", "target"} {
+				Expect(now[key]).To(Equal(old[key]))
+			}
+		}
+		f.mu.Lock()
+		Expect(f.smWrites).To(BeZero())
+		f.mu.Unlock()
+	}
+}

@@ -40,6 +40,11 @@ def group_members(pgid):
 class ProcessFailure(RuntimeError):
     """公开异常只包含稳定标签及 exit，不包含命令参数或原始输出。"""
 
+    def __init__(self, message, *, child_exit=None, timed_out=False):
+        """结构化保存真实子进程结果，调用者不必解析可能含私有标签的异常正文。"""
+        super().__init__(message)
+        self.child_exit, self.timed_out = child_exit, timed_out
+
 
 class ProcessRunner:
     """统一捕获真实子进程，并为辅助进程保存可核验的本次身份。"""
@@ -155,9 +160,9 @@ class ProcessRunner:
         if interrupted:
             raise interrupted
         if timed_out:
-            raise ProcessFailure(label + " 超过预算；原始输出已私有捕获")
+            raise ProcessFailure(label + " 超过预算；原始输出已私有捕获", child_exit=child.returncode, timed_out=True)
         if check and result.returncode:
-            raise ProcessFailure(label + " exit=" + str(result.returncode))
+            raise ProcessFailure(label + " exit=" + str(result.returncode), child_exit=child.returncode)
         if text or encoding:
             result.stdout = result.stdout.decode(encoding or "utf-8", errors="replace")
             result.stderr = result.stderr.decode(encoding or "utf-8", errors="replace")

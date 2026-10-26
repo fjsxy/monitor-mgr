@@ -21,6 +21,7 @@ import (
 	"time"
 )
 
+// checkTestHistoricalCreatorEvidence 验证可靠旧创建证据、未知与冲突分别保留。
 func checkTestHistoricalCreatorEvidence(t ginkgo.GinkgoTInterface) {
 	ginkgo.By("I26-01/02/03：真实 v10 schema 只从唯一且一致的 CREATE_INSTANCE actor 补齐创建用户")
 	for _, variant := range []string{"reliable-ksm", "reliable-agent", "renamed-ksm", "renamed-agent", "v11", "v11-known-admin", "v11-known-user", "missing", "conflict", "wrong-target", "wrong-cluster", "wrong-id", "wrong-component", "missing-actor", "malformed"} {
@@ -175,6 +176,7 @@ func historicalFixture(t ginkgo.GinkgoTInterface, boundary func(string, string) 
 	return p, admin, user, i["id"].(string), cluster, target, cfg
 }
 
+// checkTestHistoricalManagementConfirmation 验证管理员显式管理确认独立于历史创建事实。
 func checkTestHistoricalManagementConfirmation(t ginkgo.GinkgoTInterface) {
 	ginkgo.By("I26-04/05/06/07：管理员独立确认管理权限，留存 actor/time/result 且不改历史事实")
 	p, admin, user, id, cluster, _, cfg := historicalFixture(t, nil)
@@ -226,6 +228,8 @@ func checkTestHistoricalManagementConfirmation(t ginkgo.GinkgoTInterface) {
 	}
 	clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 2, "ksm": ksmConfig("lifecycle")}, user, "revoked-save", 403)
 }
+
+// checkTestHistoricalManagementDirectRPC 通过直接 Kitex RPC 验证确认权限不能被 HTTP 绕过。
 func checkTestHistoricalManagementDirectRPC(t ginkgo.GinkgoTInterface) {
 	ginkgo.By("I26-06/07：真实直接 RPC 重新认证管理员且不能弱化已知创建角色")
 	p, admin, user, id, cluster, _, _ := historicalFixture(t, nil)
@@ -259,6 +263,7 @@ func checkTestHistoricalManagementDirectRPC(t ginkgo.GinkgoTInterface) {
 	ginkgo.AddReportEntry("I26-06/07", "HTTP/RPC 当前管理员授权、已知角色、外部及注销实例边界均通过")
 }
 
+// checkTestHistoricalManagementDispatchRevocation 验证后台实际派发前重新检查已撤销的历史管理权限。
 func checkTestHistoricalManagementDispatchRevocation(t ginkgo.GinkgoTInterface) {
 	ginkgo.By("I26-05：管理员撤销独立权限确认后，已受理且未发送的普通用户任务不能写入")
 	entered, release := make(chan struct{}), make(chan struct{})

@@ -78,6 +78,7 @@ var _ = ginkgo.It("UT-09 幂等与受理事务", func() {
 
 var _ = ginkgo.It("UT-10 派发取消与任务授权", func() {
 	t := ginkgo.GinkgoT()
+	checkExporterOperatorDispatch(t)
 	checkTestInstanceDispatchReauthorizesCreatorProtection(t)
 	checkTestHistoricalManagementDispatchRevocation(t)
 	checkTestInstanceDispatchRejectsDisabledAccount(t)
@@ -99,6 +100,7 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 	checkHistoricalMigrationInventory(t)
 	checkHistoricalMigrationResolutions(t)
 	checkHistoricalParentRelease(t)
+	checkHistoricalDeletionRelease(t)
 	checkHistoricalMigrationBoundaries(t)
 	checkHistoricalAgentImpact(t)
 	checkHistoricalNewPublicationRecovery(t)

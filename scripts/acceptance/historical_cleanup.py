@@ -2,6 +2,7 @@
 import json
 
 
+# 关键：按已登记原 UID 清理资源；同名替代必须拒绝。
 def cleanup_registered(s, key, uid):
     target,kind,namespace,name=key
     receipt={'success':False,'phase':'read','reason':'read-failed'}

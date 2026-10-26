@@ -54,6 +54,7 @@ def bundle_proof(directory, lock=None):
 def anonymous_bytes(url):
     """公开浏览地址只走经 TLS 校验的 HTTPS，不读 gh/用户登录材料。"""
     class HTTPSRedirect(urllib.request.HTTPRedirectHandler):
+        # 关键：所有重定向仍须使用 HTTPS，禁止降级传输。
         def redirect_request(self, request, fp, code, message, headers, newurl):
             if urllib.parse.urlsplit(newurl).scheme != 'https':
                 raise ReleaseError('RELEASE_HTTPS_REQUIRED')
@@ -99,6 +100,7 @@ def fetch_source(directory):
     env = {key: value for key, value in os.environ.items() if not key.startswith(('GIT_', 'GH_')) and key not in ('GITHUB_TOKEN', 'SSH_AUTH_SOCK')}
     env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull, GIT_TERMINAL_PROMPT='0',
                GIT_ASKPASS='false', GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='credential.helper', GIT_CONFIG_VALUE_0='')
+    # 执行禁用用户凭据的 Git 命令，原输出仅留在内存供摘要核验。
     def run(*args):
         result = subprocess.run(['git', '-C', str(directory), *args], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
         if result.returncode: raise ReleaseError('RELEASE_SOURCE_FETCH_FAILED')
@@ -112,6 +114,7 @@ def fetch_source(directory):
     return dict(source=actual, repository=repository, dirty=False, anonymous=True)
 
 
+# 解析 source/fetch/verify CLI 参数并仅输出安全错误码。
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_subparsers(dest='action', required=True)

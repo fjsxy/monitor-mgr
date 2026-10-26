@@ -7,6 +7,8 @@ import (
 	"github.com/fjsxy/monitor-mgr/internal/platform"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	ginkgo "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -48,6 +50,7 @@ func checkExporterCollectionIntent(t ginkgo.GinkgoTInterface) {
 
 // 旧 schema 可能接受请求却裁掉字段，必须在任何 CR 写入之前识别。
 func checkExporterCollectionCapability(t ginkgo.GinkgoTInterface) {
+	checkExporterOperatorRuntime(t)
 	for _, field := range []string{"spec.serviceMonitor", "spec.serviceMonitor.enabled", "spec.serviceMonitor.interval", "status.serviceMonitor.resource.uid", "status.serviceMonitor.state"} {
 		ginkgo.By("I28-U03.crd：实际 served schema 缺失/错误 " + field + " 时零业务写拒绝")
 		p, c, id, f := ksmPublishedFixture(t)
@@ -111,6 +114,8 @@ func collectionObservationFixture(f *ksmFixture, uid string) {
 	f.cr["status"] = map[string]any{"serviceMonitor": map[string]any{"observedGeneration": f.cr["metadata"].(map[string]any)["generation"], "state": "Ready", "reason": "ReconcileSucceeded", "message": "配套配置已收敛", "resource": map[string]any{"apiVersion": "monitoring.coreos.com/v1", "kind": "ServiceMonitor", "namespace": "monitoring", "name": "operator-chosen.independent", "uid": uid}}, "conditions": []any{map[string]any{"type": "ServiceMonitorReady", "status": "True", "observedGeneration": f.cr["metadata"].(map[string]any)["generation"]}}}
 	f.legacySM = map[string]any{"apiVersion": "monitoring.coreos.com/v1", "kind": "ServiceMonitor", "metadata": map[string]any{"name": "operator-chosen.independent", "namespace": "monitoring", "uid": uid, "resourceVersion": "42", "ownerReferences": []any{map[string]any{"apiVersion": "monitoring.fjsxy.github.io/v1alpha1", "kind": "KubeStateMetrics", "name": f.cr["metadata"].(map[string]any)["name"], "uid": "created-uid", "controller": true}}}, "spec": map[string]any{"endpoints": []any{map[string]any{"port": "arbitrary-metrics"}}}}
 }
+
+// collectionSource 通过公开实例接口读取配套来源，确保读取模型经真实 RPC。
 func collectionSource(t ginkgo.GinkgoTInterface, p *platform.Runtime, c *http.Cookie, id string) map[string]any {
 	t.Helper()
 	v := clusterCall(t, p, "GET", "/instances/"+id, nil, c, "", 200)
@@ -244,6 +249,99 @@ func checkExporterUnknownCreator(t ginkgo.GinkgoTInterface) {
 		denied := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, actor, fmt.Sprint("unknown-creator-", n), 409)
 		Expect(denied["message"]).To(ContainSubstring("创建用户未知"))
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	Expect(f.mutationRequests).To(BeZero())
+	Expect(f.smWrites).To(BeZero())
+}
+
+// exporterRuntimeFixture 表达已批准 RC4 的实际运行身份，不以 tag 或 CRD 冒充进程能力。
+func exporterRuntimeFixture() map[string]map[string]any {
+	image := "docker.io/fjsxy/monitor-in-hand@sha256:1a9ec41de21c7b2b633ee7179f5f3f4c1a9e098f1dc4e74a9e720dbee73f19ff"
+	container := map[string]any{"name": "manager", "image": image, "args": []any{"--leader-elect=true", "--health-probe-bind-address=:8081", "--log-level=info"}}
+	metadata := func(name, uid string) map[string]any {
+		return map[string]any{"name": name, "namespace": "operator-system", "uid": uid}
+	}
+	dep := map[string]any{"metadata": metadata("monitor-in-hand", "operator-dep"), "spec": map[string]any{"template": map[string]any{"spec": map[string]any{"serviceAccountName": "operator", "containers": []any{container}}}}}
+	rsMeta := metadata("operator-rs", "operator-rs")
+	rsMeta["ownerReferences"] = []any{map[string]any{"kind": "Deployment", "uid": "operator-dep", "controller": true}}
+	rs := map[string]any{"metadata": rsMeta}
+	podMeta := metadata("operator-pod", "operator-pod")
+	podMeta["ownerReferences"] = []any{map[string]any{"kind": "ReplicaSet", "uid": "operator-rs", "controller": true}}
+	pod := map[string]any{"metadata": podMeta, "spec": map[string]any{"serviceAccountName": "operator", "containers": []any{container}}, "status": map[string]any{"phase": "Running", "containerStatuses": []any{map[string]any{"name": "manager", "ready": true, "containerID": "containerd://original", "imageID": "docker-pullable://docker.io/fjsxy/monitor-in-hand@sha256:0eadb4af76f5a1c72eb3f5bb4b8372eab43dbabb0a4dfb194866d58cf854ebde"}}}}
+	return map[string]map[string]any{"/apis/apps/v1/deployments": {"items": []any{dep}}, "/apis/apps/v1/namespaces/operator-system/replicasets": {"items": []any{rs}}, "/api/v1/namespaces/operator-system/pods": {"items": []any{pod}}, "/api/v1/namespaces/operator-system/pods/operator-pod": pod}
+}
+
+// checkExporterOperatorRuntime 经公开预览拒绝缺失、旧版本及无法核实的实际 controller。
+func checkExporterOperatorRuntime(t ginkgo.GinkgoTInterface) {
+	for _, variant := range []string{"absent", "old", "tag-only", "wrong-digest", "not-ready", "read-denied"} {
+		ginkgo.By("I23-R09.runtime-" + variant)
+		p, a, id, f := ksmPublishedFixture(t)
+		f.mu.Lock()
+		pod := f.exporterRuntime["/api/v1/namespaces/operator-system/pods/operator-pod"]
+		c := pod["spec"].(map[string]any)["containers"].([]any)[0].(map[string]any)
+		status := pod["status"].(map[string]any)["containerStatuses"].([]any)[0].(map[string]any)
+		switch variant {
+		case "absent":
+			f.exporterRuntime["/apis/apps/v1/deployments"] = map[string]any{"items": []any{}}
+		case "old":
+			c["image"] = "docker.io/fjsxy/monitor-in-hand:0.1.0"
+		case "tag-only":
+			c["image"] = "docker.io/fjsxy/monitor-in-hand:0.2.0-rc.4"
+		case "wrong-digest":
+			status["imageID"] = "docker.io/fjsxy/monitor-in-hand@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		case "not-ready":
+			status["ready"] = false
+		case "read-denied":
+			f.exporterRuntimeDenied = true
+		}
+		f.mu.Unlock()
+		response := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, a, "runtime-"+variant, 409)
+		Expect(response["code"]).To(Equal("CONFLICT"))
+		f.mu.Lock()
+		Expect(f.mutationRequests).To(BeZero())
+		Expect(f.smWrites).To(BeZero())
+		f.mu.Unlock()
+	}
+	// 预览时的运行能力不能作为稍后发布的永久凭据。
+	p, a, id, f := ksmPublishedFixture(t)
+	preview := ksmPreview(t, p, a, id, 1)
+	f.mu.Lock()
+	f.exporterRuntime["/apis/apps/v1/deployments"] = map[string]any{"items": []any{}}
+	f.mu.Unlock()
+	clusterCall(t, p, "POST", "/instances/"+id+"/publications", map[string]any{"draftRevision": 1, "previewId": preview["previewId"]}, a, "runtime-recheck", 409)
+
+	ginkgo.By("I23-R09.disabled：关闭配套采集不新增运行 controller 依赖")
+	config := ksmConfig("instance")
+	config["serviceMonitor"] = map[string]any{"enabled": false}
+	clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "ksm": config}, a, "runtime-disable", 200)
+	ksmPreview(t, p, a, id, 2)
+}
+
+// checkExporterOperatorDispatch 验证受理时的运行证据不能绕过后台实际写入前的再次预检。
+func checkExporterOperatorDispatch(t ginkgo.GinkgoTInterface) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once, released sync.Once
+	defer released.Do(func() { close(release) })
+	p, a, id, f := lifecycleFixture(t, func(stage, id string) error {
+		if stage == "beforeDispatch" {
+			once.Do(func() { close(entered) })
+			<-release
+		}
+		return nil
+	})
+	op := lifecyclePublish(t, p, a, id)
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("未到实际派发屏障")
+	}
+	f.mu.Lock()
+	f.exporterRuntime["/apis/apps/v1/deployments"] = map[string]any{"items": []any{}}
+	f.mu.Unlock()
+	released.Do(func() { close(release) })
+	done := awaitLifecycleState(t, p, a, op["operationId"].(string), "FAILED")
+	Expect(done["message"]).To(ContainSubstring("exporter Operator"))
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	Expect(f.mutationRequests).To(BeZero())

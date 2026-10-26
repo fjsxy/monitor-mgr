@@ -129,6 +129,7 @@ func (s *Store) refreshExporterCompanion(ctx context.Context, i *rpc.Observation
 	save(nil)
 }
 
+// companionController 关键：配套对象的 controller owner 必须指向实例已确认的父 UID，不能仅按名称接管。
 func companionController(meta map[string]any, i *rpc.ObservationInstance) bool {
 	refs, _ := meta["ownerReferences"].([]any)
 	for _, raw := range refs {

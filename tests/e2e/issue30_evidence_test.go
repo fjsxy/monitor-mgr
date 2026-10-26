@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
+// init 将 Agent 实际采集与创建用户隔离证据绑定稳定用例。
 func init() {
 	registerIssueEvidence("issue30", assertIssue30Evidence)
 	requireIssueEvidence("E2E-04", "issue30")

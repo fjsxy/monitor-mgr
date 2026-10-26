@@ -6,24 +6,29 @@ import uuid
 from agent_storage import wait
 
 
+# 抽取实际 Kubernetes 对象身份字段。
 def _metadata(obj):
     m = obj.get('metadata', {})
     return {key: copy.deepcopy(m[key]) for key in ('name', 'namespace', 'uid', 'resourceVersion', 'generation', 'labels', 'ownerReferences', 'deletionTimestamp') if key in m}
 
 
+# 保留当前验收所需的资源身份和配置快照。
 def _object(obj):
     return {key: copy.deepcopy(obj[key]) for key in ('apiVersion', 'kind', 'spec', 'status') if key in obj} | {'metadata': _metadata(obj)}
 
 
+# 读取平台实例绑定的真实父 CR。
 def _parent(s, instance):
     return s.get('kubestatemetrics', instance['name'], target=s.target)
 
 
+# 等待 Operator 配套观察达到指定状态。
 def _settled(s, instance, state='Ready'):
     # 等待只决定采证时间；完整身份/状态/所有权结论仍由 Go 断言。
     return wait(lambda: _parent(s, instance), lambda cr: cr.get('status', {}).get('serviceMonitor', {}).get('state') == state and cr.get('status', {}).get('serviceMonitor', {}).get('observedGeneration') == cr['metadata']['generation'], timeout=100, message='Operator 配套观察未到达采证阶段 '+state)
 
 
+# 分别保存父 CR、配套对象与平台观察证据。
 def snapshot(s, instance, state='Ready'):
     parent = _settled(s, instance, state)
     s.call('POST', '/instances/' + instance['id'] + '/refresh', {})
@@ -45,11 +50,13 @@ def snapshot(s, instance, state='Ready'):
     return {'instance': {key: current.get(key) for key in ('id', 'uid', 'name', 'creatorUserId', 'currentVersionId', 'lifecycle')}, 'parent': _object(parent), 'companion': companion, 'sources': sources, 'version': version, 'services': [_object(value) for value in services], 'endpoints': [_object(value) | {'subsets': value.get('subsets', [])} for value in endpoints]}
 
 
+# 记录单实例配套拓扑与跨实例隔离证据。
 def topology(s, instance):
     proof = s.acceptance_evidence.setdefault('issue28', {'testedCommit': s.env.candidate, 'topologies': []})
     proof['topologies'].append(snapshot(s, instance))
 
 
+# 通过明确发布和外部故障验证配套生命周期。
 def lifecycle(s):
     s.by('I28-K01：真实 SM read/no-write SA 发布两个 exporter，审计全部 SM 写尝试')
     s.prepare('-collection', 'control')
@@ -118,11 +125,13 @@ def lifecycle(s):
     for rule in rules:
         if 'servicemonitors' in rule.get('resources', []): rule['resources'].remove('servicemonitors')
     rules = [rule for rule in rules if rule.get('resources') or rule.get('nonResourceURLs')]
+    # 通过公开草稿/发布入口切换选择规则。
     def set_rules(value):
         current = s.get('clusterrole', role['name'], target=s.target)
         s.k('patch', 'clusterrole', role['name'], '--type=json', '-p', json.dumps([{'op':'test','path':'/metadata/uid','value':original_role['metadata']['uid']},{'op':'test','path':'/metadata/resourceVersion','value':current['metadata']['resourceVersion']},{'op':'replace','path':'/rules','value':value}]), target=s.target)
     set_rules(rules)
     try:
+        # 重新读取各来源的独立观察时间。
         def read_sources():
             s.call('POST', '/instances/' + first['id'] + '/refresh', {})
             return [source for source in s.call('GET', '/instances/' + first['id']).get('sources', []) if source['source'] == 'ServiceMonitor']

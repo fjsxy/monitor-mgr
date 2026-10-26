@@ -8,14 +8,14 @@ export type ResourceProgress={target:{key:string;apiVersion:string;kind:string;n
 export type Operation = { operationId:string; action?:string; state:string; message:string; createdAt:string; versionId?:string; attemptId?:string; instanceId?:string; revision?: Int64; storageResult?:string;storageVolumes?:StorageVolume[];resources?:ResourceProgress[] };
 export type DeletionPreview=StorageImpactValue & {previewId:string;instanceId:string;versionId:string;uid:string;name:string;namespace:string;impactNamespaces:string[]};
 type Attempt = { attemptId:string; state:string; possiblySent:boolean; revision: Int64; sequence: Int64; actorId:string; message:string; createdAt:string;resources?:ResourceProgress[] };
-const names:Record<string,string> = {HISTORICAL_PENDING:"历史步骤待人工处理",QUEUED:"已受理",CHECKING:"检查中",DISPATCHED:"可能已发送",SUCCEEDED:"已完成",FAILED:"失败",CANCELLED:"已取消",WAITING_CONFIRMATION:"等待明确继续",RESULT_UNCERTAIN:"结果待确认",IDENTITY_UNCERTAIN:"资源身份无法确认",DELETION_VERIFYING:"清理核验中",DELETION_BLOCKED:"清理受阻"};
+const names:Record<string,string> = {HISTORICAL_RESOLVED:"历史删除已显式收尾",HISTORICAL_PENDING:"历史步骤待人工处理",QUEUED:"已受理",CHECKING:"检查中",DISPATCHED:"可能已发送",SUCCEEDED:"已完成",FAILED:"失败",CANCELLED:"已取消",WAITING_CONFIRMATION:"等待明确继续",RESULT_UNCERTAIN:"结果待确认",IDENTITY_UNCERTAIN:"资源身份无法确认",DELETION_VERIFYING:"清理核验中",DELETION_BLOCKED:"清理受阻"};
 export function LifecycleActions({operation,onOperation,canManage}:{operation:Operation;canManage:boolean;onOperation:(value:Operation)=>Promise<void>|void}) {
  const [attempts,setAttempts]=useState<Attempt[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[deleteConfirm,setDeleteConfirm]=useState<{action:string;preview:DeletionPreview}|null>(null);
  const command=useRef<{signature:string;key:ReturnType<typeof crypto.randomUUID>}|null>(null);
  async function load(){const result=await api<{attempts:Attempt[]}>(`/operations/${operation.operationId}/attempts`);setAttempts(result.attempts)}
  useEffect(()=>{void load().catch(()=>setError("执行尝试读取失败，请刷新历史"))},[operation.operationId,operation.state,operation.revision]);
  const current=attempts.find(a=>a.attemptId===operation.attemptId);
- const historicalPending=operation.resources?.some(r=>r.historicalPending);
+ const historicalPending=operation.state!=="HISTORICAL_RESOLVED"&&operation.resources?.some(r=>r.historicalPending);
  const unsent=!historicalPending&&current && !current.possiblySent && ["QUEUED","CHECKING","WAITING_CONFIRMATION"].includes(operation.state);
  async function act(action:string,deletePreviewId?:string){
   if(!current || (!canManage && action!=="refresh"))return;setBusy(true);setError("");
