@@ -366,7 +366,7 @@ func checkAgentUnknownCreatorCustom(t ginkgo.GinkgoTInterface) {
 		after := readJSON(t, p, "/instances/"+id, user)
 		Expect(after["creatorRole"]).To(BeEmpty())
 		Expect(after["creatorUserId"]).To(Equal(got["creatorUserId"]))
-		ginkgo.AddReportEntry(id, "权限确认不补造身份，custom selector按独立授权保存/真实RPC回读")
+		ginkgo.AddReportEntry(idText, "权限确认不补造身份，custom selector按独立授权保存/真实RPC回读")
 		Expect(p.Close(context.Background())).To(Succeed())
 	}
 }
