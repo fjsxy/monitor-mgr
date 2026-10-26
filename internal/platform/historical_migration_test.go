@@ -650,7 +650,11 @@ func checkHistoricalSingleCR(t ginkgo.GinkgoTInterface) {
 
 // checkHistoricalDeletionRelease 将独立旧删除夹具从外部清理核验到明确收尾，未知发送事实仍原样保留。
 func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
-	for _, variant := range []string{"clear", "replacement-parent", "replacement-sm", "workload", "read-denied", "wrong-snapshot", "wrong-uid", "unresolved-sm", "ordinary"} {
+	variants := []string{"clear", "replacement-parent", "replacement-sm", "workload", "read-denied", "wrong-snapshot", "wrong-uid", "unresolved-sm", "ordinary", "graph-shape", "graph-page-denied", "graph-page-repeat", "graph-replacement", "graph-api-absent", "graph-sm-page-absent", "graph-seen-child"}
+	for kind := range historicalGraphFixtureKinds {
+		variants = append(variants, "leftover-"+kind, "denied-"+kind)
+	}
+	for _, variant := range variants {
 		ginkgo.By("I23-R10.delete-" + variant)
 		p, a, u, id, f, cfg, op := migrationFixture(t, "IDENTITY_UNCERTAIN")
 		Expect(p.Close(context.Background())).To(Succeed())
@@ -658,6 +662,10 @@ func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
 		Expect(e).NotTo(HaveOccurred())
 		_, e = db.Exec(`INSERT INTO deletion_operations(operation_id,instance_id,version_id,original_uid,cr_path,target_namespace,preview_id) SELECT operation_id,instance_id,version_id,'created-uid','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics/lifecycle','monitoring','' FROM publication_operations WHERE operation_id=$operation; DELETE FROM publication_operations WHERE operation_id=$operation; UPDATE operations SET action='DELETE',state='DELETION_VERIFYING' WHERE id=$operation; UPDATE resource_progress SET state='DELETION_VERIFYING',possibly_sent=1 WHERE attempt_id=(SELECT current_attempt_id FROM operation_lifecycle WHERE operation_id=$operation)`, sql.Named("operation", op["operationId"]))
 		Expect(e).NotTo(HaveOccurred())
+		if variant == "graph-replacement" || variant == "graph-seen-child" {
+			_, e = db.Exec(`INSERT INTO seen_resources VALUES(?,'v1','Service','monitoring','seen-name','seen-old','created-uid','/api/v1/namespaces/monitoring/services/seen-name')`, id)
+			Expect(e).NotTo(HaveOccurred())
+		}
 		Expect(db.Close()).To(Succeed())
 		f.mu.Lock()
 		f.cr = nil
@@ -687,6 +695,38 @@ func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
 		case "read-denied":
 			f.readFailure = true
 		}
+		if strings.HasPrefix(variant, "leftover-") {
+			kind := strings.TrimPrefix(variant, "leftover-")
+			info := historicalGraphFixtureKinds[kind]
+			namespace := "monitoring"
+			if info.cluster {
+				namespace = ""
+			}
+			obj := map[string]any{"apiVersion": info.api, "kind": kind, "metadata": map[string]any{"name": "additional-original", "namespace": namespace, "uid": "additional-original-uid", "ownerReferences": []any{map[string]any{"uid": "created-uid", "controller": true}}}}
+			f.exporterRuntime[info.path] = map[string]any{"items": []any{obj}}
+		}
+		if strings.HasPrefix(variant, "denied-") {
+			info := historicalGraphFixtureKinds[strings.TrimPrefix(variant, "denied-")]
+			f.resourceStatuses = map[string]int{info.path: 403}
+		}
+		switch variant {
+		case "graph-shape":
+			f.exporterRuntime["/api/v1/services"] = map[string]any{}
+		case "graph-page-denied", "graph-page-repeat":
+			f.exporterRuntime["/api/v1/services"] = map[string]any{"items": []any{}, "metadata": map[string]any{"continue": "again"}}
+			if variant == "graph-page-denied" {
+				f.resourceStatuses = map[string]int{"/api/v1/services#again": 403}
+			}
+		case "graph-replacement":
+			f.exporterRuntime["/api/v1/services"] = map[string]any{"items": []any{map[string]any{"metadata": map[string]any{"name": "seen-name", "namespace": "monitoring", "uid": "replacement-unowned"}}}}
+		case "graph-seen-child":
+			f.exporterRuntime["/apis/discovery.k8s.io/v1/endpointslices"] = map[string]any{"items": []any{map[string]any{"metadata": map[string]any{"name": "leftover-slice", "namespace": "monitoring", "uid": "slice-uid", "ownerReferences": []any{map[string]any{"uid": "seen-old", "controller": true}}}}}}
+		case "graph-sm-page-absent":
+			f.exporterRuntime["/apis/monitoring.coreos.com/v1/servicemonitors"] = map[string]any{"items": []any{}, "metadata": map[string]any{"continue": "again"}}
+			f.resourceStatuses = map[string]int{"/apis/monitoring.coreos.com/v1/servicemonitors#again": 404}
+		case "graph-api-absent":
+			f.resourceStatuses = map[string]int{"/apis/monitoring.coreos.com/v1/servicemonitors": 404}
+		}
 		f.mu.Unlock()
 		body := bodyFor(rs[0].(map[string]any))
 		if variant == "wrong-uid" {
@@ -697,7 +737,7 @@ func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
 		}
 		status := 409
 		client := a
-		if variant == "clear" {
+		if variant == "clear" || variant == "graph-api-absent" {
 			status = 200
 		}
 		if variant == "ordinary" {
@@ -705,7 +745,7 @@ func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
 			client = u
 		}
 		result := clusterCall(t, p, "POST", "/instances/"+id+"/historical-operation-releases", body, client, "release-old-delete", status)
-		if variant == "clear" {
+		if variant == "clear" || variant == "graph-api-absent" {
 			Expect(result["parentReleased"]).To(BeTrue())
 			current := clusterCall(t, p, "GET", "/instances/"+id, nil, a, "", 200)
 			Expect(current["lifecycle"]).To(Equal("DELETED"))
@@ -713,14 +753,14 @@ func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
 		}
 		current := clusterCall(t, p, "GET", "/instances/"+id, nil, a, "", 200)
 		inventory := clusterCall(t, p, "GET", "/instances/"+id+"/historical-migration", nil, a, "", 200)
-		if variant == "clear" {
+		if variant == "clear" || variant == "graph-api-absent" {
 			Expect(inventory["protectionOperationId"]).To(Equal(""))
 		} else {
 			Expect(current["lifecycle"]).NotTo(Equal("DELETED"))
 			Expect(inventory["protectionOperationId"]).To(Equal(op["operationId"]))
 		}
 		after := clusterCall(t, p, "GET", "/operations/"+op["operationId"].(string), nil, a, "", 200)
-		if variant == "clear" {
+		if variant == "clear" || variant == "graph-api-absent" {
 			Expect(after["state"]).To(Equal("HISTORICAL_RESOLVED"))
 		}
 		for n, raw := range before["resources"].([]any) {
@@ -730,7 +770,7 @@ func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
 				Expect(now[key]).To(Equal(old[key]))
 			}
 		}
-		if variant == "clear" {
+		if variant == "clear" || variant == "graph-api-absent" {
 			clusterID := current["clusterId"].(string)
 			actor := readJSON(t, p, "/session", a)["account"].(map[string]any)["id"]
 			clusterCall(t, p, "POST", "/clusters/"+clusterID+"/transfer", map[string]any{"ownerId": actor}, a, "resolved-delete-transfer", 200)
@@ -747,4 +787,16 @@ func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
 		Expect(f.smWrites).To(BeZero())
 		f.mu.Unlock()
 	}
+}
+
+// historicalGraphFixtureKinds 来自RC4正式资源种类及Service后代，独立列出API作用域，不复制任何资源命名。
+var historicalGraphFixtureKinds = map[string]struct {
+	api, path string
+	cluster   bool
+}{
+	"Service": {"v1", "/api/v1/services", false}, "ServiceAccount": {"v1", "/api/v1/serviceaccounts", false}, "Endpoints": {"v1", "/api/v1/endpoints", false},
+	"EndpointSlice": {"discovery.k8s.io/v1", "/apis/discovery.k8s.io/v1/endpointslices", false},
+	"Role":          {"rbac.authorization.k8s.io/v1", "/apis/rbac.authorization.k8s.io/v1/roles", false}, "RoleBinding": {"rbac.authorization.k8s.io/v1", "/apis/rbac.authorization.k8s.io/v1/rolebindings", false},
+	"ClusterRole": {"rbac.authorization.k8s.io/v1", "/apis/rbac.authorization.k8s.io/v1/clusterroles", true}, "ClusterRoleBinding": {"rbac.authorization.k8s.io/v1", "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings", true},
+	"ServiceMonitor": {"monitoring.coreos.com/v1", "/apis/monitoring.coreos.com/v1/servicemonitors", false},
 }

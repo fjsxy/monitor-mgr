@@ -5,6 +5,7 @@ import time
 from agent import Suite as AgentSuite
 from agent_storage import wait
 from e2e_environment import ROOT, LOCK
+from fixture_names import namespace_name
 
 
 # 读取 Agent 实际采用的旧/新 exporter 目标。
@@ -16,7 +17,7 @@ def _targets(s, namespace, pod):
 # 在显式切换前记录旧采集基线和真实样本。
 def begin(s, records):
     from agent_collection import observe_agent, adopted_configuration
-    exporter_ns=s.targetns;collector_ns=exporter_ns+'-agent';s.fixture(collector_ns,s.target)
+    exporter_ns=s.targetns;collector_ns=namespace_name(exporter_ns+'-agent');s.fixture(collector_ns,s.target)
     scope='monitor-mgr.test/migration-scope';s.k('label','namespace',exporter_ns,scope+'='+s.a.prefix,target=s.target)
     target=s.env.targets[s.target];receiver='migration-receiver'
     s.env.command(['helm','upgrade','--install',receiver,ROOT/'charts/test-receiver','--kubeconfig',target['kubeconfig'],'--kube-context',target['context'],'--namespace',collector_ns,'--set-string','image='+LOCK['images']['prometheus']['image'],'--set-string','runId='+s.env.run_id,'--wait','--timeout','120s'],'helm-migration-receiver',timeout=150)

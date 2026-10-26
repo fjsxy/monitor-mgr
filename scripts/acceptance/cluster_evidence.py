@@ -37,6 +37,8 @@ def platform_rbac(namespace, name, run_id):
         dict(apiGroups=['apps'], resources=['deployments', 'statefulsets', 'daemonsets'], verbs=READ + ['create', 'update']),
         dict(apiGroups=['apps'], resources=['replicasets'], verbs=READ),
         dict(apiGroups=['discovery.k8s.io'], resources=['endpointslices'], verbs=READ),
+        # 关键：完整原 UID 图包含正式 SA/RBAC 子对象；仅增加只读盘点，SM 写权限仍为空。
+        dict(apiGroups=['rbac.authorization.k8s.io'], resources=['roles', 'rolebindings', 'clusterroles', 'clusterrolebindings'], verbs=READ),
         dict(apiGroups=['storage.k8s.io'], resources=['storageclasses'], verbs=READ),
         dict(apiGroups=['apiextensions.k8s.io'], resources=['customresourcedefinitions'], verbs=READ),
         dict(apiGroups=['monitoring.fjsxy.github.io'], resources=['kubestatemetrics'], verbs=READ + ['create', 'update', 'patch', 'delete']),

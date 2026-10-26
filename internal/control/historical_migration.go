@@ -470,45 +470,23 @@ func (s *Store) releaseHistoricalDeletion(ctx context.Context, tx *sql.Tx, t *Ta
 	return s.completeHistoricalRelease(ctx, tx, p, i, r, item, cmd, "EXPLICIT_DELETION_ABSENT")
 }
 
-// historicalDeletionGraphAbsent 复用完整分页读取，从原父 UID 和持久见过的 UID 求闭包，残存后代一律阻止收尾。
+// historicalDeletionGraphAbsent 与正式 KSM 观察复用全类型、作用域及持久原 UID 图，只读核验完整清空。
 func historicalDeletionGraphAbsent(ctx context.Context, tx *sql.Tx, t *Target, i *rpc.ObservationInstance, uid string) error {
-	candidates, e := t.listOwnedCandidates(ctx, "")
+	kinds := append(append([]graphResourceKind{}, ksmGraphKinds...), serviceMonitorGraphKind)
+	candidates, e := t.listGraphCandidates(ctx, "", kinds)
 	if e != nil {
-		return Error("CONFLICT", "原删除 workload/Pod 资源图读取不完整")
+		return Error("CONFLICT", "原删除资源图读取不完整")
 	}
-	rows, e := tx.QueryContext(ctx, `SELECT uid FROM seen_resources WHERE instance_id=?`, i.Id)
-	if e != nil {
-		return e
-	}
-	seen := map[string]bool{uid: true}
-	for rows.Next() {
-		var id string
-		if e = rows.Scan(&id); e != nil {
-			rows.Close()
-			return e
-		}
-		seen[id] = true
-	}
-	e = rows.Err()
-	rows.Close()
+	durable, e := readSeenGraph(ctx, tx, i.Id)
 	if e != nil {
 		return e
 	}
-	// 关键：即使中间父对象已消失，持久 seen UID 仍能追到原 Pod；同名新 UID 不成为归属根。
-	changed := true
-	for changed {
-		changed = false
-		for _, candidate := range candidates {
-			if !seen[candidate.uid] && seen[candidate.ownerUID] {
-				seen[candidate.uid] = true
-				changed = true
-			}
-		}
+	live, e := originalOwnerGraph(uid, durable, candidates)
+	if e != nil {
+		return e
 	}
-	for _, candidate := range candidates {
-		if seen[candidate.uid] {
-			return Error("CONFLICT", "原删除 workload 或 Pod 尚未完全消失")
-		}
+	if len(live) != 0 {
+		return Error("CONFLICT", "原删除资源图尚未完全消失")
 	}
 	return nil
 }

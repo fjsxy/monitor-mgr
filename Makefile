@@ -29,9 +29,9 @@ OPERATOR_RELEASE_BUNDLE ?=
 .PHONY: help ut e2e e2e-summary check test test-race generate check-generated vet web-install web-build build run image ci-cases ci-cases-check ci-builder ci-builder-cleanup
 help: ## 查看常用命令
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-ut: ci-cases-check check-generated vet web-build ## 18 个 Ginkgo UT，一次 race 与不少于70%的产品语句覆盖率；Go总预算20m
+ut: ci-cases-check check-generated vet web-build ## 18 个 Ginkgo UT，一次 race 与不少于70%的产品语句覆盖率；Go总预算25m
 	mkdir -p .scratch
-	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -race -count=1 -timeout 20m -coverpkg=./internal/control,./internal/platform -coverprofile="$(COVERAGE_FILE)" ./internal/control ./internal/platform -args -ginkgo.no-color -ginkgo.json-report=.scratch/ut.json
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -race -count=1 -timeout 25m -coverpkg=./internal/control,./internal/platform -coverprofile="$(COVERAGE_FILE)" ./internal/control ./internal/platform -args -ginkgo.no-color -ginkgo.json-report=.scratch/ut.json
 	$(PYTHON) scripts/check-coverage.py "$(COVERAGE_FILE)" --minimum 70
 	$(PYTHON) scripts/check-tests.py
 e2e: ## 自动拉起独占双集群，默认运行10项；E2E_ARGS可指定--shard topology/storage/recovery，最后按原身份清理
@@ -130,7 +130,7 @@ ut-historical-exporter: ## #29 历史盘点、显式处理、父身份与新单 
 	mkdir -p .scratch
 	$(GO) test -count=1 -timeout 10m ./internal/platform -args -ginkgo.no-color -ginkgo.focus="UT-11|UT-12|UT-16|UT-17|UT-18" -ginkgo.json-report=.scratch/issue-29.json
 check-issue29-e2e: ## #29 真实编排语法、Go 原始证据断言编译与唯一浏览器用例发现；不启动 kind
-	$(PYTHON) -m py_compile scripts/acceptance/historical_exporter.py scripts/acceptance/historical_collection.py scripts/acceptance/historical_cleanup.py scripts/acceptance/historical_cleanup_probe.py scripts/acceptance/historical_identity.py scripts/e2e_scenarios.py
+	$(PYTHON) -m py_compile scripts/acceptance/historical_exporter.py scripts/acceptance/historical_collection.py scripts/acceptance/historical_cleanup.py scripts/acceptance/historical_cleanup_probe.py scripts/acceptance/fixture_names.py scripts/acceptance/browser_diagnostics.py scripts/acceptance/cluster_evidence.py scripts/acceptance/ksm_cases.py scripts/acceptance/historical_identity.py scripts/e2e_scenarios.py
 	$(GO) test ./tests/e2e -run '^$$'
 	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list
 
@@ -148,8 +148,8 @@ receiver-chart-check: ## 校验独占空scrape receiver的Helm声明；镜像锁
 .PHONY: ut-review-fixes check-review-fixes
 ut-review-fixes: ## #23 review 的运行能力、旧任务收尾、写前重检与工具边界局部 Ginkgo 回归
 	mkdir -p .scratch
-	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus='UT-(08|10|11|12|18)' -ginkgo.json-report=.scratch/review-fixes.json
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus='UT-(08|10|11|12|14|18)' -ginkgo.json-report=.scratch/review-fixes.json
 check-review-fixes: ci-cases-check ## review 验收编排语法、Go 原始证据断言编译与浏览器发现，不启动 kind
-	$(PYTHON) -m py_compile scripts/e2e.py scripts/e2e_environment.py scripts/e2e_scenarios.py scripts/acceptance/capture.py scripts/acceptance/transport.py scripts/acceptance/exporter_collection.py scripts/acceptance/historical_cleanup.py scripts/acceptance/historical_cleanup_probe.py
+	$(PYTHON) -m py_compile scripts/e2e.py scripts/e2e_environment.py scripts/e2e_scenarios.py scripts/acceptance/capture.py scripts/acceptance/transport.py scripts/acceptance/exporter_collection.py scripts/acceptance/historical_cleanup.py scripts/acceptance/historical_cleanup_probe.py scripts/acceptance/fixture_names.py scripts/acceptance/browser_diagnostics.py scripts/acceptance/historical_collection.py scripts/acceptance/cluster_evidence.py scripts/acceptance/ksm_cases.py
 	$(GO) test ./tests/e2e -run '^$$'
 	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list

@@ -52,6 +52,54 @@
 
 | I23-R09.env / UT-08 | 已批准镜像不能以环境覆盖控制目标 | 在 Running/Ready 原 Pod 上声明 KUBERNETES_SERVICE_HOST 环境覆盖，再请求公开预览 | 拒绝且零业务写，不能用同一镜像 digest 为其他目标背书 | #23 / #28 |
 | I23-R09.command / UT-08 | 已批准镜像不能替换入口进程 | 在原 Pod 覆盖 command，再请求公开预览 | 拒绝且零业务写，tag/digest 不能代替实际 controller 进程 | #23 / #28 |
-| I23-R20 | 全量 UT 保持有界且容纳新增必选矩阵 | 静态核对 make ut 的 go test timeout 为20m、CI job保持30m；最终集成执行原生18项并逐项核验耗时 | 不减少任何输入/断言；本地6b8实测716s、云端总命令17m30只用于预算余量，不将旧exit2推断为已证实超时；新报告决定最终结果 | #23 |
+| I23-R20 | 根据实测完整矩阵给Go UT有界预算余量 | 6f6 CI完整18项已绿，platform耗时合计约1083s、完整命令19分30；本轮新增R21/R22必选输入后将Go包预算20m调整25m，CI job仍30m；核Makefile/help与固定目录 | 不减少输入或断言；最终native18项/race/覆盖率决定成功；旧CI exit2原因仍未知，不以扩预算声称已证实超时 | #23 / #25 / #26 / #27 / #28 / #29 / #30 |
+
+| I23-R21.manager / UT-08 | 已批准镜像的入口不可被挂载替换 | 经公开 HTTP→Kitex→SQLite，在真实Pod额外挂载覆盖/manager | 拒绝预览且零业务写 | #23 / #28 |
+| I23-R21.template / UT-08 | Deployment模板不能为同样覆盖背书 | 经公开 HTTP→Kitex→SQLite，模板与Pod都声明覆盖/manager的相同挂载 | 拒绝，不把模板当作任意执行覆盖的可信来源 | #23 / #28 |
+| I23-R21.source-hostpath / UT-08 | SA注入来源必须是受控projected token | 经公开 HTTP→Kitex→SQLite，保留正常SA mountPath但将volume改为hostPath，执行相应预览/历史收尾 | 拒绝，不因路径或volume名称相同而信任 | #23 / #28 |
+| I23-R21.source-configmap / UT-08 | SA注入来源必须是受控projected token | 经公开 HTTP→Kitex→SQLite，保留正常SA mountPath但将volume改为错误configMap，执行相应预览/历史收尾 | 拒绝，不因路径或volume名称相同而信任 | #23 / #28 |
+| I23-R21.token-path / UT-08 | SA token投影路径和audience不可改变 | 经公开 HTTP→Kitex→SQLite，修改projected serviceAccountToken path，执行相应预览/历史收尾 | 拒绝，保留当前SA身份和默认API audience边界 | #23 / #28 |
+| I23-R21.token-audience / UT-08 | SA token投影路径和audience不可改变 | 经公开 HTTP→Kitex→SQLite，修改projected serviceAccountToken audience，执行相应预览/历史收尾 | 拒绝，保留当前SA身份和默认API audience边界 | #23 / #28 |
+| I23-R21.subpath / UT-08 | SA token投影路径和audience不可改变 | 经公开 HTTP→Kitex→SQLite，给标准SA挂载增加subPath，执行相应预览/历史收尾 | 拒绝，保留当前SA身份和默认API audience边界 | #23 / #28 |
+| I23-R21.lifecycle / UT-08 | 容器执行相关配置不得额外覆盖 | 经公开 HTTP→Kitex→SQLite，加入lifecycle执行钩子，执行相应预览/历史收尾 | 拒绝；不扩大monitor-op API | #23 / #28 |
+| I23-R21.sidecar / UT-08 | 容器执行相关配置不得额外覆盖 | 经公开 HTTP→Kitex→SQLite，加入额外容器，执行相应预览/历史收尾 | 拒绝；不扩大monitor-op API | #23 / #28 |
+| I23-R21.writable-root / UT-08 | 容器执行相关配置不得额外覆盖 | 经公开 HTTP→Kitex→SQLite，使manager根文件系统可写，执行相应预览/历史收尾 | 拒绝；不扩大monitor-op API | #23 / #28 |
+| I23-R21.normal / UT-08 | 正常真实SA admission继续允许 | 经公开 HTTP→Kitex→SQLite，Pod有标准serviceAccountToken+kube-root-ca.crt+namespace downwardAPI投影，模板无挂载 | 允许预览/发布，实际UID链、imageID与写前重检继续有效 | #23 / #28 |
+| I23-R22.leftover-Service / UT-11 | 完整原UID图包含Service | 旧DELETE已按原冻结快照确认旧SM并使旧路径404，原parent UID仍拥有另一份Service；请求显式收尾 | 拒绝、保留实例与原operation锁及未知执行事实；不写SM，不按名称算法认领 | #23 / #27 / #29 |
+| I23-R22.denied-Service / UT-11 | Service读取未知不能当清空 | 对完整原图的Service列表返回Forbidden，旧路径均404；请求显式收尾 | 拒绝、保留保护；namespace/cluster作用域正确 | #23 / #27 / #29 |
+| I23-R22.leftover-ServiceAccount / UT-11 | 完整原UID图包含ServiceAccount | 旧DELETE已按原冻结快照确认旧SM并使旧路径404，原parent UID仍拥有另一份ServiceAccount；请求显式收尾 | 拒绝、保留实例与原operation锁及未知执行事实；不写SM，不按名称算法认领 | #23 / #27 / #29 |
+| I23-R22.denied-ServiceAccount / UT-11 | ServiceAccount读取未知不能当清空 | 对完整原图的ServiceAccount列表返回Forbidden，旧路径均404；请求显式收尾 | 拒绝、保留保护；namespace/cluster作用域正确 | #23 / #27 / #29 |
+| I23-R22.leftover-Role / UT-11 | 完整原UID图包含Role | 旧DELETE已按原冻结快照确认旧SM并使旧路径404，原parent UID仍拥有另一份Role；请求显式收尾 | 拒绝、保留实例与原operation锁及未知执行事实；不写SM，不按名称算法认领 | #23 / #27 / #29 |
+| I23-R22.denied-Role / UT-11 | Role读取未知不能当清空 | 对完整原图的Role列表返回Forbidden，旧路径均404；请求显式收尾 | 拒绝、保留保护；namespace/cluster作用域正确 | #23 / #27 / #29 |
+| I23-R22.leftover-RoleBinding / UT-11 | 完整原UID图包含RoleBinding | 旧DELETE已按原冻结快照确认旧SM并使旧路径404，原parent UID仍拥有另一份RoleBinding；请求显式收尾 | 拒绝、保留实例与原operation锁及未知执行事实；不写SM，不按名称算法认领 | #23 / #27 / #29 |
+| I23-R22.denied-RoleBinding / UT-11 | RoleBinding读取未知不能当清空 | 对完整原图的RoleBinding列表返回Forbidden，旧路径均404；请求显式收尾 | 拒绝、保留保护；namespace/cluster作用域正确 | #23 / #27 / #29 |
+| I23-R22.leftover-ClusterRole / UT-11 | 完整原UID图包含ClusterRole | 旧DELETE已按原冻结快照确认旧SM并使旧路径404，原parent UID仍拥有另一份ClusterRole；请求显式收尾 | 拒绝、保留实例与原operation锁及未知执行事实；不写SM，不按名称算法认领 | #23 / #27 / #29 |
+| I23-R22.denied-ClusterRole / UT-11 | ClusterRole读取未知不能当清空 | 对完整原图的ClusterRole列表返回Forbidden，旧路径均404；请求显式收尾 | 拒绝、保留保护；namespace/cluster作用域正确 | #23 / #27 / #29 |
+| I23-R22.leftover-ClusterRoleBinding / UT-11 | 完整原UID图包含ClusterRoleBinding | 旧DELETE已按原冻结快照确认旧SM并使旧路径404，原parent UID仍拥有另一份ClusterRoleBinding；请求显式收尾 | 拒绝、保留实例与原operation锁及未知执行事实；不写SM，不按名称算法认领 | #23 / #27 / #29 |
+| I23-R22.denied-ClusterRoleBinding / UT-11 | ClusterRoleBinding读取未知不能当清空 | 对完整原图的ClusterRoleBinding列表返回Forbidden，旧路径均404；请求显式收尾 | 拒绝、保留保护；namespace/cluster作用域正确 | #23 / #27 / #29 |
+| I23-R22.leftover-Endpoints / UT-11 | 完整原UID图包含Endpoints | 旧DELETE已按原冻结快照确认旧SM并使旧路径404，原parent UID仍拥有另一份Endpoints；请求显式收尾 | 拒绝、保留实例与原operation锁及未知执行事实；不写SM，不按名称算法认领 | #23 / #27 / #29 |
+| I23-R22.denied-Endpoints / UT-11 | Endpoints读取未知不能当清空 | 对完整原图的Endpoints列表返回Forbidden，旧路径均404；请求显式收尾 | 拒绝、保留保护；namespace/cluster作用域正确 | #23 / #27 / #29 |
+| I23-R22.leftover-EndpointSlice / UT-11 | 完整原UID图包含EndpointSlice | 旧DELETE已按原冻结快照确认旧SM并使旧路径404，原parent UID仍拥有另一份EndpointSlice；请求显式收尾 | 拒绝、保留实例与原operation锁及未知执行事实；不写SM，不按名称算法认领 | #23 / #27 / #29 |
+| I23-R22.denied-EndpointSlice / UT-11 | EndpointSlice读取未知不能当清空 | 对完整原图的EndpointSlice列表返回Forbidden，旧路径均404；请求显式收尾 | 拒绝、保留保护；namespace/cluster作用域正确 | #23 / #27 / #29 |
+| I23-R22.leftover-ServiceMonitor / UT-11 | 完整原UID图包含ServiceMonitor | 旧DELETE已按原冻结快照确认旧SM并使旧路径404，原parent UID仍拥有另一份ServiceMonitor；请求显式收尾 | 拒绝、保留实例与原operation锁及未知执行事实；不写SM，不按名称算法认领 | #23 / #27 / #29 |
+| I23-R22.denied-ServiceMonitor / UT-11 | ServiceMonitor读取未知不能当清空 | 对完整原图的ServiceMonitor列表返回Forbidden，旧路径均404；请求显式收尾 | 拒绝、保留保护；namespace/cluster作用域正确 | #23 / #27 / #29 |
+| I23-R22.shape / UT-11 | 原资源图读取完整性与身份 | 必要列表缺少items，经公开HTTP执行旧DELETE显式收尾 | 拒绝，保留原保护和独立历史事实 | #23 / #27 / #29 |
+| I23-R22.page-denied / UT-11 | 原资源图读取完整性与身份 | 经公开 HTTP→Kitex→SQLite，完整分页第二页读取失败，执行相应预览/历史收尾 | 拒绝，保留原保护和独立历史事实 | #23 / #27 / #29 |
+| I23-R22.page-repeat / UT-11 | 原资源图读取完整性与身份 | 经公开 HTTP→Kitex→SQLite，continue未前进，执行相应预览/历史收尾 | 拒绝，保留原保护和独立历史事实 | #23 / #27 / #29 |
+| I23-R22.replacement / UT-11 | 原资源图读取完整性与身份 | 持久seen UID路径出现同名新UID，经公开HTTP执行旧DELETE显式收尾 | 拒绝，保留原保护和独立历史事实 | #23 / #27 / #29 |
+| I23-R22.empty / UT-11 | 原资源图读取完整性与身份 | 所有必要列表均合法空items，旧SM处理绑定有效，经公开HTTP执行旧DELETE显式收尾 | 成功独立收尾，旧发送事实不伪改 | #23 / #27 / #29 |
+
+
+| I23-R22.api-absent / UT-11 | 可选SM API确实不存在与未知区分 | 原冻结路径404、SM独立处理绑定有效、全图其他必要列表合法空；SM列表API返回404 | 可独立收尾；403、缺items、分页失败均不作为不存在 | #23 / #27 / #29 |
+| I23-R23.namespace-permission / E2E-02 | 受限namespace写权限负例到达目标边界 | limited SA保留原CR权限和仅Operator Deployment/ReplicaSet/Pod只读能力；禁止目标namespace workload写，公开preview后在已授权namespace发布 | 原namespace明确权限拒绝且无CR；已授权namespace可发布；不新增CR/SM写权限 | #23 / #28 |
+| I23-R24.unknown-window / E2E-08 | 首次创建丢响应只核当前子例单次发送 | 授权子例已创建auth-known CR后，记录代理事件基线，再触发unknown首次POST丢响应及只读恢复 | 当前窗口仅1次POST；原UID未知不认领，同名替代不认领，恢复零重放；保留未知任务锁 | #23 / #25 |
+
+| I23-R25.collector-name / UT-18、E2E-08 | 派生namespace满足DNS63且保持唯一身份 | 输入CI实际run-id和最大39字符run-id，历史collector从长exporter namespace派生；对相近长前缀生成并核验名称与清理引用 | 名称≤63、DNS合法且稳定、不同输入不碰撞；完整run-id label和实际namespace UID继续绑定清理，所有引用使用同一派生名 | #23 / #29 |
+
+| I23-R22.seen-child / UT-11 | 中间原Service已消失仍识别残存后代 | 持久seen原Service UID，完整列表只有该UID拥有的EndpointSlice；请求历史DELETE收尾 | 拒绝，原UID闭包跨已消失中间节点保持保护 | #23 / #27 / #29 |
+| I23-R22.optional-page / UT-11 | 可选API后续页404不是完整清空 | SM首页合法items且有continue，第二页404；请求历史DELETE收尾 | 拒绝，不能把后续缺页视为API确实不存在 | #23 / #27 / #29 |
+| I23-R22.active-rebuild / UT-14 | 原父活跃时Operator重建同名子对象仍可观察 | 原父UID不变，已观察SM从UID-a重建为UID-b，再公开refresh和删除预览 | 识别原父拥有的新子UID；与历史父已消失时的完整清空条件分别核验 | #23 / #27 / #28 |
+
+| I23-R26.browser-diagnostic / UT-18、E2E-10 | 浏览器失败不再只见泛化外层assert | 构造嵌套test.step失败报告并含私有fixture/响应/token标记、未知标题/路径/状态；投影固定step标题、经源码核实的位置与白名单期望/实际枚举；真实浏览器失败时保存同一摘要 | 安全摘要可定位固定源码/阶段；未知值降为unknown，所有任意原文、绝对路径、凭据不公开；真实断言与预算保持原样 | #23 / #26 / #28 / #29 / #30 |
 
 执行结果另存 `docs/e2e/issue-23-review-fixes-results.md`；真实集群、浏览器、实际指标与最终覆盖率由集成任务执行并绑定最终 testedCommit。

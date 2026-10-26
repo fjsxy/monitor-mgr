@@ -13,6 +13,7 @@ import uuid
 from types import SimpleNamespace
 
 from e2e_environment import ROOT, RUN_LABEL
+from fixture_names import namespace_name
 from clusters import Suite as ClusterSuite
 # 旧模块保留为场景实现库；新入口不会调用它们的 run/main/profile 分派。
 from ksm import Suite as KSMSuite
@@ -117,7 +118,7 @@ class Scenario(LifecycleSuite, AgentSuite):
         self.clusters[role]=self.call('GET','/clusters/'+op['clusterId']);return self.clusters[role]
 
     def prepare(self, suffix='', target='control', component='ksm'):
-        self.component=component;self.target=target;self.targetns=self.a.prefix+'-target'+suffix;self.crname='m'+uuid.uuid4().hex[:12]
+        self.component=component;self.target=target;self.targetns=namespace_name(self.a.prefix+'-target'+suffix);self.crname='m'+uuid.uuid4().hex[:12]
         if component=='agent': self.fixture(self.targetns,target)
         else: self.namespace(self.targetns,target)
         self.cluster=self.register(target);return self.cluster
@@ -475,11 +476,14 @@ def recovery(s):
     authorization(s,proxy)
     s.by('首次创建丢响应且没有原 UID，禁止按同名对象补认或重建')
     s.crname='unknown-'+uuid.uuid4().hex[:8];unknown=s.create()
+    # 关键：代理日志跨授权子例追加保存，仅以当前子例起点核验未知创建和恢复零重放。
+    unknown_event_start=len(s.capture_proxy())
     # 关键：先登记明确的创建身份，代理才会在丢响应前保存原 API UID；不能事后按名字补认。
-    proxy.control('register-create',{'intentId':uuid.uuid4().hex,'identity':{'apiVersion':'monitoring.fjsxy.github.io/v1alpha1','kind':'KubeStateMetrics','namespace':'','name':s.crname}})
+    unknown_intent=uuid.uuid4().hex
+    proxy.control('register-create',{'intentId':unknown_intent,'identity':{'apiVersion':'monitoring.fjsxy.github.io/v1alpha1','kind':'KubeStateMetrics','namespace':'','name':s.crname}})
     proxy.arm('POST','/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics','drop_after_upstream');o=s.publish(unknown,wait=False);s.state(o,'IDENTITY_UNCERTAIN')
-    events=s.capture_proxy();created=[e for e in events if e['stage']=='original_create_response' and e['path'].endswith('/kubestatemetrics')];assert len(created)==1
-    s.track_cr(created[0]['originalCreate']['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['originalCreate']['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy(),'POST'))==1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
+    events=s.capture_proxy()[unknown_event_start:];created=[e for e in events if e['stage']=='original_create_response' and e['path'].endswith('/kubestatemetrics') and e.get('originalCreate',{}).get('intentId')==unknown_intent];assert len(created)==1
+    s.track_cr(created[0]['originalCreate']['uid']);uid=s.cr()['metadata']['uid'];assert uid==created[0]['originalCreate']['uid'];s.rebuild();s.action(o,'retry',409);s.action(o,'continue-unsent',409);s.call('POST','/instances/'+unknown['id']+'/deletions',{'versionId':o['versionId']},status=409);assert len(s.mutations(s.capture_proxy()[unknown_event_start:],'POST'))==1;assert s.call('GET','/instances/'+unknown['id'])['uid']=='' and s.cr()['metadata']['uid']==uid
     s.by('确定失败后显式 retry，保留原冻结版本并产生新 attempt')
     proxy.control('reset',{});s.crname='retry-'+uuid.uuid4().hex[:8];retry=s.create();p=s.preview(retry)
     writepath='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics';proxy.control('faults',{'readMode':'none','rejectWritePath':writepath})
@@ -539,6 +543,9 @@ def browser(s):
         r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=360)
     finally:
         s.issue29_admin_server.shutdown();s.issue29_admin_server.server_close()
+        # 关键：即使进程超时也先保存安全失败定位；原report、fixture与进程输出仍留私有目录。
+        from browser_diagnostics import save_browser_summary
+        save_browser_summary(report_path,s.env.public/'browser'/'summary.json',ROOT)
     report=json.loads(report_path.read_text()) if report_path.is_file() else {}
     # 仅截图和数字结果公开；原 Playwright 输出含本地 fixture 路径，保留在私有目录。
     for path in out.rglob('*.png'):

@@ -174,6 +174,7 @@ type ksmFixture struct {
 	dropResponse            bool
 	exporterRuntime         map[string]map[string]any
 	exporterRuntimeDenied   bool
+	resourceStatuses        map[string]int
 	owned                   map[string][]any
 	deleteCount             int
 	deleteRequests          int
@@ -202,6 +203,17 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		f.mu.Lock()
+		status := f.resourceStatuses[r.URL.Path]
+		if token := r.URL.Query().Get("continue"); token != "" {
+			if next := f.resourceStatuses[r.URL.Path+"#"+token]; next != 0 {
+				status = next
+			}
+		}
+		if status != 0 {
+			w.WriteHeader(status)
+			f.mu.Unlock()
+			return
+		}
 		runtime, runtimeKnown := f.exporterRuntime[r.URL.Path]
 		runtimeDenied := f.exporterRuntimeDenied
 		if runtimeKnown && r.Method == "GET" {
