@@ -1,3 +1,4 @@
+import { InstanceManagement } from "./instance-management";
 import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
 import { useDraftBookmark } from "./draft-bookmark";
@@ -672,6 +673,7 @@ export function Instances({
             key={selection.key}
             selection={selection}
             cluster={current}
+            isAdmin={account.role === "ADMIN"}
             onAction={onAction}
             onChange={() => void load()}
             onClose={() => setSelection(null)}
@@ -688,6 +690,7 @@ export function Instances({
             key={selection.key}
             selection={selection}
             cluster={current}
+            isAdmin={account.role === "ADMIN"}
             onAction={onAction}
             onChange={() => void load()}
             onClose={() => setSelection(null)}
@@ -727,6 +730,7 @@ export function Instances({
 
 // 抽屉中的配置状态独立于运行轮询，保存冲突或读取失败均不覆盖本地编辑。
 function Editor({
+  isAdmin,
   selection,
   cluster,
   onAction,
@@ -734,6 +738,7 @@ function Editor({
   onClose,
   onCopy,
 }: {
+  isAdmin: boolean;
   selection: Selection;
   cluster: Cluster;
   onAction: (work: () => Promise<void>) => Promise<void>;
@@ -1043,7 +1048,7 @@ function Editor({
           <div>
             <p className="help">实例详情 · {cluster.name}</p>
             <h2>{current?.name || config.name || "新 KSM 实例"}</h2>
-            {current && <InstanceIdentity value={current} />}
+            {current && <><InstanceIdentity value={current} /><InstanceManagement value={current} clusterActive={cluster.state === "ACTIVE"} isAdmin={isAdmin} onConfirmed={next => { setCurrent(next); onChange(); }} /></>}
             <span className={"badge " + (readOnly ? "gray" : "ok")}>
               {readOnly
                 ? "平台未纳管 · 只读"

@@ -1,5 +1,6 @@
 import {test, expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
+import {instanceCreatorProtection} from './issue25';
 
 // 唯一浏览器场景只验证关键交互与精确对象身份；字段矩阵归后端 UT。
 test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async ({page, baseURL}, info) => {
@@ -48,6 +49,99 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     await expect(modal).toContainText('原部署版本');const accepted=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${fixture.largeId}/deletions`&&r.request().method()==='POST');
     await modal.getByRole('button',{name:'确认删除实例',exact:true}).click();const op=await(await accepted).json();
     await expect.poll(async()=>{await page.request.post(`/api/v1/operations/${op.operationId}/refresh`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data:{}});return (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state;},{timeout:90000}).toBe('SUCCEEDED');
+  });
+  await instanceCreatorProtection(page,baseURL,fixture,info);
+  await test.step('I26-B01 历史 KSM/Agent 由管理员明确确认，普通用户权限随允许和撤销变化',async()=>{
+    const send=async(path:string,data:unknown,status=200)=>{
+      const response=await page.request.post(`/api/v1${path}`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data});
+      expect(response.status(),path).toBe(status);return response.json();
+    };
+    const loginAdmin=async()=>{await send('/sessions',{username:'admin',password:fixture.password},201);};
+    await loginAdmin();
+    const actor=(await(await page.request.get('/api/v1/session')).json()).account.id;
+    const temporary=crypto.randomUUID(),personal=crypto.randomUUID();
+    const user=await send('/accounts',{username:'historical-browser-owner',password:temporary,role:'USER'},201);
+    await send(`/clusters/${fixture.clusterId}/transfer`,{ownerId:user.id});
+    await send('/sessions',{username:'historical-browser-owner',password:temporary},201);
+    await send('/session/password',{currentPassword:temporary,newPassword:personal});
+    const loginUser=async()=>{await send('/sessions',{username:'historical-browser-owner',password:personal},201);};
+    const open=async(instance:{name:string},manage:boolean)=>{
+      await page.reload();await page.getByRole('button',{name:'观测配置',exact:true}).click();
+      const row=page.getByRole('row').filter({has:page.getByText(instance.name,{exact:true})});
+      await row.getByRole('button',{name:manage?'编辑':'查看',exact:true}).click();
+      await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('创建时角色：未知');
+    };
+    const checkUser=async(manage:boolean)=>{
+      await loginUser();
+      for(const instance of fixture.historical){
+        await open(instance,manage);
+        await expect(drawer.getByRole('button',{name:'确认历史实例管理权限',exact:true})).toHaveCount(0);
+        if(manage){
+          const detail=await(await page.request.get(`/api/v1/instances/${instance.id}`)).json();
+          const before=await(await page.request.get(`/api/v1/instances/${instance.id}/draft`)).json();
+          const component=instance.component==='Prometheus Agent'?'agent':'ksm';
+          // 关键：管理权限允许修改配置；I29 已发布的 KSM 身份仍固定，不能以名称可改代替授权判据。
+          for(const label of ['名称',component==='agent'?'Agent namespace':'部署命名空间']){
+            const identity=drawer.getByLabel(label,{exact:true});
+            if(detail.uid)await expect(identity).toBeDisabled();else await expect(identity).toBeEnabled();
+          }
+          await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('允许现有集群管理用户');
+          const cpu=drawer.getByLabel(component==='agent'?'Agent CPU request':'通用 CPU request',{exact:true});
+          await expect(cpu).toBeEnabled();
+          const nextCPU=before[component].resources.requestCPU==='123m'?'124m':'123m';
+          await cpu.fill(nextCPU);
+          const saving=page.waitForResponse(r=>new URL(r.url()).pathname===`/api/v1/instances/${instance.id}/draft`&&r.request().method()==='PUT');
+          await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();
+          const response=await saving;expect(response.status()).toBe(200);
+          expect(response.request().postDataJSON().expectedDraftRevision).toBe(before.revision);
+          const nextRevision=(BigInt(before.revision)+1n).toString();
+          expect(String((await response.json()).revision)).toBe(nextRevision);
+          await expect(drawer.getByText(`草稿 v${nextRevision} 已保存`,{exact:true})).toBeVisible();
+          const after=await(await page.request.get(`/api/v1/instances/${instance.id}/draft`)).json();
+          expect(String(after.revision)).toBe(nextRevision);expect(after[component].resources.requestCPU).toBe(nextCPU);
+          expect(after[component].name).toBe(before[component].name);
+          expect(after[component][component==='agent'?'namespace':'targetNamespace']).toBe(before[component][component==='agent'?'namespace':'targetNamespace']);
+        }else{
+          await expect(drawer.getByLabel('名称',{exact:true})).toBeDisabled();
+          await expect(drawer.getByRole('button',{name:'保存草稿',exact:true})).toHaveCount(0);
+          await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('创建时角色未知');
+        }
+        await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+      }
+    };
+    await checkUser(false);
+    for(const result of ['allow','restrict']){
+      await loginAdmin();
+      for(const instance of fixture.historical){
+        await open(instance,true);
+        await drawer.getByRole('button',{name:'确认历史实例管理权限',exact:true}).click();
+        const confirm=page.getByRole('dialog',{name:'确认历史实例管理权限',exact:true});
+        await expect(confirm.getByRole('button',{name:'确认管理权限',exact:true})).toBeDisabled();
+        await confirm.getByLabel('管理权限结果',{exact:true}).selectOption(result);
+        await confirm.getByRole('button',{name:'确认管理权限',exact:true}).click();
+        await expect(confirm).toHaveCount(0);
+        await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText(`确认用户：${actor}`);
+        await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('确认时间：');
+        const detail=await(await page.request.get(`/api/v1/instances/${instance.id}`)).json();
+        expect(detail.creatorRole).toBe('');expect(detail.managementConfirmation.allowClusterManagers).toBe(result==='allow');
+        await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+      }
+      await checkUser(result==='allow');
+    }
+    await loginAdmin();await open(fixture.historical[0],true);
+    await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+    await send(`/clusters/${fixture.clusterId}/unregister`,{});
+    await page.getByRole('button',{name:'刷新列表',exact:true}).click();
+    // 不重载整个工作台，验证已打开页面刷新后即遵守注销状态，同时继续展示原确认记录。
+    for(const instance of fixture.historical){
+      const row=page.getByRole('row').filter({has:page.getByText(instance.name,{exact:true})});
+      await row.getByRole('button',{name:'查看',exact:true}).click();
+      await expect(drawer.getByRole('button',{name:'确认历史实例管理权限',exact:true})).toHaveCount(0);
+      await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText('集群已注销');
+      await expect(drawer.getByLabel('实例创建身份',{exact:true})).toContainText(`确认用户：${actor}`);
+      await expect(drawer.getByLabel('名称',{exact:true})).toBeDisabled();
+      await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+    }
   });
   expect(errors).toEqual([]);await page.screenshot({path:info.outputPath('main-flow.png')});
 });

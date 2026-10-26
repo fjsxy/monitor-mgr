@@ -27,3 +27,10 @@ func assertIssueEvidence(caseID string, evidence map[string]json.RawMessage) {
 		assertion(evidence)
 	}
 }
+
+func init() {
+	registerIssueEvidence("issue25", assertIssue25Evidence)
+	requireIssueEvidence("E2E-08", "issue25")
+	registerIssueEvidence("issue26", assertIssue26Evidence)
+	requireIssueEvidence("E2E-01", "issue26")
+}

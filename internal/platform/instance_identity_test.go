@@ -102,7 +102,7 @@ func bodyName(body map[string]any) string {
 }
 
 // dropInstanceCreatorSchema 构造真实旧 schema，避免只回退版本号却残留新字段。
-const dropInstanceCreatorSchema = `ALTER TABLE instances DROP COLUMN creator_user_id;ALTER TABLE instances DROP COLUMN creator_role;`
+const dropInstanceCreatorSchema = `DROP TABLE IF EXISTS instance_management_confirmations;ALTER TABLE instances DROP COLUMN creator_user_id;ALTER TABLE instances DROP COLUMN creator_role;`
 
 // I25-03/04/05/06：同集群普通用户可读受保护配置，各 HTTP/RPC 变更入口独立拒绝。
 func checkTestAdminInstanceWriteProtection(t ginkgo.GinkgoTInterface) {
