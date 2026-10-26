@@ -1,3 +1,4 @@
+import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
 import { useDraftBookmark } from "./draft-bookmark";
 import {AgentLifecycleFields,AgentStorageFields,StorageImpact,StoragePolicies,type StorageImpactValue,type StatefulPolicy,StorageVolumeOutcome} from "./agent-storage";
@@ -87,7 +88,7 @@ export type Source = SourceStatus & {
     expectedPolicy?:string;retentionResult?:string;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;statefulUID?:string;statefulName?:string;shard?:number;agentUID?:string;impactAction?:string;
   }[];
 };
-type Instance = {
+type Instance = InstanceIdentityValue & {
   id: string;
   name: string;
   readOnly: boolean;
@@ -266,6 +267,7 @@ export function AgentEditor({
     } | null>(null);
   const bookmark = useDraftBookmark(bodyRef);
   currentRef.current = current;
+  const canManage = !current || current.canManage;
   const readOnly = Boolean(current?.readOnly),
     fixed = Boolean(current?.uid),
     dirty = JSON.stringify(canonical(config)) !== saved;
@@ -453,7 +455,7 @@ export function AgentEditor({
     setConfig(value);
     setNotice("");
     setPreview(null);
-    if (currentRef.current && !readOnly) {
+    if (currentRef.current && canManage) {
       if (editingTimer.current) clearTimeout(editingTimer.current);
       editingTimer.current = setTimeout(() => {
         void api(
@@ -466,6 +468,7 @@ export function AgentEditor({
   }
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (!canManage) return;
     await run(async () => {
       const value = canonical(config);
       let id = current?.id;
@@ -586,6 +589,7 @@ export function AgentEditor({
               实例详情 · {cluster.name} · collector / Prometheus Agent
             </p>
             <h2>{current?.name || config.name || "新 Agent 实例"}</h2>
+            {current && <InstanceIdentity value={current} />}
             <span className={`badge ${readOnly ? "gray" : "ok"}`}>
               {readOnly
                 ? "平台未纳管 · 只读"
@@ -668,7 +672,7 @@ export function AgentEditor({
                       value={config}
                       onChange={change}
                       fixed={fixed}
-                      disabled={busy}
+                      disabled={busy || !canManage}
                       namespaces={namespaces}
                       references={references}
                       errors={{
@@ -738,7 +742,7 @@ export function AgentEditor({
                         <strong>{stateText(operation.state)}</strong>
                         <p>{operation.message}</p>
                         <p className="help">操作 {operation.operationId}</p>
-                        <LifecycleActions operation={operation} onOperation={followOperation} />
+                        <LifecycleActions canManage={canManage} operation={operation} onOperation={followOperation} />
                       </article>
                     )}
                     <p className="help">
@@ -799,7 +803,7 @@ export function AgentEditor({
                                 查看冻结版本 {item.versionId.slice(0, 8)}
                               </button>
                             )}
-                            <LifecycleActions operation={item} onOperation={value => followOperation(value, true)} />
+                            <LifecycleActions canManage={canManage} operation={item} onOperation={value => followOperation(value, true)} />
                           </article>
                         ))}
                         <h3>发布版本</h3>
@@ -841,7 +845,7 @@ export function AgentEditor({
             )
           )}
         </div>
-        {!viewed && !readOnly && tab === "draft" && (
+        {!viewed && canManage && tab === "draft" && (
           <div className="drawer-footer">
             <div>
               <span className={`badge ${dirty ? "warn" : "gray"}`}>
@@ -941,7 +945,7 @@ export function AgentEditor({
                 </button>
                 <button
                   className="primary"
-                  disabled={busy || (preview.drift && !overwrite)}
+                  disabled={busy || !canManage || (preview.drift && !overwrite)}
                   onClick={() => void confirm()}
                 >
                   确认下发

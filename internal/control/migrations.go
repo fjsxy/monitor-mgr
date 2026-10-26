@@ -43,7 +43,7 @@ var migrationSQL = [][]string{
 	nil,
 	activitySchema,
 	append(append([]string{}, agentStorageSchema...), storageTasksSchema...),
-	nil, // v11 创建身份由 #25 集成，保留旧版序号。
+	instanceCreatorSchema, // v11 保留 #25 的真实创建身份迁移及旧版序号。
 	resourceProgressSchema,
 	nil, // v13 旧管理确认表保持原样，产品入口由 #26 提供。
 	historicalResourceSchema,

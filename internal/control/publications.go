@@ -142,7 +142,7 @@ func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, v
 	return nil
 }
 func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r *rpc.PreviewRequest) (*rpc.PublicationPreview, error) {
-	i, e := s.authorizedInstance(ctx, c, r.Id)
+	i, e := s.authorizedInstanceForWrite(ctx, c, r.Id)
 	if e != nil {
 		return nil, e
 	}

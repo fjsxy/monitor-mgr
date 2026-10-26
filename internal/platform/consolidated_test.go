@@ -39,6 +39,10 @@ var _ = ginkgo.It("UT-04 集群登记与管理状态", func() {
 
 var _ = ginkgo.It("UT-07 实例身份与不可变字段", func() {
 	t := ginkgo.GinkgoT()
+	checkTestInstanceCreatorIdentity(t)
+	checkTestAdminInstanceWriteProtection(t)
+	checkTestCollectorAdminProtection(t)
+	checkTestInstanceCreatorRoleSnapshot(t)
 	checkTestK10DraftNameAndRevision(t)
 	checkTestAgentTypedDraftIdentityAndDefaults(t)
 	checkTestAgentRevisionNameBudgetLegacyAndWorker(t)
@@ -65,6 +69,11 @@ var _ = ginkgo.It("UT-09 幂等与受理事务", func() {
 
 var _ = ginkgo.It("UT-10 派发取消与任务授权", func() {
 	t := ginkgo.GinkgoT()
+	checkTestInstanceDispatchReauthorizesCreatorProtection(t)
+	checkTestInstanceDispatchRejectsDisabledAccount(t)
+	checkTestInstanceConflictRetryReauthorizes(t)
+	checkTestInstanceDeletionDispatchReauthorizes(t)
+	checkTestInstanceSentResultSurvivesRevocation(t)
 	checkTestP08CancellationCompetesWithPersistentDispatch(t)
 	checkTestI06CookieExpiryDoesNotCancelAcceptedOperation(t)
 	checkTestPublicationPreflightDoesNotBlockCurrentAccountRevocation(t)
@@ -134,6 +143,7 @@ var _ = ginkgo.It("UT-15 请求预算与并发", func() {
 
 var _ = ginkgo.It("UT-16 数据库主密钥与敏感投影", func() {
 	t := ginkgo.GinkgoT()
+	checkTestUnknownCreatorMigration(t)
 	checkTestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL(t)
 	checkLegacyPublicationMigration(t)
 	checkTestT07DatabaseCorruptionNeverStartsReady(t)
