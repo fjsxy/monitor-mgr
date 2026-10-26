@@ -121,7 +121,7 @@ func (s *Store) refreshExporterCompanion(ctx context.Context, i *rpc.Observation
 	}
 	m := objectMap(obj, "metadata")
 	if objectString(obj, "apiVersion") != r.ApiVersion || objectString(obj, "kind") != r.Kind || objectString(m, "name") != r.Name || objectString(m, "namespace") != r.Namespace || objectString(m, "uid") != r.Uid || !companionController(m, i) {
-		save(Error("CONFLICT", "配套引用 UID 或 controller owner 与原父 CR 不一致，不认领同名对象"))
+		save(Error("CONFLICT", "Operator "+out.State+"/"+out.Reason+"："+out.Message+"；配套引用 UID 或 controller owner 与原父 CR 不一致，不认领同名对象"))
 		return
 	}
 	// 关键：正常子资源重建的新 UID 来自当前父 status，无需修改父 UID/版本，也不会产生平台写任务。

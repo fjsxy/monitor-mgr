@@ -57,6 +57,7 @@ var _ = ginkgo.It("UT-08 保存预览与版本冻结", func() {
 	checkExporterCollectionIntent(t)
 	checkExporterCollectionCapability(t)
 	checkExporterCollectionParameters(t)
+	checkExporterUnknownCreator(t)
 	checkTestP02PublicationFreezesSourceAndP03Idempotency(t)
 	checkTestP04DraftAndTargetPreviewRaces(t)
 	checkTestAgentDraftSourceIsolation(t)

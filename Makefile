@@ -105,3 +105,9 @@ ut-historical-identity: ## #26 历史身份迁移、管理员确认与 worker �
 	mkdir -p .scratch
 	$(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus="UT-07|UT-10|UT-16" -ginkgo.json-report=.scratch/issue-26.json
 	$(PYTHON) -m py_compile scripts/acceptance/historical_identity.py scripts/e2e_scenarios.py
+
+.PHONY: check-issue28-e2e
+check-issue28-e2e: ## #28 真实编排语法、Go 证据断言编译与唯一浏览器用例发现；不创建 kind
+	$(PYTHON) -m py_compile scripts/acceptance/exporter_collection.py scripts/e2e.py scripts/e2e_scenarios.py
+	$(GO) test ./tests/e2e -run '^$$'
+	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list

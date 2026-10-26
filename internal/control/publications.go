@@ -349,12 +349,11 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	if e = prepareCollectionIntent(i, originalCfg); e != nil {
 		return nil, e
 	}
-	cl, readErr := s.GetCluster(ctx, c, &rpc.ClusterID{Id: i.ClusterId})
-	if readErr != nil {
-		return nil, readErr
-	}
-	if e = t.publicationDependencies(ctx, cl, originalCfg, i.Uid == ""); e != nil {
-		return nil, e
+	// 受理只复核新字段能力；完整 namespace/UID/权限预检属于异步派发，不能延长持久受理的网络等待。
+	if i.Component == KSMComponent {
+		if e = t.collectionDependencies(ctx, originalCfg.spec()); e != nil {
+			return nil, e
+		}
 	}
 	if e = validateHistoricalCollection(ctx, s.DB, i, originalCfg.spec(), t); e != nil {
 		return nil, e

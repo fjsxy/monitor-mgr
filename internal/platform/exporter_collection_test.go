@@ -226,3 +226,26 @@ func checkExporterCollectionDeletion(t ginkgo.GinkgoTInterface) {
 	Expect(f.smWrites).To(BeZero())
 	Expect(f.deleteCount).To(Equal(1))
 }
+
+// 管理确认只授予管理权限，不能补造归属标签所需的历史创建身份。
+func checkExporterUnknownCreator(t ginkgo.GinkgoTInterface) {
+	ginkgo.By("I28-R01：历史 creator 未知，管理员权限确认后仍不能启用配套采集")
+	p, admin, user, id, _, f, _ := historicalFixture(t, nil)
+	current := clusterCall(t, p, "GET", "/instances/"+id, nil, admin, "", 200)
+	Expect(current["creatorUserId"]).To(BeEmpty())
+	clusterCall(t, p, "POST", "/instances/"+id+"/management-confirmations", map[string]any{"allowClusterManagers": true}, admin, "confirm-management-only", 200)
+	current = clusterCall(t, p, "GET", "/instances/"+id, nil, user, "", 200)
+	Expect(current["canManage"]).To(BeTrue())
+	Expect(current["creatorUserId"]).To(BeEmpty())
+	cfg := ksmConfig("lifecycle")
+	cfg["serviceMonitor"] = map[string]any{"enabled": true, "interval": "30s", "scrapeTimeout": "10s"}
+	clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "ksm": cfg}, user, "explicit-new-collection", 200)
+	for n, actor := range []*http.Cookie{admin, user} {
+		denied := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, actor, fmt.Sprint("unknown-creator-", n), 409)
+		Expect(denied["message"]).To(ContainSubstring("创建用户未知"))
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	Expect(f.mutationRequests).To(BeZero())
+	Expect(f.smWrites).To(BeZero())
+}
