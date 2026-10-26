@@ -258,6 +258,10 @@ func checkLegacySMNeverDispatches(t ginkgo.GinkgoTInterface) {
 					t.Fatal(e)
 				}
 				op := clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "refresh", 200)
+				history := clusterCall(t, p, "GET", "/operations?instanceId="+id, nil, c, "", 200)["operations"].([]any)
+				if len(history) != 1 || history[0].(map[string]any)["operationId"] != oid || history[0].(map[string]any)["resources"].([]any)[1].(map[string]any)["historicalPending"] != true {
+					t.Fatal("按 instanceID 无法盘点旧 SM 原任务", history)
+				}
 				rs := op["resources"].([]any)
 				if len(rs) != 2 {
 					t.Fatal("旧资源集合被替换", op)

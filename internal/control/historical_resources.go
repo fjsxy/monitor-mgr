@@ -146,3 +146,31 @@ func validateLegacyManagementSchema(ctx context.Context, db clusterQuery) error 
 	}
 	return nil
 }
+
+// historicalServiceMonitorStep 供发布预检及显式盘点复用；原执行事实与新的观察严格分离。
+type historicalServiceMonitorStep struct {
+	instanceID, operationID, attemptID, resourceKey string
+	path, originalUID, confirmedUID, state          string
+	possiblySent, pending                           bool
+	document                                        []byte
+}
+
+// historicalServiceMonitorSteps 在调用者已核验实例授权的事务内只读查询全部旧 SM，而非只找新 Operator 名称。
+// 关键：已成功步骤也返回，已有旧 SM 仍可能被 Agent 选中；后续切片须盘点采集影响并记录显式处理，不能假记执行成功来解除。
+func historicalServiceMonitorSteps(ctx context.Context, q clusterQuery, instanceID string) ([]historicalServiceMonitorStep, error) {
+	rows, e := q.QueryContext(ctx, `SELECT ?,r.operation_id,l.current_attempt_id,r.resource_key,r.object_path,r.original_uid,p.confirmed_uid,p.state,p.possibly_sent,r.document FROM operation_resources r JOIN operation_lifecycle l ON l.operation_id=r.operation_id JOIN resource_progress p ON p.attempt_id=l.current_attempt_id AND p.resource_key=r.resource_key WHERE json_extract(r.document,'$.kind')='ServiceMonitor' AND r.operation_id IN (SELECT operation_id FROM publication_operations WHERE instance_id=? UNION SELECT operation_id FROM deletion_operations WHERE instance_id=?) ORDER BY r.operation_id,r.position`, instanceID, instanceID, instanceID)
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	out := []historicalServiceMonitorStep{}
+	for rows.Next() {
+		var step historicalServiceMonitorStep
+		if e = rows.Scan(&step.instanceID, &step.operationID, &step.attemptID, &step.resourceKey, &step.path, &step.originalUID, &step.confirmedUID, &step.state, &step.possiblySent, &step.document); e != nil {
+			return nil, e
+		}
+		step.pending = step.state != "SUCCEEDED" && step.state != "CANCELLED"
+		out = append(out, step)
+	}
+	return out, rows.Err()
+}
