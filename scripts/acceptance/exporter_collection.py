@@ -150,7 +150,7 @@ def lifecycle(s):
     for rule in rules:
         if 'servicemonitors' in rule.get('resources', []): rule['resources'].remove('servicemonitors')
     rules = [rule for rule in rules if rule.get('resources') or rule.get('nonResourceURLs')]
-    # 通过公开草稿/发布入口切换选择规则。
+    # 关键：由集群管理员按原 ClusterRole UID/RV 临时撤销或恢复 SM 读取权限，属于外部 RBAC 故障注入。
     def set_rules(value):
         current = s.get('clusterrole', role['name'], target=s.target)
         s.k('patch', 'clusterrole', role['name'], '--type=json', '-p', json.dumps([{'op':'test','path':'/metadata/uid','value':original_role['metadata']['uid']},{'op':'test','path':'/metadata/resourceVersion','value':current['metadata']['resourceVersion']},{'op':'replace','path':'/rules','value':value}]), target=s.target)

@@ -62,3 +62,56 @@
 局部原生执行：UT-08/10/11/12/18 五项均 passed、NumAttempts=1，其他稳定用例是显式 focus 未选，不构成全量18项通过。最初 `review-focused.json` 中四项 race passed、UT-18 因新测试在 unittest 清空 traceback 后才观察源码帧而失败；已修正观察时点，单独 UT-18 race 复测及最终五项均通过，原失败报告保留。
 
 真实旧 6b8 失败的修复依据来自集成任务保存的原始状态/安全来源帧；未将 exit=2 推断为超时，未重建 RC4 发布品。按集成任务明确决定，全量 Go UT 从15m增加到20m、CI job仍30m，原因是6b8本地全量716s、云端相同head冷启动总命令17m30及新增必选矩阵需要有界余量；这不是旧失败原因的定性，也未减少输入或断言。
+
+
+二次 Spec 复核及 6f6 CI 反馈的追加修复，基线为 `626f0f0f9c9bf935bd016d233e13deda9f1c5c34`。最终五列计划：<https://github.com/fjsxy/monitor-mgr/issues/23#issuecomment-6418392363>，GitHub 正文与本地逐字一致。下列测试执行在未提交的追加工作树；原报告和日志保留真实来源，不将其伪造绑定到最终提交 SHA。
+
+| 输入 | 实际结果 | 证据/限制 |
+|---|---|---|
+| I23-R20 | 预算静态核查通过 | 根据6f6 CI全18项passed/platform约1083s/完整命令19分30，将Go包预算20m调整25m；CI job30m不变；旧exit2原因仍未知 |
+| I23-R21.manager / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.template / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.source-hostpath / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.source-configmap / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.token-path / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.token-audience / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.subpath / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.lifecycle / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.sidecar / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.writable-root / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R21.normal / UT-08 | 局部 UT 通过 | review-sa-mount-red.log → review-sa-mount-green.json；最终review-followup-targeted.json UT-08 passed/attempt1 |
+| I23-R22.leftover-Service / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.denied-Service / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.leftover-ServiceAccount / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.denied-ServiceAccount / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.leftover-Role / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.denied-Role / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.leftover-RoleBinding / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.denied-RoleBinding / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.leftover-ClusterRole / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.denied-ClusterRole / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.leftover-ClusterRoleBinding / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.denied-ClusterRoleBinding / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.leftover-Endpoints / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.denied-Endpoints / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.leftover-EndpointSlice / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.denied-EndpointSlice / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.leftover-ServiceMonitor / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.denied-ServiceMonitor / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.shape / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.page-denied / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.page-repeat / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.replacement / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.empty / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.api-absent / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R23.namespace-permission / E2E-02 | 静态检查通过；真实 E2E 未执行 | 6f6 CI权限失败为原始red；仅补Operator和完整图只读权限，原namespace workload写负例保持；父最终真实E2E-02核验 |
+| I23-R24.unknown-window / E2E-08 | 静态检查通过；真实 E2E 未执行 | 6f6 CI全历史POST计数污染为原始red；改用子例事件窗口与预存intentId，恢复/未知保护断言保留；父最终E2E-08核验 |
+| I23-R25.collector-name / UT-18、E2E-08 | 工具 UT 通过；真实 E2E 未执行 | review-ci-fixtures-red.log → review-ci-fixtures-green.json；最终review-browser-diagnostic-green.json UT-18包含实际CI长run-id、最大39字符run-id和不同长前缀 |
+| I23-R22.seen-child / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.optional-page / UT-11 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R22.active-rebuild / UT-14 | 局部 UT 通过 | review-complete-graph-red.log → review-followup-targeted.json UT-11/14 passed/attempt1；active-rebuild另有review-active-graph-red.log最小复现 |
+| I23-R26.browser-diagnostic / UT-18、E2E-10 | 工具 UT 通过；真实 E2E 未执行 | review-browser-diagnostic-red.log → review-browser-diagnostic-green.json UT-18 passed/attempt1；固定step/源码/枚举正控及私有标记/未知路径负例；浏览器原断言与其预算未改 |
+
+运行边界：新增 `deletion_graph.go` 只共享 RC4 正式受管类型、作用域、完整分页和原 UID 闭包，不复制 Service 命名或端口算法。活跃原父可识别 Operator 合法重建子 UID；历史删除要求完整图为空，未知读取、外部替代和任一原后代残留均拒绝。SM 仍只有读取。
+
+`review-followup-checks.log` 包含18 UT/10 E2E清单一致、Python语法、Go E2E断言编译与唯一Playwright用例发现；`review-followup-vet.log` 通过。没有在 fixer 树运行完整18项/race/覆盖率或真实10case，最终由集成任务绑定最终merge SHA执行。6f6云端UT/storage已绿属于旧候选，不挪作本次修复后证据。

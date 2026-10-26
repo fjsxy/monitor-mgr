@@ -51,6 +51,7 @@ func checkExporterCollectionIntent(t ginkgo.GinkgoTInterface) {
 // 旧 schema 可能接受请求却裁掉字段，必须在任何 CR 写入之前识别。
 func checkExporterCollectionCapability(t ginkgo.GinkgoTInterface) {
 	checkExporterOperatorRuntime(t)
+	checkExporterOperatorMounts(t)
 	for _, field := range []string{"spec.serviceMonitor", "spec.serviceMonitor.enabled", "spec.serviceMonitor.interval", "status.serviceMonitor.resource.uid", "status.serviceMonitor.state"} {
 		ginkgo.By("I28-U03.crd：实际 served schema 缺失/错误 " + field + " 时零业务写拒绝")
 		p, c, id, f := ksmPublishedFixture(t)
@@ -155,6 +156,8 @@ func checkExporterCollectionObservation(t ginkgo.GinkgoTInterface) {
 	Expect(v["uid"]).To(Equal("created-uid"))
 	Expect(v["currentVersionId"]).To(Equal(op["versionId"]))
 	Expect(collectionSource(t, p, c, id)["companion"].(map[string]any)["resource"].(map[string]any)["uid"]).To(Equal("companion-uid-b"))
+	ginkgo.By("I23-R22.active-rebuild：原父拥有重建子UID后仍可只读取得删除预览")
+	clusterCall(t, p, "POST", "/instances/"+id+"/deletion-previews", nil, c, "rebuild-preview", 200)
 	ginkgo.By("I28-U04.drift：旧 generation 只报未收敛")
 	f.mu.Lock()
 	f.cr["status"].(map[string]any)["serviceMonitor"].(map[string]any)["observedGeneration"] = float64(0)
@@ -258,11 +261,11 @@ func checkExporterUnknownCreator(t ginkgo.GinkgoTInterface) {
 // exporterRuntimeFixture 表达已批准 RC4 的实际运行身份，不以 tag 或 CRD 冒充进程能力。
 func exporterRuntimeFixture() map[string]map[string]any {
 	image := "docker.io/fjsxy/monitor-in-hand@sha256:1a9ec41de21c7b2b633ee7179f5f3f4c1a9e098f1dc4e74a9e720dbee73f19ff"
-	container := map[string]any{"name": "manager", "image": image, "args": []any{"--leader-elect=true", "--health-probe-bind-address=:8081", "--log-level=info"}}
+	container := map[string]any{"name": "manager", "image": image, "args": []any{"--leader-elect=true", "--health-probe-bind-address=:8081", "--log-level=info"}, "securityContext": map[string]any{"allowPrivilegeEscalation": false, "readOnlyRootFilesystem": true, "capabilities": map[string]any{"drop": []any{"ALL"}}}}
 	metadata := func(name, uid string) map[string]any {
 		return map[string]any{"name": name, "namespace": "operator-system", "uid": uid}
 	}
-	dep := map[string]any{"metadata": metadata("monitor-in-hand", "operator-dep"), "spec": map[string]any{"template": map[string]any{"spec": map[string]any{"serviceAccountName": "operator", "containers": []any{container}}}}}
+	dep := map[string]any{"metadata": metadata("monitor-in-hand", "operator-dep"), "spec": map[string]any{"template": map[string]any{"spec": map[string]any{"serviceAccountName": "operator", "securityContext": map[string]any{"runAsNonRoot": true, "seccompProfile": map[string]any{"type": "RuntimeDefault"}}, "containers": []any{container}}}}}
 	rsMeta := metadata("operator-rs", "operator-rs")
 	rsMeta["ownerReferences"] = []any{map[string]any{"kind": "Deployment", "uid": "operator-dep", "controller": true}}
 	rs := map[string]any{"metadata": rsMeta}
@@ -273,8 +276,12 @@ func exporterRuntimeFixture() map[string]map[string]any {
 		podContainer[key] = value
 	}
 	podContainer["volumeMounts"] = []any{map[string]any{"name": "kube-api-access-fixture", "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount", "readOnly": true}}
-	pod := map[string]any{"metadata": podMeta, "spec": map[string]any{"serviceAccountName": "operator", "containers": []any{podContainer}}, "status": map[string]any{"phase": "Running", "containerStatuses": []any{map[string]any{"name": "manager", "ready": true, "containerID": "containerd://original", "imageID": "docker-pullable://docker.io/fjsxy/monitor-in-hand@sha256:0eadb4af76f5a1c72eb3f5bb4b8372eab43dbabb0a4dfb194866d58cf854ebde"}}}}
-	return map[string]map[string]any{"/apis/apps/v1/deployments": {"items": []any{dep}}, "/apis/apps/v1/namespaces/operator-system/replicasets": {"items": []any{rs}}, "/api/v1/namespaces/operator-system/pods": {"items": []any{pod}}, "/api/v1/namespaces/operator-system/pods/operator-pod": pod}
+	pod := map[string]any{"metadata": podMeta, "spec": map[string]any{"serviceAccountName": "operator", "securityContext": map[string]any{"runAsNonRoot": true, "seccompProfile": map[string]any{"type": "RuntimeDefault"}}, "volumes": []any{map[string]any{"name": "kube-api-access-fixture", "projected": map[string]any{"defaultMode": 420, "sources": []any{map[string]any{"serviceAccountToken": map[string]any{"path": "token", "expirationSeconds": 3607}}, map[string]any{"configMap": map[string]any{"name": "kube-root-ca.crt", "items": []any{map[string]any{"key": "ca.crt", "path": "ca.crt"}}}}, map[string]any{"downwardAPI": map[string]any{"items": []any{map[string]any{"path": "namespace", "fieldRef": map[string]any{"apiVersion": "v1", "fieldPath": "metadata.namespace"}}}}}}}}}, "containers": []any{podContainer}}, "status": map[string]any{"phase": "Running", "containerStatuses": []any{map[string]any{"name": "manager", "ready": true, "containerID": "containerd://original", "imageID": "docker-pullable://docker.io/fjsxy/monitor-in-hand@sha256:0eadb4af76f5a1c72eb3f5bb4b8372eab43dbabb0a4dfb194866d58cf854ebde"}}}}
+	runtime := map[string]map[string]any{"/apis/apps/v1/deployments": {"items": []any{dep}}, "/apis/apps/v1/namespaces/operator-system/replicasets": {"items": []any{rs}}, "/api/v1/namespaces/operator-system/pods": {"items": []any{pod}}, "/api/v1/namespaces/operator-system/pods/operator-pod": pod}
+	for _, path := range []string{"/api/v1/services", "/api/v1/serviceaccounts", "/api/v1/endpoints", "/apis/discovery.k8s.io/v1/endpointslices", "/apis/rbac.authorization.k8s.io/v1/roles", "/apis/rbac.authorization.k8s.io/v1/rolebindings", "/apis/rbac.authorization.k8s.io/v1/clusterroles", "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings"} {
+		runtime[path] = map[string]any{"items": []any{}}
+	}
+	return runtime
 }
 
 // checkExporterOperatorRuntime 经公开预览拒绝缺失、旧版本及无法核实的实际 controller。
@@ -355,4 +362,52 @@ func checkExporterOperatorDispatch(t ginkgo.GinkgoTInterface) {
 	defer f.mu.Unlock()
 	Expect(f.mutationRequests).To(BeZero())
 	Expect(f.smWrites).To(BeZero())
+}
+
+// checkExporterOperatorMounts 用公开预览证明批准镜像不能替代实际执行入口和SA投影的校验。
+func checkExporterOperatorMounts(t ginkgo.GinkgoTInterface) {
+	for _, variant := range []string{"manager", "template", "source-hostpath", "source-configmap", "token-path", "token-audience", "subpath", "lifecycle", "sidecar", "writable-root"} {
+		ginkgo.By("I23-R21." + variant)
+		p, a, id, f := ksmPublishedFixture(t)
+		f.mu.Lock()
+		pod := f.exporterRuntime["/api/v1/namespaces/operator-system/pods/operator-pod"]
+		spec := pod["spec"].(map[string]any)
+		c := spec["containers"].([]any)[0].(map[string]any)
+		volume := spec["volumes"].([]any)[0].(map[string]any)
+		projected := volume["projected"].(map[string]any)
+		switch variant {
+		case "manager", "template":
+			c["volumeMounts"] = append(c["volumeMounts"].([]any), map[string]any{"name": "override", "mountPath": "/manager", "readOnly": true})
+			spec["volumes"] = append(spec["volumes"].([]any), map[string]any{"name": "override", "configMap": map[string]any{"name": "foreign"}})
+			if variant == "template" {
+				dep := f.exporterRuntime["/apis/apps/v1/deployments"]["items"].([]any)[0].(map[string]any)
+				template := dep["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
+				template["volumes"] = spec["volumes"]
+				template["containers"] = spec["containers"]
+			}
+		case "source-hostpath":
+			delete(volume, "projected")
+			volume["hostPath"] = map[string]any{"path": "/foreign"}
+		case "source-configmap":
+			projected["sources"].([]any)[1].(map[string]any)["configMap"].(map[string]any)["name"] = "foreign-ca"
+		case "token-path":
+			projected["sources"].([]any)[0].(map[string]any)["serviceAccountToken"].(map[string]any)["path"] = "manager"
+		case "token-audience":
+			projected["sources"].([]any)[0].(map[string]any)["serviceAccountToken"].(map[string]any)["audience"] = "foreign-api"
+		case "subpath":
+			c["volumeMounts"].([]any)[0].(map[string]any)["subPath"] = "foreign"
+		case "lifecycle":
+			c["lifecycle"] = map[string]any{"postStart": map[string]any{"exec": map[string]any{"command": []any{"/other"}}}}
+		case "sidecar":
+			spec["containers"] = append(spec["containers"].([]any), map[string]any{"name": "foreign", "image": "foreign"})
+		case "writable-root":
+			c["securityContext"].(map[string]any)["readOnlyRootFilesystem"] = false
+		}
+		f.mu.Unlock()
+		clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, a, "mount-"+variant, 409)
+		f.mu.Lock()
+		Expect(f.mutationRequests).To(BeZero())
+		Expect(f.smWrites).To(BeZero())
+		f.mu.Unlock()
+	}
 }

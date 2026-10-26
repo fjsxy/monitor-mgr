@@ -17,6 +17,48 @@ from clusters import Suite as ClusterSuite
 
 
 class TrustBoundary(unittest.TestCase):
+    def test_browser_failure_projection(self):
+        """浏览器失败只投影固定步骤、可信源码位置及状态枚举，任意报告内容仍私有。"""
+        from browser_diagnostics import browser_summary
+        root = Path(__file__).resolve().parents[2]
+        location = dict(file=str(root/'web/tests/phase1.spec.ts'),line=50,column=1)
+        secret = 'PRIVATE_FIXTURE_TOKEN_SENTINEL'
+        error = dict(message='Expected: "Ready"\nReceived: "Reconciling"\n'+secret, location=location, stack=secret)
+        step = dict(title='查看 diff，明确确认后才发布到真实集群',error=error,steps=[dict(title=secret,error=error)])
+        result = dict(status='failed',steps=[step],stdout=[secret],stderr=[secret],attachments=[dict(path=secret)])
+        report = dict(suites=[dict(specs=[dict(tests=[dict(results=[result])])])],stats=dict(expected=0,unexpected=1,skipped=0))
+        value = browser_summary(report,root)
+        self.assertEqual(value['failures'][0]['step'],step['title'])
+        self.assertEqual(value['failures'][0]['file'],'web/tests/phase1.spec.ts')
+        self.assertEqual(value['failures'][0]['expected'],'Ready')
+        self.assertEqual(value['failures'][0]['actual'],'Reconciling')
+        self.assertNotIn(secret,json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+        step['title']=secret;step.pop('steps');error['location']['file']='/private/'+secret
+        error['message']='Expected: "'+secret+'"\nReceived: "'+secret+'"'
+        value=browser_summary(report,root)
+        self.assertEqual(value['failures'][0]['step'],'unknown')
+        self.assertEqual(value['failures'][0]['expected'],'unknown')
+        self.assertEqual(value['failures'][0]['actual'],'unknown')
+        self.assertNotIn(secret,json.dumps(value));self.assertNotIn('file',value['failures'][0])
+
+    def test_fixture_namespace_names(self):
+        """长CI/run-id派生namespace稳定且保留唯一性，短名保持原可读身份。"""
+        import re
+        from fixture_names import namespace_name
+        self.assertEqual(namespace_name('mm-short-c8-target-historical-migration'), 'mm-short-c8-target-historical-migration')
+        values = []
+        for run in ['mm-ci-40333823884-1-recovery', 'mm-'+'a'*36, 'mm-'+'a'*35+'b']:
+            exporter = namespace_name(run+'-c8-target-historical-migration')
+            collector = namespace_name(exporter+'-agent')
+            for name in [exporter, collector]:
+                self.assertLessEqual(len(name),63)
+                self.assertRegex(name,r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+                self.assertEqual(namespace_name(name),name)
+            self.assertNotEqual(exporter,collector)
+            self.assertEqual(namespace_name(exporter+'-agent'),collector)
+            values.append(collector)
+        self.assertEqual(len(set(values)),3)
+
     def test_capture_failure_tail(self):
         """大体积原日志的末尾失败和超时仍须经冻结源码核验后安全投影。"""
         from capture import project_output

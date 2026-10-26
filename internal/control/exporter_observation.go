@@ -157,46 +157,5 @@ func (s *Store) companionGraphCandidates(ctx context.Context, i *rpc.Observation
 	if !declared && seen == 0 {
 		return nil, nil
 	}
-	out := []seenResource{}
-	next := ""
-	tokens := map[string]bool{}
-	for {
-		path := "/apis/" + serviceMonitorAPI + "/servicemonitors?limit=200"
-		if next != "" {
-			path += "&continue=" + url.QueryEscape(next)
-		}
-		var list struct {
-			Items    []map[string]any `json:"items"`
-			Metadata struct {
-				Continue string `json:"continue"`
-			} `json:"metadata"`
-		}
-		e := t.Request(ctx, "GET", path, nil, &list)
-		// API 已删除代表配套对象不存在；Forbidden/网络失败从不作为消失证据。
-		if apiCode(e) == "TARGET_NOT_FOUND" {
-			return out, nil
-		}
-		if e != nil {
-			return nil, e
-		}
-		if list.Items == nil {
-			return nil, Error("UNAVAILABLE", "配套 ServiceMonitor 列表不完整")
-		}
-		for _, obj := range list.Items {
-			meta := objectMap(obj, "metadata")
-			ns, name, uid := objectString(meta, "namespace"), objectString(meta, "name"), objectString(meta, "uid")
-			if uid == "" || ns == "" || name == "" {
-				return nil, Error("UNAVAILABLE", "配套 ServiceMonitor 身份不完整")
-			}
-			out = append(out, seenResource{serviceMonitorAPI, "ServiceMonitor", ns, name, uid, ownerUID(meta), "/apis/" + serviceMonitorAPI + "/namespaces/" + url.PathEscape(ns) + "/servicemonitors/" + url.PathEscape(name)})
-		}
-		next = list.Metadata.Continue
-		if next == "" {
-			return out, nil
-		}
-		if tokens[next] {
-			return nil, Error("UNAVAILABLE", "配套 ServiceMonitor 分页重复")
-		}
-		tokens[next] = true
-	}
+	return t.listGraphCandidates(ctx, "", []graphResourceKind{serviceMonitorGraphKind})
 }
