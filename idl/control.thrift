@@ -66,12 +66,14 @@ struct CollectorSelection { 1: required string mode, 2: optional list<string> na
 struct MetricSelection { 1: required string mode, 2: optional list<string> patterns }
 struct NamespaceSelection { 1: required string mode, 2: optional list<string> names, 3: optional list<string> namePatterns }
 struct RoleResources { 1: required string mode, 2: optional ContainerResources resources }
+// 平台只配置采集意图；归属标签由固定创建身份生成，不接受用户传入。
+struct ExporterServiceMonitor { 1: required bool enabled, 2: optional string interval, 3: optional string scrapeTimeout }
 struct KSMConfiguration {
  1: required string name, 2: required string targetNamespace, 3: required string deploymentMode,
  4: required string desiredState, 5: required ContainerResources resources,
  6: required CollectorSelection collectors, 7: required MetricSelection metricFilter, 8: required NamespaceSelection namespaceFilter,
  9: required bool advancedResources, 10: optional i32 shards,
- 11: optional RoleResources nodeResources, 12: optional RoleResources clusterResources, 13: optional RoleResources unscheduledResources
+ 11: optional RoleResources nodeResources, 12: optional RoleResources clusterResources, 13: optional RoleResources unscheduledResources, 14: optional ExporterServiceMonitor serviceMonitor
 }
 // Agent配置仅表达平台支持字段；所有认证仅引用同namespace的既有Secret。
 struct LabelExpression { 1: required string key, 2: required string operator, 3: optional list<string> values }
@@ -88,7 +90,10 @@ struct AgentConfiguration { 1: required string name, 2: required string namespac
 struct MatchedResource { 1: required string kind, 2: required string namespace, 3: required string name, 4: required string uid }
 struct AgentStatefulPolicy { 1: required string name, 2: required string uid, 3: required string whenScaled, 4: required string whenDeleted }
 struct VolumeObservation { 1: required string namespace, 2: required string name, 3: required string uid, 4: required string phase, 5: required string requestedStorage, 6: required list<string> accessModes, 7: required string storageClass, 8: required list<string> mountedByPods, 9: optional string expectedPolicy, 10: optional string retentionResult, 11: optional string lastAttemptAt, 12: optional string lastSuccessAt, 13: optional string error, 14: optional string statefulUID, 15: optional string statefulName, 16: optional i32 shard, 17: optional string agentUID, 18: optional string impactAction }
-struct SourceObservation { 1: required string source, 2: required string lastAttemptAt, 3: required string lastSuccessAt, 4: required string error, 5: required bool historical, 6: optional list<MatchedResource> matches, 7: optional list<VolumeObservation> volumes, 8: optional InstanceRuntime runtimeSnapshot, 9: optional string uid, 10: optional bool stale, 11: optional list<AgentStatefulPolicy> policies, 12: optional string storageMode }
+// 配套观察只表示 Operator 收敛，不代表实际采集；引用按完整身份核验。
+struct OperatorResourceReference { 1: required string apiVersion, 2: required string kind, 3: required string namespace, 4: required string name, 5: required string uid }
+struct CompanionObservation { 1: required string state, 2: required string reason, 3: required string message, 4: required string parentUid, 5: required i64 generation, 6: required i64 observedGeneration, 7: optional OperatorResourceReference resource, 8: optional string yaml }
+struct SourceObservation { 1: required string source, 2: required string lastAttemptAt, 3: required string lastSuccessAt, 4: required string error, 5: required bool historical, 6: optional list<MatchedResource> matches, 7: optional list<VolumeObservation> volumes, 8: optional InstanceRuntime runtimeSnapshot, 9: optional string uid, 10: optional bool stale, 11: optional list<AgentStatefulPolicy> policies, 12: optional string storageMode, 13: optional CompanionObservation companion }
 struct AssociationPreviewRequest { 1: required string id, 2: required i64 draftRevision }
 struct AssociationPreview { 1: required i64 draftRevision, 2: required list<SourceObservation> sources }
 struct InstanceID { 1: required string id }

@@ -26,6 +26,7 @@ from ksm_cases import controller, args as workload_args, counts, stopped_workloa
 class Scenario(LifecycleSuite, AgentSuite):
     def __init__(self, environment, index, emit):
         self.env, self.index, self.emit = environment, index, emit
+        self.acceptance_evidence = {}
         prefix = environment.run_id + '-c' + str(index)
         a = SimpleNamespace(session=None, output=str(environment.private / ('case-' + str(index))),
                             prefix=prefix, port=19000 + index * 3, kubectl='kubectl', initialize=True,
@@ -122,7 +123,7 @@ class Scenario(LifecycleSuite, AgentSuite):
 
     def cfg(self,name=None,mode='Deployment',namespace=None):
         if self.component=='agent': return AgentSuite.cfg(self,name,namespace)
-        value=KSMSuite.cfg(self,name,mode);value['namespaceFilter']={'mode':'Include','names':[self.targetns]};return value
+        value=KSMSuite.cfg(self,name,mode);value['serviceMonitor']={'enabled':True,'interval':'30s','scrapeTimeout':'10s'};value['namespaceFilter']={'mode':'Include','names':[self.targetns]};return value
     def create(self,*args,**kwargs): return (AgentSuite.create if self.component=='agent' else KSMSuite.create)(self,*args,**kwargs)
     def save(self,*args,**kwargs): return (AgentSuite.save if self.component=='agent' else KSMSuite.save)(self,*args,**kwargs)
     def preview(self,*args,**kwargs): return (AgentSuite.preview if self.component=='agent' else KSMSuite.preview)(self,*args,**kwargs)
@@ -272,6 +273,8 @@ def ksm(s):
     cfg=s.cfg();i=s.create(cfg)
     assert s.k('get','kubestatemetrics',s.crname,target=s.target,check=False).returncode!=0
     s.publish(i);s.runtime(i);assert len([x for x in s.workloads() if x['kind']=='Deployment'])==1
+    from exporter_collection import topology, lifecycle as collection_lifecycle
+    topology(s,i)
     s.by('替换为双分片 StatefulSet，再替换为三角色 DaemonSet')
     for mode in ('StatefulSetSharded','DaemonSetSharded'):
         cfg=s.cfg(mode=mode)
@@ -279,7 +282,7 @@ def ksm(s):
             cfg.update(advancedResources=True,collectors={'mode':'Include','names':['pods','nodes']},metricFilter={'mode':'Deny','patterns':['kube_pod_labels']})
             for role,cpu in [('nodeResources','110m'),('clusterResources','120m'),('unscheduledResources','130m')]:cfg[role]={'mode':'Override','resources':{'requestCPU':cpu,'requestMemory':'64Mi','limitMemory':'256Mi'}}
         else:cfg.update(collectors={'mode':'Include','names':['pods','nodes']},metricFilter={'mode':'Allow','patterns':['kube_.*']})
-        s.save(i,cfg);s.publish(i);s.runtime(i)
+        s.save(i,cfg);s.publish(i);s.runtime(i);topology(s,i)
         if mode=='StatefulSetSharded':assert controller(s,'StatefulSet')['spec']['replicas']==2
         else:
             assert len([x for x in s.workloads() if x['kind']=='DaemonSet'])==1
@@ -299,6 +302,7 @@ def ksm(s):
     s.call('DELETE','/instances/'+found['id'],status=403)
     s.call('PUT','/instances/'+found['id']+'/draft',{'expectedDraftRevision':1,'ksm':s.cfg()},status=403)
     s.call('POST','/instances/'+found['id']+'/publications',{'draftRevision':1,'previewId':'forged','overwriteDrift':False},status=403)
+    collection_lifecycle(s)
 
 
 def agent(s):

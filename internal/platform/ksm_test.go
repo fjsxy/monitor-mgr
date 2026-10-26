@@ -146,6 +146,8 @@ func checkTestF04EncryptedSchema3WrongKeyDoesNotMigrate(t ginkgo.GinkgoTInterfac
 
 type ksmFixture struct {
 	legacySM            map[string]any
+	crd                 map[string]any
+	smReadFailure       bool
 	smReads             int
 	smReadPaths         []string
 	smWrites            int
@@ -189,15 +191,33 @@ type ksmFixture struct {
 func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 	t.Helper()
 	base, _, _ := clusterAPI(t, 200, false)
-	f := &ksmFixture{}
+	f := &ksmFixture{crd: collectionCRDFixture(t)}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/apis/apiextensions.k8s.io/v1/customresourcedefinitions/kubestatemetrics.monitoring.fjsxy.github.io" {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			json.NewEncoder(w).Encode(f.crd)
+			return
+		}
 		if strings.Contains(r.URL.Path, "/servicemonitors") {
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			if r.Method != "GET" {
 				f.smWrites++
 				w.WriteHeader(500)
+				return
+			}
+			if f.smReadFailure {
+				w.WriteHeader(403)
+				return
+			}
+			if strings.HasSuffix(r.URL.Path, "/servicemonitors") {
+				items := []any{}
+				if f.legacySM != nil {
+					items = append(items, f.legacySM)
+				}
+				json.NewEncoder(w).Encode(map[string]any{"items": items})
 				return
 			}
 			f.smReads++

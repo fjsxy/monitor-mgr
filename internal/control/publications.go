@@ -84,10 +84,6 @@ func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, v
 		desired = frozenSpec[0]
 	}
 	targetNamespace := objectString(desired, "targetNamespace")
-	mode := objectString(objectMap(desired, "deployment"), "mode")
-	if mode == "" {
-		mode = "Deployment"
-	}
 	if targetNamespace == "" {
 		return Error("INVALID_INPUT", "冻结目标namespace缺失")
 	}
@@ -118,12 +114,18 @@ func (t *Target) publicationDependencies(ctx context.Context, cl *rpc.Cluster, v
 	if create {
 		verb = "create"
 	}
+	// 保留既有 namespace 管理权限门禁；实际 workload 与配套写入仍由 Operator 执行。
+	mode := objectString(objectMap(desired, "deployment"), "mode")
 	workload := "deployments"
 	if mode == "StatefulSetSharded" {
 		workload = "statefulsets"
 	}
 	if mode == "DaemonSetSharded" {
 		workload = "daemonsets"
+	}
+
+	if e := t.collectionDependencies(ctx, desired); e != nil {
+		return e
 	}
 	for _, a := range []map[string]string{{"group": "monitoring.fjsxy.github.io", "resource": "kubestatemetrics", "verb": verb}, {"group": "apps", "resource": workload, "verb": verb, "namespace": targetNamespace}} {
 		var review struct {
@@ -153,6 +155,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	if e != nil {
 		return nil, e
 	}
+	if e = prepareCollectionIntent(i, cfg); e != nil {
+		return nil, e
+	}
 	if rev != r.DraftRevision {
 		return nil, Error("CONFLICT", "草稿修订已变化")
 	}
@@ -171,6 +176,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	defer t.Close()
 	cl, e := s.GetCluster(ctx, c, &rpc.ClusterID{Id: i.ClusterId})
 	if e != nil {
+		return nil, e
+	}
+	if e = validateHistoricalCollection(ctx, s.DB, i, cfg.spec(), t); e != nil {
 		return nil, e
 	}
 	if e = t.publicationDependencies(ctx, cl, cfg, i.Uid == ""); e != nil {
@@ -221,6 +229,9 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 	defer tx.Rollback()
 	_, latestInstance, e := s.instanceTx(ctx, tx, c, r.Id)
 	if e != nil {
+		return nil, e
+	}
+	if e = validateHistoricalCollection(ctx, tx, latestInstance, cfg.spec(), t); e != nil {
 		return nil, e
 	}
 	if e = validateFixedSpec(ctx, tx, latestInstance, cfg.spec()); e != nil {
@@ -330,6 +341,24 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	if e != nil {
 		return nil, e
 	}
+	// 受理前重新读实际能力；发送前仍重复预检，避免预览后 schema 被降级。
+	originalCfg, originalRev, readErr := readDraft(ctx, s.DB, i.Id)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if e = prepareCollectionIntent(i, originalCfg); e != nil {
+		return nil, e
+	}
+	cl, readErr := s.GetCluster(ctx, c, &rpc.ClusterID{Id: i.ClusterId})
+	if readErr != nil {
+		return nil, readErr
+	}
+	if e = t.publicationDependencies(ctx, cl, originalCfg, i.Uid == ""); e != nil {
+		return nil, e
+	}
+	if e = validateHistoricalCollection(ctx, s.DB, i, originalCfg.spec(), t); e != nil {
+		return nil, e
+	}
 	var storageSnapshot *agentStorageSnapshot
 	var observedDraftRevision int64
 	if i.Component == AgentComponent {
@@ -377,16 +406,25 @@ func (s *Store) PublishConfiguration(ctx context.Context, c *rpc.RequestContext,
 	if e != nil {
 		return nil, e
 	}
+	if e = prepareCollectionIntent(i, cfg); e != nil {
+		return nil, e
+	}
 	if agent, ok := cfg.(*AgentConfig); ok {
 		if e = agent.validateRevisionName(); e != nil {
 			return nil, e
 		}
+	}
+	if rev != originalRev {
+		return nil, Error("CONFLICT", "发布预检期间草稿已变化，请重新预览")
 	}
 	if i.Component == AgentComponent && rev != observedDraftRevision {
 		return nil, Error("CONFLICT", "存储预检期间草稿已变化，请重新预览")
 	}
 	baseline, e := readPreview(ctx, tx, r.PreviewId, i.Id)
 	if e != nil {
+		return nil, e
+	}
+	if e = validateHistoricalCollection(ctx, tx, i, cfg.spec(), t); e != nil {
 		return nil, e
 	}
 	if e = validateFixedSpec(ctx, tx, i, cfg.spec()); e != nil {

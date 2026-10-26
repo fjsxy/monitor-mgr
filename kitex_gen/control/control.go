@@ -2176,20 +2176,91 @@ var fieldIDToName_RoleResources = map[int16]string{
 	2: "resources",
 }
 
+type ExporterServiceMonitor struct {
+	Enabled        bool    `thrift:"enabled,1,required" frugal:"1,required,bool" json:"enabled"`
+	Interval       *string `thrift:"interval,2,optional" frugal:"2,optional,string" json:"interval,omitempty"`
+	ScrapeTimeout  *string `thrift:"scrapeTimeout,3,optional" frugal:"3,optional,string" json:"scrapeTimeout,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewExporterServiceMonitor() *ExporterServiceMonitor {
+	return &ExporterServiceMonitor{}
+}
+
+func (p *ExporterServiceMonitor) InitDefault() {
+}
+
+func (p *ExporterServiceMonitor) GetEnabled() (v bool) {
+	return p.Enabled
+}
+
+var ExporterServiceMonitor_Interval_DEFAULT string
+
+func (p *ExporterServiceMonitor) GetInterval() (v string) {
+	if !p.IsSetInterval() {
+		return ExporterServiceMonitor_Interval_DEFAULT
+	}
+	return *p.Interval
+}
+
+var ExporterServiceMonitor_ScrapeTimeout_DEFAULT string
+
+func (p *ExporterServiceMonitor) GetScrapeTimeout() (v string) {
+	if !p.IsSetScrapeTimeout() {
+		return ExporterServiceMonitor_ScrapeTimeout_DEFAULT
+	}
+	return *p.ScrapeTimeout
+}
+func (p *ExporterServiceMonitor) SetEnabled(val bool) {
+	p.Enabled = val
+}
+func (p *ExporterServiceMonitor) SetInterval(val *string) {
+	p.Interval = val
+}
+func (p *ExporterServiceMonitor) SetScrapeTimeout(val *string) {
+	p.ScrapeTimeout = val
+}
+
+func (p *ExporterServiceMonitor) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ExporterServiceMonitor) IsSetInterval() bool {
+	return p.Interval != nil
+}
+
+func (p *ExporterServiceMonitor) IsSetScrapeTimeout() bool {
+	return p.ScrapeTimeout != nil
+}
+
+func (p *ExporterServiceMonitor) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ExporterServiceMonitor(%+v)", *p)
+}
+
+var fieldIDToName_ExporterServiceMonitor = map[int16]string{
+	1: "enabled",
+	2: "interval",
+	3: "scrapeTimeout",
+}
+
 type KSMConfiguration struct {
-	Name                 string              `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
-	TargetNamespace      string              `thrift:"targetNamespace,2,required" frugal:"2,required,string" json:"targetNamespace"`
-	DeploymentMode       string              `thrift:"deploymentMode,3,required" frugal:"3,required,string" json:"deploymentMode"`
-	DesiredState         string              `thrift:"desiredState,4,required" frugal:"4,required,string" json:"desiredState"`
-	Resources            *ContainerResources `thrift:"resources,5,required" frugal:"5,required,ContainerResources" json:"resources"`
-	Collectors           *CollectorSelection `thrift:"collectors,6,required" frugal:"6,required,CollectorSelection" json:"collectors"`
-	MetricFilter         *MetricSelection    `thrift:"metricFilter,7,required" frugal:"7,required,MetricSelection" json:"metricFilter"`
-	NamespaceFilter      *NamespaceSelection `thrift:"namespaceFilter,8,required" frugal:"8,required,NamespaceSelection" json:"namespaceFilter"`
-	AdvancedResources    bool                `thrift:"advancedResources,9,required" frugal:"9,required,bool" json:"advancedResources"`
-	Shards               *int32              `thrift:"shards,10,optional" frugal:"10,optional,i32" json:"shards,omitempty"`
-	NodeResources        *RoleResources      `thrift:"nodeResources,11,optional" frugal:"11,optional,RoleResources" json:"nodeResources,omitempty"`
-	ClusterResources     *RoleResources      `thrift:"clusterResources,12,optional" frugal:"12,optional,RoleResources" json:"clusterResources,omitempty"`
-	UnscheduledResources *RoleResources      `thrift:"unscheduledResources,13,optional" frugal:"13,optional,RoleResources" json:"unscheduledResources,omitempty"`
+	Name                 string                  `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	TargetNamespace      string                  `thrift:"targetNamespace,2,required" frugal:"2,required,string" json:"targetNamespace"`
+	DeploymentMode       string                  `thrift:"deploymentMode,3,required" frugal:"3,required,string" json:"deploymentMode"`
+	DesiredState         string                  `thrift:"desiredState,4,required" frugal:"4,required,string" json:"desiredState"`
+	Resources            *ContainerResources     `thrift:"resources,5,required" frugal:"5,required,ContainerResources" json:"resources"`
+	Collectors           *CollectorSelection     `thrift:"collectors,6,required" frugal:"6,required,CollectorSelection" json:"collectors"`
+	MetricFilter         *MetricSelection        `thrift:"metricFilter,7,required" frugal:"7,required,MetricSelection" json:"metricFilter"`
+	NamespaceFilter      *NamespaceSelection     `thrift:"namespaceFilter,8,required" frugal:"8,required,NamespaceSelection" json:"namespaceFilter"`
+	AdvancedResources    bool                    `thrift:"advancedResources,9,required" frugal:"9,required,bool" json:"advancedResources"`
+	Shards               *int32                  `thrift:"shards,10,optional" frugal:"10,optional,i32" json:"shards,omitempty"`
+	NodeResources        *RoleResources          `thrift:"nodeResources,11,optional" frugal:"11,optional,RoleResources" json:"nodeResources,omitempty"`
+	ClusterResources     *RoleResources          `thrift:"clusterResources,12,optional" frugal:"12,optional,RoleResources" json:"clusterResources,omitempty"`
+	UnscheduledResources *RoleResources          `thrift:"unscheduledResources,13,optional" frugal:"13,optional,RoleResources" json:"unscheduledResources,omitempty"`
+	ServiceMonitor       *ExporterServiceMonitor `thrift:"serviceMonitor,14,optional" frugal:"14,optional,ExporterServiceMonitor" json:"serviceMonitor,omitempty"`
 	_unknownFields       unknown.Fields
 }
 
@@ -2291,6 +2362,15 @@ func (p *KSMConfiguration) GetUnscheduledResources() (v *RoleResources) {
 	}
 	return p.UnscheduledResources
 }
+
+var KSMConfiguration_ServiceMonitor_DEFAULT *ExporterServiceMonitor
+
+func (p *KSMConfiguration) GetServiceMonitor() (v *ExporterServiceMonitor) {
+	if !p.IsSetServiceMonitor() {
+		return KSMConfiguration_ServiceMonitor_DEFAULT
+	}
+	return p.ServiceMonitor
+}
 func (p *KSMConfiguration) SetName(val string) {
 	p.Name = val
 }
@@ -2330,6 +2410,9 @@ func (p *KSMConfiguration) SetClusterResources(val *RoleResources) {
 func (p *KSMConfiguration) SetUnscheduledResources(val *RoleResources) {
 	p.UnscheduledResources = val
 }
+func (p *KSMConfiguration) SetServiceMonitor(val *ExporterServiceMonitor) {
+	p.ServiceMonitor = val
+}
 
 func (p *KSMConfiguration) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -2367,6 +2450,10 @@ func (p *KSMConfiguration) IsSetUnscheduledResources() bool {
 	return p.UnscheduledResources != nil
 }
 
+func (p *KSMConfiguration) IsSetServiceMonitor() bool {
+	return p.ServiceMonitor != nil
+}
+
 func (p *KSMConfiguration) String() string {
 	if p == nil {
 		return "<nil>"
@@ -2388,6 +2475,7 @@ var fieldIDToName_KSMConfiguration = map[int16]string{
 	11: "nodeResources",
 	12: "clusterResources",
 	13: "unscheduledResources",
+	14: "serviceMonitor",
 }
 
 type LabelExpression struct {
@@ -3658,6 +3746,191 @@ var fieldIDToName_VolumeObservation = map[int16]string{
 	18: "impactAction",
 }
 
+type OperatorResourceReference struct {
+	ApiVersion     string `thrift:"apiVersion,1,required" frugal:"1,required,string" json:"apiVersion"`
+	Kind           string `thrift:"kind,2,required" frugal:"2,required,string" json:"kind"`
+	Namespace      string `thrift:"namespace,3,required" frugal:"3,required,string" json:"namespace"`
+	Name           string `thrift:"name,4,required" frugal:"4,required,string" json:"name"`
+	Uid            string `thrift:"uid,5,required" frugal:"5,required,string" json:"uid"`
+	_unknownFields unknown.Fields
+}
+
+func NewOperatorResourceReference() *OperatorResourceReference {
+	return &OperatorResourceReference{}
+}
+
+func (p *OperatorResourceReference) InitDefault() {
+}
+
+func (p *OperatorResourceReference) GetApiVersion() (v string) {
+	return p.ApiVersion
+}
+
+func (p *OperatorResourceReference) GetKind() (v string) {
+	return p.Kind
+}
+
+func (p *OperatorResourceReference) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *OperatorResourceReference) GetName() (v string) {
+	return p.Name
+}
+
+func (p *OperatorResourceReference) GetUid() (v string) {
+	return p.Uid
+}
+func (p *OperatorResourceReference) SetApiVersion(val string) {
+	p.ApiVersion = val
+}
+func (p *OperatorResourceReference) SetKind(val string) {
+	p.Kind = val
+}
+func (p *OperatorResourceReference) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *OperatorResourceReference) SetName(val string) {
+	p.Name = val
+}
+func (p *OperatorResourceReference) SetUid(val string) {
+	p.Uid = val
+}
+
+func (p *OperatorResourceReference) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *OperatorResourceReference) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("OperatorResourceReference(%+v)", *p)
+}
+
+var fieldIDToName_OperatorResourceReference = map[int16]string{
+	1: "apiVersion",
+	2: "kind",
+	3: "namespace",
+	4: "name",
+	5: "uid",
+}
+
+type CompanionObservation struct {
+	State              string                     `thrift:"state,1,required" frugal:"1,required,string" json:"state"`
+	Reason             string                     `thrift:"reason,2,required" frugal:"2,required,string" json:"reason"`
+	Message            string                     `thrift:"message,3,required" frugal:"3,required,string" json:"message"`
+	ParentUid          string                     `thrift:"parentUid,4,required" frugal:"4,required,string" json:"parentUid"`
+	Generation         int64                      `thrift:"generation,5,required" frugal:"5,required,i64" json:"generation"`
+	ObservedGeneration int64                      `thrift:"observedGeneration,6,required" frugal:"6,required,i64" json:"observedGeneration"`
+	Resource           *OperatorResourceReference `thrift:"resource,7,optional" frugal:"7,optional,OperatorResourceReference" json:"resource,omitempty"`
+	Yaml               *string                    `thrift:"yaml,8,optional" frugal:"8,optional,string" json:"yaml,omitempty"`
+	_unknownFields     unknown.Fields
+}
+
+func NewCompanionObservation() *CompanionObservation {
+	return &CompanionObservation{}
+}
+
+func (p *CompanionObservation) InitDefault() {
+}
+
+func (p *CompanionObservation) GetState() (v string) {
+	return p.State
+}
+
+func (p *CompanionObservation) GetReason() (v string) {
+	return p.Reason
+}
+
+func (p *CompanionObservation) GetMessage() (v string) {
+	return p.Message
+}
+
+func (p *CompanionObservation) GetParentUid() (v string) {
+	return p.ParentUid
+}
+
+func (p *CompanionObservation) GetGeneration() (v int64) {
+	return p.Generation
+}
+
+func (p *CompanionObservation) GetObservedGeneration() (v int64) {
+	return p.ObservedGeneration
+}
+
+var CompanionObservation_Resource_DEFAULT *OperatorResourceReference
+
+func (p *CompanionObservation) GetResource() (v *OperatorResourceReference) {
+	if !p.IsSetResource() {
+		return CompanionObservation_Resource_DEFAULT
+	}
+	return p.Resource
+}
+
+var CompanionObservation_Yaml_DEFAULT string
+
+func (p *CompanionObservation) GetYaml() (v string) {
+	if !p.IsSetYaml() {
+		return CompanionObservation_Yaml_DEFAULT
+	}
+	return *p.Yaml
+}
+func (p *CompanionObservation) SetState(val string) {
+	p.State = val
+}
+func (p *CompanionObservation) SetReason(val string) {
+	p.Reason = val
+}
+func (p *CompanionObservation) SetMessage(val string) {
+	p.Message = val
+}
+func (p *CompanionObservation) SetParentUid(val string) {
+	p.ParentUid = val
+}
+func (p *CompanionObservation) SetGeneration(val int64) {
+	p.Generation = val
+}
+func (p *CompanionObservation) SetObservedGeneration(val int64) {
+	p.ObservedGeneration = val
+}
+func (p *CompanionObservation) SetResource(val *OperatorResourceReference) {
+	p.Resource = val
+}
+func (p *CompanionObservation) SetYaml(val *string) {
+	p.Yaml = val
+}
+
+func (p *CompanionObservation) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *CompanionObservation) IsSetResource() bool {
+	return p.Resource != nil
+}
+
+func (p *CompanionObservation) IsSetYaml() bool {
+	return p.Yaml != nil
+}
+
+func (p *CompanionObservation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CompanionObservation(%+v)", *p)
+}
+
+var fieldIDToName_CompanionObservation = map[int16]string{
+	1: "state",
+	2: "reason",
+	3: "message",
+	4: "parentUid",
+	5: "generation",
+	6: "observedGeneration",
+	7: "resource",
+	8: "yaml",
+}
+
 type SourceObservation struct {
 	Source          string                 `thrift:"source,1,required" frugal:"1,required,string" json:"source"`
 	LastAttemptAt   string                 `thrift:"lastAttemptAt,2,required" frugal:"2,required,string" json:"lastAttemptAt"`
@@ -3671,6 +3944,7 @@ type SourceObservation struct {
 	Stale           *bool                  `thrift:"stale,10,optional" frugal:"10,optional,bool" json:"stale,omitempty"`
 	Policies        []*AgentStatefulPolicy `thrift:"policies,11,optional" frugal:"11,optional,list<AgentStatefulPolicy>" json:"policies,omitempty"`
 	StorageMode     *string                `thrift:"storageMode,12,optional" frugal:"12,optional,string" json:"storageMode,omitempty"`
+	Companion       *CompanionObservation  `thrift:"companion,13,optional" frugal:"13,optional,CompanionObservation" json:"companion,omitempty"`
 	_unknownFields  unknown.Fields
 }
 
@@ -3763,6 +4037,15 @@ func (p *SourceObservation) GetStorageMode() (v string) {
 	}
 	return *p.StorageMode
 }
+
+var SourceObservation_Companion_DEFAULT *CompanionObservation
+
+func (p *SourceObservation) GetCompanion() (v *CompanionObservation) {
+	if !p.IsSetCompanion() {
+		return SourceObservation_Companion_DEFAULT
+	}
+	return p.Companion
+}
 func (p *SourceObservation) SetSource(val string) {
 	p.Source = val
 }
@@ -3799,6 +4082,9 @@ func (p *SourceObservation) SetPolicies(val []*AgentStatefulPolicy) {
 func (p *SourceObservation) SetStorageMode(val *string) {
 	p.StorageMode = val
 }
+func (p *SourceObservation) SetCompanion(val *CompanionObservation) {
+	p.Companion = val
+}
 
 func (p *SourceObservation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -3832,6 +4118,10 @@ func (p *SourceObservation) IsSetStorageMode() bool {
 	return p.StorageMode != nil
 }
 
+func (p *SourceObservation) IsSetCompanion() bool {
+	return p.Companion != nil
+}
+
 func (p *SourceObservation) String() string {
 	if p == nil {
 		return "<nil>"
@@ -3852,6 +4142,7 @@ var fieldIDToName_SourceObservation = map[int16]string{
 	10: "stale",
 	11: "policies",
 	12: "storageMode",
+	13: "companion",
 }
 
 type AssociationPreviewRequest struct {

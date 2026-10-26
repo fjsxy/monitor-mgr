@@ -52,6 +52,9 @@ var _ = ginkgo.It("UT-07 实例身份与不可变字段", func() {
 
 var _ = ginkgo.It("UT-08 保存预览与版本冻结", func() {
 	t := ginkgo.GinkgoT()
+	checkExporterCollectionIntent(t)
+	checkExporterCollectionCapability(t)
+	checkExporterCollectionParameters(t)
 	checkTestP02PublicationFreezesSourceAndP03Idempotency(t)
 	checkTestP04DraftAndTargetPreviewRaces(t)
 	checkTestAgentDraftSourceIsolation(t)
@@ -98,6 +101,7 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 
 var _ = ginkgo.It("UT-12 预览与删除保护", func() {
 	t := ginkgo.GinkgoT()
+	checkExporterCollectionDeletion(t)
 	checkTestDeletionPreviewBindsTargetAndImpact(t)
 	checkTestP05DriftOverwritePreservesMetadataAndP06Equivalent(t)
 	checkPublicationStatusConflict(t)
@@ -122,6 +126,7 @@ var _ = ginkgo.It("UT-13 PVC 危险动作决策", func() {
 
 var _ = ginkgo.It("UT-14 状态与工作台查询", func() {
 	t := ginkgo.GinkgoT()
+	checkExporterCollectionObservation(t)
 	checkTestR03KSMEffectiveZeroValuesAndMissingStatus(t)
 	checkTestR03AgentPausedReadOnly(t)
 	checkTestR03AgentZeroUsesApplicableStatus(t)

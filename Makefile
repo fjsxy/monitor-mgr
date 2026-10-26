@@ -90,3 +90,7 @@ test-issue27: ## #27 单 CR、旧 SM 只读、冻结身份、删除与持久化 
 .PHONY: ut-instance-identity
 ut-instance-identity: ## #25 实例创建身份、直接 RPC 与 worker 授权局部行为回归
 	$(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus="UT-07|UT-10|UT-16" -ginkgo.json-report=.scratch/issue-25.json
+
+.PHONY: ut-exporter-collection
+ut-exporter-collection: ## #28 采集意图、能力、只读观察与原身份删除局部回归
+	$(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus="UT-08|UT-10|UT-11|UT-12|UT-14|UT-17" -ginkgo.json-report=.scratch/issue-28.json

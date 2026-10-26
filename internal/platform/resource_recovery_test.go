@@ -293,6 +293,16 @@ func checkLegacySMNeverDispatches(t ginkgo.GinkgoTInterface) {
 				if len(attempts) != 1 || attempts[0].(map[string]any)["state"] != opState || attempts[0].(map[string]any)["possiblySent"] != true {
 					t.Fatal("旧任务尝试被改写", attempts)
 				}
+				if restart == 0 && variant != "queued" {
+					ginkgo.By("I28-R04/I28-U08：不同名称的旧成功或结果不明 SM 阻断新启用，不按 pending 筛选")
+					cfg := ksmConfig("lifecycle")
+					cfg["serviceMonitor"] = map[string]any{"enabled": true, "interval": "30s", "scrapeTimeout": "10s"}
+					clusterCall(t, p, "PUT", "/instances/"+id+"/draft", map[string]any{"expectedDraftRevision": 1, "ksm": cfg}, c, "new-intent", 200)
+					denied := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 2}, c, "legacy-block", 409)
+					if !strings.Contains(denied["message"].(string), "旧平台 ServiceMonitor") {
+						t.Fatal("新启用没有经过全部历史SM门禁", denied)
+					}
+				}
 				p.Close(context.Background())
 			}
 			f.mu.Lock()

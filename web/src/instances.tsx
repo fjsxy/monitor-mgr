@@ -33,6 +33,7 @@ type KSM = {
   nodeResources?: Role;
   clusterResources?: Role;
   unscheduledResources?: Role;
+  serviceMonitor?: { enabled: boolean; interval: string; scrapeTimeout: string };
 };
 type Runtime = {
   summary: string;
@@ -144,6 +145,7 @@ const defaultConfig = (): KSM => ({
   metricFilter: { mode: "All" },
   namespaceFilter: { mode: "All" },
   advancedResources: false,
+  serviceMonitor: {enabled: true, interval: "30s", scrapeTimeout: "10s"},
 });
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 // 后端明确字段错误保留原文；浏览器网络异常统一中文，避免直接暴露英文实现提示。
@@ -1617,6 +1619,15 @@ function Configuration({
             })}
         </section>
       )}
+      <section className="config-section">
+        <h3>配套采集意图</h3>
+        <label className="checkbox-line"><input type="checkbox" aria-label="启用配套采集" checked={config.serviceMonitor?.enabled ?? false} onChange={event => patch({serviceMonitor: {...(config.serviceMonitor ?? {interval:"30s",scrapeTimeout:"10s"}), enabled:event.target.checked}})} />启用配套采集</label>
+        <p className="help">保存草稿不改变集群。明确下发后由 Operator 维护配套 ServiceMonitor；归属使用固定的实例创建用户。关闭采集不停止 exporter，挂起保留配套配置，停用清理全部本实例资源。</p>
+        {config.serviceMonitor && <div className="field-grid">
+          <label>采集间隔<input aria-label="采集间隔" value={config.serviceMonitor.interval} onChange={event => patch({serviceMonitor:{...config.serviceMonitor!,interval:event.target.value}})} placeholder="30s" /></label>
+          <label>采集超时<input aria-label="采集超时" value={config.serviceMonitor.scrapeTimeout} onChange={event => patch({serviceMonitor:{...config.serviceMonitor!,scrapeTimeout:event.target.value}})} placeholder="10s" /></label>
+        </div>}
+      </section>
       <section className="config-section">
         <h3>采集内容与过滤</h3>
         <div className="field-grid">
