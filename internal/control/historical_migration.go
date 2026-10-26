@@ -360,6 +360,13 @@ func (s *Store) releaseHistoricalParent(ctx context.Context, tx *sql.Tx, t *Targ
 		if i.Uid != "" && i.Uid != item.OriginalUid {
 			return nil, Error("CONFLICT", "实例已有其他已知 UID，不能回退")
 		}
+		if i.Uid == "" {
+			// 关键：original_uid 仅是发送前基线，不能替代成功观察事实；空实例只恢复持久 confirmed_uid。
+			var confirmed string
+			if tx.QueryRowContext(ctx, `SELECT p.confirmed_uid FROM resource_progress p JOIN operation_lifecycle l ON l.current_attempt_id=p.attempt_id WHERE l.operation_id=? AND p.resource_key='component'`, item.OperationId).Scan(&confirmed) != nil || confirmed != item.OriginalUid {
+				return nil, Error("CONFLICT", "原父步骤尚无已持久确认的 UID，不能恢复空实例身份")
+			}
+		}
 		if componentFor(i.Component).normalizeSpec(objectMap(current, "spec")) != componentFor(i.Component).normalizeSpec(objectMap(doc, "spec")) {
 			return nil, Error("CONFLICT", "原父 CR 与冻结基线漂移，须先核实后再处理")
 		}

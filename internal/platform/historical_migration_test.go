@@ -140,7 +140,7 @@ func checkHistoricalMigrationResolutions(t ginkgo.GinkgoTInterface) {
 
 // 父 CR 的原身份与旧 SM 处置分开；只有独立核验可释放精确旧操作互斥。
 func checkHistoricalParentRelease(t ginkgo.GinkgoTInterface) {
-	for _, variant := range []string{"known", "partial", "unknown-present", "unknown-absent", "newer-uid", "newer-version", "drift"} {
+	for _, variant := range []string{"known", "partial", "partial-original-only", "unknown-present", "unknown-absent", "newer-uid", "newer-version", "drift"} {
 		ginkgo.By("I29-U07.parent-" + variant)
 		p, a, _, id, f, cfg, op := migrationFixture(t, "IDENTITY_UNCERTAIN")
 		if variant != "known" && variant != "drift" {
@@ -150,6 +150,8 @@ func checkHistoricalParentRelease(t ginkgo.GinkgoTInterface) {
 			switch variant {
 			case "partial":
 				_, e = db.Exec(`UPDATE instances SET uid='',current_version_id='' WHERE id=?`, id)
+			case "partial-original-only":
+				_, e = db.Exec(`UPDATE instances SET uid='',current_version_id='' WHERE id=$instance;UPDATE resource_progress SET confirmed_uid='',state='IDENTITY_UNCERTAIN' WHERE attempt_id=(SELECT current_attempt_id FROM operation_lifecycle WHERE operation_id=$operation) AND resource_key='component'`, sql.Named("instance", id), sql.Named("operation", op["operationId"]))
 			case "unknown-present", "unknown-absent":
 				_, e = db.Exec(`UPDATE instances SET uid='',current_version_id='' WHERE id=$instance;UPDATE operation_resources SET original_uid='' WHERE operation_id=$operation AND resource_key='component';UPDATE resource_progress SET confirmed_uid='',state='IDENTITY_UNCERTAIN' WHERE attempt_id=(SELECT current_attempt_id FROM operation_lifecycle WHERE operation_id=$operation) AND resource_key='component'`, sql.Named("instance", id), sql.Named("operation", op["operationId"]))
 			case "newer-uid":
