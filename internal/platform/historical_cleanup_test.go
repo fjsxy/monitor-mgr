@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 )
 
+// checkHistoricalCleanup 通过真实 HTTP 清理夹具验证原 UID、失败阶段与零误删。
 func checkHistoricalCleanup(t ginkgo.GinkgoTInterface) {
 	python := os.Getenv("MONITOR_MGR_PYTHON")
 	if python == "" {
@@ -38,9 +39,9 @@ func checkHistoricalCleanup(t ginkgo.GinkgoTInterface) {
 		}
 	}
 	Expect(json.Unmarshal(raw, &proof)).To(Succeed())
-	Expect(proof.Cleanup).To(HaveLen(6))
+	Expect(proof.Cleanup).To(HaveLen(9))
 	Expect(proof.Handoff).To(HaveLen(6))
-	reasons := map[string]string{"blocked": "delete/delete-failed", "replaced": "identity/uid-mismatch", "read": "read/read-failed", "finalizers": "finalizers/finalizer-patch-failed", "delete": "delete/delete-failed"}
+	reasons := map[string]string{"blocked": "delete/delete-failed", "replaced": "identity/uid-mismatch", "read": "read/read-failed", "finalizers": "finalizers/finalizer-patch-failed", "delete": "delete/delete-failed", "patch-replaced": "identity/uid-mismatch"}
 	for _, item := range proof.Cleanup {
 		id := "I29-R03." + item.Variant
 		if item.Variant == "gone" || item.Variant == "blocked" {
@@ -56,13 +57,21 @@ func checkHistoricalCleanup(t ginkgo.GinkgoTInterface) {
 			Expect(event.Method).NotTo(BeEmpty())
 			if event.Method == "DELETE" {
 				deletes++
-				Expect(event.Preconditions).To(Equal(map[string]string{"uid": "original-uid", "resourceVersion": "rv"}))
+				rv := "rv"
+				if item.Variant == "patch-conflict" {
+					rv = "rv2"
+				}
+				Expect(event.Preconditions).To(Equal(map[string]string{"uid": "original-uid", "resourceVersion": rv}))
 			}
 		}
-		if item.Variant == "gone" {
+		if item.Variant == "gone" || item.Variant == "patch-gone" || item.Variant == "patch-conflict" {
 			Expect(*item.Receipt.Success).To(BeTrue())
 			Expect(*item.RegistryRetained).To(BeFalse())
-			Expect(deletes).To(Equal(1))
+			if item.Variant == "patch-gone" {
+				Expect(deletes).To(BeZero())
+			} else {
+				Expect(deletes).To(Equal(1))
+			}
 		} else {
 			Expect(*item.Receipt.Success).To(BeFalse())
 			Expect(*item.RegistryRetained).To(BeTrue())

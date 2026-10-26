@@ -6,6 +6,7 @@ import uuid
 from agent_storage import wait
 
 
+# 提取旧操作不可改写的原状态、UID 与发送事实。
 def _facts(operation):
     return {'operationId': operation['operationId'], 'versionId': operation['versionId'], 'state':operation['state'], 'attemptId':operation['attemptId'],
             'resources': [{key: copy.deepcopy(resource[key]) for key in ('target', 'state', 'confirmedUid', 'possiblySent')} for resource in operation['resources']]}
@@ -94,6 +95,7 @@ print(json.dumps({'records':len(records),'integrity':'ok'}))
     return records
 
 
+# 将管理员显式确认绑定原盘点快照和冻结身份。
 def confirmation(s, instance, snapshot, resource, parent=False):
     body={key:resource[key] for key in ('operationId','resourceKey','objectPath','originalUid','documentFingerprint')}
     body.update(snapshotId=snapshot['snapshotId'],confirmExternalHandling=True)
@@ -112,6 +114,7 @@ def remove_old(s, record):
     if s.owned_crs.get(key)==record['oldUid']:del s.owned_crs[key]
 
 
+# 验证历史 exporter 的显式处理与新发布切换。
 def migrate(s):
     s.by('I29-K02：成功和未知旧 SM 均须管理员外部处理，原任务不改成功')
     s.prepare('-historical-migration',target='control')
@@ -152,7 +155,9 @@ def browser_fixture(s):
     record=prepare_legacy(s,('IDENTITY_UNCERTAIN',))[0]
     token=secrets.token_urlsafe(32)
     class Handler(http.server.BaseHTTPRequestHandler):
+        # 抑制测试 HTTP 服务的原始请求日志。
         def log_message(self,*args): pass
+        # 接收浏览器明确确认的迁移请求并保留请求事实。
         def do_POST(self):
             if self.path!='/process-old-sm' or self.headers.get('Authorization')!='Bearer '+token:
                 self.send_response(403);self.end_headers();return
@@ -168,6 +173,7 @@ def browser_fixture(s):
             'resultPath':str(s.out/'issue29-browser-result.json')}
 
 
+# 将真实浏览器交互结果与原操作事实对照。
 def browser_result(s, fixture):
     value=json.loads(open(fixture['resultPath']).read())
     if value['instanceId']!=fixture['instance']['id']:raise RuntimeError('浏览器迁移交接实例不符')

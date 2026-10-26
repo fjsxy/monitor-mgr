@@ -184,7 +184,7 @@ class _FrozenSources:
 def project_output(result, *, label, candidate, private_root, root=ROOT):
     """同一次原命令完成后仅识别源码已验证的失败标识；原message/assertdiff永不投影。"""
     value = dict(schemaVersion=1, kind='process-diagnostic', productGate=False,
-        operation=label if label in ('quality', 'generated') else 'capture', exit=result.returncode,
+        operation=label if label in ('quality', 'generated', 'ut') else 'capture', exit=result.returncode,
         state='completed' if result.returncode == 0 else 'failed', unknown=result.returncode != 0,
         testFailures=[], runningTests=[], observedMarkers=[], repoFrames=[], raw={name: dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
             for name, data in [('stdout', result.stdout), ('stderr', result.stderr)]})
@@ -201,7 +201,7 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
                 ('go-build-process-limit', (b'resource temporarily unavailable',))]:
             if all(token in lower for token in tokens) and marker not in value['observedMarkers']:
                 value['observedMarkers'].append(marker)
-        # 只读有界前缀；完整原bytes/hash仍在上面的私有捕获摘要中，截断明确unknown。
+        # 关键：失败摘要通常在日志末尾；首尾共享有界预算，不能让大体积业务日志饿死原生失败标识。
         limit = 1024 * 1024;attempts = 0
         source.unknown = len(result.stdout) > limit or len(result.stderr) > limit
         # 关键：同一有界前缀先排静态阶段/timeout/失败根ID，普通位置不能耗尽查询预算后饿死末尾Make错误。
@@ -210,7 +210,10 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
         def queue(priority, item):
             if len(groups[priority]) < 65:groups[priority].append(item)
             else:source.unknown = True
-        for line in (result.stdout[:limit] + b'\n\n' + result.stderr[:limit]).decode(errors='replace').splitlines():
+        def bounded(data):
+            """首尾共享固定解析预算，完整原字节与摘要仍由私有捕获保留。"""
+            return data if len(data)<=limit else data[:limit//2]+b'\n'+data[-limit//2:]
+        for line in (bounded(result.stdout) + b'\n\n' + bounded(result.stderr)).decode(errors='replace').splitlines():
             if len(line) > 2048:
                 if '_test.go:' in line or line.startswith(('make', 'panic: test timed out after')) or timeout_stage:
                     source.unknown = True
@@ -267,9 +270,46 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
                 if item and item not in value['repoFrames']:
                     if len(value['repoFrames']) < 8:value['repoFrames'].append(item)
                     else:source.unknown = True
+        if label=='ut':
+            project_native_ut(result, source, value)
         value['unknown'] = source.unknown or not (value['testFailures'] or value['runningTests'] or value['repoFrames'] or value['observedMarkers'])
     except Exception:pass
     return value
+
+
+def project_native_ut(result, source, value):
+    """关键：仅消费本次子进程写出的固定原生报告；Failure.Message、动态标题和原路径永不输出。"""
+    started = getattr(result, 'capture_started_at', None)
+    if type(started) not in (int, float):
+        return
+    for package in ('control', 'platform'):
+        path = source.root/'internal'/package/'.scratch/ut.json'
+        if not path.exists():
+            continue
+        try:
+            if path.is_symlink() or not path.resolve().is_relative_to(source.root) or path.stat().st_mtime<started or path.stat().st_size>8*1024*1024:
+                source.unknown=True;continue
+            reports=json.loads(path.read_bytes())
+            if not isinstance(reports,list) or len(reports)!=1:raise ValueError('native-report-invalid')
+            for spec in reports[0].get('SpecReports',[]):
+                if spec.get('LeafNodeType')!='It' or spec.get('State')=='passed':continue
+                state=spec.get('State');attempts=spec.get('NumAttempts')
+                if state not in ('failed','panicked','timedout','interrupted','aborted','skipped','pending') or type(attempts) is not int or not 0<=attempts<=10:
+                    source.unknown=True;continue
+                case_id=str(spec.get('LeafNodeText','')).split(' ',1)[0]
+                item=source.ginkgo_case(case_id)
+                if not item:continue
+                native=dict(**item,state=state,attempts=attempts)
+                value.setdefault('nativeFailures',[]).append(native)
+                if item not in value['testFailures']:value['testFailures'].append(item)
+                location=spec.get('Failure',{}).get('Location',{})
+                name=source.relative(location.get('FileName',''))
+                line=location.get('LineNumber')
+                if name and name.endswith('_test.go') and type(line) is int:
+                    frame=source.go_frame(pathlib.PurePosixPath(name).name,line)
+                    if frame and frame not in value['repoFrames'] and len(value['repoFrames'])<8:value['repoFrames'].append(frame)
+        except Exception:
+            source.unknown=True
 
 
 def project_exception(error, *, candidate, private_root, root=ROOT, prepare_type=None):
@@ -357,7 +397,9 @@ def capture(argv, *, private_root, label, cwd=None, env=None, timeout=None, publ
         stream.write('\n')
     if publish:
         print(json.dumps({'id': label, 'exit': code, 'stdoutBytes': receipt['raw'][0]['bytes'], 'stderrBytes': receipt['raw'][1]['bytes']}), flush=True)
-    return subprocess.CompletedProcess(argv, code, paths[0].read_bytes(), paths[1].read_bytes())
+    result = subprocess.CompletedProcess(argv, code, paths[0].read_bytes(), paths[1].read_bytes())
+    result.capture_started_at = started
+    return result
 
 
 def main():

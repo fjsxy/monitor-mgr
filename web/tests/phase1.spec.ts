@@ -29,6 +29,9 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
   await test.step('大 revision 在保存和 YAML 预览中保持精确',async()=>{
     await expect(drawer.getByText('草稿 v9007199254740993 已保存',{exact:true})).toBeVisible();
     await drawer.getByLabel('通用 CPU request',{exact:true}).fill('111m');
+    // 关键：真实v10升级保持缺省关闭，必须由用户明确选择后才编辑并发布采集意图。
+    await expect(drawer.getByLabel('启用配套采集',{exact:true})).not.toBeChecked();
+    await drawer.getByLabel('启用配套采集',{exact:true}).check();
     await drawer.getByLabel('采集间隔',{exact:true}).fill('45s');await drawer.getByLabel('采集超时',{exact:true}).fill('12s');
     const saving=page.waitForRequest(r=>new URL(r.url()).pathname===`/api/v1/instances/${fixture.largeId}/draft`&&r.method()==='PUT');
     await drawer.getByRole('button',{name:'保存草稿',exact:true}).click();expect((await saving).postDataJSON().expectedDraftRevision).toBe('9007199254740993');

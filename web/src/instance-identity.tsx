@@ -8,6 +8,7 @@ export type InstanceIdentityValue = {
   readOnlyReason: string;
 };
 
+// 分别展示原创建身份、管理权限确认及当前只读原因。
 export function InstanceIdentity({ value, compact = false }: { value: InstanceIdentityValue; compact?: boolean }) {
   const role = value.creatorRole === "ADMIN" ? "管理员" : value.creatorRole === "USER" ? "普通用户" : "未知";
   return <div className="help" aria-label={compact ? "实例创建身份摘要" : "实例创建身份"}>

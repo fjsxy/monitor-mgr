@@ -37,7 +37,7 @@ export function SourceHistory({ source, children }: { source: SourceStatus; chil
     </div>}
     {source.companion && <div aria-label="Operator 配套观察">
       <p><strong>配套收敛：{history ? "当前未知" : ({Ready:"已收敛",Degraded:"故障",Reconciling:"未收敛",Disabled:"已关闭",Deleting:"清理中",Unknown:"未知"} as Record<string,string>)[source.companion.state] ?? source.companion.state}</strong></p>
-      <p className="help">父 CR UID：{source.companion.parentUid} · generation {source.companion.observedGeneration} / {source.companion.generation}</p>
+      <p className="help">父 CR UID：{source.companion.parentUid}</p>
       <p>{source.companion.reason}：{source.companion.message}</p>
       {source.companion.resource && <p className="help">{source.companion.resource.apiVersion} {source.companion.resource.kind} {source.companion.resource.namespace}/{source.companion.resource.name} · UID {source.companion.resource.uid}</p>}
       <p className="help">平台仅只读观察，配套故障由 Operator 按已发布意图修复。配套收敛与 CR 下发成功分别记录；实际采集尚需 Agent 与样本证据。</p>

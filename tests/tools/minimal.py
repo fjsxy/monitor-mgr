@@ -3,6 +3,9 @@ import copy
 import json
 from pathlib import Path
 import sys
+import tempfile
+import subprocess
+import time
 from types import SimpleNamespace
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
@@ -14,6 +17,59 @@ from clusters import Suite as ClusterSuite
 
 
 class TrustBoundary(unittest.TestCase):
+    def test_capture_failure_tail(self):
+        """大体积原日志的末尾失败和超时仍须经冻结源码核验后安全投影。"""
+        from capture import project_output
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); private = root/'private'
+            (root/'internal/platform').mkdir(parents=True)
+            (root/'internal/platform/consolidated_test.go').write_text('package platform_test\nvar _ = ginkgo.It("UT-18 来源边界", func() {})\n')
+            (root/'Makefile').write_text('ut:\n\tgo test ./...\n')
+            # 只在临时目录冻结本例静态源码，不读取用户Git身份或远端凭据。
+            def git(*args):
+                return subprocess.run(['git','-C',str(root),*args],check=True,capture_output=True).stdout.decode().strip()
+            git('init','--quiet');git('add','Makefile','internal/platform/consolidated_test.go')
+            git('-c','user.name=验收夹具','-c','user.email=fixture@example.invalid','commit','--quiet','-m','test: 冻结诊断夹具')
+            candidate = git('rev-parse','HEAD')
+            output = b'x\n'*600000+b'panic: test timed out after 15m0s\n[FAIL] [It] UT-18 PRIVATE_FAILURE_MESSAGE\n'
+            result = subprocess.CompletedProcess([],2,output,b'make: *** [Makefile:2: ut] Error 1\n')
+            result.capture_started_at=time.time()
+            report=root/'internal/platform/.scratch/ut.json';report.parent.mkdir()
+            report.write_text(json.dumps([dict(SpecReports=[dict(LeafNodeType='It',LeafNodeText='UT-18 PRIVATE_TITLE',State='failed',NumAttempts=1,Failure=dict(Message='PRIVATE_FAILURE_MESSAGE',Location=dict(FileName=str(root/'internal/platform/consolidated_test.go'),LineNumber=2,FullStackTrace='PRIVATE_STACK')))])]))
+            value = project_output(result,label='ut',candidate=candidate,private_root=private,root=root)
+            self.assertIn('go-test-timeout',value['observedMarkers'])
+            self.assertTrue(any(v.get('caseId')=='UT-18' for v in value['testFailures']))
+            self.assertTrue(any(v['file']=='Makefile' and v['line']==2 for v in value['repoFrames']))
+            self.assertEqual(value['nativeFailures'][0]['caseId'],'UT-18')
+            self.assertEqual(value['nativeFailures'][0]['state'],'failed')
+            self.assertNotIn('PRIVATE_',json.dumps(value))
+
+    def test_environment_command_diagnostic(self):
+        """公开命令失败必须可定位，未知标签和私有输出不能穿越安全边界。"""
+        from e2e_environment import Environment
+        for label, delay, stage, code in [('fetch-public-release-source', False, 'fetch-public-release-source', 'E2E_COMMAND_FAILED'),
+                ('fetch-published-operator', False, 'fetch-published-operator', 'E2E_COMMAND_FAILED'),
+                ('build-platform', False, 'build-platform', 'BUILD_COMMAND_FAILED'),
+                ('PRIVATE_TOKEN_/private/path', False, 'unknown', 'E2E_COMMAND_FAILED'),
+                ('fetch-public-release-source', True, 'fetch-public-release-source', 'E2E_COMMAND_TIMEOUT')]:
+            with self.subTest(label=label, timeout=delay), tempfile.TemporaryDirectory() as temporary:
+                env = Environment(Path(temporary)/'run', 'mm-test', 'candidate')
+                child = 'import sys,time; print("PRIVATE_OUTPUT_SENTINEL", flush=True); '+('time.sleep(10)' if delay else 'sys.exit(17)')
+                with self.assertRaises(RuntimeError) as raised:
+                    try:
+                        env.command([sys.executable, '-c', child], label, timeout=.1 if delay else 5)
+                    except RuntimeError as error:
+                        source = failure_summary(error)
+                        raise
+                diagnostic = json.loads((env.public/'command-failure.json').read_text())
+                self.assertEqual(diagnostic, dict(operation=stage, exit=-9 if delay else 17, errorCode=code))
+                self.assertNotIn('PRIVATE_', json.dumps(diagnostic))
+                self.assertTrue(any(v['file']=='scripts/e2e_environment.py' for v in source['frames']))
+                self.assertNotIn('PRIVATE_', json.dumps(source))
+                captures = list((env.private/'processes').iterdir())
+                self.assertTrue(any(b'PRIVATE_OUTPUT_SENTINEL' in p.read_bytes() for p in captures))
+                self.assertTrue(all(p.stat().st_mode & 0o077 == 0 for p in captures))
+
     def report(self):
         return [{'SuiteSucceeded': True, 'SpecReports': [
             {'LeafNodeType': 'It', 'LeafNodeText': 'E2E-01 示例', 'State': 'passed', 'NumAttempts': 1}]}]

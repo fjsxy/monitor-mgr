@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
+// init 将采集意图和配套观察的原始证据断言绑定稳定用例。
 func init() {
 	registerIssueEvidence("issue28", assertIssue28Evidence)
 	requireIssueEvidence("E2E-03", "issue28")
@@ -55,14 +56,18 @@ type collectionSnapshot struct {
 		VersionID, Yaml string
 		Resources       []struct{ Key, APIVersion, Kind, Namespace, Name, Yaml string }
 	}
+	CleanupGraph        *[]collectionObject
 	Services, Endpoints []collectionObject
 	Draft               struct {
 		KSM struct{ ServiceMonitor map[string]any }
 	}
 }
 
+// cm 读取证据中的对象，缺失保留 nil 交由断言拒绝。
 func cm(m map[string]any, key string) map[string]any { v, _ := m[key].(map[string]any); return v }
-func cs(m map[string]any, key string) string         { v, _ := m[key].(string); return v }
+
+// cs 读取证据中的字符串，不从其他字段补造。
+func cs(m map[string]any, key string) string { v, _ := m[key].(string); return v }
 
 // assertCompanion 不复制任何 Operator 名称/端口/labels 算法，只核公开引用和原父所有权。
 func assertCompanion(s collectionSnapshot) {
@@ -180,10 +185,10 @@ func assertCompanion(s collectionSnapshot) {
 // assertIssue28Evidence 把真实受限身份、零尝试审计和 Operator 生命周期分别核验。
 func assertIssue28Evidence(evidence map[string]json.RawMessage) {
 	var proof struct {
-		TestedCommit                                                                                                                            string
-		Topologies, Initial                                                                                                                     []collectionSnapshot
-		Updated, OtherAfterUpdate, Rebuilt, Conflict, Repaired, Suspended, Closed, Disabled, Restored, OtherFinal, OtherBaseline, ReadRecovered collectionSnapshot
-		ReadFailure                                                                                                                             []struct {
+		TestedCommit                                                                                                                                            string
+		Topologies, Initial                                                                                                                                     []collectionSnapshot
+		Updated, OtherAfterUpdate, Rebuilt, Conflict, Repaired, Suspended, Closed, Disabled, Restored, OtherFinal, OtherBaseline, ReadRecovered, BeforeDisabled collectionSnapshot
+		ReadFailure                                                                                                                                             []struct {
 			Error      string
 			Historical bool
 		}
@@ -269,6 +274,13 @@ func assertIssue28Evidence(evidence map[string]json.RawMessage) {
 	Expect(cm(proof.Closed.Parent.Spec, "serviceMonitor")["enabled"]).To(BeFalse())
 	Expect(proof.Closed.Parent.Spec["enabled"]).To(BeTrue())
 	Expect(proof.Disabled.Parent.Spec["enabled"]).To(BeFalse())
+	assertCompanion(proof.BeforeDisabled)
+	Expect(proof.BeforeDisabled.CleanupGraph).NotTo(BeNil())
+	Expect(*proof.BeforeDisabled.CleanupGraph).NotTo(BeEmpty())
+	Expect(proof.Disabled.Parent.Status["phase"]).To(Equal("Disabled"))
+	Expect(proof.Disabled.Parent.Status["observedGeneration"]).To(BeNumerically("==", proof.Disabled.Parent.Metadata.Generation))
+	Expect(proof.Disabled.CleanupGraph).NotTo(BeNil())
+	Expect(*proof.Disabled.CleanupGraph).To(BeEmpty(), "停用必须清空原SM/Service/workload/Pod资源图")
 	Expect(proof.Deletion.State).To(Equal("SUCCEEDED"))
 	Expect(proof.Deletion.Resources).To(HaveLen(1))
 	Expect(proof.Deletion.Resources[0].Target.Kind).To(Equal("KubeStateMetrics"))

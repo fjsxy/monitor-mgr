@@ -172,6 +172,8 @@ type ksmFixture struct {
 	lastWrite               []byte
 	rejectWrite             int
 	dropResponse            bool
+	exporterRuntime         map[string]map[string]any
+	exporterRuntimeDenied   bool
 	owned                   map[string][]any
 	deleteCount             int
 	deleteRequests          int
@@ -196,9 +198,32 @@ type ksmFixture struct {
 func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 	t.Helper()
 	base, _, _ := clusterAPI(t, 200, false)
-	f := &ksmFixture{crd: collectionCRDFixture(t)}
+	f := &ksmFixture{crd: collectionCRDFixture(t), exporterRuntime: exporterRuntimeFixture()}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		f.mu.Lock()
+		runtime, runtimeKnown := f.exporterRuntime[r.URL.Path]
+		runtimeDenied := f.exporterRuntimeDenied
+		if runtimeKnown && r.Method == "GET" {
+			if runtimeDenied || f.readFailure {
+				w.WriteHeader(403)
+			} else {
+				if r.URL.Path == "/apis/apps/v1/deployments" {
+					merged := map[string]any{"items": append([]any{}, runtime["items"].([]any)...)}
+					for path, objects := range f.owned {
+						if strings.HasSuffix(path, "/deployments") {
+							merged["items"] = append(merged["items"].([]any), objects...)
+						}
+					}
+					json.NewEncoder(w).Encode(merged)
+				} else {
+					json.NewEncoder(w).Encode(runtime)
+				}
+			}
+			f.mu.Unlock()
+			return
+		}
+		f.mu.Unlock()
 		if strings.HasPrefix(r.URL.Path, "/api/v1/namespaces") {
 			f.mu.Lock()
 			namespaces := f.migrationNamespaces

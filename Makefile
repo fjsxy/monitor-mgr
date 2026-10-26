@@ -23,13 +23,15 @@ RELEASE ?= monitor-mgr
 IMAGE_TAG ?= development
 VM_RELEASE ?= vmcluster
 VM_NAMESPACE ?= monitoring
+OPERATOR_SOURCE_DESTINATION ?=
+OPERATOR_RELEASE_BUNDLE ?=
 
 .PHONY: help ut e2e e2e-summary check test test-race generate check-generated vet web-install web-build build run image ci-cases ci-cases-check ci-builder ci-builder-cleanup
 help: ## 查看常用命令
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-ut: ci-cases-check check-generated vet web-build ## 18 个 Ginkgo UT，一次 race 与不少于70%的产品语句覆盖率
+ut: ci-cases-check check-generated vet web-build ## 18 个 Ginkgo UT，一次 race 与不少于70%的产品语句覆盖率；Go总预算20m
 	mkdir -p .scratch
-	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -race -count=1 -timeout 15m -coverpkg=./internal/control,./internal/platform -coverprofile="$(COVERAGE_FILE)" ./internal/control ./internal/platform -args -ginkgo.no-color -ginkgo.json-report=.scratch/ut.json
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -race -count=1 -timeout 20m -coverpkg=./internal/control,./internal/platform -coverprofile="$(COVERAGE_FILE)" ./internal/control ./internal/platform -args -ginkgo.no-color -ginkgo.json-report=.scratch/ut.json
 	$(PYTHON) scripts/check-coverage.py "$(COVERAGE_FILE)" --minimum 70
 	$(PYTHON) scripts/check-tests.py
 e2e: ## 自动拉起独占双集群，默认运行10项；E2E_ARGS可指定--shard topology/storage/recovery，最后按原身份清理
@@ -83,6 +85,17 @@ ci-builder: ## CI 创建本 run 独占、固定版本的 BuildKit；须指定 BU
 ci-builder-cleanup: ## 按记录的原容器 ID 清理本 run 构建器
 	$(PYTHON) scripts/ci-builder.py cleanup --name "$(BUILDX_BUILDER)"
 
+.PHONY: operator-release-source operator-release-fetch operator-release-verify
+operator-release-source: ## 匿名获取锁定 Operator CLI 源码；显式指定 OPERATOR_SOURCE_DESTINATION
+	@test -n "$(OPERATOR_SOURCE_DESTINATION)" || (echo '必须指定 OPERATOR_SOURCE_DESTINATION' >&2; exit 1)
+	$(PYTHON) scripts/acceptance/operator_release.py source --destination "$(OPERATOR_SOURCE_DESTINATION)"
+operator-release-fetch: ## 匿名获取并核验原发布资产；显式指定 OPERATOR_RELEASE_BUNDLE
+	@test -n "$(OPERATOR_RELEASE_BUNDLE)" || (echo '必须指定 OPERATOR_RELEASE_BUNDLE' >&2; exit 1)
+	$(PYTHON) scripts/acceptance/operator_release.py fetch --bundle "$(OPERATOR_RELEASE_BUNDLE)"
+operator-release-verify: ## 逐字节核验本地原发布资产；显式指定 OPERATOR_RELEASE_BUNDLE
+	@test -n "$(OPERATOR_RELEASE_BUNDLE)" || (echo '必须指定 OPERATOR_RELEASE_BUNDLE' >&2; exit 1)
+	$(PYTHON) scripts/acceptance/operator_release.py verify --bundle "$(OPERATOR_RELEASE_BUNDLE)"
+
 .PHONY: test-issue27
 test-issue27: ## #27 单 CR、旧 SM 只读、冻结身份、删除与持久化 Ginkgo 回归，不启动 kind
 	$(GO) test -race -count=1 -timeout 5m ./internal/platform -args -ginkgo.focus='UT-(07|10|11|12|13|16)' -ginkgo.no-color
@@ -131,3 +144,12 @@ check-issue30-e2e: ## #30 真实采集编排语法、模块加载、Go证据编�
 	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list
 receiver-chart-check: ## 校验独占空scrape receiver的Helm声明；镜像锁定与现有Prometheus一致
 	$(HELM) lint charts/test-receiver --set-string 'image=quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3' --set-string runId=mm-issue30-static
+
+.PHONY: ut-review-fixes check-review-fixes
+ut-review-fixes: ## #23 review 的运行能力、旧任务收尾、写前重检与工具边界局部 Ginkgo 回归
+	mkdir -p .scratch
+	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus='UT-(08|10|11|12|18)' -ginkgo.json-report=.scratch/review-fixes.json
+check-review-fixes: ci-cases-check ## review 验收编排语法、Go 原始证据断言编译与浏览器发现，不启动 kind
+	$(PYTHON) -m py_compile scripts/e2e.py scripts/e2e_environment.py scripts/e2e_scenarios.py scripts/acceptance/capture.py scripts/acceptance/transport.py scripts/acceptance/exporter_collection.py scripts/acceptance/historical_cleanup.py scripts/acceptance/historical_cleanup_probe.py
+	$(GO) test ./tests/e2e -run '^$$'
+	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list

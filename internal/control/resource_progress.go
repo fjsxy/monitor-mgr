@@ -24,20 +24,16 @@ type frozenResource struct {
 	originalUID           string
 }
 
+// primaryFrozenResource 从冻结文档投影唯一请求身份，保持创建与恢复使用同一规则。
 func primaryFrozenResource(i *rpc.ObservationInstance, cfg configuration, spec map[string]any) frozenResource {
 	doc := cfg.document()
 	doc["spec"] = spec
 	a := componentFor(i.Component)
-	identity := *i
-	m := objectMap(doc, "metadata")
-	identity.Name = objectString(m, "name")
-	identity.TargetNamespace = objectString(objectMap(doc, "spec"), "targetNamespace")
-	if i.Component == AgentComponent {
-		identity.TargetNamespace = objectString(m, "namespace")
-		identity.CrNamespace = reference(identity.TargetNamespace)
-	}
-	return frozenResource{key: "component", collection: a.collectionPath(instanceCRNamespace(&identity)), path: a.objectPath(&identity), document: doc, originalUID: i.Uid}
+	identity := resourceInstance(i, frozenResource{document: doc}, i.Uid)
+	return frozenResource{key: "component", collection: a.collectionPath(instanceCRNamespace(identity)), path: a.objectPath(identity), document: doc, originalUID: i.Uid}
 }
+
+// public 仅返回已脱敏冻结文档，不泄漏内部请求路径及凭据。
 func (r frozenResource) public() *rpc.FrozenResource {
 	m := objectMap(r.document, "metadata")
 	return &rpc.FrozenResource{Key: r.key, ApiVersion: objectString(r.document, "apiVersion"), Kind: objectString(r.document, "kind"), Namespace: objectString(m, "namespace"), Name: objectString(m, "name"), Yaml: yamlText(safeTargetDocument(r.document))}
@@ -163,6 +159,12 @@ func resourceProgressFor(ctx context.Context, q clusterQuery, op, attempt string
 func enrichResourceProgress(ctx context.Context, q clusterQuery, o *rpc.Operation) {
 	if o.GetAttemptId() != "" {
 		o.Resources, _ = resourceProgressFor(ctx, q, o.OperationId, o.GetAttemptId())
+		var disposition string
+		if q.QueryRowContext(ctx, `SELECT disposition FROM historical_operation_releases WHERE operation_id=?`, o.OperationId).Scan(&disposition) == nil && disposition == "EXPLICIT_DELETION_ABSENT" {
+			o.State = "HISTORICAL_RESOLVED"
+			o.Message = "管理员已明确确认外部清理并解除原删除互斥；旧执行状态和未知发送事实保持原样"
+			return
+		}
 		for _, p := range o.Resources {
 			if p.GetHistoricalPending() {
 				o.State = "HISTORICAL_PENDING"
@@ -264,6 +266,8 @@ func resourceInstance(i *rpc.ObservationInstance, r frozenResource, uid string) 
 	}
 	return &copy
 }
+
+// readFrozenResource 只读取原冻结目标，404 表达当前不存在而非重新认领。
 func readFrozenResource(ctx context.Context, t *Target, r frozenResource) (map[string]any, error) {
 	var cr map[string]any
 	e := t.Request(ctx, "GET", r.path, nil, &cr)

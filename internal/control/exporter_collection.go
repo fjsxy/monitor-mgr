@@ -93,6 +93,9 @@ func (t *Target) collectionDependencies(ctx context.Context, desired map[string]
 	if monitor["enabled"] != true {
 		return nil
 	}
+	if e := t.checkExporterOperatorRuntime(ctx); e != nil {
+		return e
+	}
 	var list map[string]any
 	if e := t.Request(ctx, "GET", "/apis/monitoring.coreos.com/v1/namespaces/"+url.PathEscape(objectString(desired, "targetNamespace"))+"/servicemonitors?limit=1", nil, &list); e != nil {
 		return Error("CONFLICT", "ServiceMonitor CRD 或观察读取权限不可用："+safeSourceError(e))

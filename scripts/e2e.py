@@ -62,6 +62,7 @@ def main():
     try:
         # 分阶段记录耗时，后续调整分组可依据公开实测，而不依赖敏感原始日志。
         for name,operation in [('build',environment.build),('clusters',environment.prepare_clusters),('images',environment.load_images),('operators',environment.operators)]:
+            summary['stage']=name
             stage=time.monotonic();operation();summary['timingsSeconds'][name]=round(time.monotonic()-stage,3)
         summary['environment']='ready'
         with tempfile.TemporaryDirectory(prefix='mm-e2e-') as temporary:
@@ -123,9 +124,10 @@ def main():
                 summary['passed']=child.returncode==0 and all(r['outcome']=='passed' for r in results.values())
     except Exception as error:
         summary['errorType']=type(error).__name__
+        summary['diagnostic']=failure_summary(error)
         if summary['environment']=='preparing':summary['environment']='failed'
         path=environment.private/'run-failure.txt';path.write_text(traceback.format_exc());os.chmod(path,0o600)
-        print('E2E 执行失败：'+type(error).__name__+'；原始诊断：'+str(path),flush=True)
+        print('E2E 执行失败；源码位置见公开 diagnostic，原始诊断保持私有',flush=True)
     finally:
         if child and child.poll() is None:child.terminate();child.wait(timeout=15)
         failures=environment.processes.close_auxiliary()

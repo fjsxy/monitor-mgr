@@ -16,11 +16,14 @@ import yaml
 from testing_contract import owned_identity
 import sys
 sys.path.insert(0, str(Path(__file__).parent / 'acceptance'))
-from transport import ProcessRunner
+from transport import ProcessRunner, ProcessFailure
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = json.loads((ROOT / 'scripts/acceptance/source-lock.json').read_text())
 RUN_LABEL = 'monitor-mgr.test/run'
+COMMAND_STAGES = frozenset(['build-platform', 'fetch-public-release-source', 'fetch-published-operator',
+    'clone-locked-operator', 'checkout-locked-operator', 'operator-sha', 'build-release-tool',
+    'verify-published-operator', 'verify-release-bundle', 'inventory-kind', 'kind-create-control', 'kind-create-data']) | frozenset('kubectl-'+role+'-'+verb for role in ('control','data') for verb in ('get','patch','create','delete','wait','scale','rollout'))
 
 
 def private_json(path, value):
@@ -44,17 +47,32 @@ class Environment:
         self.operator_content = []
 
     def command(self, command, label='command', **kwargs):
-        result = self.processes.run([str(v) for v in command], label=label, **kwargs)
+        """外部原始输出始终私有；失败只公开经过白名单的阶段和真实退出码。"""
+        try:
+            result = self.processes.run([str(v) for v in command], label=label, **kwargs)
+        except ProcessFailure as error:
+            self.command_failure(label, error.child_exit, timed_out=error.timed_out)
+            raise
         if result.returncode:
-            if label == 'build-platform':
-                # 关键：只投影固定分类与 exit；Docker 原文可能包含私有路径/源码，不能进入公开 artifact。
-                diagnostic=dict(operation=label,exit=result.returncode,errorCode='BUILD_COMMAND_FAILED')
-                if b'unknown scheme oci-layout' in result.stderr:diagnostic['errorCode']='BUILD_OCI_LAYOUT_UNSUPPORTED'
-                if b'no space left on device' in result.stderr:diagnostic['errorCode']='BUILD_DISK_FULL'
-                private_json(self.public/'command-failure.json',diagnostic)
-                print('构建失败：'+json.dumps(diagnostic),flush=True)
+            self.command_failure(label, result.returncode, stderr=result.stderr)
             raise RuntimeError(label + ': exit=' + str(result.returncode) + '；原始输出见私有 processes')
         return result
+
+    def command_failure(self, label, exit_code, *, timed_out=False, stderr=b''):
+        """关键：label 不可信，未知标签只投影 unknown，禁止原文/argv/路径进入公共 artifact。"""
+        operation = label if type(label) is str and label in COMMAND_STAGES else 'unknown'
+        code = 'E2E_COMMAND_TIMEOUT' if timed_out else 'E2E_COMMAND_FAILED'
+        if operation == 'build-platform' and not timed_out:
+            code = 'BUILD_COMMAND_FAILED'
+            if b'unknown scheme oci-layout' in stderr: code = 'BUILD_OCI_LAYOUT_UNSUPPORTED'
+            if b'no space left on device' in stderr: code = 'BUILD_DISK_FULL'
+        diagnostic = dict(operation=operation, exit=exit_code if type(exit_code) is int and -255 <= exit_code <= 255 else None, errorCode=code)
+        if operation.startswith('kubectl-'):
+            from historical_cleanup import kubectl_failure
+            reason=kubectl_failure(stderr)
+            diagnostic['errorCode']={'not-found':'KUBERNETES_NOT_FOUND','conflict':'KUBERNETES_CONFLICT','precondition-failed':'KUBERNETES_PRECONDITION_FAILED','forbidden':'KUBERNETES_FORBIDDEN','wait-timeout':'KUBERNETES_WAIT_TIMEOUT'}.get(reason,code)
+        private_json(self.public/'command-failure.json', diagnostic)
+        print('外部步骤失败：'+json.dumps(diagnostic), flush=True)
 
     def checkpoint(self):
         # 持久保存已经观察到的身份，使失败后的独立 cleanup 仍能核验原资源。
@@ -68,6 +86,7 @@ class Environment:
         encoded = None if data is None else json.dumps(data).encode()
         result = self.processes.run(command, label='kubectl-' + role + '-' + str(args[0]), input=encoded, timeout=240)
         if check and result.returncode:
+            self.command_failure('kubectl-'+role+'-'+str(args[0]),result.returncode,stderr=result.stderr)
             raise RuntimeError('kubectl-' + role + '-' + str(args[:2]) + ': exit=' + str(result.returncode))
         # 关键：原 UID 取自本次 create/apply 响应；后续同名 GET 不能成为认领依据。
         if mutation and result.returncode==0:
@@ -210,7 +229,7 @@ class Environment:
             # 显式本地来源仍只读克隆提交，不复制未提交内容或修改原 checkout。
             self.command(['git', 'clone', '--quiet', '--no-hardlinks', '--no-checkout', self.source, source], 'clone-locked-operator', timeout=300)
         else:
-            self.command([sys.executable, ROOT/'scripts/acceptance/operator_release.py', 'source', '--destination', source], 'fetch-public-release-source', timeout=600)
+            self.command(['make', 'operator-release-source', 'PYTHON='+sys.executable, 'OPERATOR_SOURCE_DESTINATION='+str(source)], 'fetch-public-release-source', cwd=ROOT, timeout=600)
         self.command(['git', '-C', source, 'checkout', '--quiet', '--detach', LOCK['monitorOp']['source']], 'checkout-locked-operator')
         assert self.command(['git', '-C', source, 'rev-parse', 'HEAD'], 'operator-sha').stdout.decode().strip() == LOCK['monitorOp']['source']
         self.operator_source = source
@@ -225,7 +244,8 @@ class Environment:
                 shutil.copyfile(Path(supplied) / asset, self.release_bundle / asset)
                 os.chmod(self.release_bundle / asset, 0o600)
         else:
-            self.command([sys.executable, ROOT/'scripts/acceptance/operator_release.py', 'fetch', '--bundle', self.release_bundle], 'fetch-published-operator', timeout=600)
+            self.command(['make', 'operator-release-fetch', 'PYTHON='+sys.executable, 'OPERATOR_RELEASE_BUNDLE='+str(self.release_bundle)], 'fetch-published-operator', cwd=ROOT, timeout=600)
+        self.command(['make', 'operator-release-verify', 'PYTHON='+sys.executable, 'OPERATOR_RELEASE_BUNDLE='+str(self.release_bundle)], 'verify-release-bundle', cwd=ROOT)
         self.release_proof = bundle_proof(self.release_bundle)
         self.release_tool = self.private / 'operator-release'
         self.command(['go', 'build', '-trimpath', '-o', self.release_tool, './cmd/release'], 'build-release-tool', cwd=source, timeout=600)

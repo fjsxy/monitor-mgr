@@ -67,11 +67,10 @@ jobs:
         run: make ci-builder PYTHON=python
       - name: 匿名 HTTPS 获取锁定发布 CLI 源码
         run: >-
-          python scripts/acceptance/operator_release.py source --destination "$RUNNER_TEMP/monitor-op"
+          make operator-release-source PYTHON=python OPERATOR_SOURCE_DESTINATION="$RUNNER_TEMP/monitor-op"
       - name: 匿名 HTTPS 获取原始 release 资产
         run: >-
-          python scripts/acceptance/operator_release.py fetch
-          --bundle "$RUNNER_TEMP/operator-bundle"
+          make operator-release-fetch PYTHON=python OPERATOR_RELEASE_BUNDLE="$RUNNER_TEMP/operator-bundle"
       - name: 自动准备并执行本组E2E
         run: >-
           MONITOR_OP_RELEASE_BUNDLE="$RUNNER_TEMP/operator-bundle" make e2e PYTHON=python
