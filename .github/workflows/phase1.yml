@@ -42,7 +42,7 @@ jobs:
           retention-days: 14
   e2e:
     name: E2E / ${{ matrix.shard }} / 独占双集群
-    # 关键：私有 Operator 凭据只提供给可信同仓 job；不使用 pull_request_target。
+    # 固定同仓候选；公开 Operator 依赖不需要跨仓凭据。
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -65,17 +65,10 @@ jobs:
           python3 scripts/install-helm.py "$RUNNER_TEMP/tools/bin/helm"
       - name: 固定独占 BuildKit，支持经校验的 OCI 输入
         run: make ci-builder PYTHON=python
-      - name: 仅此步骤获取锁定发布 CLI 源码
-        env:
-          MONITOR_OP_DEPLOY_KEY: ${{ secrets.MONITOR_OP_DEPLOY_KEY }}
-          MONITOR_OP_SOURCE_REPOSITORY: ${{ secrets.MONITOR_OP_SOURCE_REPOSITORY }}
+      - name: 匿名 HTTPS 获取锁定发布 CLI 源码
         run: >-
-          python scripts/acceptance/fetch_source.py --destination "$RUNNER_TEMP/monitor-op"
-          --private-root "$RUNNER_TEMP/private/source-access"
-      - name: 仅此步骤获取原始私有 release 资产
-        env:
-          # 跨仓只读 token 仅供 gh 下载，不能带入构建或公开 artifact。
-          GH_TOKEN: ${{ secrets.MONITOR_OP_RELEASE_TOKEN }}
+          python scripts/acceptance/operator_release.py source --destination "$RUNNER_TEMP/monitor-op"
+      - name: 匿名 HTTPS 获取原始 release 资产
         run: >-
           python scripts/acceptance/operator_release.py fetch
           --bundle "$RUNNER_TEMP/operator-bundle"

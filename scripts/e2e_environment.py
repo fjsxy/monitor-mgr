@@ -205,11 +205,12 @@ class Environment:
         return audit_metadata(raw, identity)
 
     def build(self):
-        if not self.source:
-            common = Path(self.command(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], 'git-common', cwd=ROOT).stdout.decode().strip())
-            self.source = common.parent.parent / 'monitor-op'
         source = self.private / 'monitor-op'
-        self.command(['git', 'clone', '--quiet', '--no-hardlinks', '--no-checkout', self.source, source], 'clone-locked-operator', timeout=300)
+        if self.source:
+            # 显式本地来源仍只读克隆提交，不复制未提交内容或修改原 checkout。
+            self.command(['git', 'clone', '--quiet', '--no-hardlinks', '--no-checkout', self.source, source], 'clone-locked-operator', timeout=300)
+        else:
+            self.command([sys.executable, ROOT/'scripts/acceptance/operator_release.py', 'source', '--destination', source], 'fetch-public-release-source', timeout=600)
         self.command(['git', '-C', source, 'checkout', '--quiet', '--detach', LOCK['monitorOp']['source']], 'checkout-locked-operator')
         assert self.command(['git', '-C', source, 'rev-parse', 'HEAD'], 'operator-sha').stdout.decode().strip() == LOCK['monitorOp']['source']
         self.operator_source = source
@@ -224,7 +225,7 @@ class Environment:
                 shutil.copyfile(Path(supplied) / asset, self.release_bundle / asset)
                 os.chmod(self.release_bundle / asset, 0o600)
         else:
-            self.command([sys.executable, ROOT/'scripts/acceptance/operator_release.py', 'fetch', '--bundle', self.release_bundle], 'fetch-published-operator', timeout=300)
+            self.command([sys.executable, ROOT/'scripts/acceptance/operator_release.py', 'fetch', '--bundle', self.release_bundle], 'fetch-published-operator', timeout=600)
         self.release_proof = bundle_proof(self.release_bundle)
         self.release_tool = self.private / 'operator-release'
         self.command(['go', 'build', '-trimpath', '-o', self.release_tool, './cmd/release'], 'build-release-tool', cwd=source, timeout=600)
