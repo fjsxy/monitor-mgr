@@ -48,6 +48,8 @@ func freezePublicationResources(ctx context.Context, tx *sql.Tx, version string,
 	resources := []frozenResource{primaryFrozenResource(i, cfg, spec)}
 	return insertFrozenVersionResources(ctx, tx, version, resources)
 }
+
+// insertFrozenVersionResources 在同一事务保存完整路径及文档，不接受后续草稿覆盖。
 func insertFrozenVersionResources(ctx context.Context, tx *sql.Tx, version string, resources []frozenResource) error {
 	for position, r := range resources {
 		if _, e := tx.ExecContext(ctx, `INSERT INTO version_resources VALUES(?,?,?,?,?,?)`, version, r.key, position, r.collection, r.path, []byte(canonical(r.document))); e != nil {
@@ -56,6 +58,8 @@ func insertFrozenVersionResources(ctx context.Context, tx *sql.Tx, version strin
 	}
 	return nil
 }
+
+// readFrozenResources 按原顺序读取冻结集合，旧双 CR 仍可准确展示。
 func readFrozenResources(ctx context.Context, q clusterQuery, id string, operation bool) ([]frozenResource, error) {
 	query := `SELECT resource_key,position,collection_path,object_path,document,'' FROM version_resources WHERE version_id=? ORDER BY position`
 	if operation {
@@ -135,6 +139,8 @@ func freezeOperationResources(ctx context.Context, tx *sql.Tx, o *rpc.Operation,
 	}
 	return nil
 }
+
+// resourceProgressFor 公开每次尝试的独立资源事实及附加只读观察。
 func resourceProgressFor(ctx context.Context, q clusterQuery, op, attempt string) ([]*rpc.ResourceProgress, error) {
 	resources, e := readFrozenResources(ctx, q, op, true)
 	if e != nil {
@@ -152,10 +158,18 @@ func resourceProgressFor(ctx context.Context, q clusterQuery, op, attempt string
 	projectHistoricalResources(ctx, q, projected)
 	return out, nil
 }
+
+// enrichResourceProgress 将资源事实加入公共操作，只在响应中标记历史待处理。
 func enrichResourceProgress(ctx context.Context, q clusterQuery, o *rpc.Operation) {
 	if o.GetAttemptId() != "" {
 		o.Resources, _ = resourceProgressFor(ctx, q, o.OperationId, o.GetAttemptId())
-		projectHistoricalResources(ctx, q, o)
+		for _, p := range o.Resources {
+			if p.GetHistoricalPending() {
+				o.State = "HISTORICAL_PENDING"
+				o.Message = historicalPendingMessage
+				break
+			}
+		}
 	}
 }
 
@@ -171,6 +185,8 @@ func markResourceDispatch(ctx context.Context, tx *sql.Tx, o *rpc.Operation, key
 	}
 	return nil
 }
+
+// recordResourceResult 与操作结果同事务保存 UID；已成功事实不能被后续恢复降级。
 func recordResourceResult(ctx context.Context, tx *sql.Tx, o *rpc.Operation, key, state, message, uid, now string) error {
 	_, e := tx.ExecContext(ctx, `UPDATE resource_progress SET state=?,message=?,confirmed_uid=CASE WHEN ?<>'' THEN ? ELSE confirmed_uid END,updated_at=? WHERE attempt_id=? AND resource_key=? AND state<>'SUCCEEDED'`, state, message, uid, uid, now, o.GetAttemptId(), key)
 	if e == nil && state == "SUCCEEDED" && o.Action == "PUBLISH" && uid != "" {

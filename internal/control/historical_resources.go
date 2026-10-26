@@ -118,9 +118,31 @@ func validateLegacyManagementSchema(ctx context.Context, db clusterQuery) error 
 	if exists == 0 {
 		return nil
 	}
-	rows, e := db.QueryContext(ctx, `SELECT sequence,instance_id,actor_id,confirmed_at,allow_cluster_managers FROM instance_management_confirmations LIMIT 0`)
+	rows, e := db.QueryContext(ctx, `PRAGMA table_info(instance_management_confirmations)`)
 	if e != nil {
+		return e
+	}
+	defer rows.Close()
+	expected := map[string]string{"sequence": "INTEGER", "instance_id": "TEXT", "actor_id": "TEXT", "confirmed_at": "TEXT", "allow_cluster_managers": "INTEGER"}
+	count := 0
+	for rows.Next() {
+		var position, notNull, primary int
+		var name, kind string
+		var defaultValue any
+		if e = rows.Scan(&position, &name, &kind, &notNull, &defaultValue, &primary); e != nil {
+			return e
+		}
+		want, known := expected[name]
+		if !known || kind != want || (name == "sequence" && (primary != 1 || notNull != 0)) || (name != "sequence" && (primary != 0 || notNull != 1)) {
+			return Error("UNAVAILABLE", "旧 v13 管理确认结构不兼容，保留原库")
+		}
+		count++
+	}
+	if e = rows.Err(); e != nil {
+		return e
+	}
+	if count != len(expected) {
 		return Error("UNAVAILABLE", "旧 v13 管理确认结构不兼容，保留原库")
 	}
-	return rows.Close()
+	return nil
 }
