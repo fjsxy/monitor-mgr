@@ -164,7 +164,7 @@ func checkResourceRetryIdentity(t ginkgo.GinkgoTInterface) {
 
 // I27-C01：独立旧 schema/任务夹具仅描述升级前持久事实；所有读取和恢复动作经过公开 HTTP/Kitex。
 func checkLegacySMNeverDispatches(t ginkgo.GinkgoTInterface) {
-	for _, variant := range []string{"queued", "sent", "unknown"} {
+	for _, variant := range []string{"queued", "sent", "unknown", "succeeded"} {
 		for _, legacyVersion := range []int{12, 13} {
 			ginkgo.By(fmt.Sprintf("I27-C01.%s/v%d：旧 SM 步骤所有恢复入口只读并显示历史待处理", variant, legacyVersion))
 			f, target := ksmTarget(t)
@@ -222,14 +222,23 @@ func checkLegacySMNeverDispatches(t ginkgo.GinkgoTInterface) {
 				opState = "RESULT_UNCERTAIN"
 				sent = true
 			}
-			if variant == "sent" {
+			if variant == "sent" || variant == "succeeded" {
 				uid = "old-sm-uid"
+			}
+			if variant == "succeeded" {
+				state = "SUCCEEDED"
+				opState = "SUCCEEDED"
 			}
 			task, e := os.ReadFile("testdata/legacy/task-sm-v12.sql")
 			if e != nil {
 				t.Fatal(e)
 			}
-			if _, e = db.Exec(string(task), sql.Named("version", accepted["versionId"]), sql.Named("operation", oid), sql.Named("attempt", done["attemptId"]), sql.Named("instance", id), sql.Named("document", raw), sql.Named("uid", uid), sql.Named("state", state), sql.Named("operationState", opState), sql.Named("possiblySent", sent)); e != nil {
+			if _, e = db.Exec(string(task), sql.Named("version", accepted["versionId"]), sql.Named("operation", oid), sql.Named("attempt", done["attemptId"]), sql.Named("instance", id), sql.Named("document", raw), sql.Named("uid", uid), sql.Named("state", state), sql.Named("operationState", opState), sql.Named("possiblySent", sent), sql.Named("currentVersion", func() any {
+				if variant == "succeeded" {
+					return accepted["versionId"]
+				}
+				return ""
+			}())); e != nil {
 				t.Fatal(e)
 			}
 			if _, e = db.Exec(`INSERT INTO schema_migrations VALUES(12)`); e != nil {
@@ -259,7 +268,7 @@ func checkLegacySMNeverDispatches(t ginkgo.GinkgoTInterface) {
 				}
 				op := clusterCall(t, p, "POST", "/operations/"+oid+"/refresh", nil, c, "refresh", 200)
 				history := clusterCall(t, p, "GET", "/operations?instanceId="+id, nil, c, "", 200)["operations"].([]any)
-				if len(history) != 1 || history[0].(map[string]any)["operationId"] != oid || history[0].(map[string]any)["resources"].([]any)[1].(map[string]any)["historicalPending"] != true {
+				if len(history) != 1 || history[0].(map[string]any)["operationId"] != oid || history[0].(map[string]any)["resources"].([]any)[1].(map[string]any)["historicalPending"] != (variant != "succeeded") {
 					t.Fatal("按 instanceID 无法盘点旧 SM 原任务", history)
 				}
 				rs := op["resources"].([]any)
@@ -267,7 +276,11 @@ func checkLegacySMNeverDispatches(t ginkgo.GinkgoTInterface) {
 					t.Fatal("旧资源集合被替换", op)
 				}
 				r := rs[1].(map[string]any)
-				if r["state"] != state || r["confirmedUid"] != uid || r["possiblySent"] != sent || r["historicalPending"] != true || r["observation"] == nil || op["state"] != "HISTORICAL_PENDING" {
+				wantState := "HISTORICAL_PENDING"
+				if variant == "succeeded" {
+					wantState = "SUCCEEDED"
+				}
+				if r["state"] != state || r["confirmedUid"] != uid || r["possiblySent"] != sent || r["historicalPending"] != (variant != "succeeded") || r["observation"] == nil || op["state"] != wantState {
 					t.Fatal("历史事实被覆盖或未显式待处理", op)
 				}
 				if rs[0].(map[string]any)["state"] != "SUCCEEDED" {

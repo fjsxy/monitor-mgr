@@ -7,5 +7,5 @@ INSERT INTO resource_progress VALUES($attempt,'companion',$uid,$possiblySent,$st
 INSERT INTO instance_resource_identities VALUES($instance,'component','created-uid');
 UPDATE operations SET state=$operationState,message='旧双 CR 原操作' WHERE id=$operation;
 UPDATE execution_attempts SET state=$operationState,possibly_sent=1 WHERE id=$attempt;
-UPDATE instances SET current_version_id='' WHERE id=$instance;
+UPDATE instances SET current_version_id=$currentVersion WHERE id=$instance;
 INSERT INTO instance_protections VALUES($instance,$operation);

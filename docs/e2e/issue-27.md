@@ -41,6 +41,7 @@
 | I27-C01.queued | 旧未发 SM 步骤禁止恢复续写 | 加载旧 schema 中 component 成功、SM QUEUED 的任务；启动、读取、refresh、retry、continue、cancel 并重启 | 旧版本/UID/逐资源事实保留；SM 显示历史待处理；各入口 0 SM 写入；不能假记成功或转新模式 | #27 |
 | I27-C01.sent | 旧可能已发 SM 只读核验 | 加载 SM possibly_sent=true 且原 UID 已确认的旧任务，目标存在原 UID；启动、refresh 与重启 | 只 GET 原冻结路径；保留 UID/发送标记/原结果，并独立显示核验结果与人工处理原因；0 SM 写入 | #27 |
 | I27-C01.unknown | 旧 SM 首次发送未知身份不认领 | 加载 SM possibly_sent=true、原 UID 为空的任务，目标含同名同 spec 对象；refresh、retry、continue、重启 | UID 仍为空，身份仍待确认，明确旧任务待处理；0 SM 写入，不自动接管 | #27 |
+| I27-C01.succeeded | 已成功旧 SM 仍可盘点，不能只查未完成步骤 | 加载 v12/v13 中 SM 已成功且保留旧原名称的任务；按 instanceID 查询历史并只读 refresh、重启 | 旧成功状态、UID、发送标记保留；historicalPending=false，但原 operation/resource key、冻结路径和 YAML 仍可盘点；0 SM 写入，不能误认为旧对象已经清理 | #27 |
 | I27-C02 | 新模式资源派发白名单 | 公开创建并发布 KSM/Agent，再重试明确失败及继续未发操作；读取版本/操作/attempt | 仅一个 component 资源，kind 分别为 KubeStateMetrics/PrometheusAgent；所有目标写入无 ServiceMonitor | #27 |
 | I27-C03 | 删除冻结路径和替换 UID 保护 | 发布 KSM/Agent 后预览删除；目标同名换 UID 或出现 RV 冲突；重试/继续/重启 | 仅按原冻结路径和原 UID/RV 条件删除；不删替代对象；存储保护独立有效 | #27 |
 | I27-C04 | Operator 子资源故障不会变成平台补写 | 新发布成功后目标报告子资源故障；刷新操作与运行观察 | CR 写入成功与观察故障分开表达；无第二份平台写入任务，无 SM 写入 | #27 |
