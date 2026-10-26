@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,12 +23,13 @@ func checkLegacyPublicationMigration(t ginkgo.GinkgoTInterface) {
 	// 接下来F04：精确v5旧库保留由HTTP/Kitex创建的密文、会话、固定版本、已成功历史和未发保护。
 	ginkgo.By("F04：精确v5旧库保留由HTTP/Kitex创建的密文、会话、固定版本、已成功历史和未发保护。")
 
-	for _, fail := range []bool{true} {
+	for _, oldVersion := range []int{5, 10, 11} {
+		fail := oldVersion == 5
 		name := "success"
 		if fail {
 			name = "failure"
 		}
-		teststeps.Step(name, func() {
+		teststeps.Step(fmt.Sprintf("schema-v%d/%s", oldVersion, name), func() {
 			f, target := ksmTarget(t)
 			_ = f
 			dir := t.TempDir()
@@ -68,10 +70,33 @@ func checkLegacyPublicationMigration(t ginkgo.GinkgoTInterface) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			// 关键：裁除所有v6及后续关系/字段，留下精确v5形状；不把新schema残余伪装成旧库。
-			_, e = db.Exec(dropInstanceCreatorSchema + dropAgentStorageSchema + `PRAGMA foreign_keys=OFF;DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DROP TABLE deletion_previews;DROP TABLE seen_resources;DROP TABLE deletion_operations;DROP TABLE operation_lifecycle;ALTER TABLE execution_attempts DROP COLUMN revision;ALTER TABLE execution_attempts DROP COLUMN sequence;ALTER TABLE execution_attempts DROP COLUMN actor_id;ALTER TABLE execution_attempts DROP COLUMN message;DELETE FROM schema_migrations WHERE version>5;`)
+			// 关键：按被测版本裁除后续关系/字段，不把新版表残余伪装成旧 schema。
+			// 独立裁为 v10/v11 时保留当时完整存储与生命周期 schema，只移除真正后续的资源表。
+			downgrade := dropAgentStorageSchema + `PRAGMA foreign_keys=OFF;DROP INDEX instance_activity_order;ALTER TABLE instances DROP COLUMN activity_sequence;DROP TABLE instance_activity_counter;DROP TABLE deletion_previews;DROP TABLE seen_resources;DROP TABLE deletion_operations;DROP TABLE operation_lifecycle;ALTER TABLE execution_attempts DROP COLUMN revision;ALTER TABLE execution_attempts DROP COLUMN sequence;ALTER TABLE execution_attempts DROP COLUMN actor_id;ALTER TABLE execution_attempts DROP COLUMN message;DELETE FROM schema_migrations WHERE version>5;`
+			if oldVersion >= 10 {
+				downgrade = dropResourceProgressSchema + `DROP TABLE IF EXISTS instance_management_confirmations;DELETE FROM schema_migrations WHERE version>` + fmt.Sprint(oldVersion)
+			}
+			_, e = db.Exec(downgrade)
 			if e != nil {
 				t.Fatal(e)
+			}
+			var creatorColumns int
+			if e = db.QueryRow(`SELECT count(*) FROM pragma_table_info('instances') WHERE name='creator_user_id'`).Scan(&creatorColumns); e != nil {
+				t.Fatal(e)
+			}
+			if oldVersion < 11 && creatorColumns != 0 {
+				if _, e = db.Exec(`ALTER TABLE instances DROP COLUMN creator_user_id;ALTER TABLE instances DROP COLUMN creator_role`); e != nil {
+					t.Fatal(e)
+				}
+			}
+			if oldVersion == 11 && creatorColumns == 0 {
+				legacy, e := os.ReadFile("testdata/legacy/creator-v11.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				if _, e = db.Exec(string(legacy)); e != nil {
+					t.Fatal(e)
+				}
 			}
 			var historicalSpec []byte
 			if e = db.QueryRow(`SELECT effective_spec FROM publication_versions WHERE id=?`, pending["versionId"]).Scan(&historicalSpec); e != nil {

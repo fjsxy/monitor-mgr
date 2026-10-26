@@ -378,7 +378,7 @@ func checkTestUnknownCreatorMigration(t ginkgo.GinkgoTInterface) {
 		t.Fatal(err)
 	}
 	// 关键：删除新版本才存在的字段与身份投影，旧证据缺失时只能保留未知，不能借当前角色补造。
-	_, err = db.Exec(dropInstanceCreatorSchema + `DELETE FROM schema_migrations WHERE version>10;DELETE FROM command_results WHERE action='CREATE_INSTANCE';`)
+	_, err = db.Exec(dropResourceProgressSchema + dropInstanceCreatorSchema + `DROP TABLE IF EXISTS instance_management_confirmations;DELETE FROM schema_migrations WHERE version>10;DELETE FROM command_results WHERE action='CREATE_INSTANCE';`)
 	db.Close()
 	if err != nil {
 		t.Fatal(err)
