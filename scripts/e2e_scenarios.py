@@ -426,6 +426,8 @@ def recovery(s):
     writepath='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics';proxy.control('faults',{'readMode':'none','rejectWritePath':writepath})
     failure=s.publish(retry,preview=p,wait=False);s.state(failure,'FAILED');cfg=s.cfg();cfg['resources']['requestCPU']='999m';s.save(retry,cfg);proxy.control('reset',{})
     again=s.action(failure,'retry');s.state(again,'SUCCEEDED');assert again['versionId']==failure['versionId'] and again['attemptId']!=failure['attemptId'];assert s.cr()['spec']['podResources']['requests']['cpu']=='100m';s.track_cr(s.cr()['metadata']['uid'])
+    from instance_identity import authorization
+    authorization(s,proxy)
 
 
 def deletion(s):

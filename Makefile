@@ -90,3 +90,9 @@ test-issue27: ## #27 单 CR、旧 SM 只读、冻结身份、删除与持久化 
 .PHONY: ut-instance-identity
 ut-instance-identity: ## #25 实例创建身份、直接 RPC 与 worker 授权局部行为回归
 	$(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus="UT-07|UT-10|UT-16" -ginkgo.json-report=.scratch/issue-25.json
+
+.PHONY: check-issue25-e2e
+check-issue25-e2e: ## #25 真实验收夹具语法、Go 编译与浏览器用例发现；不表示真实集群执行通过
+	$(PYTHON) -m py_compile scripts/acceptance/instance_identity.py scripts/acceptance/ksm_proxy.py scripts/acceptance/fixtures/fault_proxy.py scripts/e2e_scenarios.py
+	$(GO) test ./tests/e2e -run '^$$'
+	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list
