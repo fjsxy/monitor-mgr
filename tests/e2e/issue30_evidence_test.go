@@ -36,6 +36,10 @@ type adopted30 struct {
 	ExternalLabels    map[string]string
 	Jobs, RemoteWrite []string
 	ScrapeConfigs     []map[string]any
+	ActiveTargets     []struct {
+		ScrapePool, Health, LastScrape, ScrapeURL string
+		Labels, DiscoveredLabels                  map[string]string
+	}
 }
 type sample30 struct {
 	Metric map[string]string
@@ -429,6 +433,40 @@ func assertIssue30Evidence(evidence map[string]json.RawMessage) {
 		actualJobs := append([]string{}, group.Adopted.Jobs...)
 		sort.Strings(actualJobs)
 		Expect(actualJobs).To(Equal(jobs), "实际采用job必须恰好是Operator配套集合")
+		// 关键：进程实际active targets也必须精确相等，配置job和有样本不能掩盖额外发现目标。
+		assertTargets := func(adopted adopted30, exports []export30) {
+			wantedTargets := map[string]float64{}
+			for _, exported := range exports {
+				for _, target := range exported.Targets {
+					key := strings.Join([]string{target.Job, target.Namespace, target.Service, target.Endpoint, target.Instance, target.Pod, target.PodUID}, "\x00")
+					minimum := group.PublishedAt
+					if exported.StartedAt > minimum {
+						minimum = exported.StartedAt
+					}
+					Expect(wantedTargets).NotTo(HaveKey(key))
+					wantedTargets[key] = minimum
+				}
+			}
+			Expect(adopted.ActiveTargets).To(HaveLen(len(wantedTargets)))
+			seenTargets := map[string]bool{}
+			for _, target := range adopted.ActiveTargets {
+				key := strings.Join([]string{target.ScrapePool, target.Labels["namespace"], target.Labels["service"], target.Labels["endpoint"], target.Labels["instance"], target.Labels["pod"], target.DiscoveredLabels["__meta_kubernetes_pod_uid"]}, "\x00")
+				Expect(wantedTargets).To(HaveKey(key))
+				Expect(seenTargets).NotTo(HaveKey(key))
+				seenTargets[key] = true
+				Expect(target.Health).To(Equal("up"))
+				Expect(target.DiscoveredLabels["__meta_kubernetes_namespace"]).To(Equal(target.Labels["namespace"]))
+				Expect(target.DiscoveredLabels["__meta_kubernetes_service_name"]).To(Equal(target.Labels["service"]))
+				Expect(target.DiscoveredLabels["__meta_kubernetes_pod_name"]).To(Equal(target.Labels["pod"]))
+				Expect(target.DiscoveredLabels["__address__"]).To(Equal(target.Labels["instance"]))
+				lastScrape, err := time.Parse(time.RFC3339Nano, target.LastScrape)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(float64(lastScrape.UnixNano()) / 1e9).To(BeNumerically(">=", wantedTargets[key]))
+				Expect(target.ScrapeURL).To(Equal("http://" + target.Labels["instance"] + "/metrics"))
+			}
+		}
+		assertTargets(group.InitialAdopted, group.Exports[:1])
+		assertTargets(group.Adopted, group.Exports)
 		Expect(group.MatchingPreview.Historical).NotTo(BeNil())
 		Expect(*group.MatchingPreview.Historical).To(BeFalse())
 		Expect(group.MatchingPreview.Error).To(BeEmpty())
@@ -716,6 +754,12 @@ func assertIssue30Evidence(evidence map[string]json.RawMessage) {
 	// 每个空数组/false/数值由明确原始字段提供；包括嵌套样本和受限权限的false。
 	for _, rawGroup := range groupFields {
 		group := required30(rawGroup)
+		for _, phase := range []string{"adopted", "initialAdopted"} {
+			adopted := required30(group[phase], "process", "configSHA256", "externalLabels", "jobs", "remoteWrite", "scrapeConfigs", "activeTargets")
+			for _, target := range items30(adopted["activeTargets"]) {
+				required30(target, "scrapePool", "labels", "discoveredLabels", "health", "lastScrape", "scrapeUrl")
+			}
+		}
 		for _, rawExport := range items30(group["exports"]) {
 			exported := required30(rawExport, "snapshot", "startedAt", "pods", "workloads", "containers", "targets")
 			snapshot := required30(exported["snapshot"], "parent", "companion", "sources", "version", "services", "endpoints")

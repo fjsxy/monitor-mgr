@@ -42,12 +42,20 @@ def _process(s, namespace, pod, target='data'):
 
 def _configuration(s, namespace, pod, target='data'):
     actual = _adopted(s, namespace, pod, target)
+    targets = _api(s, namespace, pod, '/api/v1/targets?state=active', target)
+    if targets.get('status') != 'success' or not isinstance(targets.get('data', {}).get('activeTargets'), list):
+        raise RuntimeError('实际Prometheus进程targets不可读')
+    label_keys = {'namespace', 'service', 'endpoint', 'instance', 'pod', 'job'}
+    discovery_keys = {'__meta_kubernetes_pod_uid', '__meta_kubernetes_namespace', '__meta_kubernetes_service_name', '__meta_kubernetes_pod_name', '__address__'}
+    active = [{key: value for key, value in item.items() if key in ('scrapePool', 'health', 'lastScrape', 'scrapeUrl')} |
+              {'labels': {key: value for key, value in item.get('labels', {}).items() if key in label_keys},
+               'discoveredLabels': {key: value for key, value in item.get('discoveredLabels', {}).items() if key in discovery_keys}} for item in targets['data']['activeTargets']]
     # 本专用Agent只使用None认证；公开结果不输出任意Secret值。
     return {'process': _process(s, namespace, pod, target), 'configSHA256': hashlib.sha256(yaml.safe_dump(actual).encode()).hexdigest(),
             'externalLabels': actual.get('global', {}).get('external_labels', {}),
             'jobs': [value['job_name'] for value in actual.get('scrape_configs', [])],
             'remoteWrite': [value['url'] for value in actual.get('remote_write', [])],
-            'scrapeConfigs': actual.get('scrape_configs', [])}
+            'scrapeConfigs': actual.get('scrape_configs', []), 'activeTargets': active}
 
 
 def _source(value):
@@ -194,7 +202,10 @@ def creator_collection(s):
     def expression(labels): return 'kube_pod_info{'+','.join(key+'='+json.dumps(value) for key, value in labels.items())+'}'
     def adopted(group):
         jobs = {target['job'] for exported in group['exports'] for target in exported['targets']}
-        return wait(lambda: _configuration(s, namespace, group['identity']['pod']['metadata']['name']), lambda value: set(value['jobs']) == jobs, timeout=120, message='Agent原进程未采用精确配套jobs')
+        count = sum(len(exported['targets']) for exported in group['exports'])
+        return wait(lambda: _configuration(s, namespace, group['identity']['pod']['metadata']['name']),
+                    lambda value: set(value['jobs']) == jobs and len(value['activeTargets']) == count and all(t['health'] == 'up' for t in value['activeTargets']),
+                    timeout=120, message='Agent原进程未采用精确配套jobs或实际targets未收敛')
     def samples(group):
         prometheus = group['adopted']['externalLabels']['prometheus']; observations = []
         for exported in group['exports']:
