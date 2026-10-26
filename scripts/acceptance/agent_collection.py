@@ -206,6 +206,11 @@ def creator_collection(s):
                     times = query('timestamp('+expr+')', rows[0]['value'][0])
                     observations.append({'query': labels, 'results': rows, 'timestampResults': times, 'notBefore': max(group['publishedAt'], exported['startedAt']), 'receiverPodUID': proof['receiverBefore']['process']['podUID']})
         return observations
+    def negatives(group, other):
+        # 关键：动态前后分别实际查询，不能用最终负样本倒推新增前的隔离结果。
+        identity = group['adopted']['externalLabels']['prometheus']
+        return [{'query': {'prometheus': identity, 'namespace': e['snapshot']['companion']['metadata']['namespace'], 'uid': p['metadata']['uid']},
+                 'results': query(expression({'prometheus': identity, 'namespace': e['snapshot']['companion']['metadata']['namespace'], 'uid': p['metadata']['uid']})), 'observedAt': time.time()} for e in other['exports'] for p in e['pods']]
     exports = {role: exporter(role, 1, client) for role, client in [('user', user_client), ('admin', admin_client)]}
     for role, client, creator in [('user', user_client, user['id']), ('admin', admin_client, admin_id)]:
         name = role+'-agent-'+uuid.uuid4().hex[:8]; context('agent', namespace, name); cfg = s.cfg()
@@ -225,6 +230,9 @@ def creator_collection(s):
         else:
             with s.using(user_client): denied = s.save(instance, cfg, status=403)
             proof['protectedAgentSave'] = denied
+    for group in proof['groups']:
+        other = next(g for g in proof['groups'] if g['role'] != group['role'])
+        group['initialNegativeQueries'] = negatives(group, other)
     s.by('I30-K02：管理员编辑只保存草稿；既有Agent不重发而发现新增同创建者exporter')
     context('agent', namespace, user_group['identity']['instance']['name']); user_cfg['resources']['requestCPU'] = '210m'
     s.save(user_instance, user_cfg); proof['adminEditedDraft'] = s.call('GET', '/instances/'+user_instance['id']+'/draft')
@@ -238,7 +246,7 @@ def creator_collection(s):
         group['adopted'] = adopted(group)
         group['allSamples'] = query(expression({'prometheus': group['adopted']['externalLabels']['prometheus']}))
         other = next(g for g in proof['groups'] if g['role'] != group['role'])
-        group['negativeQueries'] = [{'query': {'prometheus': group['adopted']['externalLabels']['prometheus'], 'namespace': e['snapshot']['companion']['metadata']['namespace'], 'uid': p['metadata']['uid']}, 'results': query(expression({'prometheus': group['adopted']['externalLabels']['prometheus'], 'namespace': e['snapshot']['companion']['metadata']['namespace'], 'uid': p['metadata']['uid']})), 'observedAt': time.time()} for e in other['exports'] for p in e['pods']]
+        group['negativeQueries'] = negatives(group, other)
     proof['prometheusOperator'] = _operator(s)
     s.by('I30-K03：同一受限SA上真实读取故障与RBAC拒绝，恢复后不提升权限')
     proxy = Proxy(s, 'data', backend_config=config); s.proxies.append(proxy)

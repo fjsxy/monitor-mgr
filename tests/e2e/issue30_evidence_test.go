@@ -61,16 +61,16 @@ type source30 struct {
 	Matches                                     []struct{ UID, Namespace, Name string }
 }
 type group30 struct {
-	Role, CreatorUserID         string
-	PublishedAt                 float64
-	InitialDraft                struct{ Agent map[string]any }
-	Identity                    identity30
-	OwnPreview, MatchingPreview source30
-	Adopted, InitialAdopted     adopted30
-	Exports                     []export30
-	Samples, InitialSamples     []query30
-	AllSamples                  []sample30
-	NegativeQueries             []query30
+	Role, CreatorUserID                     string
+	PublishedAt                             float64
+	InitialDraft                            struct{ Agent map[string]any }
+	Identity                                identity30
+	OwnPreview, MatchingPreview             source30
+	Adopted, InitialAdopted                 adopted30
+	Exports                                 []export30
+	Samples, InitialSamples                 []query30
+	AllSamples                              []sample30
+	NegativeQueries, InitialNegativeQueries []query30
 }
 type audit30 struct {
 	AuditID, Stage, Username, Verb string
@@ -353,7 +353,7 @@ func assertIssue30Evidence(evidence map[string]json.RawMessage) {
 	roles := map[string]bool{}
 	creators := map[string]bool{}
 	for index, group := range proof.Groups {
-		rawGroup := required30(groupFields[index], "role", "creatorUserId", "publishedAt", "initialDraft", "identity", "ownPreview", "matchingPreview", "adopted", "initialAdopted", "exports", "samples", "initialSamples", "allSamples", "negativeQueries")
+		rawGroup := required30(groupFields[index], "role", "creatorUserId", "publishedAt", "initialDraft", "identity", "ownPreview", "matchingPreview", "adopted", "initialAdopted", "exports", "samples", "initialSamples", "allSamples", "negativeQueries", "initialNegativeQueries")
 		Expect([]string{"user", "admin"}).To(ContainElement(group.Role))
 		Expect(roles).NotTo(HaveKey(group.Role))
 		roles[group.Role] = true
@@ -476,44 +476,65 @@ func assertIssue30Evidence(evidence map[string]json.RawMessage) {
 		}
 		expectedByRole[group.Role] = wanted
 		// 关键：空负查询必须显式有results=[]，省略/null不能被解释成“没有另一组样本”。
-		negatives := items30(rawGroup["negativeQueries"])
-		for _, negative := range negatives {
-			required30(negative, "query", "results", "observedAt")
-			Expect(items30(required30(negative)["results"])).To(BeEmpty())
+		for _, phase := range []string{"initialNegativeQueries", "negativeQueries"} {
+			for _, negative := range items30(rawGroup[phase]) {
+				required30(negative, "query", "results", "observedAt")
+				Expect(items30(required30(negative)["results"])).To(BeEmpty())
+			}
 		}
 		ginkgo.AddReportEntry("I30-K01."+group.Role, fmt.Sprintf("%d个实际Endpoint/Pod样本，全部查询精确相等", len(wanted)))
 	}
 	ginkgo.By("I30-K01.negative-user/negative-admin：两个方向的真实负样本查询完整且为空")
+	dynamicStartedAt := float64(0)
+	for _, group := range proof.Groups {
+		if group.Role == "user" {
+			dynamicStartedAt = group.Exports[1].StartedAt
+		}
+	}
 	for _, group := range proof.Groups {
 		other := "user"
 		if group.Role == "user" {
 			other = "admin"
 		}
-		expected := map[string]bool{}
-		for _, e := range proof.Groups {
-			if e.Role != other {
-				continue
-			}
-			for _, exported := range e.Exports {
-				var snap collectionSnapshot
-				Expect(json.Unmarshal(exported.Snapshot, &snap)).To(Succeed())
-				for _, pod := range exported.Pods {
-					expected[snap.Companion.Metadata.Namespace+"/"+pod.Metadata.UID] = true
+		for _, phase := range []struct {
+			Initial bool
+			Queries []query30
+		}{{true, group.InitialNegativeQueries}, {false, group.NegativeQueries}} {
+			expected := map[string]bool{}
+			for _, e := range proof.Groups {
+				if e.Role != other {
+					continue
+				}
+				exports := e.Exports
+				if phase.Initial {
+					exports = exports[:1]
+				}
+				for _, exported := range exports {
+					var snap collectionSnapshot
+					Expect(json.Unmarshal(exported.Snapshot, &snap)).To(Succeed())
+					for _, pod := range exported.Pods {
+						expected[snap.Companion.Metadata.Namespace+"/"+pod.Metadata.UID] = true
+					}
 				}
 			}
-		}
-		Expect(group.NegativeQueries).To(HaveLen(len(expected)))
-		seen := map[string]bool{}
-		for _, q := range group.NegativeQueries {
-			Expect(q.Query).To(HaveLen(3))
-			Expect(q.Query["prometheus"]).To(Equal(group.Adopted.ExternalLabels["prometheus"]))
-			key := q.Query["namespace"] + "/" + q.Query["uid"]
-			Expect(expected).To(HaveKey(key))
-			Expect(seen).NotTo(HaveKey(key))
-			seen[key] = true
-			Expect(q.Results).NotTo(BeNil())
-			Expect(q.Results).To(BeEmpty())
-			Expect(q.ObservedAt).To(BeNumerically(">", proof.Groups[0].PublishedAt))
+			Expect(phase.Queries).To(HaveLen(len(expected)))
+			seen := map[string]bool{}
+			for _, q := range phase.Queries {
+				Expect(q.Query).To(HaveLen(3))
+				Expect(q.Query["prometheus"]).To(Equal(group.Adopted.ExternalLabels["prometheus"]))
+				key := q.Query["namespace"] + "/" + q.Query["uid"]
+				Expect(expected).To(HaveKey(key))
+				Expect(seen).NotTo(HaveKey(key))
+				seen[key] = true
+				Expect(q.Results).NotTo(BeNil())
+				Expect(q.Results).To(BeEmpty())
+				Expect(q.ObservedAt).To(BeNumerically(">", group.PublishedAt))
+				if phase.Initial {
+					Expect(q.ObservedAt).To(BeNumerically("<", dynamicStartedAt))
+				} else {
+					Expect(q.ObservedAt).To(BeNumerically(">", dynamicStartedAt))
+				}
+			}
 		}
 	}
 	ginkgo.By("I30-K02.dynamic/edit：动态新增不重发Agent，管理员编辑也保留原目标")
@@ -708,5 +729,20 @@ func assertIssue30Evidence(evidence map[string]json.RawMessage) {
 			}
 		}
 	}
-	ginkgo.AddReportEntry("I30-K01/K02/K03", "真实身份、全部Endpoint样本、双向负查询、精确集合、动态不重发和零SM写分别通过")
+	// 每个必选输入独立留下原生报告编号，不能只用父场景通过替代明细。
+	for _, result := range []struct{ ID, Detail string }{
+		{"I30-K01.negative-user", "动态前后对admin源PodUID的真实负查询均为空"},
+		{"I30-K01.negative-admin", "动态前后对全部user源PodUID的真实负查询均为空"},
+		{"I30-K01.exact", "两组实际采用jobs及所有kube_pod_info元组与全部合法Endpoints精确相等"},
+		{"I30-K01.receiver", "前后原receiver进程与config相同，空scrape、无remote_write、初始无样本"},
+		{"I30-K01.audit", fmt.Sprintf("父写%d/SM读%d/Forbidden%d正控，平台所有SM写尝试为0", parentWrites, smReads, forbiddenReads)},
+		{"I30-K02.dynamic", "新exporter到达前后AgentUID/版本/spec/容器相同且审计无重发"},
+		{"I30-K02.edit", "管理员保存非关联字段后原creator目标与namespace规则不变"},
+		{"I30-K02.namespace", "Own空成功与跨namespace精确匹配分别采证"},
+		{"I30-K03.process", "同原Prometheus Operator进程具备Agent controller与ScrapeConfig informer能力"},
+		{"I30-K03.read-failure", "同受限上游SA的实际只读路径故障明确为TARGET_ERROR"},
+		{"I30-K03.forbidden", "真实SA读取RBAC拒绝明确为TARGET_FORBIDDEN并恢复原受限身份"},
+	} {
+		ginkgo.AddReportEntry(result.ID, result.Detail)
+	}
 }
