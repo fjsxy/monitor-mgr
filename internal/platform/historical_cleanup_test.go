@@ -22,19 +22,19 @@ func checkHistoricalCleanup(t ginkgo.GinkgoTInterface) {
 		Cleanup []struct {
 			Variant string
 			Receipt struct {
-				Success       bool
+				Success       *bool
 				Phase, Reason string
 			}
-			RegistryRetained bool
-			Events           []struct {
+			RegistryRetained *bool
+			Events           *[]struct {
 				Method        string
 				Preconditions map[string]string
 			}
 		}
 		Handoff []struct {
 			Variant string
-			Tracked []string
-			Error   string
+			Tracked *[]string
+			Error   *string
 		}
 	}
 	Expect(json.Unmarshal(raw, &proof)).To(Succeed())
@@ -47,20 +47,25 @@ func checkHistoricalCleanup(t ginkgo.GinkgoTInterface) {
 			id = "I29-R01." + item.Variant
 		}
 		ginkgo.By(id)
+		// 关键：缺字段不能反序列化为 false/空列表后冒充实际零写或已退休责任。
+		Expect(item.Receipt.Success).NotTo(BeNil())
+		Expect(item.RegistryRetained).NotTo(BeNil())
+		Expect(item.Events).NotTo(BeNil())
 		deletes := 0
-		for _, event := range item.Events {
+		for _, event := range *item.Events {
+			Expect(event.Method).NotTo(BeEmpty())
 			if event.Method == "DELETE" {
 				deletes++
 				Expect(event.Preconditions).To(Equal(map[string]string{"uid": "original-uid", "resourceVersion": "rv"}))
 			}
 		}
 		if item.Variant == "gone" {
-			Expect(item.Receipt.Success).To(BeTrue())
-			Expect(item.RegistryRetained).To(BeFalse())
+			Expect(*item.Receipt.Success).To(BeTrue())
+			Expect(*item.RegistryRetained).To(BeFalse())
 			Expect(deletes).To(Equal(1))
 		} else {
-			Expect(item.Receipt.Success).To(BeFalse())
-			Expect(item.RegistryRetained).To(BeTrue())
+			Expect(*item.Receipt.Success).To(BeFalse())
+			Expect(*item.RegistryRetained).To(BeTrue())
 			Expect(item.Receipt.Phase + "/" + item.Receipt.Reason).To(Equal(reasons[item.Variant]))
 			if item.Variant != "blocked" && item.Variant != "delete" {
 				Expect(deletes).To(BeZero())
@@ -71,15 +76,17 @@ func checkHistoricalCleanup(t ginkgo.GinkgoTInterface) {
 	for _, item := range proof.Handoff {
 		id := "I29-R02." + item.Variant
 		ginkgo.By(id)
+		Expect(item.Error).NotTo(BeNil())
+		Expect(item.Tracked).NotTo(BeNil())
 		if item.Variant == "confirmed" {
-			Expect(item.Error).To(BeEmpty())
-			Expect(item.Tracked).To(Equal([]string{"original-uid"}))
+			Expect(*item.Error).To(BeEmpty())
+			Expect(*item.Tracked).To(Equal([]string{"original-uid"}))
 		} else {
-			Expect(item.Tracked).To(BeEmpty())
+			Expect(*item.Tracked).To(BeEmpty())
 			if item.Variant == "unsent" {
-				Expect(item.Error).To(BeEmpty())
+				Expect(*item.Error).To(BeEmpty())
 			} else {
-				Expect(item.Error).NotTo(BeEmpty())
+				Expect(*item.Error).NotTo(BeEmpty())
 			}
 		}
 		ginkgo.AddReportEntry(id, "精确发布操作交接不采用同名资源补认")
