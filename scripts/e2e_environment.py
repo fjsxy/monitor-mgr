@@ -23,7 +23,7 @@ LOCK = json.loads((ROOT / 'scripts/acceptance/source-lock.json').read_text())
 RUN_LABEL = 'monitor-mgr.test/run'
 COMMAND_STAGES = frozenset(['build-platform', 'fetch-public-release-source', 'fetch-published-operator',
     'clone-locked-operator', 'checkout-locked-operator', 'operator-sha', 'build-release-tool',
-    'verify-published-operator', 'verify-release-bundle', 'inventory-kind', 'kind-create-control', 'kind-create-data'])
+    'verify-published-operator', 'verify-release-bundle', 'inventory-kind', 'kind-create-control', 'kind-create-data']) | frozenset('kubectl-'+role+'-'+verb for role in ('control','data') for verb in ('get','patch','create','delete','wait','scale','rollout'))
 
 
 def private_json(path, value):
@@ -67,6 +67,10 @@ class Environment:
             if b'unknown scheme oci-layout' in stderr: code = 'BUILD_OCI_LAYOUT_UNSUPPORTED'
             if b'no space left on device' in stderr: code = 'BUILD_DISK_FULL'
         diagnostic = dict(operation=operation, exit=exit_code if type(exit_code) is int and -255 <= exit_code <= 255 else None, errorCode=code)
+        if operation.startswith('kubectl-'):
+            from historical_cleanup import kubectl_failure
+            reason=kubectl_failure(stderr)
+            diagnostic['errorCode']={'not-found':'KUBERNETES_NOT_FOUND','conflict':'KUBERNETES_CONFLICT','precondition-failed':'KUBERNETES_PRECONDITION_FAILED','forbidden':'KUBERNETES_FORBIDDEN','wait-timeout':'KUBERNETES_WAIT_TIMEOUT'}.get(reason,code)
         private_json(self.public/'command-failure.json', diagnostic)
         print('外部步骤失败：'+json.dumps(diagnostic), flush=True)
 
@@ -82,6 +86,7 @@ class Environment:
         encoded = None if data is None else json.dumps(data).encode()
         result = self.processes.run(command, label='kubectl-' + role + '-' + str(args[0]), input=encoded, timeout=240)
         if check and result.returncode:
+            self.command_failure('kubectl-'+role+'-'+str(args[0]),result.returncode,stderr=result.stderr)
             raise RuntimeError('kubectl-' + role + '-' + str(args[:2]) + ': exit=' + str(result.returncode))
         # 关键：原 UID 取自本次 create/apply 响应；后续同名 GET 不能成为认领依据。
         if mutation and result.returncode==0:

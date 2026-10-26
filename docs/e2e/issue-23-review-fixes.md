@@ -38,4 +38,20 @@
 | I23-R15 / UT-18 | 云端 UT 失败可安全定位原生 case | 通过 capture.project_output 的冻结源码边界输入失败 Ginkgo 原始输出与原生报告；含任意 Failure.Message/私有 marker 负例 | 只投影固定 UT-ID、真实状态、冻结源码位置和 Go 超时固定类别；正文/路径/凭据原文不公开，原始日志保持私有 | #23 |
 | I23-R16 / UT-18 | 超过 1MiB 的真实 UT 日志不饿死末尾失败 | 输入大体积前缀和末尾固定 Ginkgo fail/Go test timeout、running tests 与 Make 错误；固定用例及路径须经当前候选源码核对 | 可定位末尾真实失败及超时；有界解析、截断明确 unknown，不凭 exit=2 断定超时 | #23 |
 
+| I23-R17.publish / UT-11 | 已显式处理旧发布不永久阻塞集群变更 | 完成绑定原 operation 的独立历史 PUBLISH 处理后，通过公开 HTTP 转移到当前所属用户 | 旧未知执行状态保持原样，已处理历史项不再计入集群未结束互斥 | #23 / #27 / #29 |
+| I23-R17.delete / UT-11 | 已显式收尾旧删除不永久阻塞集群变更 | 完成独立历史 DELETE 收尾后，通过公开 HTTP 转移到当前所属用户 | DELETED 与独立处理事实保留，旧 DELETE 原状态不伪改成功，集群转移成功 | #23 / #27 / #29 |
+| I23-R17.other / UT-11 | 独立处理不能放行其他未知任务 | 旧任务显式处理后，在同集群新建另一个首次创建响应丢失任务，再请求转移/注销 | 新任务保持 IDENTITY_UNCERTAIN 和原锁；转移/注销均拒绝 | #23 / #27 / #29 |
+| I23-R18 / E2E-04 | Agent 长退出宽限不造成夹具清理倒序 | 采集与产品删除断言全部完成后，先固定本 run 原 CR UID 下的 Pod UID 图；发送原 CR Foreground 删除后、等待前，仅对已确认 namespace UID/label 内原 Pod 按 UID grace=0 加速；核实原图消失 | 只加速本 run 夹具 Pod；不触碰其他 run/同名替代，不缩短业务删除断言，失败仍保留真实清理收据 | #23 / #30 |
+
+| I23-R14.gone / UT-18 | 最后一个 fixture hold 释放后404正确退休责任 | 真实受控 HTTP 夹具 PATCH 移除 hold 后立即删除原对象，运行实际 cleanup helper | 固定 finalizers/gone 收据成功、原 UID 清理登记退休、零额外 DELETE | #23 / #27 / #29 |
+| I23-R14.conflict / UT-18 | RV 条件冲突可安全重读原身份 | 第一次 PATCH 返回409，随后回读仍为原 UID 并使用其当前 RV 重试 | 有界重试只针对明确条件冲突，每次 PATCH 保留原 UID/RV test，最终原图清空 | #23 / #27 / #29 |
+| I23-R14.replaced / UT-18 | finalizer 处理后同名替代不接管 | PATCH 后读到同名新 UID | identity/uid-mismatch 失败、登记保留，不对替代发 DELETE | #23 / #27 / #29 |
+| I23-R19 / E2E-10 | 真实旧库浏览器必须明确选择采集启用 | 打开真实 v10 large revision 实例，先断言配套开关未选中；用户明确勾选后才填写 interval/timeout 并保存、预览、发布 | 升级不自动 enable，缺省关闭事实保留；明确操作后才出现采集参数，精确 revision 和真实发布断言继续执行 | #23 / #28 / #29 |
+
+| I23-R09.admission / UT-08 | 实际 Pod 的 SA admission 字段不能误判版本 | 锁定 RC4 的 Pod 含 Kubernetes 自动注入的 serviceaccount token volumeMount，Deployment template 没有该字段；经公开预览/发布 | 核对运行镜像、原UID链、参数与当前SA，允许正常 admission 差异；env/command 等可能改写控制目标的覆盖仍拒绝 | #23 / #28 |
+
+| I23-R09.env / UT-08 | 已批准镜像不能以环境覆盖控制目标 | 在 Running/Ready 原 Pod 上声明 KUBERNETES_SERVICE_HOST 环境覆盖，再请求公开预览 | 拒绝且零业务写，不能用同一镜像 digest 为其他目标背书 | #23 / #28 |
+| I23-R09.command / UT-08 | 已批准镜像不能替换入口进程 | 在原 Pod 覆盖 command，再请求公开预览 | 拒绝且零业务写，tag/digest 不能代替实际 controller 进程 | #23 / #28 |
+| I23-R20 | 全量 UT 保持有界且容纳新增必选矩阵 | 静态核对 make ut 的 go test timeout 为20m、CI job保持30m；最终集成执行原生18项并逐项核验耗时 | 不减少任何输入/断言；本地6b8实测716s、云端总命令17m30只用于预算余量，不将旧exit2推断为已证实超时；新报告决定最终结果 | #23 |
+
 执行结果另存 `docs/e2e/issue-23-review-fixes-results.md`；真实集群、浏览器、实际指标与最终覆盖率由集成任务执行并绑定最终 testedCommit。

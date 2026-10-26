@@ -25,11 +25,17 @@ def _parent(s, instance):
 # 等待 Operator 配套观察达到指定状态。
 def _settled(s, instance, state='Ready'):
     # 等待只决定采证时间；完整身份/状态/所有权结论仍由 Go 断言。
-    return wait(lambda: _parent(s, instance), lambda cr: cr.get('status', {}).get('serviceMonitor', {}).get('state') == state and cr.get('status', {}).get('serviceMonitor', {}).get('observedGeneration') == cr['metadata']['generation'], timeout=100, message='Operator 配套观察未到达采证阶段 '+state)
+    def current(cr):
+        status=cr.get('status',{});companion=status.get('serviceMonitor',{});generation=cr['metadata']['generation']
+        # 关键：RC4停用分支更新父终态，保留旧SM观察generation；原值必须保存，清空证据另行读取。
+        if state=='Disabled' and cr.get('spec',{}).get('enabled') is False:
+            return status.get('phase')=='Disabled' and status.get('observedGeneration')==generation and companion.get('state')=='Disabled'
+        return companion.get('state')==state and companion.get('observedGeneration')==generation
+    return wait(lambda: _parent(s, instance), current, timeout=100, message='Operator 配套观察未到达采证阶段 '+state)
 
 
 # 分别保存父 CR、配套对象与平台观察证据。
-def snapshot(s, instance, state='Ready'):
+def snapshot(s, instance, state='Ready', cleanup_baseline=None):
     parent = _settled(s, instance, state)
     s.call('POST', '/instances/' + instance['id'] + '/refresh', {})
     current = s.call('GET', '/instances/' + instance['id'])
@@ -45,9 +51,28 @@ def snapshot(s, instance, state='Ready'):
         owned = [service['metadata']['name'] for service in services if any(owner.get('controller') and owner.get('uid') == parent['metadata']['uid'] for owner in service['metadata'].get('ownerReferences', []))]
         endpoints = wait(lambda: s.get('endpoints', '-n', s.targetns, target=s.target)['items'], lambda values: bool(owned) and all(any(value['metadata']['name'] == name and any(subset.get('addresses') for subset in value.get('subsets', [])) for value in values) for name in owned), timeout=100, message='实际 Service Endpoints 未就绪')
 
+    cleanup_graph = None
+    if cleanup_baseline is not None:
+        cleanup_graph=wait(lambda: owned_graph(s,parent,cleanup_baseline),lambda graph:not graph,timeout=100,message='停用后原父资源图尚未清空')
     version = s.call('GET', '/instances/' + instance['id'] + '/versions/' + current['currentVersionId']) if current.get('currentVersionId') else None
     sources = [source for source in current.get('sources', []) if source['source'] == 'ServiceMonitor']
-    return {'instance': {key: current.get(key) for key in ('id', 'uid', 'name', 'creatorUserId', 'currentVersionId', 'lifecycle')}, 'parent': _object(parent), 'companion': companion, 'sources': sources, 'version': version, 'services': [_object(value) for value in services], 'endpoints': [_object(value) | {'subsets': value.get('subsets', [])} for value in endpoints]}
+    return {'cleanupGraph': cleanup_graph, 'instance': {key: current.get(key) for key in ('id', 'uid', 'name', 'creatorUserId', 'currentVersionId', 'lifecycle')}, 'parent': _object(parent), 'companion': companion, 'sources': sources, 'version': version, 'services': [_object(value) for value in services], 'endpoints': [_object(value) | {'subsets': value.get('subsets', [])} for value in endpoints]}
+
+
+# 完整列举实际资源并按原父UID与原图UID求闭包，不复制Operator的名称/selector算法。
+def owned_graph(s, parent, baseline=()):
+    candidates=[]
+    for resource in ('deployments','statefulsets','daemonsets','replicasets','pods','services','endpoints','servicemonitors'):
+        candidates.extend(s.get(resource,'--all-namespaces',target=s.target)['items'])
+    seen={parent['metadata']['uid']}|{item['metadata']['uid'] for item in baseline}
+    changed=True
+    while changed:
+        changed=False
+        for item in candidates:
+            metadata=item['metadata']
+            if metadata['uid'] not in seen and any(owner.get('uid') in seen for owner in metadata.get('ownerReferences',[])):
+                seen.add(metadata['uid']);changed=True
+    return [_object(item) for item in candidates if item['metadata']['uid'] in seen]
 
 
 # 记录单实例配套拓扑与跨实例隔离证据。
@@ -146,8 +171,11 @@ def lifecycle(s):
     cfg['desiredState'] = 'Running'
     cfg['serviceMonitor']['enabled'] = False
     s.save(first, cfg); s.publish(first); proof['closed'] = snapshot(s, first, 'Disabled')
+    cfg['serviceMonitor']['enabled'] = True
+    s.save(first,cfg);s.publish(first);proof['beforeDisabled']=snapshot(s,first)
+    proof['beforeDisabled']['cleanupGraph']=owned_graph(s,proof['beforeDisabled']['parent'])
     cfg['desiredState'] = 'Disabled'
-    s.save(first, cfg); s.publish(first); proof['disabled'] = snapshot(s, first, 'Disabled')
+    s.save(first, cfg); s.publish(first); proof['disabled'] = snapshot(s, first, 'Disabled',cleanup_baseline=proof['beforeDisabled']['cleanupGraph'])
     cfg['desiredState'] = 'Running'; cfg['serviceMonitor']['enabled'] = True
     s.save(first, cfg); s.publish(first); proof['restored'] = snapshot(s, first)
     preview = s.call('POST', '/instances/' + first['id'] + '/deletion-previews', {})

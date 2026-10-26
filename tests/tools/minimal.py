@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import subprocess
+import time
 from types import SimpleNamespace
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
@@ -24,6 +25,7 @@ class TrustBoundary(unittest.TestCase):
             (root/'internal/platform').mkdir(parents=True)
             (root/'internal/platform/consolidated_test.go').write_text('package platform_test\nvar _ = ginkgo.It("UT-18 来源边界", func() {})\n')
             (root/'Makefile').write_text('ut:\n\tgo test ./...\n')
+            # 只在临时目录冻结本例静态源码，不读取用户Git身份或远端凭据。
             def git(*args):
                 return subprocess.run(['git','-C',str(root),*args],check=True,capture_output=True).stdout.decode().strip()
             git('init','--quiet');git('add','Makefile','internal/platform/consolidated_test.go')
@@ -31,10 +33,15 @@ class TrustBoundary(unittest.TestCase):
             candidate = git('rev-parse','HEAD')
             output = b'x\n'*600000+b'panic: test timed out after 15m0s\n[FAIL] [It] UT-18 PRIVATE_FAILURE_MESSAGE\n'
             result = subprocess.CompletedProcess([],2,output,b'make: *** [Makefile:2: ut] Error 1\n')
+            result.capture_started_at=time.time()
+            report=root/'internal/platform/.scratch/ut.json';report.parent.mkdir()
+            report.write_text(json.dumps([dict(SpecReports=[dict(LeafNodeType='It',LeafNodeText='UT-18 PRIVATE_TITLE',State='failed',NumAttempts=1,Failure=dict(Message='PRIVATE_FAILURE_MESSAGE',Location=dict(FileName=str(root/'internal/platform/consolidated_test.go'),LineNumber=2,FullStackTrace='PRIVATE_STACK')))])]))
             value = project_output(result,label='ut',candidate=candidate,private_root=private,root=root)
             self.assertIn('go-test-timeout',value['observedMarkers'])
             self.assertTrue(any(v.get('caseId')=='UT-18' for v in value['testFailures']))
             self.assertTrue(any(v['file']=='Makefile' and v['line']==2 for v in value['repoFrames']))
+            self.assertEqual(value['nativeFailures'][0]['caseId'],'UT-18')
+            self.assertEqual(value['nativeFailures'][0]['state'],'failed')
             self.assertNotIn('PRIVATE_',json.dumps(value))
 
     def test_environment_command_diagnostic(self):

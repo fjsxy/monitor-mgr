@@ -211,6 +211,7 @@ def project_output(result, *, label, candidate, private_root, root=ROOT):
             if len(groups[priority]) < 65:groups[priority].append(item)
             else:source.unknown = True
         def bounded(data):
+            """首尾共享固定解析预算，完整原字节与摘要仍由私有捕获保留。"""
             return data if len(data)<=limit else data[:limit//2]+b'\n'+data[-limit//2:]
         for line in (bounded(result.stdout) + b'\n\n' + bounded(result.stderr)).decode(errors='replace').splitlines():
             if len(line) > 2048:

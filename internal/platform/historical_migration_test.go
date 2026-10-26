@@ -192,6 +192,8 @@ func checkHistoricalParentRelease(t ginkgo.GinkgoTInterface) {
 		if status == 200 {
 			Expect(result["parentReleased"]).To(BeTrue())
 			current := clusterCall(t, p, "GET", "/instances/"+id, nil, a, "", 200)
+			actor := readJSON(t, p, "/session", a)["account"].(map[string]any)["id"]
+			clusterCall(t, p, "POST", "/clusters/"+current["clusterId"].(string)+"/transfer", map[string]any{"ownerId": actor}, a, "resolved-publication-transfer", 200)
 			if variant == "unknown-absent" {
 				Expect(current["uid"]).To(Equal(""))
 			} else {
@@ -727,6 +729,19 @@ func checkHistoricalDeletionRelease(t ginkgo.GinkgoTInterface) {
 			for _, key := range []string{"state", "possiblySent", "confirmedUid", "target"} {
 				Expect(now[key]).To(Equal(old[key]))
 			}
+		}
+		if variant == "clear" {
+			clusterID := current["clusterId"].(string)
+			actor := readJSON(t, p, "/session", a)["account"].(map[string]any)["id"]
+			clusterCall(t, p, "POST", "/clusters/"+clusterID+"/transfer", map[string]any{"ownerId": actor}, a, "resolved-delete-transfer", 200)
+			fresh := clusterCall(t, p, "POST", "/clusters/"+clusterID+"/instances", map[string]any{"component": "kube-state-metrics", "ksm": ksmConfig("unresolved-after-history")}, a, "fresh-unresolved", 201)
+			f.mu.Lock()
+			f.dropResponse = true
+			f.mu.Unlock()
+			pending := lifecyclePublish(t, p, a, fresh["id"].(string))
+			awaitLifecycleState(t, p, a, pending["operationId"].(string), "IDENTITY_UNCERTAIN")
+			clusterCall(t, p, "POST", "/clusters/"+clusterID+"/transfer", map[string]any{"ownerId": actor}, a, "other-pending-transfer", 409)
+			clusterCall(t, p, "POST", "/clusters/"+clusterID+"/unregister", map[string]any{}, a, "other-pending-unregister", 409)
 		}
 		f.mu.Lock()
 		Expect(f.smWrites).To(BeZero())

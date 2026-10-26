@@ -268,13 +268,18 @@ func exporterRuntimeFixture() map[string]map[string]any {
 	rs := map[string]any{"metadata": rsMeta}
 	podMeta := metadata("operator-pod", "operator-pod")
 	podMeta["ownerReferences"] = []any{map[string]any{"kind": "ReplicaSet", "uid": "operator-rs", "controller": true}}
-	pod := map[string]any{"metadata": podMeta, "spec": map[string]any{"serviceAccountName": "operator", "containers": []any{container}}, "status": map[string]any{"phase": "Running", "containerStatuses": []any{map[string]any{"name": "manager", "ready": true, "containerID": "containerd://original", "imageID": "docker-pullable://docker.io/fjsxy/monitor-in-hand@sha256:0eadb4af76f5a1c72eb3f5bb4b8372eab43dbabb0a4dfb194866d58cf854ebde"}}}}
+	podContainer := map[string]any{}
+	for key, value := range container {
+		podContainer[key] = value
+	}
+	podContainer["volumeMounts"] = []any{map[string]any{"name": "kube-api-access-fixture", "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount", "readOnly": true}}
+	pod := map[string]any{"metadata": podMeta, "spec": map[string]any{"serviceAccountName": "operator", "containers": []any{podContainer}}, "status": map[string]any{"phase": "Running", "containerStatuses": []any{map[string]any{"name": "manager", "ready": true, "containerID": "containerd://original", "imageID": "docker-pullable://docker.io/fjsxy/monitor-in-hand@sha256:0eadb4af76f5a1c72eb3f5bb4b8372eab43dbabb0a4dfb194866d58cf854ebde"}}}}
 	return map[string]map[string]any{"/apis/apps/v1/deployments": {"items": []any{dep}}, "/apis/apps/v1/namespaces/operator-system/replicasets": {"items": []any{rs}}, "/api/v1/namespaces/operator-system/pods": {"items": []any{pod}}, "/api/v1/namespaces/operator-system/pods/operator-pod": pod}
 }
 
 // checkExporterOperatorRuntime 经公开预览拒绝缺失、旧版本及无法核实的实际 controller。
 func checkExporterOperatorRuntime(t ginkgo.GinkgoTInterface) {
-	for _, variant := range []string{"absent", "old", "tag-only", "wrong-digest", "not-ready", "read-denied"} {
+	for _, variant := range []string{"absent", "old", "tag-only", "wrong-digest", "not-ready", "read-denied", "env", "command"} {
 		ginkgo.By("I23-R09.runtime-" + variant)
 		p, a, id, f := ksmPublishedFixture(t)
 		f.mu.Lock()
@@ -294,6 +299,10 @@ func checkExporterOperatorRuntime(t ginkgo.GinkgoTInterface) {
 			status["ready"] = false
 		case "read-denied":
 			f.exporterRuntimeDenied = true
+		case "env":
+			c["env"] = []any{map[string]any{"name": "KUBERNETES_SERVICE_HOST", "value": "other.invalid"}}
+		case "command":
+			c["command"] = []any{"/other-process"}
 		}
 		f.mu.Unlock()
 		response := clusterCall(t, p, "POST", "/instances/"+id+"/previews", map[string]any{"draftRevision": 1}, a, "runtime-"+variant, 409)

@@ -158,6 +158,34 @@ class Scenario(LifecycleSuite, AgentSuite):
         self.pod=pods[0]['metadata']['name'];self.platform_pod_uid=pods[0]['metadata']['uid'];assert self.platform_pod_uid!=old
         self.cookies=cookies;self.connect();return self.platform_pod_uid
 
+    def capture_cleanup_pods(self,key,uid,obj):
+        # 关键：在发送本例原CR删除前固定Pod UID闭包；原namespace UID/run标签是另一层必要边界。
+        target,kind,namespace,name=key;namespace=namespace or obj.get('spec',{}).get('targetNamespace','')
+        original=self.namespace_uids.get((target,namespace))
+        if not original:return []
+        actual=self.get('namespace',namespace,target=target)
+        assert actual['metadata']['uid']==original and actual['metadata'].get('labels',{}).get(RUN_LABEL)==self.env.run_id
+        objects=[]
+        for resource in ('deployments','statefulsets','daemonsets','replicasets','pods'):
+            objects.extend(self.get(resource,'-n',namespace,target=target)['items'])
+        seen={uid};changed=True
+        while changed:
+            changed=False
+            for item in objects:
+                if item['metadata']['uid'] not in seen and any(owner.get('uid') in seen for owner in item['metadata'].get('ownerReferences',[])):
+                    seen.add(item['metadata']['uid']);changed=True
+        return [(target,namespace,item['metadata']['name'],item['metadata']['uid']) for item in objects if item.get('kind')=='Pod' and item['metadata']['uid'] in seen]
+
+    def accelerate_cleanup_pods(self,pods):
+        # 关键：业务断言结束且原CR已开始Foreground清理后，只加速刚才固定的原Pod，避免重新创建或触碰同名替代。
+        for target,namespace,name,uid in pods:
+            actual=self.k('get','pod',name,'-n',namespace,'-o','json',target=target,check=False)
+            if actual.returncode:
+                from historical_cleanup import kubectl_failure
+                assert kubectl_failure(actual.stderr)=='not-found';continue
+            if json.loads(actual.stdout)['metadata']['uid']!=uid:continue
+            self.delete_uid(target,'/api/v1/namespaces/'+namespace+'/pods/'+name,uid,grace=0)
+
     def cleanup(self):
         failures=[]
         for proxy in self.proxies:
@@ -175,7 +203,7 @@ class Scenario(LifecycleSuite, AgentSuite):
                 actual=self.get('namespace',namespace,target=target)
                 from testing_contract import owned_identity
                 assert owned_identity(self.env.run_id,{'uid':uid,'runId':self.env.run_id},{'uid':actual['metadata']['uid'],'runId':actual['metadata'].get('labels',{}).get(RUN_LABEL)})
-                # fixture 清理可加速自己的 Pod 退出；所有业务删除断言已经在场景中完成。
+                # namespace本身仍为本run原UID，最后清理所有残留fixture Pod。
                 for pod in self.get('pods','-n',namespace,target=target)['items']:
                     self.delete_uid(target,'/api/v1/namespaces/'+namespace+'/pods/'+pod['metadata']['name'],pod['metadata']['uid'],grace=0)
                 self.delete_uid(target,'/api/v1/namespaces/'+namespace,uid)
@@ -442,6 +470,9 @@ def recovery(s):
     before=len(s.mutations(s.capture_proxy(),'PUT'));assert before==1;s.rebuild();proxy.control('reset',{})
     s.call('POST','/operations/'+op['operationId']+'/refresh',{});s.state(op,'SUCCEEDED',timeout=60)
     assert len(s.mutations(s.capture_proxy(),'PUT'))==before
+    # 关键：归属转移只在没有未完成任务时执行；未知发送子例之后的锁必须保持。
+    from instance_identity import authorization
+    authorization(s,proxy)
     s.by('首次创建丢响应且没有原 UID，禁止按同名对象补认或重建')
     s.crname='unknown-'+uuid.uuid4().hex[:8];unknown=s.create()
     # 关键：先登记明确的创建身份，代理才会在丢响应前保存原 API UID；不能事后按名字补认。
@@ -454,8 +485,6 @@ def recovery(s):
     writepath='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics';proxy.control('faults',{'readMode':'none','rejectWritePath':writepath})
     failure=s.publish(retry,preview=p,wait=False);s.state(failure,'FAILED');cfg=s.cfg();cfg['resources']['requestCPU']='999m';s.save(retry,cfg);proxy.control('reset',{})
     again=s.action(failure,'retry');s.state(again,'SUCCEEDED');assert again['versionId']==failure['versionId'] and again['attemptId']!=failure['attemptId'];assert s.cr()['spec']['podResources']['requests']['cpu']=='100m';s.track_cr(s.cr()['metadata']['uid'])
-    from instance_identity import authorization
-    authorization(s,proxy)
     from historical_exporter import migrate
     migrate(s)
 
@@ -466,11 +495,15 @@ def deletion(s):
     kept_uid=json.loads(s.k('create','-f','-',data=kept).stdout)['metadata']['uid']
     s.by('原 CR finalizer 阻塞真实 Foreground 删除；移除后等待原图完全消失')
     i=s.create();s.publish(i);s.runtime(i);original=s.cr();uid=original['metadata']['uid']
-    finalizers=original['metadata'].get('finalizers',[])+['phase1.fixture/hold']
-    s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'add','path':'/metadata/finalizers','value':finalizers}]))
+    from historical_cleanup import fixture_finalizers
+    key=(s.target,'kubestatemetrics','',s.crname)
+    held=fixture_finalizers(s,key,uid,add=('phase1.fixture/hold',))
+    assert held['success'] and held['object'] is not None and 'phase1.fixture/hold' in held['object']['metadata'].get('finalizers',[]),'原UID hold未实际生效'
     op=s.delete(i,False);s.state(op,'DELETION_BLOCKED','DELETION_VERIFYING');assert s.call('GET','/operations/'+op['operationId'])['state']!='SUCCEEDED'
     s.call('POST','/clusters/'+s.cluster['id']+'/unregister',{},status=409);s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner},status=409)
-    cr=s.cr();s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'test','path':'/metadata/resourceVersion','value':cr['metadata']['resourceVersion']},{'op':'replace','path':'/metadata/finalizers','value':[f for f in cr['metadata'].get('finalizers',[]) if f!='phase1.fixture/hold']}]))
+    # 关键：只对明确RV条件冲突重读原UID，不能因后台status并发更新改为无条件patch。
+    released=fixture_finalizers(s,key,uid,remove=('phase1.fixture/hold',))
+    assert released['success'] and released['observed'],'原UID hold释放失败或释放前已不存在'
     wait(lambda:s.call('POST','/operations/'+op['operationId']+'/refresh',{}),lambda value:value['state']=='SUCCEEDED',message='前台删除原图未结束')
     assert not s.workloads() and s.k('get','kubestatemetrics',s.crname,check=False).returncode!=0
     s.by('同名 CR 替换成新 UID 后，旧平台实例不能删除替代对象')

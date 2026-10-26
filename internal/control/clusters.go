@@ -230,7 +230,12 @@ func (s *Store) acceptCredential(ctx context.Context, c *rpc.RequestContext, act
 // 关键：包括未来操作及未知状态，不能只检查凭据类型而放行仍受保护的转移或注销。
 func (s *Store) HasUnfinishedChangesTx(ctx context.Context, tx *sql.Tx, id string) error {
 	var n int
-	if tx.QueryRowContext(ctx, `SELECT count(*) FROM operations WHERE cluster_id=? AND state NOT IN ('SUCCEEDED','FAILED','CANCELLED')`, id).Scan(&n) != nil {
+	// 关键：显式历史处理事实只解除其绑定原 operation 的互斥；旧未知发送结果不能伪改成功，其他未结束操作仍阻止转移。
+	if tx.QueryRowContext(ctx, `SELECT count(*) FROM operations o WHERE o.cluster_id=? AND o.state NOT IN ('SUCCEEDED','FAILED','CANCELLED') AND NOT EXISTS (
+SELECT 1 FROM historical_operation_releases h JOIN operation_resources r ON r.operation_id=h.operation_id AND r.resource_key='component' AND r.object_path=h.object_path
+WHERE h.operation_id=o.id AND h.released_by<>'' AND h.released_at<>'' AND NOT EXISTS(SELECT 1 FROM instance_protections p WHERE p.instance_id=h.instance_id AND p.operation_id=o.id)
+AND ((o.action='PUBLISH' AND h.disposition IN ('VERIFIED_ORIGINAL','EXPLICIT_ABSENT') AND EXISTS(SELECT 1 FROM publication_operations p WHERE p.operation_id=o.id AND p.instance_id=h.instance_id))
+OR (o.action='DELETE' AND h.disposition='EXPLICIT_DELETION_ABSENT' AND EXISTS(SELECT 1 FROM deletion_operations d JOIN instances i ON i.id=d.instance_id WHERE d.operation_id=o.id AND d.instance_id=h.instance_id AND i.lifecycle='DELETED'))))`, id).Scan(&n) != nil {
 		return Error("UNAVAILABLE", "未结束变更无法核验")
 	}
 	if n > 0 {

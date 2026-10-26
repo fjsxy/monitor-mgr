@@ -36,7 +36,8 @@ func exporterImageDigest(image string) bool {
 func exporterProcessIdentity(pod map[string]any, expected map[string]any) string {
 	meta, spec, status := objectMap(pod, "metadata"), objectMap(pod, "spec"), objectMap(pod, "status")
 	container := exporterManager(pod)
-	if objectString(meta, "uid") == "" || meta["deletionTimestamp"] != nil || objectString(status, "phase") != "Running" || container == nil || !exporterImageDigest(objectString(container, "image")) || canonical(container) != canonical(expected) || len(anySlice(container["command"])) != 0 {
+	// 关键：admission会注入SA token volumeMount，不能比较完整container；只核会改变实际进程/目标的公开字段。
+	if objectString(meta, "uid") == "" || meta["deletionTimestamp"] != nil || objectString(status, "phase") != "Running" || container == nil || !exporterImageDigest(objectString(container, "image")) || container["image"] != expected["image"] || container["name"] != expected["name"] || canonical(container["args"]) != canonical(expected["args"]) || len(anySlice(container["command"])) != 0 || len(anySlice(container["env"])) != 0 || len(anySlice(container["envFrom"])) != 0 {
 		return ""
 	}
 	args, e := argumentMap(container["args"])

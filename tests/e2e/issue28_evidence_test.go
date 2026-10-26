@@ -56,6 +56,7 @@ type collectionSnapshot struct {
 		VersionID, Yaml string
 		Resources       []struct{ Key, APIVersion, Kind, Namespace, Name, Yaml string }
 	}
+	CleanupGraph        *[]collectionObject
 	Services, Endpoints []collectionObject
 	Draft               struct {
 		KSM struct{ ServiceMonitor map[string]any }
@@ -184,10 +185,10 @@ func assertCompanion(s collectionSnapshot) {
 // assertIssue28Evidence 把真实受限身份、零尝试审计和 Operator 生命周期分别核验。
 func assertIssue28Evidence(evidence map[string]json.RawMessage) {
 	var proof struct {
-		TestedCommit                                                                                                                            string
-		Topologies, Initial                                                                                                                     []collectionSnapshot
-		Updated, OtherAfterUpdate, Rebuilt, Conflict, Repaired, Suspended, Closed, Disabled, Restored, OtherFinal, OtherBaseline, ReadRecovered collectionSnapshot
-		ReadFailure                                                                                                                             []struct {
+		TestedCommit                                                                                                                                            string
+		Topologies, Initial                                                                                                                                     []collectionSnapshot
+		Updated, OtherAfterUpdate, Rebuilt, Conflict, Repaired, Suspended, Closed, Disabled, Restored, OtherFinal, OtherBaseline, ReadRecovered, BeforeDisabled collectionSnapshot
+		ReadFailure                                                                                                                                             []struct {
 			Error      string
 			Historical bool
 		}
@@ -273,6 +274,13 @@ func assertIssue28Evidence(evidence map[string]json.RawMessage) {
 	Expect(cm(proof.Closed.Parent.Spec, "serviceMonitor")["enabled"]).To(BeFalse())
 	Expect(proof.Closed.Parent.Spec["enabled"]).To(BeTrue())
 	Expect(proof.Disabled.Parent.Spec["enabled"]).To(BeFalse())
+	assertCompanion(proof.BeforeDisabled)
+	Expect(proof.BeforeDisabled.CleanupGraph).NotTo(BeNil())
+	Expect(*proof.BeforeDisabled.CleanupGraph).NotTo(BeEmpty())
+	Expect(proof.Disabled.Parent.Status["phase"]).To(Equal("Disabled"))
+	Expect(proof.Disabled.Parent.Status["observedGeneration"]).To(BeNumerically("==", proof.Disabled.Parent.Metadata.Generation))
+	Expect(proof.Disabled.CleanupGraph).NotTo(BeNil())
+	Expect(*proof.Disabled.CleanupGraph).To(BeEmpty(), "停用必须清空原SM/Service/workload/Pod资源图")
 	Expect(proof.Deletion.State).To(Equal("SUCCEEDED"))
 	Expect(proof.Deletion.Resources).To(HaveLen(1))
 	Expect(proof.Deletion.Resources[0].Target.Kind).To(Equal("KubeStateMetrics"))
