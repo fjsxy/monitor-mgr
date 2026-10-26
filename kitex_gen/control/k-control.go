@@ -15966,6 +15966,389 @@ func (p *InstanceRuntime) field10Length() int {
 	return l
 }
 
+func (p *InstanceManagementConfirmation) FastRead(buf []byte) (int, error) {
+
+	var err error
+	var offset int
+	var l int
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetActorId bool = false
+	var issetConfirmedAt bool = false
+	var issetAllowClusterManagers bool = false
+	for {
+		var isUnknownField bool
+		var beginOff int = offset
+		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
+		offset += l
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRING {
+				l, err = p.FastReadField1(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetActorId = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 2:
+			if fieldTypeId == thrift.STRING {
+				l, err = p.FastReadField2(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetConfirmedAt = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 3:
+			if fieldTypeId == thrift.BOOL {
+				l, err = p.FastReadField3(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetAllowClusterManagers = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+			offset += l
+			if err != nil {
+				goto SkipFieldError
+			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
+		}
+	}
+
+	if !issetActorId {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetConfirmedAt {
+		fieldId = 2
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetAllowClusterManagers {
+		fieldId = 3
+		goto RequiredFieldNotSetError
+	}
+	return offset, nil
+ReadFieldBeginError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_InstanceManagementConfirmation[fieldId]), err)
+SkipFieldError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+RequiredFieldNotSetError:
+	return offset, thrift.NewProtocolException(thrift.INVALID_DATA, fmt.Sprintf("required field %s is not set", fieldIDToName_InstanceManagementConfirmation[fieldId]))
+}
+
+func (p *InstanceManagementConfirmation) FastReadField1(buf []byte) (int, error) {
+	offset := 0
+
+	var _field string
+	if v, l, err := thrift.Binary.ReadString(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.ActorId = _field
+	return offset, nil
+}
+
+func (p *InstanceManagementConfirmation) FastReadField2(buf []byte) (int, error) {
+	offset := 0
+
+	var _field string
+	if v, l, err := thrift.Binary.ReadString(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.ConfirmedAt = _field
+	return offset, nil
+}
+
+func (p *InstanceManagementConfirmation) FastReadField3(buf []byte) (int, error) {
+	offset := 0
+
+	var _field bool
+	if v, l, err := thrift.Binary.ReadBool(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.AllowClusterManagers = _field
+	return offset, nil
+}
+
+func (p *InstanceManagementConfirmation) FastWrite(buf []byte) int {
+	return p.FastWriteNocopy(buf, nil)
+}
+
+func (p *InstanceManagementConfirmation) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	if p != nil {
+		offset += p.fastWriteField3(buf[offset:], w)
+		offset += p.fastWriteField1(buf[offset:], w)
+		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
+	}
+	offset += thrift.Binary.WriteFieldStop(buf[offset:])
+	return offset
+}
+
+func (p *InstanceManagementConfirmation) BLength() int {
+	l := 0
+	if p != nil {
+		l += p.field1Length()
+		l += p.field2Length()
+		l += p.field3Length()
+		l += len(p._unknownFields)
+	}
+	l += thrift.Binary.FieldStopLength()
+	return l
+}
+
+func (p *InstanceManagementConfirmation) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 1)
+	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.ActorId)
+	return offset
+}
+
+func (p *InstanceManagementConfirmation) fastWriteField2(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 2)
+	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.ConfirmedAt)
+	return offset
+}
+
+func (p *InstanceManagementConfirmation) fastWriteField3(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.BOOL, 3)
+	offset += thrift.Binary.WriteBool(buf[offset:], p.AllowClusterManagers)
+	return offset
+}
+
+func (p *InstanceManagementConfirmation) field1Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.StringLengthNocopy(p.ActorId)
+	return l
+}
+
+func (p *InstanceManagementConfirmation) field2Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.StringLengthNocopy(p.ConfirmedAt)
+	return l
+}
+
+func (p *InstanceManagementConfirmation) field3Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.BoolLength()
+	return l
+}
+
+func (p *ConfirmInstanceManagementRequest) FastRead(buf []byte) (int, error) {
+
+	var err error
+	var offset int
+	var l int
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetId bool = false
+	var issetAllowClusterManagers bool = false
+	for {
+		var isUnknownField bool
+		var beginOff int = offset
+		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
+		offset += l
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRING {
+				l, err = p.FastReadField1(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetId = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 2:
+			if fieldTypeId == thrift.BOOL {
+				l, err = p.FastReadField2(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+				issetAllowClusterManagers = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+			offset += l
+			if err != nil {
+				goto SkipFieldError
+			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
+		}
+	}
+
+	if !issetId {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetAllowClusterManagers {
+		fieldId = 2
+		goto RequiredFieldNotSetError
+	}
+	return offset, nil
+ReadFieldBeginError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_ConfirmInstanceManagementRequest[fieldId]), err)
+SkipFieldError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+RequiredFieldNotSetError:
+	return offset, thrift.NewProtocolException(thrift.INVALID_DATA, fmt.Sprintf("required field %s is not set", fieldIDToName_ConfirmInstanceManagementRequest[fieldId]))
+}
+
+func (p *ConfirmInstanceManagementRequest) FastReadField1(buf []byte) (int, error) {
+	offset := 0
+
+	var _field string
+	if v, l, err := thrift.Binary.ReadString(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.Id = _field
+	return offset, nil
+}
+
+func (p *ConfirmInstanceManagementRequest) FastReadField2(buf []byte) (int, error) {
+	offset := 0
+
+	var _field bool
+	if v, l, err := thrift.Binary.ReadBool(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.AllowClusterManagers = _field
+	return offset, nil
+}
+
+func (p *ConfirmInstanceManagementRequest) FastWrite(buf []byte) int {
+	return p.FastWriteNocopy(buf, nil)
+}
+
+func (p *ConfirmInstanceManagementRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	if p != nil {
+		offset += p.fastWriteField2(buf[offset:], w)
+		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
+	}
+	offset += thrift.Binary.WriteFieldStop(buf[offset:])
+	return offset
+}
+
+func (p *ConfirmInstanceManagementRequest) BLength() int {
+	l := 0
+	if p != nil {
+		l += p.field1Length()
+		l += p.field2Length()
+		l += len(p._unknownFields)
+	}
+	l += thrift.Binary.FieldStopLength()
+	return l
+}
+
+func (p *ConfirmInstanceManagementRequest) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 1)
+	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.Id)
+	return offset
+}
+
+func (p *ConfirmInstanceManagementRequest) fastWriteField2(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.BOOL, 2)
+	offset += thrift.Binary.WriteBool(buf[offset:], p.AllowClusterManagers)
+	return offset
+}
+
+func (p *ConfirmInstanceManagementRequest) field1Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.StringLengthNocopy(p.Id)
+	return l
+}
+
+func (p *ConfirmInstanceManagementRequest) field2Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.BoolLength()
+	return l
+}
+
 func (p *ObservationInstance) FastRead(buf []byte) (int, error) {
 
 	var err error
@@ -16320,6 +16703,20 @@ func (p *ObservationInstance) FastRead(buf []byte) (int, error) {
 					goto ReadFieldError
 				}
 				issetReadOnlyReason = true
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 23:
+			if fieldTypeId == thrift.STRUCT {
+				l, err = p.FastReadField23(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
 			} else {
 				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
 				offset += l
@@ -16752,6 +17149,18 @@ func (p *ObservationInstance) FastReadField22(buf []byte) (int, error) {
 	return offset, nil
 }
 
+func (p *ObservationInstance) FastReadField23(buf []byte) (int, error) {
+	offset := 0
+	_field := NewInstanceManagementConfirmation()
+	if l, err := _field.FastRead(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+	}
+	p.ManagementConfirmation = _field
+	return offset, nil
+}
+
 func (p *ObservationInstance) FastWrite(buf []byte) int {
 	return p.FastWriteNocopy(buf, nil)
 }
@@ -16781,6 +17190,7 @@ func (p *ObservationInstance) FastWriteNocopy(buf []byte, w thrift.NocopyWriter)
 		offset += p.fastWriteField18(buf[offset:], w)
 		offset += p.fastWriteField19(buf[offset:], w)
 		offset += p.fastWriteField22(buf[offset:], w)
+		offset += p.fastWriteField23(buf[offset:], w)
 		offset += copy(buf[offset:], p._unknownFields)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
@@ -16812,6 +17222,7 @@ func (p *ObservationInstance) BLength() int {
 		l += p.field20Length()
 		l += p.field21Length()
 		l += p.field22Length()
+		l += p.field23Length()
 		l += len(p._unknownFields)
 	}
 	l += thrift.Binary.FieldStopLength()
@@ -16989,6 +17400,15 @@ func (p *ObservationInstance) fastWriteField22(buf []byte, w thrift.NocopyWriter
 	return offset
 }
 
+func (p *ObservationInstance) fastWriteField23(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	if p.IsSetManagementConfirmation() {
+		offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRUCT, 23)
+		offset += p.ManagementConfirmation.FastWriteNocopy(buf[offset:], w)
+	}
+	return offset
+}
+
 func (p *ObservationInstance) field1Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
@@ -17154,6 +17574,15 @@ func (p *ObservationInstance) field22Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
 	l += thrift.Binary.StringLengthNocopy(p.ReadOnlyReason)
+	return l
+}
+
+func (p *ObservationInstance) field23Length() int {
+	l := 0
+	if p.IsSetManagementConfirmation() {
+		l += thrift.Binary.FieldBeginLength()
+		l += p.ManagementConfirmation.BLength()
+	}
 	return l
 }
 
@@ -26083,6 +26512,308 @@ func (p *ControlServiceGetInstanceResult) field0Length() int {
 }
 
 func (p *ControlServiceGetInstanceResult) field1Length() int {
+	l := 0
+	if p.IsSetError() {
+		l += thrift.Binary.FieldBeginLength()
+		l += p.Error.BLength()
+	}
+	return l
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) FastRead(buf []byte) (int, error) {
+
+	var err error
+	var offset int
+	var l int
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	for {
+		var isUnknownField bool
+		var beginOff int = offset
+		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
+		offset += l
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				l, err = p.FastReadField1(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 2:
+			if fieldTypeId == thrift.STRUCT {
+				l, err = p.FastReadField2(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+			offset += l
+			if err != nil {
+				goto SkipFieldError
+			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
+		}
+	}
+
+	return offset, nil
+ReadFieldBeginError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_ControlServiceConfirmInstanceManagementArgs[fieldId]), err)
+SkipFieldError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) FastReadField1(buf []byte) (int, error) {
+	offset := 0
+	_field := NewRequestContext()
+	if l, err := _field.FastRead(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+	}
+	p.Ctx = _field
+	return offset, nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) FastReadField2(buf []byte) (int, error) {
+	offset := 0
+	_field := NewConfirmInstanceManagementRequest()
+	if l, err := _field.FastRead(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+	}
+	p.Request = _field
+	return offset, nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) FastWrite(buf []byte) int {
+	return p.FastWriteNocopy(buf, nil)
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	if p != nil {
+		offset += p.fastWriteField1(buf[offset:], w)
+		offset += p.fastWriteField2(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
+	}
+	offset += thrift.Binary.WriteFieldStop(buf[offset:])
+	return offset
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) BLength() int {
+	l := 0
+	if p != nil {
+		l += p.field1Length()
+		l += p.field2Length()
+		l += len(p._unknownFields)
+	}
+	l += thrift.Binary.FieldStopLength()
+	return l
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRUCT, 1)
+	offset += p.Ctx.FastWriteNocopy(buf[offset:], w)
+	return offset
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) fastWriteField2(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRUCT, 2)
+	offset += p.Request.FastWriteNocopy(buf[offset:], w)
+	return offset
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) field1Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += p.Ctx.BLength()
+	return l
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) field2Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += p.Request.BLength()
+	return l
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) FastRead(buf []byte) (int, error) {
+
+	var err error
+	var offset int
+	var l int
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	for {
+		var isUnknownField bool
+		var beginOff int = offset
+		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
+		offset += l
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				l, err = p.FastReadField0(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				l, err = p.FastReadField1(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+			offset += l
+			if err != nil {
+				goto SkipFieldError
+			}
+			isUnknownField = true
+		}
+		if isUnknownField {
+			p._unknownFields = append(p._unknownFields, buf[beginOff:offset]...)
+		}
+	}
+
+	return offset, nil
+ReadFieldBeginError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_ControlServiceConfirmInstanceManagementResult[fieldId]), err)
+SkipFieldError:
+	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) FastReadField0(buf []byte) (int, error) {
+	offset := 0
+	_field := NewObservationInstance()
+	if l, err := _field.FastRead(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+	}
+	p.Success = _field
+	return offset, nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) FastReadField1(buf []byte) (int, error) {
+	offset := 0
+	_field := NewAPIError()
+	if l, err := _field.FastRead(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+	}
+	p.Error = _field
+	return offset, nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) FastWrite(buf []byte) int {
+	return p.FastWriteNocopy(buf, nil)
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	if p != nil {
+		offset += p.fastWriteField0(buf[offset:], w)
+		offset += p.fastWriteField1(buf[offset:], w)
+		offset += copy(buf[offset:], p._unknownFields)
+	}
+	offset += thrift.Binary.WriteFieldStop(buf[offset:])
+	return offset
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) BLength() int {
+	l := 0
+	if p != nil {
+		l += p.field0Length()
+		l += p.field1Length()
+		l += len(p._unknownFields)
+	}
+	l += thrift.Binary.FieldStopLength()
+	return l
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) fastWriteField0(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	if p.IsSetSuccess() {
+		offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRUCT, 0)
+		offset += p.Success.FastWriteNocopy(buf[offset:], w)
+	}
+	return offset
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	if p.IsSetError() {
+		offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRUCT, 1)
+		offset += p.Error.FastWriteNocopy(buf[offset:], w)
+	}
+	return offset
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) field0Length() int {
+	l := 0
+	if p.IsSetSuccess() {
+		l += thrift.Binary.FieldBeginLength()
+		l += p.Success.BLength()
+	}
+	return l
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) field1Length() int {
 	l := 0
 	if p.IsSetError() {
 		l += thrift.Binary.FieldBeginLength()
@@ -36838,6 +37569,14 @@ func (p *ControlServiceGetInstanceArgs) GetFirstArgument() interface{} {
 }
 
 func (p *ControlServiceGetInstanceResult) GetResult() interface{} {
+	return p.Success
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) GetFirstArgument() interface{} {
+	return p.Ctx
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) GetResult() interface{} {
 	return p.Success
 }
 

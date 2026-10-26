@@ -509,6 +509,8 @@ func checkTestExternalKSMReadOnlyAndFailedList(t ginkgo.GinkgoTInterface) {
 		t.Fatal(external)
 	}
 	ext := external["id"].(string)
+	// I26-06：管理员也不能通过历史权限确认接管外部实例。
+	clusterCall(t, p, "POST", "/instances/"+ext+"/management-confirmations", map[string]any{"allowClusterManagers": true}, c, "external-confirm", 403)
 	detail := clusterCall(t, p, "GET", "/instances/"+ext, nil, c, "", 200)
 	if !strings.Contains(detail["yaml"].(string), "external-uid") {
 		t.Fatal("只读YAML丢失")

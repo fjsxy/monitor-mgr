@@ -22,6 +22,7 @@ type Client interface {
 	QueryInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.QueryInstancesRequest, callOptions ...callopt.Option) (r *control.QueryInstancesResult_, err error)
 	ListInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.InstancesResult_, err error)
 	GetInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
+	ConfirmInstanceManagement(ctx context.Context, ctx_ *control.RequestContext, request *control.ConfirmInstanceManagementRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
 	GetDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
 	SaveDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.SaveDraftRequest, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
 	CopyTemplate(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
@@ -142,6 +143,11 @@ func (p *kControlServiceClient) ListInstances(ctx context.Context, ctx_ *control
 func (p *kControlServiceClient) GetInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ObservationInstance, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetInstance(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ConfirmInstanceManagement(ctx context.Context, ctx_ *control.RequestContext, request *control.ConfirmInstanceManagementRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ConfirmInstanceManagement(ctx, ctx_, request)
 }
 
 func (p *kControlServiceClient) GetDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error) {

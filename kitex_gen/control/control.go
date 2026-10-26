@@ -4362,30 +4362,126 @@ var fieldIDToName_InstanceRuntime = map[int16]string{
 	10: "paused",
 }
 
-type ObservationInstance struct {
-	Id                   string               `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	ClusterId            string               `thrift:"clusterId,2,required" frugal:"2,required,string" json:"clusterId"`
-	Name                 string               `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
-	TargetNamespace      string               `thrift:"targetNamespace,4,required" frugal:"4,required,string" json:"targetNamespace"`
-	Component            string               `thrift:"component,5,required" frugal:"5,required,string" json:"component"`
-	Type                 string               `thrift:"type,6,required" frugal:"6,required,string" json:"type"`
-	ReadOnly             bool                 `thrift:"readOnly,7,required" frugal:"7,required,bool" json:"readOnly"`
-	Uid                  string               `thrift:"uid,8,required" frugal:"8,required,string" json:"uid"`
-	Lifecycle            string               `thrift:"lifecycle,9,required" frugal:"9,required,string" json:"lifecycle"`
-	CurrentVersionId     string               `thrift:"currentVersionId,10,required" frugal:"10,required,string" json:"currentVersionId"`
-	ActivityAt           string               `thrift:"activityAt,11,required" frugal:"11,required,string" json:"activityAt"`
-	Runtime              *InstanceRuntime     `thrift:"runtime,12,optional" frugal:"12,optional,InstanceRuntime" json:"runtime,omitempty"`
-	Ownership            string               `thrift:"ownership,13,required" frugal:"13,required,string" json:"ownership"`
-	Yaml                 *string              `thrift:"yaml,14,optional" frugal:"14,optional,string" json:"yaml,omitempty"`
-	CrNamespace          *string              `thrift:"crNamespace,15,optional" frugal:"15,optional,string" json:"crNamespace,omitempty"`
-	Scope                *string              `thrift:"scope,16,optional" frugal:"16,optional,string" json:"scope,omitempty"`
-	Sources              []*SourceObservation `thrift:"sources,17,optional" frugal:"17,optional,list<SourceObservation>" json:"sources,omitempty"`
-	CreatorUserId        string               `thrift:"creatorUserId,18,required" frugal:"18,required,string" json:"creatorUserId"`
-	CreatorRole          string               `thrift:"creatorRole,19,required" frugal:"19,required,string" json:"creatorRole"`
-	CreatorIdentityKnown bool                 `thrift:"creatorIdentityKnown,20,required" frugal:"20,required,bool" json:"creatorIdentityKnown"`
-	CanManage            bool                 `thrift:"canManage,21,required" frugal:"21,required,bool" json:"canManage"`
-	ReadOnlyReason       string               `thrift:"readOnlyReason,22,required" frugal:"22,required,string" json:"readOnlyReason"`
+type InstanceManagementConfirmation struct {
+	ActorId              string `thrift:"actorId,1,required" frugal:"1,required,string" json:"actorId"`
+	ConfirmedAt          string `thrift:"confirmedAt,2,required" frugal:"2,required,string" json:"confirmedAt"`
+	AllowClusterManagers bool   `thrift:"allowClusterManagers,3,required" frugal:"3,required,bool" json:"allowClusterManagers"`
 	_unknownFields       unknown.Fields
+}
+
+func NewInstanceManagementConfirmation() *InstanceManagementConfirmation {
+	return &InstanceManagementConfirmation{}
+}
+
+func (p *InstanceManagementConfirmation) InitDefault() {
+}
+
+func (p *InstanceManagementConfirmation) GetActorId() (v string) {
+	return p.ActorId
+}
+
+func (p *InstanceManagementConfirmation) GetConfirmedAt() (v string) {
+	return p.ConfirmedAt
+}
+
+func (p *InstanceManagementConfirmation) GetAllowClusterManagers() (v bool) {
+	return p.AllowClusterManagers
+}
+func (p *InstanceManagementConfirmation) SetActorId(val string) {
+	p.ActorId = val
+}
+func (p *InstanceManagementConfirmation) SetConfirmedAt(val string) {
+	p.ConfirmedAt = val
+}
+func (p *InstanceManagementConfirmation) SetAllowClusterManagers(val bool) {
+	p.AllowClusterManagers = val
+}
+
+func (p *InstanceManagementConfirmation) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *InstanceManagementConfirmation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("InstanceManagementConfirmation(%+v)", *p)
+}
+
+var fieldIDToName_InstanceManagementConfirmation = map[int16]string{
+	1: "actorId",
+	2: "confirmedAt",
+	3: "allowClusterManagers",
+}
+
+type ConfirmInstanceManagementRequest struct {
+	Id                   string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	AllowClusterManagers bool   `thrift:"allowClusterManagers,2,required" frugal:"2,required,bool" json:"allowClusterManagers"`
+	_unknownFields       unknown.Fields
+}
+
+func NewConfirmInstanceManagementRequest() *ConfirmInstanceManagementRequest {
+	return &ConfirmInstanceManagementRequest{}
+}
+
+func (p *ConfirmInstanceManagementRequest) InitDefault() {
+}
+
+func (p *ConfirmInstanceManagementRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *ConfirmInstanceManagementRequest) GetAllowClusterManagers() (v bool) {
+	return p.AllowClusterManagers
+}
+func (p *ConfirmInstanceManagementRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *ConfirmInstanceManagementRequest) SetAllowClusterManagers(val bool) {
+	p.AllowClusterManagers = val
+}
+
+func (p *ConfirmInstanceManagementRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ConfirmInstanceManagementRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ConfirmInstanceManagementRequest(%+v)", *p)
+}
+
+var fieldIDToName_ConfirmInstanceManagementRequest = map[int16]string{
+	1: "id",
+	2: "allowClusterManagers",
+}
+
+type ObservationInstance struct {
+	Id                     string                          `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	ClusterId              string                          `thrift:"clusterId,2,required" frugal:"2,required,string" json:"clusterId"`
+	Name                   string                          `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
+	TargetNamespace        string                          `thrift:"targetNamespace,4,required" frugal:"4,required,string" json:"targetNamespace"`
+	Component              string                          `thrift:"component,5,required" frugal:"5,required,string" json:"component"`
+	Type                   string                          `thrift:"type,6,required" frugal:"6,required,string" json:"type"`
+	ReadOnly               bool                            `thrift:"readOnly,7,required" frugal:"7,required,bool" json:"readOnly"`
+	Uid                    string                          `thrift:"uid,8,required" frugal:"8,required,string" json:"uid"`
+	Lifecycle              string                          `thrift:"lifecycle,9,required" frugal:"9,required,string" json:"lifecycle"`
+	CurrentVersionId       string                          `thrift:"currentVersionId,10,required" frugal:"10,required,string" json:"currentVersionId"`
+	ActivityAt             string                          `thrift:"activityAt,11,required" frugal:"11,required,string" json:"activityAt"`
+	Runtime                *InstanceRuntime                `thrift:"runtime,12,optional" frugal:"12,optional,InstanceRuntime" json:"runtime,omitempty"`
+	Ownership              string                          `thrift:"ownership,13,required" frugal:"13,required,string" json:"ownership"`
+	Yaml                   *string                         `thrift:"yaml,14,optional" frugal:"14,optional,string" json:"yaml,omitempty"`
+	CrNamespace            *string                         `thrift:"crNamespace,15,optional" frugal:"15,optional,string" json:"crNamespace,omitempty"`
+	Scope                  *string                         `thrift:"scope,16,optional" frugal:"16,optional,string" json:"scope,omitempty"`
+	Sources                []*SourceObservation            `thrift:"sources,17,optional" frugal:"17,optional,list<SourceObservation>" json:"sources,omitempty"`
+	CreatorUserId          string                          `thrift:"creatorUserId,18,required" frugal:"18,required,string" json:"creatorUserId"`
+	CreatorRole            string                          `thrift:"creatorRole,19,required" frugal:"19,required,string" json:"creatorRole"`
+	CreatorIdentityKnown   bool                            `thrift:"creatorIdentityKnown,20,required" frugal:"20,required,bool" json:"creatorIdentityKnown"`
+	CanManage              bool                            `thrift:"canManage,21,required" frugal:"21,required,bool" json:"canManage"`
+	ReadOnlyReason         string                          `thrift:"readOnlyReason,22,required" frugal:"22,required,string" json:"readOnlyReason"`
+	ManagementConfirmation *InstanceManagementConfirmation `thrift:"managementConfirmation,23,optional" frugal:"23,optional,InstanceManagementConfirmation" json:"managementConfirmation,omitempty"`
+	_unknownFields         unknown.Fields
 }
 
 func NewObservationInstance() *ObservationInstance {
@@ -4507,6 +4603,15 @@ func (p *ObservationInstance) GetCanManage() (v bool) {
 func (p *ObservationInstance) GetReadOnlyReason() (v string) {
 	return p.ReadOnlyReason
 }
+
+var ObservationInstance_ManagementConfirmation_DEFAULT *InstanceManagementConfirmation
+
+func (p *ObservationInstance) GetManagementConfirmation() (v *InstanceManagementConfirmation) {
+	if !p.IsSetManagementConfirmation() {
+		return ObservationInstance_ManagementConfirmation_DEFAULT
+	}
+	return p.ManagementConfirmation
+}
 func (p *ObservationInstance) SetId(val string) {
 	p.Id = val
 }
@@ -4573,6 +4678,9 @@ func (p *ObservationInstance) SetCanManage(val bool) {
 func (p *ObservationInstance) SetReadOnlyReason(val string) {
 	p.ReadOnlyReason = val
 }
+func (p *ObservationInstance) SetManagementConfirmation(val *InstanceManagementConfirmation) {
+	p.ManagementConfirmation = val
+}
 
 func (p *ObservationInstance) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -4596,6 +4704,10 @@ func (p *ObservationInstance) IsSetScope() bool {
 
 func (p *ObservationInstance) IsSetSources() bool {
 	return p.Sources != nil
+}
+
+func (p *ObservationInstance) IsSetManagementConfirmation() bool {
+	return p.ManagementConfirmation != nil
 }
 
 func (p *ObservationInstance) String() string {
@@ -4628,6 +4740,7 @@ var fieldIDToName_ObservationInstance = map[int16]string{
 	20: "creatorIdentityKnown",
 	21: "canManage",
 	22: "readOnlyReason",
+	23: "managementConfirmation",
 }
 
 type InstancesResult_ struct {
@@ -6103,6 +6216,8 @@ type ControlService interface {
 
 	GetInstance(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *ObservationInstance, err error)
 
+	ConfirmInstanceManagement(ctx context.Context, ctx_ *RequestContext, request *ConfirmInstanceManagementRequest) (r *ObservationInstance, err error)
+
 	GetDraft(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *ConfigurationDraft, err error)
 
 	SaveDraft(ctx context.Context, ctx_ *RequestContext, request *SaveDraftRequest) (r *ConfigurationDraft, err error)
@@ -7514,6 +7629,128 @@ func (p *ControlServiceGetInstanceResult) String() string {
 }
 
 var fieldIDToName_ControlServiceGetInstanceResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceConfirmInstanceManagementArgs struct {
+	Ctx            *RequestContext                   `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ConfirmInstanceManagementRequest `thrift:"request,2" frugal:"2,default,ConfirmInstanceManagementRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceConfirmInstanceManagementArgs() *ControlServiceConfirmInstanceManagementArgs {
+	return &ControlServiceConfirmInstanceManagementArgs{}
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) InitDefault() {
+}
+
+var ControlServiceConfirmInstanceManagementArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceConfirmInstanceManagementArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceConfirmInstanceManagementArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceConfirmInstanceManagementArgs_Request_DEFAULT *ConfirmInstanceManagementRequest
+
+func (p *ControlServiceConfirmInstanceManagementArgs) GetRequest() (v *ConfirmInstanceManagementRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceConfirmInstanceManagementArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceConfirmInstanceManagementArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceConfirmInstanceManagementArgs) SetRequest(val *ConfirmInstanceManagementRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceConfirmInstanceManagementArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceConfirmInstanceManagementArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceConfirmInstanceManagementResult struct {
+	Success        *ObservationInstance `thrift:"success,0,optional" frugal:"0,optional,ObservationInstance" json:"success,omitempty"`
+	Error          *APIError            `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceConfirmInstanceManagementResult() *ControlServiceConfirmInstanceManagementResult {
+	return &ControlServiceConfirmInstanceManagementResult{}
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) InitDefault() {
+}
+
+var ControlServiceConfirmInstanceManagementResult_Success_DEFAULT *ObservationInstance
+
+func (p *ControlServiceConfirmInstanceManagementResult) GetSuccess() (v *ObservationInstance) {
+	if !p.IsSetSuccess() {
+		return ControlServiceConfirmInstanceManagementResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceConfirmInstanceManagementResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceConfirmInstanceManagementResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceConfirmInstanceManagementResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceConfirmInstanceManagementResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ObservationInstance)
+}
+func (p *ControlServiceConfirmInstanceManagementResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceConfirmInstanceManagementResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceConfirmInstanceManagementResult = map[int16]string{
 	0: "success",
 	1: "error",
 }

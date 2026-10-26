@@ -41,8 +41,8 @@ func instanceWritePermission(p *Principal, i *rpc.ObservationInstance) error {
 	if i.CreatorRole == "ADMIN" {
 		return Error("FORBIDDEN", "管理员创建的实例对普通用户只读")
 	}
-	if i.CreatorRole != "USER" {
-		return Error("FORBIDDEN", "创建时角色未知，须由管理员确认管理权限")
+	if i.CreatorRole != "USER" && !unknownRoleManagementAllowed(i) {
+		return Error("FORBIDDEN", historicalReadOnlyReason(i))
 	}
 	return nil
 }
@@ -70,4 +70,17 @@ func (s *Store) authorizedInstanceForWrite(ctx context.Context, c *rpc.RequestCo
 	// 关键：预览只读取数据，但会形成后续写入确认；必须先执行同一实例写授权。
 	_, i, e := s.instanceTx(ctx, tx, c, id)
 	return i, e
+}
+
+// unknownRoleManagementAllowed 只对历史未知角色应用明确允许；已知管理员创建保护永远优先。
+func unknownRoleManagementAllowed(i *rpc.ObservationInstance) bool {
+	return i.CreatorRole == "" && i.ManagementConfirmation != nil && i.ManagementConfirmation.AllowClusterManagers
+}
+
+// historicalReadOnlyReason 区分等待确认与已明确保留管理员管理，避免把拒绝结果展示成未处理。
+func historicalReadOnlyReason(i *rpc.ObservationInstance) string {
+	if i.ManagementConfirmation != nil {
+		return "管理员已确认此历史实例仅由管理员管理（创建时角色未知）"
+	}
+	return "创建时角色未知，须由管理员确认管理权限"
 }
