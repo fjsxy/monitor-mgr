@@ -1,3 +1,4 @@
+import { HistoricalMigration } from "./historical-migration";
 import { InstanceManagement } from "./instance-management";
 import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
@@ -1226,6 +1227,7 @@ function Editor({
                       刷新历史
                     </button>
                   </div>
+                  {current&&!readOnly&&<HistoricalMigration key={current.id} instanceId={current.id} isAdmin={isAdmin} active={cluster.state==="ACTIVE"} onUpdated={async()=>{setCurrent(await api<Instance>(`/instances/${current.id}`));await loadHistory(current.id);onChange()}}/>}
                   {readOnly ? (
                     <p className="help">平台未纳管实例没有平台发布历史。</p>
                   ) : (

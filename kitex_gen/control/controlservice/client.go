@@ -11,6 +11,9 @@ import (
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
+	ReleaseHistoricalOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest, callOptions ...callopt.Option) (r *control.HistoricalMigrationConfirmation, err error)
+	ResolveHistoricalServiceMonitor(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest, callOptions ...callopt.Option) (r *control.HistoricalMigrationConfirmation, err error)
+	GetHistoricalMigration(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.HistoricalMigration, err error)
 	PreviewAssociations(ctx context.Context, ctx_ *control.RequestContext, request *control.AssociationPreviewRequest, callOptions ...callopt.Option) (r *control.AssociationPreview, err error)
 	PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest, callOptions ...callopt.Option) (r *control.DeletionPreview, err error)
 	RetryLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
@@ -88,6 +91,21 @@ func MustNewClient(destService string, opts ...client.Option) Client {
 
 type kControlServiceClient struct {
 	*kClient
+}
+
+func (p *kControlServiceClient) ReleaseHistoricalOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest, callOptions ...callopt.Option) (r *control.HistoricalMigrationConfirmation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ReleaseHistoricalOperation(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ResolveHistoricalServiceMonitor(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest, callOptions ...callopt.Option) (r *control.HistoricalMigrationConfirmation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ResolveHistoricalServiceMonitor(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) GetHistoricalMigration(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.HistoricalMigration, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetHistoricalMigration(ctx, ctx_, request)
 }
 
 func (p *kControlServiceClient) PreviewAssociations(ctx context.Context, ctx_ *control.RequestContext, request *control.AssociationPreviewRequest, callOptions ...callopt.Option) (r *control.AssociationPreview, err error) {

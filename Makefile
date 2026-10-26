@@ -111,3 +111,12 @@ check-issue28-e2e: ## #28 真实编排语法、Go 证据断言编译与唯一浏
 	$(PYTHON) -m py_compile scripts/acceptance/exporter_collection.py scripts/e2e.py scripts/e2e_scenarios.py
 	$(GO) test ./tests/e2e -run '^$$'
 	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list
+
+.PHONY: ut-historical-exporter check-issue29-e2e
+ut-historical-exporter: ## #29 历史盘点、显式处理、父身份与新单 CR 发布局部 Ginkgo 回归
+	mkdir -p .scratch
+	$(GO) test -count=1 -timeout 10m ./internal/platform -args -ginkgo.no-color -ginkgo.focus="UT-11|UT-12|UT-16|UT-17|UT-18" -ginkgo.json-report=.scratch/issue-29.json
+check-issue29-e2e: ## #29 真实编排语法、Go 原始证据断言编译与唯一浏览器用例发现；不启动 kind
+	$(PYTHON) -m py_compile scripts/acceptance/historical_exporter.py scripts/acceptance/historical_collection.py scripts/acceptance/historical_cleanup.py scripts/acceptance/historical_cleanup_probe.py scripts/acceptance/historical_identity.py scripts/e2e_scenarios.py
+	$(GO) test ./tests/e2e -run '^$$'
+	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list

@@ -1,6 +1,6 @@
 # #29 历史 exporter 显式启用与旧 ServiceMonitor 迁移测试计划
 
-2026-10-26 修订。基于 integration `28535ad8762299c0708699a1e7b0f1ab6f08c95b`，替代旧平台双 CR 写入预期。保留原 I29 ID；计划不表示已执行。主要接缝为已确认的公开 HTTP → 真实 Kitex RPC → SQLite → worker，辅以直接 RPC、受控 TLS Kubernetes API、独立真实旧 schema、真实 Helm/PVC 与唯一 Playwright 流程。固定 18 UT / 10 E2E 不增加顶层用例。
+2026-10-26 修订 2。基于 integration `28535ad8762299c0708699a1e7b0f1ab6f08c95b`，替代旧平台双 CR 写入预期。保留原 I29 ID；计划不表示已执行。主要接缝为已确认的公开 HTTP → 真实 Kitex RPC → SQLite → worker，辅以直接 RPC、受控 TLS Kubernetes API、独立真实旧 schema、真实 Helm/PVC 与唯一 Playwright 流程。固定 18 UT / 10 E2E 不增加顶层用例。
 
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
@@ -48,6 +48,10 @@
 | I29-R03.read | 清理读取失败不泄露异常 | cleanup目标返回读取错误，异常含私有sentinel | cleanup失败且固定read/read-failed，公共JSON无异常正文/URL/sentinel | #29 |
 | I29-R03.write | fixture外部清理失败阶段可区分 | 本run自有fixture finalizer条件PATCH或UID DELETE分别拒绝 | 固定finalizers/finalizer-patch-failed、delete/delete-failed；不移除外部finalizer；平台产品无SM写API | #29 |
 
+
+| I29-U07.parent-partial | 部分发布父已确认但实例UID空 | 独立旧task保存component confirmedUID、SM失败，实例UID空/无currentVersion；管理员核原父path/UID/spec并处理SM后释放 | 仅从持久父confirmedUID以CAS恢复仍空实例UID；审计标明来源，旧state不改且不提升currentVersion；新预览明确原父基线/漂移 | #29 |
+| I29-U07.parent-newer-uid | 较新已知UID不回退 | 旧父step confirmedUID=A，实例已有较新UID=B，尝试原operation解阻 | 冲突拒绝，不覆盖B，不修改新保护或旧执行事实 | #29 |
+| I29-U07.parent-newer-version | 较新版本不回退 | 旧父step已确认，实例currentVersion为另一较新版本，尝试从旧operation恢复UID/释放 | 拒绝旧基线回退，不提升/覆盖currentVersion，不修改旧state | #29 |
 
 执行映射：U01/U02/U03/U04/U08 → UT-16；U06/U07 → UT-11/12/17；U05 → UT-12；R01/R02/R03 → UT-18；K01 → E2E-01；K02 → E2E-08；B01 → E2E-10。复合输入在用例内以稳定后缀独立 By/ReportEntry 记录，结果逐输入保存。真实集群及浏览器由父规格统一运行；本项交付编排与 Go 原始证据断言，不将语法/编译当作真实通过。
 

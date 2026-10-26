@@ -5034,6 +5034,545 @@ var fieldIDToName_ObservationInstance = map[int16]string{
 	23: "managementConfirmation",
 }
 
+type HistoricalMigrationResource struct {
+	OperationId         string `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
+	ResourceKey         string `thrift:"resourceKey,2,required" frugal:"2,required,string" json:"resourceKey"`
+	ObjectPath          string `thrift:"objectPath,3,required" frugal:"3,required,string" json:"objectPath"`
+	OriginalUid         string `thrift:"originalUid,4,required" frugal:"4,required,string" json:"originalUid"`
+	DocumentFingerprint string `thrift:"documentFingerprint,5,required" frugal:"5,required,string" json:"documentFingerprint"`
+	State               string `thrift:"state,6,required" frugal:"6,required,string" json:"state"`
+	PossiblySent        bool   `thrift:"possiblySent,7,required" frugal:"7,required,bool" json:"possiblySent"`
+	FrozenYaml          string `thrift:"frozenYaml,8,required" frugal:"8,required,string" json:"frozenYaml"`
+	CurrentUid          string `thrift:"currentUid,9,required" frugal:"9,required,string" json:"currentUid"`
+	ResourceVersion     string `thrift:"resourceVersion,10,required" frugal:"10,required,string" json:"resourceVersion"`
+	CurrentYaml         string `thrift:"currentYaml,11,required" frugal:"11,required,string" json:"currentYaml"`
+	Missing             bool   `thrift:"missing,12,required" frugal:"12,required,bool" json:"missing"`
+	Error               string `thrift:"error,13,required" frugal:"13,required,string" json:"error"`
+	ResolvedBy          string `thrift:"resolvedBy,14,required" frugal:"14,required,string" json:"resolvedBy"`
+	ResolvedAt          string `thrift:"resolvedAt,15,required" frugal:"15,required,string" json:"resolvedAt"`
+	_unknownFields      unknown.Fields
+}
+
+func NewHistoricalMigrationResource() *HistoricalMigrationResource {
+	return &HistoricalMigrationResource{}
+}
+
+func (p *HistoricalMigrationResource) InitDefault() {
+}
+
+func (p *HistoricalMigrationResource) GetOperationId() (v string) {
+	return p.OperationId
+}
+
+func (p *HistoricalMigrationResource) GetResourceKey() (v string) {
+	return p.ResourceKey
+}
+
+func (p *HistoricalMigrationResource) GetObjectPath() (v string) {
+	return p.ObjectPath
+}
+
+func (p *HistoricalMigrationResource) GetOriginalUid() (v string) {
+	return p.OriginalUid
+}
+
+func (p *HistoricalMigrationResource) GetDocumentFingerprint() (v string) {
+	return p.DocumentFingerprint
+}
+
+func (p *HistoricalMigrationResource) GetState() (v string) {
+	return p.State
+}
+
+func (p *HistoricalMigrationResource) GetPossiblySent() (v bool) {
+	return p.PossiblySent
+}
+
+func (p *HistoricalMigrationResource) GetFrozenYaml() (v string) {
+	return p.FrozenYaml
+}
+
+func (p *HistoricalMigrationResource) GetCurrentUid() (v string) {
+	return p.CurrentUid
+}
+
+func (p *HistoricalMigrationResource) GetResourceVersion() (v string) {
+	return p.ResourceVersion
+}
+
+func (p *HistoricalMigrationResource) GetCurrentYaml() (v string) {
+	return p.CurrentYaml
+}
+
+func (p *HistoricalMigrationResource) GetMissing() (v bool) {
+	return p.Missing
+}
+
+func (p *HistoricalMigrationResource) GetError() (v string) {
+	return p.Error
+}
+
+func (p *HistoricalMigrationResource) GetResolvedBy() (v string) {
+	return p.ResolvedBy
+}
+
+func (p *HistoricalMigrationResource) GetResolvedAt() (v string) {
+	return p.ResolvedAt
+}
+func (p *HistoricalMigrationResource) SetOperationId(val string) {
+	p.OperationId = val
+}
+func (p *HistoricalMigrationResource) SetResourceKey(val string) {
+	p.ResourceKey = val
+}
+func (p *HistoricalMigrationResource) SetObjectPath(val string) {
+	p.ObjectPath = val
+}
+func (p *HistoricalMigrationResource) SetOriginalUid(val string) {
+	p.OriginalUid = val
+}
+func (p *HistoricalMigrationResource) SetDocumentFingerprint(val string) {
+	p.DocumentFingerprint = val
+}
+func (p *HistoricalMigrationResource) SetState(val string) {
+	p.State = val
+}
+func (p *HistoricalMigrationResource) SetPossiblySent(val bool) {
+	p.PossiblySent = val
+}
+func (p *HistoricalMigrationResource) SetFrozenYaml(val string) {
+	p.FrozenYaml = val
+}
+func (p *HistoricalMigrationResource) SetCurrentUid(val string) {
+	p.CurrentUid = val
+}
+func (p *HistoricalMigrationResource) SetResourceVersion(val string) {
+	p.ResourceVersion = val
+}
+func (p *HistoricalMigrationResource) SetCurrentYaml(val string) {
+	p.CurrentYaml = val
+}
+func (p *HistoricalMigrationResource) SetMissing(val bool) {
+	p.Missing = val
+}
+func (p *HistoricalMigrationResource) SetError(val string) {
+	p.Error = val
+}
+func (p *HistoricalMigrationResource) SetResolvedBy(val string) {
+	p.ResolvedBy = val
+}
+func (p *HistoricalMigrationResource) SetResolvedAt(val string) {
+	p.ResolvedAt = val
+}
+
+func (p *HistoricalMigrationResource) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigrationResource) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigrationResource(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigrationResource = map[int16]string{
+	1:  "operationId",
+	2:  "resourceKey",
+	3:  "objectPath",
+	4:  "originalUid",
+	5:  "documentFingerprint",
+	6:  "state",
+	7:  "possiblySent",
+	8:  "frozenYaml",
+	9:  "currentUid",
+	10: "resourceVersion",
+	11: "currentYaml",
+	12: "missing",
+	13: "error",
+	14: "resolvedBy",
+	15: "resolvedAt",
+}
+
+type HistoricalMigrationConfirmation struct {
+	InstanceId     string `thrift:"instanceId,1,required" frugal:"1,required,string" json:"instanceId"`
+	OperationId    string `thrift:"operationId,2,required" frugal:"2,required,string" json:"operationId"`
+	ResourceKey    string `thrift:"resourceKey,3,required" frugal:"3,required,string" json:"resourceKey"`
+	OriginalUid    string `thrift:"originalUid,4,required" frugal:"4,required,string" json:"originalUid"`
+	ResolvedBy     string `thrift:"resolvedBy,5,required" frugal:"5,required,string" json:"resolvedBy"`
+	ResolvedAt     string `thrift:"resolvedAt,6,required" frugal:"6,required,string" json:"resolvedAt"`
+	SnapshotId     string `thrift:"snapshotId,7,required" frugal:"7,required,string" json:"snapshotId"`
+	ParentReleased bool   `thrift:"parentReleased,8,required" frugal:"8,required,bool" json:"parentReleased"`
+	_unknownFields unknown.Fields
+}
+
+func NewHistoricalMigrationConfirmation() *HistoricalMigrationConfirmation {
+	return &HistoricalMigrationConfirmation{}
+}
+
+func (p *HistoricalMigrationConfirmation) InitDefault() {
+}
+
+func (p *HistoricalMigrationConfirmation) GetInstanceId() (v string) {
+	return p.InstanceId
+}
+
+func (p *HistoricalMigrationConfirmation) GetOperationId() (v string) {
+	return p.OperationId
+}
+
+func (p *HistoricalMigrationConfirmation) GetResourceKey() (v string) {
+	return p.ResourceKey
+}
+
+func (p *HistoricalMigrationConfirmation) GetOriginalUid() (v string) {
+	return p.OriginalUid
+}
+
+func (p *HistoricalMigrationConfirmation) GetResolvedBy() (v string) {
+	return p.ResolvedBy
+}
+
+func (p *HistoricalMigrationConfirmation) GetResolvedAt() (v string) {
+	return p.ResolvedAt
+}
+
+func (p *HistoricalMigrationConfirmation) GetSnapshotId() (v string) {
+	return p.SnapshotId
+}
+
+func (p *HistoricalMigrationConfirmation) GetParentReleased() (v bool) {
+	return p.ParentReleased
+}
+func (p *HistoricalMigrationConfirmation) SetInstanceId(val string) {
+	p.InstanceId = val
+}
+func (p *HistoricalMigrationConfirmation) SetOperationId(val string) {
+	p.OperationId = val
+}
+func (p *HistoricalMigrationConfirmation) SetResourceKey(val string) {
+	p.ResourceKey = val
+}
+func (p *HistoricalMigrationConfirmation) SetOriginalUid(val string) {
+	p.OriginalUid = val
+}
+func (p *HistoricalMigrationConfirmation) SetResolvedBy(val string) {
+	p.ResolvedBy = val
+}
+func (p *HistoricalMigrationConfirmation) SetResolvedAt(val string) {
+	p.ResolvedAt = val
+}
+func (p *HistoricalMigrationConfirmation) SetSnapshotId(val string) {
+	p.SnapshotId = val
+}
+func (p *HistoricalMigrationConfirmation) SetParentReleased(val bool) {
+	p.ParentReleased = val
+}
+
+func (p *HistoricalMigrationConfirmation) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigrationConfirmation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigrationConfirmation(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigrationConfirmation = map[int16]string{
+	1: "instanceId",
+	2: "operationId",
+	3: "resourceKey",
+	4: "originalUid",
+	5: "resolvedBy",
+	6: "resolvedAt",
+	7: "snapshotId",
+	8: "parentReleased",
+}
+
+type HistoricalMigrationConfirmationRequest struct {
+	Id                      string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	SnapshotId              string `thrift:"snapshotId,2,required" frugal:"2,required,string" json:"snapshotId"`
+	OperationId             string `thrift:"operationId,3,required" frugal:"3,required,string" json:"operationId"`
+	ResourceKey             string `thrift:"resourceKey,4,required" frugal:"4,required,string" json:"resourceKey"`
+	ObjectPath              string `thrift:"objectPath,5,required" frugal:"5,required,string" json:"objectPath"`
+	OriginalUid             string `thrift:"originalUid,6,required" frugal:"6,required,string" json:"originalUid"`
+	DocumentFingerprint     string `thrift:"documentFingerprint,7,required" frugal:"7,required,string" json:"documentFingerprint"`
+	ConfirmExternalHandling bool   `thrift:"confirmExternalHandling,8,required" frugal:"8,required,bool" json:"confirmExternalHandling"`
+	_unknownFields          unknown.Fields
+}
+
+func NewHistoricalMigrationConfirmationRequest() *HistoricalMigrationConfirmationRequest {
+	return &HistoricalMigrationConfirmationRequest{}
+}
+
+func (p *HistoricalMigrationConfirmationRequest) InitDefault() {
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetSnapshotId() (v string) {
+	return p.SnapshotId
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetOperationId() (v string) {
+	return p.OperationId
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetResourceKey() (v string) {
+	return p.ResourceKey
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetObjectPath() (v string) {
+	return p.ObjectPath
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetOriginalUid() (v string) {
+	return p.OriginalUid
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetDocumentFingerprint() (v string) {
+	return p.DocumentFingerprint
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetConfirmExternalHandling() (v bool) {
+	return p.ConfirmExternalHandling
+}
+func (p *HistoricalMigrationConfirmationRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetSnapshotId(val string) {
+	p.SnapshotId = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetOperationId(val string) {
+	p.OperationId = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetResourceKey(val string) {
+	p.ResourceKey = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetObjectPath(val string) {
+	p.ObjectPath = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetOriginalUid(val string) {
+	p.OriginalUid = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetDocumentFingerprint(val string) {
+	p.DocumentFingerprint = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetConfirmExternalHandling(val bool) {
+	p.ConfirmExternalHandling = val
+}
+
+func (p *HistoricalMigrationConfirmationRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigrationConfirmationRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigrationConfirmationRequest(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigrationConfirmationRequest = map[int16]string{
+	1: "id",
+	2: "snapshotId",
+	3: "operationId",
+	4: "resourceKey",
+	5: "objectPath",
+	6: "originalUid",
+	7: "documentFingerprint",
+	8: "confirmExternalHandling",
+}
+
+type HistoricalMigrationAgent struct {
+	Name           string   `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	Namespace      string   `thrift:"namespace,2,required" frugal:"2,required,string" json:"namespace"`
+	Uid            string   `thrift:"uid,3,required" frugal:"3,required,string" json:"uid"`
+	SelectionYaml  string   `thrift:"selectionYaml,4,required" frugal:"4,required,string" json:"selectionYaml"`
+	SelectedPaths  []string `thrift:"selectedPaths,5,required" frugal:"5,required,list<string>" json:"selectedPaths"`
+	_unknownFields unknown.Fields
+}
+
+func NewHistoricalMigrationAgent() *HistoricalMigrationAgent {
+	return &HistoricalMigrationAgent{}
+}
+
+func (p *HistoricalMigrationAgent) InitDefault() {
+}
+
+func (p *HistoricalMigrationAgent) GetName() (v string) {
+	return p.Name
+}
+
+func (p *HistoricalMigrationAgent) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *HistoricalMigrationAgent) GetUid() (v string) {
+	return p.Uid
+}
+
+func (p *HistoricalMigrationAgent) GetSelectionYaml() (v string) {
+	return p.SelectionYaml
+}
+
+func (p *HistoricalMigrationAgent) GetSelectedPaths() (v []string) {
+	return p.SelectedPaths
+}
+func (p *HistoricalMigrationAgent) SetName(val string) {
+	p.Name = val
+}
+func (p *HistoricalMigrationAgent) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *HistoricalMigrationAgent) SetUid(val string) {
+	p.Uid = val
+}
+func (p *HistoricalMigrationAgent) SetSelectionYaml(val string) {
+	p.SelectionYaml = val
+}
+func (p *HistoricalMigrationAgent) SetSelectedPaths(val []string) {
+	p.SelectedPaths = val
+}
+
+func (p *HistoricalMigrationAgent) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigrationAgent) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigrationAgent(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigrationAgent = map[int16]string{
+	1: "name",
+	2: "namespace",
+	3: "uid",
+	4: "selectionYaml",
+	5: "selectedPaths",
+}
+
+type HistoricalMigration struct {
+	InstanceId            string                         `thrift:"instanceId,1,required" frugal:"1,required,string" json:"instanceId"`
+	SnapshotId            string                         `thrift:"snapshotId,2,required" frugal:"2,required,string" json:"snapshotId"`
+	ObservedAt            string                         `thrift:"observedAt,3,required" frugal:"3,required,string" json:"observedAt"`
+	SchemaVersion         int32                          `thrift:"schemaVersion,4,required" frugal:"4,required,i32" json:"schemaVersion"`
+	CurrentVersionId      string                         `thrift:"currentVersionId,5,required" frugal:"5,required,string" json:"currentVersionId"`
+	Resources             []*HistoricalMigrationResource `thrift:"resources,6,required" frugal:"6,required,list<HistoricalMigrationResource>" json:"resources"`
+	Agents                []*HistoricalMigrationAgent    `thrift:"agents,7,required" frugal:"7,required,list<HistoricalMigrationAgent>" json:"agents"`
+	ImpactComplete        bool                           `thrift:"impactComplete,8,required" frugal:"8,required,bool" json:"impactComplete"`
+	Error                 string                         `thrift:"error,9,required" frugal:"9,required,string" json:"error"`
+	ProtectionOperationId string                         `thrift:"protectionOperationId,10,required" frugal:"10,required,string" json:"protectionOperationId"`
+	_unknownFields        unknown.Fields
+}
+
+func NewHistoricalMigration() *HistoricalMigration {
+	return &HistoricalMigration{}
+}
+
+func (p *HistoricalMigration) InitDefault() {
+}
+
+func (p *HistoricalMigration) GetInstanceId() (v string) {
+	return p.InstanceId
+}
+
+func (p *HistoricalMigration) GetSnapshotId() (v string) {
+	return p.SnapshotId
+}
+
+func (p *HistoricalMigration) GetObservedAt() (v string) {
+	return p.ObservedAt
+}
+
+func (p *HistoricalMigration) GetSchemaVersion() (v int32) {
+	return p.SchemaVersion
+}
+
+func (p *HistoricalMigration) GetCurrentVersionId() (v string) {
+	return p.CurrentVersionId
+}
+
+func (p *HistoricalMigration) GetResources() (v []*HistoricalMigrationResource) {
+	return p.Resources
+}
+
+func (p *HistoricalMigration) GetAgents() (v []*HistoricalMigrationAgent) {
+	return p.Agents
+}
+
+func (p *HistoricalMigration) GetImpactComplete() (v bool) {
+	return p.ImpactComplete
+}
+
+func (p *HistoricalMigration) GetError() (v string) {
+	return p.Error
+}
+
+func (p *HistoricalMigration) GetProtectionOperationId() (v string) {
+	return p.ProtectionOperationId
+}
+func (p *HistoricalMigration) SetInstanceId(val string) {
+	p.InstanceId = val
+}
+func (p *HistoricalMigration) SetSnapshotId(val string) {
+	p.SnapshotId = val
+}
+func (p *HistoricalMigration) SetObservedAt(val string) {
+	p.ObservedAt = val
+}
+func (p *HistoricalMigration) SetSchemaVersion(val int32) {
+	p.SchemaVersion = val
+}
+func (p *HistoricalMigration) SetCurrentVersionId(val string) {
+	p.CurrentVersionId = val
+}
+func (p *HistoricalMigration) SetResources(val []*HistoricalMigrationResource) {
+	p.Resources = val
+}
+func (p *HistoricalMigration) SetAgents(val []*HistoricalMigrationAgent) {
+	p.Agents = val
+}
+func (p *HistoricalMigration) SetImpactComplete(val bool) {
+	p.ImpactComplete = val
+}
+func (p *HistoricalMigration) SetError(val string) {
+	p.Error = val
+}
+func (p *HistoricalMigration) SetProtectionOperationId(val string) {
+	p.ProtectionOperationId = val
+}
+
+func (p *HistoricalMigration) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigration) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigration(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigration = map[int16]string{
+	1:  "instanceId",
+	2:  "snapshotId",
+	3:  "observedAt",
+	4:  "schemaVersion",
+	5:  "currentVersionId",
+	6:  "resources",
+	7:  "agents",
+	8:  "impactComplete",
+	9:  "error",
+	10: "protectionOperationId",
+}
+
 type InstancesResult_ struct {
 	Instances      []*ObservationInstance `thrift:"instances,1,required" frugal:"1,required,list<ObservationInstance>" json:"instances"`
 	_unknownFields unknown.Fields
@@ -6485,6 +7024,12 @@ var fieldIDToName_APIError = map[int16]string{
 }
 
 type ControlService interface {
+	ReleaseHistoricalOperation(ctx context.Context, ctx_ *RequestContext, request *HistoricalMigrationConfirmationRequest) (r *HistoricalMigrationConfirmation, err error)
+
+	ResolveHistoricalServiceMonitor(ctx context.Context, ctx_ *RequestContext, request *HistoricalMigrationConfirmationRequest) (r *HistoricalMigrationConfirmation, err error)
+
+	GetHistoricalMigration(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *HistoricalMigration, err error)
+
 	PreviewAssociations(ctx context.Context, ctx_ *RequestContext, request *AssociationPreviewRequest) (r *AssociationPreview, err error)
 
 	PreviewDeletion(ctx context.Context, ctx_ *RequestContext, request *DeletionPreviewRequest) (r *DeletionPreview, err error)
@@ -6580,6 +7125,372 @@ type ControlService interface {
 	UpdateAccount(ctx context.Context, ctx_ *RequestContext, request *UpdateAccountRequest) (r *Account, err error)
 
 	ResetPassword(ctx context.Context, ctx_ *RequestContext, request *ResetPasswordRequest) (r *Empty, err error)
+}
+
+type ControlServiceReleaseHistoricalOperationArgs struct {
+	Ctx            *RequestContext                         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *HistoricalMigrationConfirmationRequest `thrift:"request,2" frugal:"2,default,HistoricalMigrationConfirmationRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceReleaseHistoricalOperationArgs() *ControlServiceReleaseHistoricalOperationArgs {
+	return &ControlServiceReleaseHistoricalOperationArgs{}
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) InitDefault() {
+}
+
+var ControlServiceReleaseHistoricalOperationArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceReleaseHistoricalOperationArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceReleaseHistoricalOperationArgs_Request_DEFAULT *HistoricalMigrationConfirmationRequest
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) GetRequest() (v *HistoricalMigrationConfirmationRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceReleaseHistoricalOperationArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceReleaseHistoricalOperationArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceReleaseHistoricalOperationArgs) SetRequest(val *HistoricalMigrationConfirmationRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceReleaseHistoricalOperationArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceReleaseHistoricalOperationArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceReleaseHistoricalOperationResult struct {
+	Success        *HistoricalMigrationConfirmation `thrift:"success,0,optional" frugal:"0,optional,HistoricalMigrationConfirmation" json:"success,omitempty"`
+	Error          *APIError                        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceReleaseHistoricalOperationResult() *ControlServiceReleaseHistoricalOperationResult {
+	return &ControlServiceReleaseHistoricalOperationResult{}
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) InitDefault() {
+}
+
+var ControlServiceReleaseHistoricalOperationResult_Success_DEFAULT *HistoricalMigrationConfirmation
+
+func (p *ControlServiceReleaseHistoricalOperationResult) GetSuccess() (v *HistoricalMigrationConfirmation) {
+	if !p.IsSetSuccess() {
+		return ControlServiceReleaseHistoricalOperationResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceReleaseHistoricalOperationResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceReleaseHistoricalOperationResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceReleaseHistoricalOperationResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceReleaseHistoricalOperationResult) SetSuccess(x interface{}) {
+	p.Success = x.(*HistoricalMigrationConfirmation)
+}
+func (p *ControlServiceReleaseHistoricalOperationResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceReleaseHistoricalOperationResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceReleaseHistoricalOperationResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceResolveHistoricalServiceMonitorArgs struct {
+	Ctx            *RequestContext                         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *HistoricalMigrationConfirmationRequest `thrift:"request,2" frugal:"2,default,HistoricalMigrationConfirmationRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceResolveHistoricalServiceMonitorArgs() *ControlServiceResolveHistoricalServiceMonitorArgs {
+	return &ControlServiceResolveHistoricalServiceMonitorArgs{}
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) InitDefault() {
+}
+
+var ControlServiceResolveHistoricalServiceMonitorArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceResolveHistoricalServiceMonitorArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceResolveHistoricalServiceMonitorArgs_Request_DEFAULT *HistoricalMigrationConfirmationRequest
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) GetRequest() (v *HistoricalMigrationConfirmationRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceResolveHistoricalServiceMonitorArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) SetRequest(val *HistoricalMigrationConfirmationRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceResolveHistoricalServiceMonitorArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceResolveHistoricalServiceMonitorArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceResolveHistoricalServiceMonitorResult struct {
+	Success        *HistoricalMigrationConfirmation `thrift:"success,0,optional" frugal:"0,optional,HistoricalMigrationConfirmation" json:"success,omitempty"`
+	Error          *APIError                        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceResolveHistoricalServiceMonitorResult() *ControlServiceResolveHistoricalServiceMonitorResult {
+	return &ControlServiceResolveHistoricalServiceMonitorResult{}
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) InitDefault() {
+}
+
+var ControlServiceResolveHistoricalServiceMonitorResult_Success_DEFAULT *HistoricalMigrationConfirmation
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) GetSuccess() (v *HistoricalMigrationConfirmation) {
+	if !p.IsSetSuccess() {
+		return ControlServiceResolveHistoricalServiceMonitorResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceResolveHistoricalServiceMonitorResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceResolveHistoricalServiceMonitorResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) SetSuccess(x interface{}) {
+	p.Success = x.(*HistoricalMigrationConfirmation)
+}
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceResolveHistoricalServiceMonitorResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceResolveHistoricalServiceMonitorResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceGetHistoricalMigrationArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetHistoricalMigrationArgs() *ControlServiceGetHistoricalMigrationArgs {
+	return &ControlServiceGetHistoricalMigrationArgs{}
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) InitDefault() {
+}
+
+var ControlServiceGetHistoricalMigrationArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceGetHistoricalMigrationArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceGetHistoricalMigrationArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceGetHistoricalMigrationArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceGetHistoricalMigrationArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceGetHistoricalMigrationArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceGetHistoricalMigrationArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceGetHistoricalMigrationArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetHistoricalMigrationArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetHistoricalMigrationArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceGetHistoricalMigrationResult struct {
+	Success        *HistoricalMigration `thrift:"success,0,optional" frugal:"0,optional,HistoricalMigration" json:"success,omitempty"`
+	Error          *APIError            `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetHistoricalMigrationResult() *ControlServiceGetHistoricalMigrationResult {
+	return &ControlServiceGetHistoricalMigrationResult{}
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) InitDefault() {
+}
+
+var ControlServiceGetHistoricalMigrationResult_Success_DEFAULT *HistoricalMigration
+
+func (p *ControlServiceGetHistoricalMigrationResult) GetSuccess() (v *HistoricalMigration) {
+	if !p.IsSetSuccess() {
+		return ControlServiceGetHistoricalMigrationResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceGetHistoricalMigrationResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceGetHistoricalMigrationResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceGetHistoricalMigrationResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceGetHistoricalMigrationResult) SetSuccess(x interface{}) {
+	p.Success = x.(*HistoricalMigration)
+}
+func (p *ControlServiceGetHistoricalMigrationResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetHistoricalMigrationResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetHistoricalMigrationResult = map[int16]string{
+	0: "success",
+	1: "error",
 }
 
 type ControlServicePreviewAssociationsArgs struct {

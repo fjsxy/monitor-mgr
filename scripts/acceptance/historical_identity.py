@@ -15,7 +15,7 @@ def upgrade_v10(s, missing_ids=(), draft_revisions=None):
     # 关键：只有本例私有平台停止后才挂原PVC；既有版本1–10的数据、UID、密文和审计保持原值。
     script = """import json,sqlite3
 c=sqlite3.connect('/data/platform.db');c.execute('BEGIN')
-for table in ['historical_resource_observations','resource_progress','operation_resources','version_resources','instance_resource_identities','instance_management_confirmations']:
+for table in ['historical_operation_releases','historical_servicemonitor_resolutions','historical_migration_snapshots','historical_resource_observations','resource_progress','operation_resources','version_resources','instance_resource_identities','instance_management_confirmations']:
     c.execute('DROP TABLE IF EXISTS '+table)
 for column in ['creator_user_id','creator_role']:
     c.execute('ALTER TABLE instances DROP COLUMN '+column)
@@ -27,7 +27,7 @@ for actor,action,target,key,raw in c.execute("SELECT actor_id,action,target_id,c
         value.pop(field,None)
     c.execute('UPDATE command_results SET result_json=? WHERE actor_id=? AND action=? AND target_id=? AND command_key=?',(json.dumps(value),actor,action,target,key))
 # 关键：旧 v10 KSM 原配置没有采集字段；夹具转换只裁去本轮新字段，不改已有 UID/审计/版本关系。
-for table,key,columns in [('drafts','instance_id',['config']),('publication_versions','id',['config','effective_spec']),('publication_previews','id',['target_spec','desired_spec'])]:
+for table,key,columns in [('drafts','instance_id',['config']),('publication_versions','id',['config','effective_spec']),('publication_previews','id',['desired_spec'])]:
     for column in columns:
         for identity,raw in c.execute('SELECT '+key+','+column+' FROM '+table).fetchall():
             value=json.loads(raw)

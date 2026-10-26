@@ -113,6 +113,13 @@ struct ObservationInstance {
  18: required string creatorUserId, 19: required string creatorRole, 20: required bool creatorIdentityKnown, 21: required bool canManage, 22: required string readOnlyReason,
  23: optional InstanceManagementConfirmation managementConfirmation
 }
+// 历史迁移盘点保留原执行事实和独立实时快照，禁止从当前对象补认原 UID。
+struct HistoricalMigrationResource { 1: required string operationId, 2: required string resourceKey, 3: required string objectPath, 4: required string originalUid, 5: required string documentFingerprint, 6: required string state, 7: required bool possiblySent, 8: required string frozenYaml, 9: required string currentUid, 10: required string resourceVersion, 11: required string currentYaml, 12: required bool missing, 13: required string error, 14: required string resolvedBy, 15: required string resolvedAt }
+struct HistoricalMigrationConfirmation { 1: required string instanceId, 2: required string operationId, 3: required string resourceKey, 4: required string originalUid, 5: required string resolvedBy, 6: required string resolvedAt, 7: required string snapshotId, 8: required bool parentReleased }
+// confirmExternalHandling 仅确认管理员已在平台外处理；不是 Kubernetes 删除命令。
+struct HistoricalMigrationConfirmationRequest { 1: required string id, 2: required string snapshotId, 3: required string operationId, 4: required string resourceKey, 5: required string objectPath, 6: required string originalUid, 7: required string documentFingerprint, 8: required bool confirmExternalHandling }
+struct HistoricalMigrationAgent { 1: required string name, 2: required string namespace, 3: required string uid, 4: required string selectionYaml, 5: required list<string> selectedPaths }
+struct HistoricalMigration { 1: required string instanceId, 2: required string snapshotId, 3: required string observedAt, 4: required i32 schemaVersion, 5: required string currentVersionId, 6: required list<HistoricalMigrationResource> resources, 7: required list<HistoricalMigrationAgent> agents, 8: required bool impactComplete, 9: required string error, 10: required string protectionOperationId }
 struct InstancesResult { 1: required list<ObservationInstance> instances }
 // 工作台查询以完整授权集合统计并在服务端过滤/分页；活动序号保持数据库内部i64。
 struct QueryInstancesRequest { 1: required string clusterId, 2: optional string name, 3: optional string type, 4: optional string component, 5: optional string summary, 6: optional i32 page, 7: optional i32 pageSize }
@@ -135,6 +142,9 @@ struct DeletionPreviewRequest { 1: required string id, 2: optional string operat
 struct DeletionPreview { 1: required string previewId, 2: required string instanceId, 3: required string versionId, 4: required string uid, 5: required string name, 6: required string namespace, 7: required list<string> impactNamespaces, 8: optional list<VolumeObservation> storageVolumes, 9: optional list<AgentStatefulPolicy> policies, 10: optional string storageMode }
 struct AttemptsResult { 1: required list<ExecutionAttempt> attempts }
 service ControlService {
+ HistoricalMigrationConfirmation ReleaseHistoricalOperation(1: RequestContext ctx, 2: HistoricalMigrationConfirmationRequest request) throws (1: APIError error)
+ HistoricalMigrationConfirmation ResolveHistoricalServiceMonitor(1: RequestContext ctx, 2: HistoricalMigrationConfirmationRequest request) throws (1: APIError error)
+ HistoricalMigration GetHistoricalMigration(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
  AssociationPreview PreviewAssociations(1: RequestContext ctx, 2: AssociationPreviewRequest request) throws (1: APIError error)
  DeletionPreview PreviewDeletion(1: RequestContext ctx, 2: DeletionPreviewRequest request) throws (1: APIError error)
  Operation RetryLifecycle(1: RequestContext ctx, 2: LifecycleRequest request) throws (1: APIError error)

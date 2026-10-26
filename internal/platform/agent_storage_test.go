@@ -295,7 +295,7 @@ func checkTestAgentStorageRetainedIdentitySurvivesParents(t ginkgo.GinkgoTInterf
 // storageVolumes把合法空列表作为空集断言，避免缺失字段导致测试panic。
 func storageVolumes(source map[string]any) []any { v, _ := source["volumes"].([]any); return v }
 
-const dropResourceProgressSchema = `DROP TABLE IF EXISTS historical_resource_observations;DROP TABLE IF EXISTS resource_progress;DROP TABLE IF EXISTS operation_resources;DROP TABLE IF EXISTS version_resources;DROP TABLE IF EXISTS instance_resource_identities;`
+const dropResourceProgressSchema = `DROP TABLE IF EXISTS historical_operation_releases;DROP TABLE IF EXISTS historical_servicemonitor_resolutions;DROP TABLE IF EXISTS historical_migration_snapshots;DROP TABLE IF EXISTS historical_resource_observations;DROP TABLE IF EXISTS resource_progress;DROP TABLE IF EXISTS operation_resources;DROP TABLE IF EXISTS version_resources;DROP TABLE IF EXISTS instance_resource_identities;`
 
 const dropAgentStorageSchema = dropResourceProgressSchema + `ALTER TABLE publication_previews DROP COLUMN storage_fingerprint;DROP TABLE IF EXISTS agent_storage_tasks;DROP TABLE IF EXISTS agent_volume_lineage;DROP TABLE IF EXISTS agent_volume_identities;`
 

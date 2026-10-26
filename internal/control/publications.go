@@ -3,6 +3,7 @@ package control
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
@@ -212,6 +213,21 @@ func (s *Store) PreviewPublication(ctx context.Context, c *rpc.RequestContext, r
 		var spec map[string]any
 		json.Unmarshal(baseline, &spec)
 		drift = componentFor(i.Component).normalizeSpec(spec) != current
+	}
+	// 关键：旧部分成功没有整体成功版本；独立解阻保留的父冻结基线仍参与漂移预览。
+	if i.CurrentVersionId == "" && i.Uid != "" {
+		var raw []byte
+		e := s.DB.QueryRowContext(ctx, `SELECT r.document FROM historical_operation_releases h JOIN operation_resources r ON r.operation_id=h.operation_id AND r.resource_key='component' WHERE h.instance_id=? AND h.original_uid=? ORDER BY h.released_at DESC LIMIT 1`, i.Id, i.Uid).Scan(&raw)
+		if e != nil && !errors.Is(e, sql.ErrNoRows) {
+			return nil, Error("UNAVAILABLE", "原父发布基线无法核验")
+		}
+		if e == nil {
+			var document map[string]any
+			if json.Unmarshal(raw, &document) != nil {
+				return nil, Error("UNAVAILABLE", "原父冻结基线不可读")
+			}
+			drift = componentFor(i.Component).normalizeSpec(objectMap(document, "spec")) != current
+		}
 	}
 	// 两侧均投影独立文档；右侧保留的旧metadata/status也可能包含认证URL或last-applied秘密。
 	right := safeTargetDocument(publicationDocument(cfg, cr, cfg.spec()))
