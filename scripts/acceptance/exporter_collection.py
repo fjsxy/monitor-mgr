@@ -152,8 +152,8 @@ def lifecycle(s):
     rules = [rule for rule in rules if rule.get('resources') or rule.get('nonResourceURLs')]
     # 关键：由集群管理员按原 ClusterRole UID/RV 临时撤销或恢复 SM 读取权限，属于外部 RBAC 故障注入。
     def set_rules(value):
-        current = s.get('clusterrole', role['name'], target=s.target)
-        s.k('patch', 'clusterrole', role['name'], '--type=json', '-p', json.dumps([{'op':'test','path':'/metadata/uid','value':original_role['metadata']['uid']},{'op':'test','path':'/metadata/resourceVersion','value':current['metadata']['resourceVersion']},{'op':'replace','path':'/rules','value':value}]), target=s.target)
+        from historical_cleanup import fixture_cluster_role_rules
+        fixture_cluster_role_rules(s,s.target,role['name'],original_role['metadata']['uid'],value)
     set_rules(rules)
     try:
         # 重新读取各来源的独立观察时间。

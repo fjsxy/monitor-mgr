@@ -1,13 +1,16 @@
 """UT-18 的受控 HTTP 输入驱动；只输出事实，业务断言由 Ginkgo 完成。"""
 import copy
 import http.server
+import http.client
+from pathlib import Path
+import tempfile
 import json
 import sys
 import threading
 import urllib.error
 import urllib.request
 from types import SimpleNamespace
-from historical_cleanup import cleanup_registered, handoff_publication
+from historical_cleanup import cleanup_registered, handoff_publication, fixture_finalizers, require_fixture_patch, remove_legacy_service_monitor, fixture_cluster_role_rules
 
 
 # 执行独立清理夹具并返回真实请求和失败阶段。
@@ -26,8 +29,12 @@ def run(variant):
         # 模拟 finalizer 更新并保留实际请求。
         def do_PATCH(self):
             patch=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-            conditions={value['path']:value['value'] for value in patch if value['op']=='test'}
-            events.append({'method':'PATCH','preconditions':{'uid':conditions.get('/metadata/uid'),'resourceVersion':conditions.get('/metadata/resourceVersion')}});state['patches']+=1
+            # 真实1.28的JSONPatch test失败只得到泛化422；不能伪造含RV文字的stderr让旧helper变绿。
+            if isinstance(patch,list):
+                events.append({'method':'PATCH','preconditions':{},'patchType':'json'})
+                self.send_response(422);self.end_headers();self.wfile.write(b'{"kind":"Status","reason":"Invalid","message":"the server rejected our request due to an error in our request","code":422}');return
+            conditions=patch.get('metadata',{})
+            events.append({'method':'PATCH','preconditions':{'uid':conditions.get('uid'),'resourceVersion':conditions.get('resourceVersion')},'patchType':'merge'});state['patches']+=1
             if variant=='patch-conflict' and state['patches']==1:
                 self.send_response(409);self.end_headers();return
             if variant in ('patch-gone','patch-conflict','patch-replaced'):
@@ -99,4 +106,65 @@ def handoff(variant):
     finally:server.shutdown();server.server_close()
     return {'variant':variant,'tracked':s.tracked,'error':error}
 
-print(json.dumps({'cleanup':[run(variant) for variant in ('gone','blocked','replaced','read','finalizers','delete','patch-gone','patch-conflict','patch-replaced')], 'handoff':[handoff(variant) for variant in ('confirmed','unknown','unsent','foreign-instance','foreign-version','foreign-operation')]}))
+
+# 条件写协议独立走真实HTTP，必要输入由Go现有UT-18断言，不连接正在验收的集群。
+def conditional(variant):
+    uid='original-uid';events=[];state={'patches':0,'obj':{'metadata':{'uid':uid,'name':'old','resourceVersion':'rv','finalizers':['other.fixture/hold','phase1.fixture/hold']},'spec':{'serviceMonitor':{'enabled':False},'targetNamespace':'ns','enabled':True}}}
+    state['obj']['rules']=[{'apiGroups':['monitoring.coreos.com'],'resources':['servicemonitors'],'verbs':['get','list']}]
+    desired_rules=[{'apiGroups':[''],'resources':['pods'],'verbs':['get']}]
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self,*args):pass
+        def do_GET(self):
+            events.append({'method':'GET'})
+            self.send_response(200);self.end_headers();self.wfile.write(json.dumps(state['obj']).encode())
+        def do_PATCH(self):
+            patch=json.loads(self.rfile.read(int(self.headers['Content-Length'])));state['patches']+=1
+            events.append({'method':'PATCH','patchType':self.headers.get('Content-Type'),'preconditions':patch.get('metadata',{}) if isinstance(patch,dict) else {}})
+            if variant=='network':self.close_connection=True;return
+            code=0
+            if variant in ('conflict','legacy-conflict','rules-conflict','replacement','legacy-replacement') and state['patches']==1:
+                state['obj']['metadata']['resourceVersion']='rv2'
+                if variant in ('replacement','legacy-replacement'):state['obj']['metadata']['uid']='replacement'
+                code=409
+            elif variant=='conflict-limit':state['obj']['metadata']['resourceVersion']='rv'+str(state['patches']+1);code=409
+            elif variant=='invalid':code=422
+            elif variant=='forbidden':code=403
+            if code:
+                self.send_response(code);self.end_headers();self.wfile.write(b'PRIVATE_SENTINEL');return
+            state['obj']['metadata'].update(patch.get('metadata',{}));state['obj']['metadata']['resourceVersion']='rv3'
+            if 'rules' in patch:state['obj']['rules']=patch['rules']
+            if 'serviceMonitor' in patch.get('spec',{}) and patch['spec']['serviceMonitor'] is None:state['obj']['spec'].pop('serviceMonitor',None)
+            self.send_response(200);self.end_headers();self.wfile.write(json.dumps(state['obj']).encode())
+    server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler);threading.Thread(target=lambda:server.serve_forever(poll_interval=.01),daemon=True).start()
+    address='http://127.0.0.1:'+str(server.server_port)+'/object'
+    class Suite:
+        target='control';crname='old'
+        def k(self,*args,**kwargs):
+            method='PATCH' if args[0]=='patch' else 'GET';data=json.loads(args[args.index('-p')+1]) if method=='PATCH' else None
+            headers={'Content-Type':'application/merge-patch+json' if '--type=merge' in args else 'application/json-patch+json'}
+            try:
+                with urllib.request.urlopen(urllib.request.Request(address,data=json.dumps(data).encode() if data is not None else None,method=method,headers=headers),timeout=2) as response:return SimpleNamespace(returncode=0,stdout=response.read(),stderr=b'')
+            except urllib.error.HTTPError as error:
+                fixed={409:b'Error from server (Conflict): PRIVATE_SENTINEL',422:b'The request is invalid: PRIVATE_SENTINEL',403:b'Error from server (Forbidden): PRIVATE_SENTINEL'}
+                return SimpleNamespace(returncode=1,stdout=b'',stderr=fixed.get(error.code,b'PRIVATE_SENTINEL'))
+            except (OSError,urllib.error.URLError,http.client.HTTPException):return SimpleNamespace(returncode=1,stdout=b'',stderr=b'PRIVATE_SENTINEL')
+    with tempfile.TemporaryDirectory() as temporary:
+        suite=Suite();suite.env=SimpleNamespace(public=Path(temporary));receipt={};diagnostic={}
+        try:
+            if variant=='rules-conflict':
+                receipt=fixture_cluster_role_rules(suite,'control','old',uid,desired_rules)
+            elif variant.startswith('legacy-'):
+                receipt=remove_legacy_service_monitor(suite,uid)
+            else:
+                receipt=fixture_finalizers(suite,('control','servicemonitor','ns','old'),uid,remove=('phase1.fixture/hold',))
+                require_fixture_patch(suite,receipt,'fixture-hold-release')
+        except AssertionError:
+            diagnostic=json.loads((Path(temporary)/'fixture-conditional-patch.json').read_text())
+            if not receipt:receipt=dict(success=False,**diagnostic)
+        finally:server.shutdown();server.server_close()
+    return dict(variant=variant,receipt={k:receipt[k] for k in ('success','reason','phase','attempts')},events=events,diagnostic=diagnostic,
+                otherFinalizerPreserved='other.fixture/hold' in state['obj']['metadata']['finalizers'],
+                otherSpecPreserved=state['obj']['spec'].get('targetNamespace')=='ns' and state['obj']['spec'].get('enabled') is True,
+                legacyFieldAbsent='serviceMonitor' not in state['obj']['spec'],rulesApplied=state['obj']['rules']==desired_rules)
+
+print(json.dumps({'conditional':[conditional(variant) for variant in ('preserve','conflict','legacy-conflict','rules-conflict','invalid','forbidden','network','conflict-limit','replacement','legacy-replacement')], 'cleanup':[run(variant) for variant in ('gone','blocked','replaced','read','finalizers','delete','patch-gone','patch-conflict','patch-replaced')], 'handoff':[handoff(variant) for variant in ('confirmed','unknown','unsent','foreign-instance','foreign-version','foreign-operation')]}))

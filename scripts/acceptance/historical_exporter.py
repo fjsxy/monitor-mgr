@@ -56,7 +56,8 @@ def prepare_legacy(s, variants=('SUCCEEDED','IDENTITY_UNCERTAIN')):
         instance=s.create(cfg);operation=s.publish(instance);parent=s.cr()
         uid=parent['metadata']['uid']
         if 'serviceMonitor' in parent['spec']:
-            s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':uid},{'op':'test','path':'/metadata/resourceVersion','value':parent['metadata']['resourceVersion']},{'op':'remove','path':'/spec/serviceMonitor'}]),target=s.target)
+            from historical_cleanup import remove_legacy_service_monitor
+            remove_legacy_service_monitor(s,uid)
         services=s.get('services','-n',s.targetns,target=s.target)['items']
         service=wait(lambda:s.get('services','-n',s.targetns,target=s.target)['items'],lambda values:any(any(owner.get('uid')==uid for owner in obj['metadata'].get('ownerReferences',[])) for obj in values),timeout=90,message='旧 exporter 指标 Service 未就绪')
         service=next(obj for obj in service if any(owner.get('uid')==uid for owner in obj['metadata'].get('ownerReferences',[])))

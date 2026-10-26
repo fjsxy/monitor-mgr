@@ -115,3 +115,24 @@
 运行边界：新增 `deletion_graph.go` 只共享 RC4 正式受管类型、作用域、完整分页和原 UID 闭包，不复制 Service 命名或端口算法。活跃原父可识别 Operator 合法重建子 UID；历史删除要求完整图为空，未知读取、外部替代和任一原后代残留均拒绝。SM 仍只有读取。
 
 `review-followup-checks.log` 包含18 UT/10 E2E清单一致、Python语法、Go E2E断言编译与唯一Playwright用例发现；`review-followup-vet.log` 通过。没有在 fixer 树运行完整18项/race/覆盖率或真实10case，最终由集成任务绑定最终merge SHA执行。6f6云端UT/storage已绿属于旧候选，不挪作本次修复后证据。
+
+
+118a 实测后的夹具/诊断追加阶段（本阶段基线 `ca5cd9a373fce75e6b6671f6e94156d14f863b28`）。最新补充计划已发布并逐字回读：<https://github.com/fjsxy/monitor-mgr/issues/23#issuecomment-6419257061>。生产业务代码、UID/RV保护、旧报告来源过滤和25m预算保持；下列本地UT执行在未提交工作树，不伪造其testedCommit。
+
+| 输入 | 实际结果 | 证据与限制 |
+|---|---|---|
+| I23-R27.rv-conflict | 真实server dry-run及工具UT通过 | `conditional-merge-probe/receipt.json`：错误RV为Conflict；`review-conditional-final.json`：首次Conflict后使用新读RV且原UID不变 |
+| I23-R27.uid-mismatch | 真实server dry-run及工具UT通过 | 错误UID为Invalid；重读同名替代UID立即停止，零后续PATCH，`review-conditional-final.json` |
+| I23-R27.unchanged | 真实server dry-run及工具UT通过 | 正确UID/RV无变化dry-run成功，前后namespace UID/RV完全一致；工具保留其它finalizer与最后hold释放404路径 |
+| I23-R27.unknown | 工具UT通过 | 泛化422/403/网络错误均单次即失败，连续409最多3次；固定operation/phase/reason/attempts摘要，无原文/路径/凭据 |
+| I23-R27.legacy | 工具UT通过；新真实E2E未执行 | 三处历史fixture仅MergePatch `spec.serviceMonitor=null`，原UID/RV复核，完整其它spec保留 |
+| I23-R27.rules | 工具UT通过；新真实E2E未执行 | exporter/Agent管理员RBAC故障注入同用条件MergePatch，仅替换既定rules并恢复完整原规则；平台SM写权限未增加 |
+| I23-R28.frames | 工具UT通过；新真实浏览器未执行 | `review-browser-frames-red.log` → `.green.json`；最终 `review-conditional-final.json` 包含多个同候选白名单源码调用帧与外部私有路径拒绝 |
+| I23-R28.http | 工具UT通过；新真实浏览器未执行 | 有限200/201/202/400/401/403/404/409/422/500/503枚举投影；未知数字/任意标记仍unknown |
+| I23-R30.current-mtime | 可重复red→green | 固定start=1700000000.5、量化mtime=1700000000重现KeyError(nativeFailures)；fixture显式设report在start之后，恰好相等边界也验证接受；`review-report-mtime-*` |
+| I23-R30.old-mtime | 工具UT通过 | 明确旧mtime被拒绝，生产`capture.py`的`mtime<started`来源条件完全未变；最终`review-conditional-final.json` |
+| I23-R29.browser-order | 等待本地真实原报告确证，尚未修改 | 静态调用链发现I29未知任务先于I25集群转移，但不把通用send断言行当作具体请求证据 |
+
+协议依据：[Kubernetes v0.28.15 patch.go](https://github.com/kubernetes/apiserver/blob/v0.28.15/pkg/endpoints/handlers/patch.go#L364) 将JSONPatch应用失败转换为泛化422，kubectl不会保留可判别的RV test失败文字。因此不能把任意Invalid当RV冲突。严格metadata-only/server-dry-run实测确认MergePatch错误RV为Conflict、错误UID为Invalid、正确条件成功；仅明确Conflict可有界重读。118a云端失败未取得原始错误正文，不能据此声称每次原失败都已证实为RV冲突；修复后的真实验收仍由父执行。
+
+最终本阶段 `review-conditional-final.json` UT-18 passed/attempt1，包含10项真实受控HTTP协议输入；`review-118a-checks.log` 完成固定18/10目录、Python语法、Go E2E编译及唯一Playwright用例发现。未触碰正在118a验收的资源，未创建集群或对象；唯一真实API诊断均为server dry-run，原始stdout/stderr只存私有目录。
