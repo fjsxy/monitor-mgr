@@ -121,6 +121,17 @@ func (s *Store) QueryInstances(ctx context.Context, c *rpc.RequestContext, r *rp
 	if _, e := s.GetCluster(ctx, c, &rpc.ClusterID{Id: r.ClusterId}); e != nil {
 		return nil, e
 	}
+	p, e := s.Authorize(ctx, token(c))
+	if e != nil {
+		return nil, e
+	}
+	cl, e := clusterByID(ctx, s.DB, r.ClusterId)
+	if e != nil {
+		return nil, e
+	}
+	for _, i := range items {
+		projectInstanceAccess(p, cl, i)
+	}
 	return &rpc.QueryInstancesResult_{Instances: items, Statistics: stats, Page: pagination}, nil
 }
 

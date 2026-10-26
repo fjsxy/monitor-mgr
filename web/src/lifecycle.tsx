@@ -8,7 +8,7 @@ export type Operation = { operationId:string; action?:string; state:string; mess
 export type DeletionPreview=StorageImpactValue & {previewId:string;instanceId:string;versionId:string;uid:string;name:string;namespace:string;impactNamespaces:string[]};
 type Attempt = { attemptId:string; state:string; possiblySent:boolean; revision: Int64; sequence: Int64; actorId:string; message:string; createdAt:string };
 const names:Record<string,string> = {QUEUED:"已受理",CHECKING:"检查中",DISPATCHED:"可能已发送",SUCCEEDED:"已完成",FAILED:"失败",CANCELLED:"已取消",WAITING_CONFIRMATION:"等待明确继续",RESULT_UNCERTAIN:"结果待确认",IDENTITY_UNCERTAIN:"资源身份无法确认",DELETION_VERIFYING:"清理核验中",DELETION_BLOCKED:"清理受阻"};
-export function LifecycleActions({operation,onOperation}:{operation:Operation;onOperation:(value:Operation)=>Promise<void>|void}) {
+export function LifecycleActions({operation,onOperation,canManage}:{operation:Operation;canManage:boolean;onOperation:(value:Operation)=>Promise<void>|void}) {
  const [attempts,setAttempts]=useState<Attempt[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[deleteConfirm,setDeleteConfirm]=useState<{action:string;preview:DeletionPreview}|null>(null);
  const command=useRef<{signature:string;key:ReturnType<typeof crypto.randomUUID>}|null>(null);
  async function load(){const result=await api<{attempts:Attempt[]}>(`/operations/${operation.operationId}/attempts`);setAttempts(result.attempts)}
@@ -16,7 +16,7 @@ export function LifecycleActions({operation,onOperation}:{operation:Operation;on
  const current=attempts.find(a=>a.attemptId===operation.attemptId);
  const unsent=current && !current.possiblySent && ["QUEUED","CHECKING","WAITING_CONFIRMATION"].includes(operation.state);
  async function act(action:string,deletePreviewId?:string){
-  if(!current)return;setBusy(true);setError("");
+  if(!current || (!canManage && action!=="refresh"))return;setBusy(true);setError("");
   if(operation.action==="DELETE"&&["retry","continue-unsent"].includes(action)&&!deletePreviewId){
    try{const preview=await api<DeletionPreview>(`/instances/${operation.instanceId}/deletion-previews`,"POST",{operationId:operation.operationId});setDeleteConfirm({action,preview})}
    catch(e){setError(e instanceof APIError?e.message:"删除影响读取失败，请刷新")}
@@ -29,13 +29,13 @@ export function LifecycleActions({operation,onOperation}:{operation:Operation;on
   finally{setBusy(false)}
  }
  return <div className="lifecycle-actions">
-  {deleteConfirm&&<div className="backdrop"><section className="dialog" role="dialog" aria-modal="true" aria-label="重新确认删除影响"><h2>重新确认删除影响</h2><p>名称：<strong>{deleteConfirm.preview.name}</strong></p><p className="help">命名空间：{deleteConfirm.preview.namespace}</p><p>影响范围：{deleteConfirm.preview.impactNamespaces.join("、")}</p><StorageImpact value={deleteConfirm.preview}/><p className="help">保留原 UID 和部署版本；仅创建一次新的执行尝试，不移除 finalizer 或直接删除 PVC。</p>{error&&<p role="alert">{error}</p>}<div className="dialog-footer"><button onClick={()=>setDeleteConfirm(null)}>返回</button><button className="danger" disabled={busy} onClick={()=>void act(deleteConfirm.action,deleteConfirm.preview.previewId)}>确认继续删除</button></div></section></div>}
+  {deleteConfirm&&<div className="backdrop"><section className="dialog" role="dialog" aria-modal="true" aria-label="重新确认删除影响"><h2>重新确认删除影响</h2><p>名称：<strong>{deleteConfirm.preview.name}</strong></p><p className="help">命名空间：{deleteConfirm.preview.namespace}</p><p>影响范围：{deleteConfirm.preview.impactNamespaces.join("、")}</p><StorageImpact value={deleteConfirm.preview}/><p className="help">保留原 UID 和部署版本；仅创建一次新的执行尝试，不移除 finalizer 或直接删除 PVC。</p>{error&&<p role="alert">{error}</p>}<div className="dialog-footer"><button onClick={()=>setDeleteConfirm(null)}>返回</button><button className="danger" disabled={busy||!canManage} onClick={()=>void act(deleteConfirm.action,deleteConfirm.preview.previewId)}>确认继续删除</button></div></section></div>}
 
   {error&&<p className="alert error" role="alert">{error}</p>}
   <div className="row-actions">
-   {operation.state==="FAILED"&&<button disabled={busy||!current} onClick={()=>void act("retry")}>重试原版本</button>}
-   {unsent&&<button disabled={busy} onClick={()=>void act("cancel")}>取消未发送任务</button>}
-   {unsent&&operation.state==="WAITING_CONFIRMATION"&&<button disabled={busy} onClick={()=>void act("continue-unsent")}>继续原任务</button>}
+   {operation.state==="FAILED"&&<button disabled={busy||!current||!canManage} onClick={()=>void act("retry")}>重试原版本</button>}
+   {unsent&&<button disabled={busy||!canManage} onClick={()=>void act("cancel")}>取消未发送任务</button>}
+   {unsent&&operation.state==="WAITING_CONFIRMATION"&&<button disabled={busy||!canManage} onClick={()=>void act("continue-unsent")}>继续原任务</button>}
    {(["RESULT_UNCERTAIN","IDENTITY_UNCERTAIN","DELETION_VERIFYING","DELETION_BLOCKED"].includes(operation.state)||["Unknown","Deleting","Pending"].includes(operation.storageResult??""))&&<button disabled={busy||!current} onClick={()=>void act("refresh")}>只读核验结果</button>}
   </div>
   {operation.state==="IDENTITY_UNCERTAIN"&&<p className="help">未确认原 UID，不能凭同名资源补认、重新下发或删除。</p>}
