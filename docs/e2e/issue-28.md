@@ -29,7 +29,10 @@
 | I28-R04 | 启用前盘点全部历史SM | 加载旧成功/unknown SM不同路径；新启用预览；管理员显式确认原对象消失后重试 | 默认阻断重复采集；只有 #29 持久的显式处理确认可解阻，不按新对象同名筛选 | #28 |
 | I28-R05 | 关闭、挂起、停用语义独立 | 保存并发布关闭采集、Suspended、Disabled，读父 frozen spec | 关闭仅表达serviceMonitor.enabled=false；挂起保留声明；停用表达父enabled=false；平台SM写0 | #28 |
 | I28-K01 | 锁定发布品与受限身份真实生命周期 | 校验RC4原tgz/CRD/RBAC/contract及镜像digest；四节点环境使用SM read/no-write SA发布两个实例；参数修改、子重建、关闭、父删除 | Operator SA创建修复配套；严格引用与owner正确；另一实例不变；平台SM四类写metadata审计计数0，父写与SM读正控存在 | #28 |
+| I28-K01.public-assets | 无凭据匿名下载原 RC4 资产 | 清除认证环境且禁用用户凭据；按锁定 release HTTPS 浏览地址下载全部9项原资产至全新临时目录；校验 release.json 及每个资产 SHA256；调用原发布 CLI verify | 无需 gh 登录、SSH deploy key 或 release token；原字节全部匹配，Operator source/testedCommit 仍8fb5ccb8，下载失败不得回退重构 | #28 |
+| I28-K01.public-source | 匿名获取固定发布 CLI 源码 | 禁用 Git credential helper、交互认证及用户 Git 配置；从公开 HTTPS 仓库只获取8fb5ccb8完整提交；回读 HEAD、clean tree；保留显式本地源码参数对照 | 匿名来源精确锁定同源 SHA；无额外源码secret依赖；只构建发布管理 CLI，不构建 Operator 镜像 | #28 |
+| I28-K01.public-invalid | 下载错误或资产篡改不得降级 | 让 HTTPS 下载返回错误、改写一个已下载资产，分别执行fetch/verify；检查后续安装行为 | 明确环境失败，错包校验拒绝，不调用集群安装，不改用旧Operator或源码重打包 | #28 |
 | I28-K02 | 真实故障与恢复边界 | 父丢响应、平台Pod重建；注入外部SM冲突/观察Forbidden再恢复；核零写审计 | 父未知UID不认领/重放；exporter保留；Operator恢复配套；平台仅只读观察 | #28 |
 | I28-B01 | 页面编辑与只读配套状态 | 现有E2E-10唯一Playwright流程编辑开关/interval/timeout；预览/版本/操作与状态页查看 | 可见父CR采集意图、CR下发结果、配套状态/引用/错误/新鲜度；无第二份SM发布或修复按钮 | #28 |
 
-执行映射：I28-U01/U02/U03/R01/R02/R05 → UT-08/17；I28-U04/R03 → UT-14；I28-U05/U08/R04 → UT-11/16；I28-U06 → UT-10；I28-U07 → UT-12；I28-K01 → E2E-03/09；I28-K02 → E2E-08；I28-B01 → E2E-10。真实原始证据交由 Ginkgo/Gomega 断言，Python 负责编排和采证。结果另存并绑定 testedCommit。
+执行映射：I28-U01/U02/U03/R01/R02/R05 → UT-08/17；I28-U04/R03 → UT-14；I28-U05/U08/R04 → UT-11/16；I28-U06 → UT-10；I28-U07 → UT-12；I28-K01（含public-assets/public-source/public-invalid准备输入） → E2E-03/09；I28-K02 → E2E-08；I28-B01 → E2E-10。真实原始证据交由 Ginkgo/Gomega 断言，Python 负责编排和采证。结果另存并绑定 testedCommit。
