@@ -114,7 +114,10 @@ def main():
                 for spec in specs:
                     if spec['State'] != 'passed':
                         item=results[spec['LeafNodeText'].split(' ')[0]]
-                        item['outcome']='failed';item['failedStep']='Ginkgo 原始证据断言';item['errorType']='GinkgoAssertionFailure'
+                        # 保留已经捕获的环境/业务根因；只有 Python 已通过时才将失败归因于 Go 证据断言。
+                        if item['outcome']=='passed':
+                            item['failedStep']='Ginkgo 原始证据断言';item['errorType']='GinkgoAssertionFailure'
+                        item['outcome']='failed';item['ginkgoState']=spec['State']
 
                 validate_specs(raw,required,candidate,source())
                 summary['passed']=child.returncode==0 and all(r['outcome']=='passed' for r in results.values())
