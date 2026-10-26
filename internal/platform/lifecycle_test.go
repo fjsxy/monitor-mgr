@@ -455,6 +455,10 @@ func checkTestP13RestartUsesPersistentSentBoundary(t ginkgo.GinkgoTInterface) {
 			}
 			op := ops[0].(map[string]any)
 			oid := op["operationId"].(string)
+			resource := resourceProgress(t, p, c, oid)
+			if resource["possiblySent"] != (stage == "afterSendMarker") || resource["confirmedUid"] != "" {
+				t.Fatal("I27-U07/U08：重启丢失原资源发送边界", resource)
+			}
 			f.mu.Lock()
 			writes := f.writes
 			f.mu.Unlock()

@@ -145,6 +145,10 @@ func checkTestF04EncryptedSchema3WrongKeyDoesNotMigrate(t ginkgo.GinkgoTInterfac
 }
 
 type ksmFixture struct {
+	legacySM            map[string]any
+	smReads             int
+	smReadPaths         []string
+	smWrites            int
 	identityGate        chan struct{}
 	identityEntered     chan struct{}
 	identityOnce        sync.Once
@@ -188,6 +192,23 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 	f := &ksmFixture{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/servicemonitors") {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if r.Method != "GET" {
+				f.smWrites++
+				w.WriteHeader(500)
+				return
+			}
+			f.smReads++
+			f.smReadPaths = append(f.smReadPaths, r.URL.Path)
+			if f.legacySM == nil {
+				w.WriteHeader(404)
+				return
+			}
+			json.NewEncoder(w).Encode(f.legacySM)
+			return
+		}
 		f.mu.Lock()
 		delay := f.readDelay
 		f.mu.Unlock()

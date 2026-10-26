@@ -43,6 +43,7 @@ func (s *Store) enrichLifecycle(ctx context.Context, q clusterQuery, o *rpc.Oper
 	o.Revision = reference(rev)
 	o.AttemptId = &a.AttemptId
 	defer s.enrichStorageTask(ctx, q, o)
+	defer enrichResourceProgress(ctx, q, o)
 	var instance, version string
 	if q.QueryRowContext(ctx, `SELECT instance_id,version_id FROM deletion_operations WHERE operation_id=?`, o.OperationId).Scan(&instance, &version) == nil {
 		o.InstanceId = &instance
@@ -104,6 +105,9 @@ func (s *Store) lifecycleCommandObserved(ctx context.Context, c *rpc.RequestCont
 	if rev != r.ExpectedOperationRevision || a.AttemptId != r.ExpectedAttemptId || a.GetRevision() != r.ExpectedAttemptRevision {
 		return nil, Error("CONFLICT", "操作或尝试已变化，请刷新后重试")
 	}
+	if historicalResourceOperation(ctx, tx, o.OperationId) {
+		return nil, Error("CONFLICT", historicalPendingMessage)
+	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	if action == "CANCEL_LIFECYCLE" {
 		// 关键：派发标记先提交即可能已发送，之后任何取消都不能宣称集群写入被撤销。
@@ -127,6 +131,12 @@ func (s *Store) lifecycleCommandObserved(ctx context.Context, c *rpc.RequestCont
 		}
 		if i.Lifecycle == "DELETED" {
 			return nil, Error("CONFLICT", "实例已删除")
+		}
+		if _, e = executablePrimaryResource(ctx, tx, o.OperationId, i); e != nil {
+			return nil, e
+		}
+		if e = validateFrozenInstanceIdentity(ctx, tx, i, o.OperationId); e != nil {
+			return nil, e
 		}
 		if o.Action == "DELETE" {
 			if r.GetDeletePreviewId() == "" {
@@ -173,6 +183,16 @@ func (s *Store) lifecycleCommandObserved(ctx context.Context, c *rpc.RequestCont
 			return nil, e
 		}
 	}
+	if action == "CANCEL_LIFECYCLE" {
+		if _, e = tx.ExecContext(ctx, `UPDATE resource_progress SET state='CANCELLED',message=?,updated_at=? WHERE attempt_id=? AND possibly_sent=0 AND state<>'SUCCEEDED'`, o.Message, now, a.AttemptId); e != nil {
+			return nil, e
+		}
+	} else {
+		if _, e = tx.ExecContext(ctx, `INSERT INTO resource_progress SELECT ?,resource_key,confirmed_uid,0,'QUEUED','新尝试，保留原冻结目标',? FROM resource_progress WHERE attempt_id=?`, o.GetAttemptId(), now, a.AttemptId); e != nil {
+			return nil, e
+		}
+	}
+	enrichResourceProgress(ctx, tx, o)
 	o.Revision = reference(rev + 1)
 	o.UpdatedAt = now
 	if _, e = tx.ExecContext(ctx, `UPDATE operations SET state=?,message=?,updated_at=? WHERE id=?`, o.State, o.Message, now, o.OperationId); e != nil {
@@ -239,6 +259,16 @@ func (s *Store) authorizeLifecycleDispatch(ctx context.Context, o *rpc.Operation
 	if e != nil {
 		return fail(e)
 	}
+	instance, err := instanceByID(ctx, tx, o.GetInstanceId())
+	if err != nil {
+		return fail(err)
+	}
+	if _, err = executablePrimaryResource(ctx, tx, o.OperationId, instance); err != nil {
+		return fail(err)
+	}
+	if err = validateFrozenInstanceIdentity(ctx, tx, instance, o.OperationId); err != nil {
+		return fail(err)
+	}
 	// 关键：每次真实写入（包括明确拒绝后的 RV 重试）都在撤权串行边界重验实例权限。
 	if e = actorInstancePermission(ctx, tx, actor, o.GetInstanceId()); e != nil {
 		return fail(e)
@@ -293,6 +323,9 @@ func (s *Store) authorizeLifecycleDispatch(ctx context.Context, o *rpc.Operation
 		return fail(e)
 	}
 	if _, e = tx.ExecContext(ctx, `UPDATE operation_lifecycle SET revision=revision+1 WHERE operation_id=?`, o.OperationId); e != nil {
+		return fail(e)
+	}
+	if e = markResourceDispatch(ctx, tx, o, "component", now); e != nil {
 		return fail(e)
 	}
 	if len(snapshots) > 0 {

@@ -1,0 +1,5 @@
+-- PR31 的 v12 原结构；独立于新版迁移，保存双 CR 任务的历史字节与发送事实。
+CREATE TABLE version_resources(version_id TEXT NOT NULL REFERENCES publication_versions(id),resource_key TEXT NOT NULL,position INTEGER NOT NULL,collection_path TEXT NOT NULL,object_path TEXT NOT NULL,document BLOB NOT NULL,PRIMARY KEY(version_id,resource_key),UNIQUE(version_id,position));
+CREATE TABLE operation_resources(operation_id TEXT NOT NULL REFERENCES operations(id),resource_key TEXT NOT NULL,position INTEGER NOT NULL,collection_path TEXT NOT NULL,object_path TEXT NOT NULL,document BLOB NOT NULL,original_uid TEXT NOT NULL,PRIMARY KEY(operation_id,resource_key),UNIQUE(operation_id,position));
+CREATE TABLE resource_progress(attempt_id TEXT NOT NULL REFERENCES execution_attempts(id),resource_key TEXT NOT NULL,confirmed_uid TEXT NOT NULL,possibly_sent INTEGER NOT NULL,state TEXT NOT NULL,message TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(attempt_id,resource_key));
+CREATE TABLE instance_resource_identities(instance_id TEXT NOT NULL REFERENCES instances(id),resource_key TEXT NOT NULL,uid TEXT NOT NULL,PRIMARY KEY(instance_id,resource_key));

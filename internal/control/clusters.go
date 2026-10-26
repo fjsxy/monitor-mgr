@@ -38,6 +38,7 @@ func scanOperation(row interface{ Scan(...any) error }) (*rpc.Operation, error) 
 
 // clusterQuery 统一数据库与事务内的单行读取边界。
 type clusterQuery interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
