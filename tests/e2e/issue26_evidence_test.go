@@ -3,6 +3,7 @@ package e2e_test
 
 import (
 	"encoding/json"
+	"os"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
@@ -23,6 +24,7 @@ func assertIssue26Evidence(evidence map[string]json.RawMessage) {
 		Confirmation  *confirmation `json:"managementConfirmation"`
 	}
 	var got struct {
+		TestedCommit        string   `json:"testedCommit"`
 		OriginalActor       string   `json:"originalActor"`
 		OriginalUID         string   `json:"originalUid"`
 		CurrentUID          string   `json:"currentUid"`
@@ -44,6 +46,7 @@ func assertIssue26Evidence(evidence map[string]json.RawMessage) {
 	raw, ok := evidence["issue26"]
 	Expect(ok).To(BeTrue(), "E2E-01 必须返回历史升级原始观测")
 	Expect(json.Unmarshal(raw, &got)).To(Succeed())
+	Expect(got.TestedCommit).To(Equal(os.Getenv("MONITOR_MGR_E2E_CANDIDATE")))
 	var fields map[string]json.RawMessage
 	Expect(json.Unmarshal(raw, &fields)).To(Succeed())
 	for _, key := range []string{"originalActor", "originalUid", "currentUid", "known", "missing", "confirmed", "allowed", "restricted", "ordinaryConfirmCode", "restrictedSaveCode", "beforeMutationCount", "automaticMutationCount", "automaticSpecHasCollection", "platformSMWrites", "publicationState", "oldVersionId", "newVersionId"} {

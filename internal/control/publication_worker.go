@@ -153,6 +153,10 @@ func (s *Store) executePublication(life context.Context, id string) {
 	// 同一受理 attempt 最多三次条件写；每次重读都重新验证 UID、spec、依赖与存储影响。
 	var rejectedRV string
 	for write := 0; write < 3; write++ {
+		if e = validateHistoricalCollection(life, s.DB, i, frozen, t); e != nil {
+			s.finishExecution(life, o, "FAILED", e, nil)
+			return
+		}
 		if e = validateFixedSpec(life, s.DB, i, frozen); e != nil {
 			s.finishExecution(life, o, "FAILED", e, nil)
 			return

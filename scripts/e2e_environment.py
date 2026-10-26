@@ -39,12 +39,14 @@ class Environment:
         arch = 'arm64' if platform.machine() in ('aarch64', 'arm64') else 'amd64'
         self.platform = 'linux/' + arch
         self.image = 'monitor-mgr:e2e-' + candidate[:12]
-        self.operator_image = 'monitor-mgr-operator:e2e-' + LOCK['monitorOp']['source'][:12]
+        image = LOCK['monitorOp']['release']['image']
+        self.operator_image = image['repository'] + '@' + image['indexDigest']
+        self.operator_content = []
 
     def command(self, command, label='command', **kwargs):
         result = self.processes.run([str(v) for v in command], label=label, **kwargs)
         if result.returncode:
-            if label in ('build-platform','build-operator'):
+            if label == 'build-platform':
                 # 关键：只投影固定分类与 exit；Docker 原文可能包含私有路径/源码，不能进入公开 artifact。
                 diagnostic=dict(operation=label,exit=result.returncode,errorCode='BUILD_COMMAND_FAILED')
                 if b'unknown scheme oci-layout' in result.stderr:diagnostic['errorCode']='BUILD_OCI_LAYOUT_UNSUPPORTED'
@@ -122,6 +124,11 @@ class Environment:
             self.targets[role] = target; self.checkpoint()
             config = dict(kind='Cluster', apiVersion='kind.x-k8s.io/v1alpha4', featureGates={'StatefulSetAutoDeletePVC': True},
                           nodes=[{'role': 'control-plane'}] + ([{'role': 'worker'}, {'role': 'worker'}] if role == 'control' else []))
+            from cluster_evidence import audit_configuration
+            policy = self.private / (role + '-audit-policy.json')
+            audit = audit_configuration(policy); private_json(policy, audit['policy'])
+            config['kubeadmConfigPatches'] = audit['kubeadmConfigPatches']
+            config['nodes'][0].update(audit['nodes'][0])
             path = self.private / (role + '-kind.json'); private_json(path, config)
             print('准备独占 kind：' + name, flush=True)
             try:
@@ -142,6 +149,61 @@ class Environment:
             path = self.private / (role + '-pod.json'); private_json(path, config); target['podConfig'] = str(path)
             target['nodes'] = self.get(role, 'nodes')['items']; self.checkpoint()
 
+    def platform_credentials(self, role, namespace, name='platform'):
+        """生成真实受限 SA/token，并通过该凭据获取实际身份和 SSAR 权限原始结果。"""
+        from cluster_evidence import platform_rbac
+        target = self.targets[role]
+        actual_namespace = self.get(role, 'namespace', namespace)
+        assert actual_namespace['metadata'].get('labels', {}).get(RUN_LABEL) == self.run_id
+        objects = platform_rbac(namespace, name, self.run_id)
+        created = []
+        for obj in objects:
+            if obj['kind'] in ('ClusterRole', 'ClusterRoleBinding'):
+                # 关键：cluster-scoped Namespace 是合法所有者，测试 namespace 删除时回收专用授权。
+                obj['metadata']['ownerReferences'] = [dict(apiVersion='v1', kind='Namespace', name=namespace, uid=actual_namespace['metadata']['uid'])]
+            response = json.loads(self.k(role, 'create', '-f', '-', data=obj).stdout)
+            created.append(dict(target=role, kind=response['kind'], name=response['metadata']['name'], namespace=response['metadata'].get('namespace', ''), uid=response['metadata']['uid']))
+        account = self.get(role, 'serviceaccount', name, '-n', namespace)
+        token = self.k(role, 'create', 'token', name, '-n', namespace, '--duration=2h').stdout.decode().strip()
+        config = json.loads(Path(target['podConfig']).read_text())
+        config['users'] = [dict(name='platform', user=dict(token=token))]
+        for context in config['contexts']: context['context']['user'] = 'platform'
+        probe_config = copy.deepcopy(config)
+        # 宿主核验仍连接私有 kubeconfig 的原宿主 API 地址；平台 Pod 使用 Docker 网络地址。
+        host_config = json.loads(self.k(role, 'config', 'view', '--minify', '--flatten', '--raw', '-o', 'json').stdout)
+        probe_config['clusters'] = host_config['clusters']
+        path = self.private / ('platform-' + role + '-' + namespace + '-' + name + '.json')
+        private_json(path, probe_config)
+        def probe(api, body):
+            result = self.command(['kubectl', '--kubeconfig', path, '--context', config['current-context'], 'create', '--raw', api, '-f', '-'],
+                                  'platform-real-permission', input=json.dumps(body).encode())
+            return json.loads(result.stdout)
+        identity = probe('/apis/authentication.k8s.io/v1/selfsubjectreviews', dict(apiVersion='authentication.k8s.io/v1', kind='SelfSubjectReview'))
+        permissions = []
+        for group, resource, verbs in [('monitoring.coreos.com', 'servicemonitors', ('get', 'list', 'watch', 'create', 'update', 'patch', 'delete', 'deletecollection')),
+                                       ('monitoring.fjsxy.github.io', 'kubestatemetrics', ('get', 'list', 'create', 'update', 'patch', 'delete')),
+                                       ('apps', 'deployments', ('create', 'update')), ('apps', 'statefulsets', ('create', 'update')),
+                                       ('apps', 'daemonsets', ('create', 'update')),
+                                       ('apiextensions.k8s.io', 'customresourcedefinitions', ('get',))]:
+            for verb in verbs:
+                attrs = dict(group=group, resource=resource, verb=verb)
+                if group == 'apps': attrs['namespace'] = namespace
+                response = probe('/apis/authorization.k8s.io/v1/selfsubjectaccessreviews',
+                                 dict(apiVersion='authorization.k8s.io/v1', kind='SelfSubjectAccessReview', spec=dict(resourceAttributes=attrs)))
+                permissions.append(dict(**attrs, status=response['status']))
+        return dict(config=config, identity=identity['status']['userInfo']['username'], serviceAccountUID=account['metadata']['uid'],
+                    identityReview=identity, permissions=permissions, resources=created)
+
+    def audit_events(self, role, identity=None):
+        """从本 run 原 control-plane 容器读取 Metadata 日志，保留所有请求尝试供 Ginkgo 断言。"""
+        from cluster_evidence import AUDIT_LOG, audit_metadata
+        target = self.targets[role]
+        node = next(n for n in target['nodes'] if n['metadata']['name'] == target['name'] + '-control-plane')
+        actual = self.command(['docker', 'inspect', '--format', '{{.Id}}', node['metadata']['name']], 'audit-node-identity').stdout.decode().strip()
+        assert actual in target['containers']
+        raw = self.command(['docker', 'exec', actual, 'cat', AUDIT_LOG], 'read-apiserver-metadata-audit').stdout.decode()
+        return audit_metadata(raw, identity)
+
     def build(self):
         if not self.source:
             common = Path(self.command(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], 'git-common', cwd=ROOT).stdout.decode().strip())
@@ -151,12 +213,26 @@ class Environment:
         self.command(['git', '-C', source, 'checkout', '--quiet', '--detach', LOCK['monitorOp']['source']], 'checkout-locked-operator')
         assert self.command(['git', '-C', source, 'rev-parse', 'HEAD'], 'operator-sha').stdout.decode().strip() == LOCK['monitorOp']['source']
         self.operator_source = source
-        dockerfile = (source / 'Dockerfile').read_text()
-        assert hashlib.sha256(dockerfile.encode()).hexdigest() == LOCK['monitorOp']['dockerfileSHA256']
+        # 关键：仅编译同源发布管理 CLI；Operator 本身必须消费原 release 镜像和资产。
+        from operator_release import bundle_proof
+        supplied = os.environ.get('MONITOR_OP_RELEASE_BUNDLE')
+        self.release_bundle = self.private / 'operator-bundle'
+        if supplied:
+            bundle_proof(supplied)
+            self.release_bundle.mkdir(mode=0o700)
+            for asset in LOCK['monitorOp']['release']['assets']:
+                shutil.copyfile(Path(supplied) / asset, self.release_bundle / asset)
+                os.chmod(self.release_bundle / asset, 0o600)
+        else:
+            self.command([sys.executable, ROOT/'scripts/acceptance/operator_release.py', 'fetch', '--bundle', self.release_bundle], 'fetch-published-operator', timeout=300)
+        self.release_proof = bundle_proof(self.release_bundle)
+        self.release_tool = self.private / 'operator-release'
+        self.command(['go', 'build', '-trimpath', '-o', self.release_tool, './cmd/release'], 'build-release-tool', cwd=source, timeout=600)
+        self.command([self.release_tool, 'verify', '--source-commit', LOCK['monitorOp']['source'], '--bundle', self.release_bundle], 'verify-published-operator')
         # 使用 Docker 官方支持的本地 OCI build context，绕过 daemon 的远端 metadata 阻塞。
         from image_inputs import pinned_layout
         contexts={}
-        for name in ('platform_node','platform_go','monitorop_go'):
+        for name in ('platform_node','platform_go'):
             print('校验锁定 OCI 构建输入：'+name,flush=True)
             spec=LOCK['images'][name]
             cache=ROOT/'.scratch/oci-inputs'/(name+'-'+spec['indexDigest'][7:19]+'-'+self.platform.split('/')[1])
@@ -166,23 +242,17 @@ class Environment:
             assert 'FROM '+LOCK['images'][name]['image'] in platform_file
             platform_file=platform_file.replace('FROM '+LOCK['images'][name]['image'],'FROM '+name)
         platform_path=self.private/'platform.Dockerfile';platform_path.write_text(platform_file)
-        dockerfile=dockerfile.replace('FROM golang:1.22.12-alpine AS builder','FROM monitorop_go AS builder').replace('FROM gcr.io/distroless/static:nonroot','FROM '+LOCK['images']['monitorop_runtime']['image'])
-        dockerfile+='\nLABEL org.opencontainers.image.revision="'+LOCK['monitorOp']['source']+'"\n'
-        path=self.private/'operator.Dockerfile';path.write_text(dockerfile)
         build=['docker','buildx','build','--load','--platform',self.platform,'--provenance=false','--sbom=false']
-        print('构建同候选平台和锁定 Operator 镜像',flush=True)
+        print('构建同候选平台；Operator 使用已校验原发布品',flush=True)
         self.command([*build,'--build-context','platform_node='+contexts['platform_node'],'--build-context','platform_go='+contexts['platform_go'],'-f',platform_path,'--build-arg','SOURCE_SHA='+self.candidate,'-t',self.image,ROOT],'build-platform',timeout=1200)
-        self.command([*build,'--build-context','monitorop_go='+contexts['monitorop_go'],'-f',path,'-t',self.operator_image,source],'build-operator',timeout=1200)
         proof=json.loads(self.command(['docker','image','inspect',self.image],'platform-image-source').stdout)[0]
         assert proof['Config']['Labels']['org.opencontainers.image.revision']==self.candidate and proof['Architecture']==self.platform.split('/')[1]
         self.platform_config=self.built_config(self.image,self.candidate,proof,'platform-image')
-        operator=json.loads(self.command(['docker','image','inspect',self.operator_image],'operator-image-source').stdout)[0]
-        assert operator['Config']['Labels']['org.opencontainers.image.revision']==LOCK['monitorOp']['source'];self.operator_config=self.built_config(self.operator_image,LOCK['monitorOp']['source'],operator,'operator-image')
-        private_json(self.public/'images.json',dict(candidate=self.candidate,platformImage=self.image,configDigest=self.platform_config,platform=self.platform,operatorSource=LOCK['monitorOp']['source'],operatorConfigDigest=self.operator_config))
+        private_json(self.public/'images.json',dict(candidate=self.candidate,platformImage=self.image,configDigest=self.platform_config,platform=self.platform,operatorSource=LOCK['monitorOp']['source'],operatorRelease=self.release_proof))
 
     def load_images(self):
         for role in self.targets:
-            self.command(['kind', 'load', 'docker-image', '--name', self.targets[role]['name'], self.image, self.operator_image], 'load-local-images-' + role, timeout=600)
+            self.command(['kind', 'load', 'docker-image', '--name', self.targets[role]['name'], self.image], 'load-local-images-' + role, timeout=600)
             # 每个节点保留锁定的官方 index 和版本标签；Pod 实际使用同一固定镜像。
             for node in self.targets[role]['nodes']:
                 for name in ('ksm', 'prometheus', 'promop', 'reloader', 'python_fixture', 'provisioner'):
@@ -190,50 +260,99 @@ class Environment:
                     self.command(['docker', 'exec', node['metadata']['name'], 'ctr', '-n', 'k8s.io', 'images', 'pull', '--platform', self.platform, image['image']], 'pull-' + name, timeout=600)
                     self.command(['docker', 'exec', node['metadata']['name'], 'ctr', '-n', 'k8s.io', 'images', 'tag', '--force', image['image'], image['tag']], 'tag-' + name)
                     if name not in self.official_configs:self.official_configs[name]=self.runtime_config(name,node['metadata']['name'])
+                self.command(['docker', 'exec', node['metadata']['name'], 'ctr', '-n', 'k8s.io', 'images', 'pull', '--platform', self.platform, self.operator_image], 'pull-published-operator', timeout=600)
+                self.operator_content.append(self.published_operator_content(node['metadata']['name']))
+
+    def published_operator_content(self, node):
+        """关键：原 index→目标 manifest→原 config 及 revision 共同绑定已发布 RC4。"""
+        from image_provenance import read_oci_graph
+        spec = LOCK['monitorOp']['release']['image']
+        def read(digest):
+            return self.command(['docker', 'exec', node, 'ctr', '-n', 'k8s.io', 'content', 'get', digest], 'operator-content').stdout
+        manifest = json.loads(read(spec['platforms'][self.platform]))
+        config = manifest['config']['digest']
+        proof = read_oci_graph(read, spec['indexDigest'], expected_config=config, expected_source=LOCK['monitorOp']['source'], platform=self.platform, require_manifest=True)
+        assert proof['manifestDigest'] == spec['platforms'][self.platform]
+        if hasattr(self, 'operator_config'):
+            assert self.operator_config == config
+        self.operator_config = config
+        return dict(node=node, **proof)
 
     def operators(self):
         bundle = self.private / 'bundle.yaml'
         self.command(['curl', '-fsSL', '--proto', '=https', '-o', bundle, LOCK['prometheusOperator']['bundleURL']], 'fetch-operator-bundle', timeout=180)
         assert hashlib.sha256(bundle.read_bytes()).hexdigest() == LOCK['prometheusOperator']['bundleSHA256']
-        crd = self.operator_source / 'config/crd/bases/monitoring.fjsxy.github.io_kubestatemetrics.yaml'
-        assert hashlib.sha256(crd.read_bytes()).hexdigest() == LOCK['monitorOp']['crdSHA256']
-        # 官方 CRD schema 中的裸 '=' 具有 YAML 1.1 value tag；仅为该标准 tag 补字符串构造。
+        # 官方 CRD 中裸 '=' 是标准 YAML tag，只为此补安全字符串构造。
         class BundleLoader(yaml.SafeLoader): pass
         BundleLoader.add_constructor('tag:yaml.org,2002:value', yaml.SafeLoader.construct_scalar)
-        objects = list(yaml.load_all(bundle.read_text(), Loader=BundleLoader))
-        namespace = 'mm-operators'; name = 'monitor-mgr-monitor-op'
+        objects = [o for o in yaml.load_all(bundle.read_text(), Loader=BundleLoader) if o]
+        namespace = 'mm-operators'
         for obj in objects:
-            if not obj: continue
             metadata = obj['metadata']; metadata.setdefault('labels', {})[RUN_LABEL] = self.run_id
-            if metadata.get('namespace') == 'default' or obj['kind'] in ('ServiceAccount', 'Deployment', 'Service'): metadata['namespace'] = namespace
+            if metadata.get('namespace') == 'default' or obj['kind'] in ('ServiceAccount', 'Deployment', 'Service'):
+                metadata['namespace'] = namespace
             if obj['kind'] == 'ClusterRoleBinding':
                 for subject in obj.get('subjects', []):
                     if subject.get('kind') == 'ServiceAccount': subject['namespace'] = namespace
             if obj['kind'] == 'Deployment':
-                c = obj['spec']['template']['spec']['containers'][0]; c['image'] = LOCK['images']['promop']['image']; c['imagePullPolicy'] = 'Never'
-                c['args'] = [a for a in c.get('args', []) if not a.startswith('--prometheus-config-reloader=')] + ['--prometheus-config-reloader=' + LOCK['images']['reloader']['image']]
-        role = yaml.safe_load((self.operator_source / 'config/rbac/role.yaml').read_text()); role['metadata'] = {'name': name}
-        objects += [yaml.safe_load(crd.read_text()), role,
-                    {'apiVersion': 'v1', 'kind': 'ServiceAccount', 'metadata': {'name': name, 'namespace': namespace}},
-                    {'apiVersion': 'rbac.authorization.k8s.io/v1', 'kind': 'ClusterRoleBinding', 'metadata': {'name': name}, 'roleRef': {'apiGroup': 'rbac.authorization.k8s.io', 'kind': 'ClusterRole', 'name': name}, 'subjects': [{'kind': 'ServiceAccount', 'name': name, 'namespace': namespace}]},
-                    {'apiVersion': 'rbac.authorization.k8s.io/v1', 'kind': 'Role', 'metadata': {'name': name, 'namespace': namespace}, 'rules': [{'apiGroups': ['coordination.k8s.io'], 'resources': ['leases'], 'verbs': ['get', 'list', 'watch', 'create', 'update', 'patch']}, {'apiGroups': [''], 'resources': ['events'], 'verbs': ['create', 'patch']}]},
-                    {'apiVersion': 'rbac.authorization.k8s.io/v1', 'kind': 'RoleBinding', 'metadata': {'name': name, 'namespace': namespace}, 'roleRef': {'apiGroup': 'rbac.authorization.k8s.io', 'kind': 'Role', 'name': name}, 'subjects': [{'kind': 'ServiceAccount', 'name': name, 'namespace': namespace}]},
-                    {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': {'name': name, 'namespace': namespace}, 'spec': {'replicas': 1, 'selector': {'matchLabels': {'app': name}}, 'template': {'metadata': {'labels': {'app': name}}, 'spec': {'serviceAccountName': name, 'containers': [{'name': 'manager', 'image': self.operator_image, 'imagePullPolicy': 'Never', 'args': ['--leader-elect=true', '--health-probe-bind-address=:8081', '--log-level=info'], 'readinessProbe': {'httpGet': {'path': '/readyz', 'port': 8081}}}]}}}}]
-        path = self.private / 'operator-values.json'; private_json(path, {'objects': [o for o in objects if o]})
+                container = obj['spec']['template']['spec']['containers'][0]
+                container['image'] = LOCK['images']['promop']['image']; container['imagePullPolicy'] = 'Never'
+                container['args'] = [a for a in container.get('args', []) if not a.startswith('--prometheus-config-reloader=')] + ['--prometheus-config-reloader=' + LOCK['images']['reloader']['image']]
+        path = self.private / 'prometheus-operator-values.json'; private_json(path, {'objects': objects})
+        prerequisites = self.private / 'prometheus-operator-prerequisites.json'
+        private_json(prerequisites, {'objects': [o for o in objects if o['kind'] != 'Deployment']})
+        crds = ['crd/' + o['metadata']['name'] for o in objects if o['kind'] == 'CustomResourceDefinition']
+        deployment = next(o for o in objects if o['kind'] == 'Deployment' and o['metadata']['name'] == 'prometheus-operator')
+        identity = 'system:serviceaccount:' + namespace + ':' + deployment['spec']['template']['spec']['serviceAccountName']
+        preparation = []; self.operator_deployments = {}
         for role, target in self.targets.items():
-            print('Helm 安装 Operator：' + role, flush=True)
-            self.command(['helm', 'upgrade', '--install', 'operators', ROOT / 'charts/test-operators', '--kubeconfig', target['kubeconfig'], '--kube-context', target['context'], '--namespace', namespace, '--create-namespace', '-f', path, '--wait', '--timeout', '5m'], 'helm-operators-' + role, timeout=360)
-            self.k(role, 'wait', '--for=condition=Established', 'crd/kubestatemetrics.monitoring.fjsxy.github.io', '--timeout=60s')
-            self.k(role,'set','image','deployment/local-path-provisioner','-n','local-path-storage','local-path-provisioner='+LOCK['images']['provisioner']['image'])
-            self.k(role,'rollout','status','deployment/local-path-provisioner','-n','local-path-storage','--timeout=120s')
-            for deployment,config in [('prometheus-operator',self.official_configs['promop']),(name,self.operator_config)]:
-                dep=self.get(role,'deployment',deployment,'-n',namespace)
-                selector=','.join(k+'='+v for k,v in sorted(dep['spec']['selector']['matchLabels'].items()))
-                pods=[p for p in self.get(role,'pods','-n',namespace,'-l',selector)['items'] if not p['metadata'].get('deletionTimestamp')]
-                assert len(pods)==1
-                proof=self.verify_container(pods[0],dep['spec']['template']['spec']['containers'][0]['name'],config)
-                self.operator_proofs.append(dict(target=role,deployment=deployment,**proof))
-        report=json.loads((self.public/'images.json').read_text());report.update(lockedRuntimeConfigs=self.official_configs,operators=self.operator_proofs);private_json(self.public/'images.json',report)
+            helm = ['helm', 'upgrade', '--install', 'operators', ROOT / 'charts/test-operators', '--kubeconfig', target['kubeconfig'], '--kube-context', target['context'], '--namespace', namespace, '--create-namespace']
+            # 关键：该上游进程启动时判定一次能力；先让原 SA 的 CRD/discovery/RBAC 就绪。
+            self.command([*helm, '-f', prerequisites, '--wait', '--timeout', '5m'], 'helm-prometheus-prerequisites-' + role, timeout=360)
+            self.k(role, 'wait', '--for=condition=Established', *crds, '--timeout=90s')
+            discovery = json.loads(self.k(role, 'get', '--raw', '/apis/monitoring.coreos.com/v1alpha1', '--as', identity).stdout)
+            required = {'prometheusagents', 'scrapeconfigs'}
+            assert required <= {r['name'] for r in discovery['resources']}
+            for resource in sorted(required):
+                for verb in ('get', 'list', 'watch'):
+                    assert self.k(role, 'auth', 'can-i', verb, resource + '.monitoring.coreos.com', '--all-namespaces', '--as', identity).stdout.decode().strip() == 'yes'
+                actual = json.loads(self.k(role, 'get', '--raw', '/apis/monitoring.coreos.com/v1alpha1/' + resource, '--as', identity).stdout)
+                assert isinstance(actual.get('items'), list)
+            self.command([*helm, '-f', path, '--wait', '--timeout', '5m'], 'helm-prometheus-operator-' + role, timeout=360)
+            preparation.append(dict(target=role, allCRDsEstablished=True, discoveryServed=True, agentAndScrapeConfigPermissions=True))
+            # 关键：使用同源发布 CLI 的 UID/RV 条件升级和原 tgz；不重构镜像、不改包。
+            from operator_release import bundle_proof
+            bundle_proof(self.release_bundle)
+            crd_name = 'kubestatemetrics.monitoring.fjsxy.github.io'
+            before = self.k(role, 'get', 'crd', crd_name, '--ignore-not-found', '-o', 'json').stdout.strip()
+            release = 'monitor-mgr'
+            env = dict(os.environ, KUBECONFIG=target['kubeconfig'])
+            self.command([self.release_tool, 'upgrade', '--source-commit', LOCK['monitorOp']['source'], '--bundle', self.release_bundle,
+                          '--context', target['context'], '--namespace', namespace, '--release', release], 'install-published-operator-' + role, timeout=360, env=env)
+            self.k(role, 'wait', '--for=condition=Established', 'crd/' + crd_name, '--timeout=90s')
+            deployed = self.get(role, 'crd', crd_name)
+            if before: assert deployed['metadata']['uid'] == json.loads(before)['metadata']['uid']
+            schema = self.private / ('deployed-crd-' + role + '.json'); private_json(schema, deployed)
+            self.command([self.release_tool, 'capability', '--file', schema], 'deployed-operator-capability-' + role)
+            matching = self.get(role, 'deployments', '-n', namespace, '-l', 'app.kubernetes.io/name=monitor-in-hand,app.kubernetes.io/instance=' + release)['items']
+            assert len(matching) == 1
+            installed = matching[0]; name = installed['metadata']['name']
+            assert installed['spec']['template']['spec']['containers'][0]['image'] == self.operator_image
+            service_account = installed['spec']['template']['spec']['serviceAccountName']
+            self.operator_deployments[role] = dict(name=name, namespace=namespace, identity='system:serviceaccount:' + namespace + ':' + service_account, crdUID=deployed['metadata']['uid'])
+            self.k(role, 'set', 'image', 'deployment/local-path-provisioner', '-n', 'local-path-storage', 'local-path-provisioner=' + LOCK['images']['provisioner']['image'])
+            self.k(role, 'rollout', 'status', 'deployment/local-path-provisioner', '-n', 'local-path-storage', '--timeout=120s')
+            for deployment_name, config in [('prometheus-operator', self.official_configs['promop']), (name, self.operator_config)]:
+                dep = self.get(role, 'deployment', deployment_name, '-n', namespace)
+                selector = ','.join(k + '=' + v for k, v in sorted(dep['spec']['selector']['matchLabels'].items()))
+                pods = [p for p in self.get(role, 'pods', '-n', namespace, '-l', selector)['items'] if not p['metadata'].get('deletionTimestamp')]
+                assert len(pods) == 1
+                proof = self.verify_container(pods[0], dep['spec']['template']['spec']['containers'][0]['name'], config)
+                self.operator_proofs.append(dict(target=role, deployment=deployment_name, source=LOCK['monitorOp']['source'] if deployment_name == name else LOCK['prometheusOperator']['source'], **proof))
+        report = json.loads((self.public / 'images.json').read_text())
+        report.update(lockedRuntimeConfigs=self.official_configs, operatorConfigDigest=self.operator_config, operatorContent=self.operator_content,
+                      operators=self.operator_proofs, operatorPreparation=preparation, operatorDeployments=self.operator_deployments)
+        private_json(self.public / 'images.json', report)
 
 
     def cleanup_clusters(self):

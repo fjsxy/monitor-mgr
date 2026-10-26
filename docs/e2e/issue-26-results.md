@@ -38,7 +38,7 @@ TDD 记录：首次 UT-16 因 creatorUserId 未补齐而失败，接入迁移后
 
 ## 真实验收代码与尚未执行
 
-I26-K01 编排已加入 E2E-01：独占 Helm/PVC 真实降到 v10，原 KSM UID/RV 下去掉旧版不存在的字段，升级后补齐/确认/轮询零自动写入，允许普通 owner 后明确发布 disabled 采集配置，撤销后实际保存被拒。原始白名单观测存 `self.evidence['issue26']`；Go `tests/e2e/issue26_evidence_test.go` 的 `assertIssue26Evidence` 逐项断言，缺证据失败。
+I26-K01 编排已加入 E2E-01：独占 Helm/PVC 真实降到 v10，原 KSM UID/RV 下去掉旧版不存在的字段，升级后补齐/确认/轮询零自动写入，允许普通 owner 后明确发布 disabled 采集配置，撤销后实际保存被拒。原始白名单观测存 `self.acceptance_evidence['issue26']`；Go `tests/e2e/issue26_evidence_test.go` 的 `assertIssue26Evidence` 逐项断言，缺证据失败。
 
 共享证据 registry 由 #28 交付，集成时需注册：`registerIssueEvidence("issue26", assertIssue26Evidence)` 和 `requireIssueEvidence("E2E-01", "issue26")`。本项未修改共享 event/suite，避免并行冲突。
 

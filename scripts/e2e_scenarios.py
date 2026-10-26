@@ -26,6 +26,7 @@ from ksm_cases import controller, args as workload_args, counts, stopped_workloa
 class Scenario(LifecycleSuite, AgentSuite):
     def __init__(self, environment, index, emit):
         self.env, self.index, self.emit = environment, index, emit
+        self.acceptance_evidence = {}
         prefix = environment.run_id + '-c' + str(index)
         a = SimpleNamespace(session=None, output=str(environment.private / ('case-' + str(index))),
                             prefix=prefix, port=19000 + index * 3, kubectl='kubectl', initialize=True,
@@ -122,7 +123,7 @@ class Scenario(LifecycleSuite, AgentSuite):
 
     def cfg(self,name=None,mode='Deployment',namespace=None):
         if self.component=='agent': return AgentSuite.cfg(self,name,namespace)
-        value=KSMSuite.cfg(self,name,mode);value['namespaceFilter']={'mode':'Include','names':[self.targetns]};return value
+        value=KSMSuite.cfg(self,name,mode);value['serviceMonitor']={'enabled':True,'interval':'30s','scrapeTimeout':'10s'};value['namespaceFilter']={'mode':'Include','names':[self.targetns]};return value
     def create(self,*args,**kwargs): return (AgentSuite.create if self.component=='agent' else KSMSuite.create)(self,*args,**kwargs)
     def save(self,*args,**kwargs): return (AgentSuite.save if self.component=='agent' else KSMSuite.save)(self,*args,**kwargs)
     def preview(self,*args,**kwargs): return (AgentSuite.preview if self.component=='agent' else KSMSuite.preview)(self,*args,**kwargs)
@@ -251,7 +252,7 @@ def platform(s):
     sm_writes=[e for e in s.capture_proxy() if e['method'] in ('POST','PUT','PATCH','DELETE') and '/servicemonitors' in e['path']]
     # 原始白名单观测由 Ginkgo 逐项断言，Python 只编排真实 Pod、HTTP 和目标身份。
     identity=lambda value:{key:value[key] for key in ('creatorUserId','creatorRole','canManage','managementConfirmation') if key in value}
-    s.evidence['issue26']={'originalActor':original_actor,'originalUid':original_uid,'currentUid':s.cr()['metadata']['uid'],'known':identity(known_read),'missing':identity(missing_read),'ordinaryConfirmCode':denied.get('code'),'confirmed':identity(confirmed),'allowed':identity(allowed),'restricted':identity(restricted),'restrictedSaveCode':restricted_save.get('code'),'beforeMutationCount':before_mutations,'automaticMutationCount':automatic_mutations,'automaticSpecHasCollection':'serviceMonitor' in automatic_spec,'platformSMWrites':len(sm_writes),'publicationState':published['state'],'oldVersionId':old_publication['versionId'],'newVersionId':published['versionId']}
+    s.acceptance_evidence['issue26']={'testedCommit':s.env.candidate,'originalActor':original_actor,'originalUid':original_uid,'currentUid':s.cr()['metadata']['uid'],'known':identity(known_read),'missing':identity(missing_read),'ordinaryConfirmCode':denied.get('code'),'confirmed':identity(confirmed),'allowed':identity(allowed),'restricted':identity(restricted),'restrictedSaveCode':restricted_save.get('code'),'beforeMutationCount':before_mutations,'automaticMutationCount':automatic_mutations,'automaticSpecHasCollection':'serviceMonitor' in automatic_spec,'platformSMWrites':len(sm_writes),'publicationState':published['state'],'oldVersionId':old_publication['versionId'],'newVersionId':published['versionId']}
     (s.env.public/'historical-identity.json').write_text(json.dumps({'testedCommit':s.env.candidate,'podUID':s.platform_pod_uid,'originalUid':original_uid,'currentUid':s.cr()['metadata']['uid'],'creatorUserId':known_read['creatorUserId'],'creatorRole':known_read['creatorRole'],'confirmation':restricted['managementConfirmation']},ensure_ascii=False,indent=2)+'\n')
     s.by('核对 HTTP 唯一 Service 端口和容器 RPC loopback 监听')
     service=s.get('service','monitor-mgr','-n',s.ns,target='control');assert [p['port'] for p in service['spec']['ports']]==[8080]
@@ -302,6 +303,8 @@ def ksm(s):
     cfg=s.cfg();i=s.create(cfg)
     assert s.k('get','kubestatemetrics',s.crname,target=s.target,check=False).returncode!=0
     s.publish(i);s.runtime(i);assert len([x for x in s.workloads() if x['kind']=='Deployment'])==1
+    from exporter_collection import topology, lifecycle as collection_lifecycle
+    topology(s,i)
     s.by('替换为双分片 StatefulSet，再替换为三角色 DaemonSet')
     for mode in ('StatefulSetSharded','DaemonSetSharded'):
         cfg=s.cfg(mode=mode)
@@ -309,7 +312,7 @@ def ksm(s):
             cfg.update(advancedResources=True,collectors={'mode':'Include','names':['pods','nodes']},metricFilter={'mode':'Deny','patterns':['kube_pod_labels']})
             for role,cpu in [('nodeResources','110m'),('clusterResources','120m'),('unscheduledResources','130m')]:cfg[role]={'mode':'Override','resources':{'requestCPU':cpu,'requestMemory':'64Mi','limitMemory':'256Mi'}}
         else:cfg.update(collectors={'mode':'Include','names':['pods','nodes']},metricFilter={'mode':'Allow','patterns':['kube_.*']})
-        s.save(i,cfg);s.publish(i);s.runtime(i)
+        s.save(i,cfg);s.publish(i);s.runtime(i);topology(s,i)
         if mode=='StatefulSetSharded':assert controller(s,'StatefulSet')['spec']['replicas']==2
         else:
             assert len([x for x in s.workloads() if x['kind']=='DaemonSet'])==1
@@ -329,6 +332,7 @@ def ksm(s):
     s.call('DELETE','/instances/'+found['id'],status=403)
     s.call('PUT','/instances/'+found['id']+'/draft',{'expectedDraftRevision':1,'ksm':s.cfg()},status=403)
     s.call('POST','/instances/'+found['id']+'/publications',{'draftRevision':1,'previewId':'forged','overwriteDrift':False},status=403)
+    collection_lifecycle(s)
 
 
 def agent(s):
@@ -456,6 +460,8 @@ def recovery(s):
     writepath='/apis/monitoring.fjsxy.github.io/v1alpha1/kubestatemetrics';proxy.control('faults',{'readMode':'none','rejectWritePath':writepath})
     failure=s.publish(retry,preview=p,wait=False);s.state(failure,'FAILED');cfg=s.cfg();cfg['resources']['requestCPU']='999m';s.save(retry,cfg);proxy.control('reset',{})
     again=s.action(failure,'retry');s.state(again,'SUCCEEDED');assert again['versionId']==failure['versionId'] and again['attemptId']!=failure['attemptId'];assert s.cr()['spec']['podResources']['requests']['cpu']=='100m';s.track_cr(s.cr()['metadata']['uid'])
+    from instance_identity import authorization
+    authorization(s,proxy)
 
 
 def deletion(s):

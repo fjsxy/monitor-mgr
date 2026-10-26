@@ -129,6 +129,10 @@ func (s *Store) CreateInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	if e != nil {
 		return nil, e
 	}
+	// 新草稿默认开启；读取旧草稿/冻结版本不会调用此默认，避免升级补建。
+	if ksm, ok := cfg.(*KSMConfig); ok && ksm.ServiceMonitor == nil {
+		ksm.ServiceMonitor = &ExporterServiceMonitor{Enabled: true, Interval: "30s", ScrapeTimeout: "10s"}
+	}
 	var n int
 	if tx.QueryRowContext(ctx, `SELECT count(*) FROM instances WHERE cluster_id=? AND component=? AND cr_namespace=? AND name=?`, cl.Id, r.Component, cfg.identity().Namespace, cfg.identity().Name).Scan(&n) != nil {
 		return nil, Error("UNAVAILABLE", "身份不可读")
