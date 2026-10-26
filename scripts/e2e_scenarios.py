@@ -251,7 +251,8 @@ def platform(s):
     # 夹具在原 UID/RV 条件下去掉旧版本不存在的字段，Operator 的默认关闭契约保持有效。
     original=s.cr()
     if 'serviceMonitor' in original['spec']:
-        s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':original_uid},{'op':'test','path':'/metadata/resourceVersion','value':original['metadata']['resourceVersion']},{'op':'remove','path':'/spec/serviceMonitor'}]))
+        from historical_cleanup import remove_legacy_service_monitor
+        remove_legacy_service_monitor(s,original_uid)
     before_mutations=len(s.mutations(s.capture_proxy()))
     from historical_identity import upgrade_v10
     upgrade_v10(s,missing_ids=[missing['id']])
@@ -499,14 +500,14 @@ def deletion(s):
     kept_uid=json.loads(s.k('create','-f','-',data=kept).stdout)['metadata']['uid']
     s.by('原 CR finalizer 阻塞真实 Foreground 删除；移除后等待原图完全消失')
     i=s.create();s.publish(i);s.runtime(i);original=s.cr();uid=original['metadata']['uid']
-    from historical_cleanup import fixture_finalizers
+    from historical_cleanup import fixture_finalizers, require_fixture_patch
     key=(s.target,'kubestatemetrics','',s.crname)
-    held=fixture_finalizers(s,key,uid,add=('phase1.fixture/hold',))
+    held=require_fixture_patch(s,fixture_finalizers(s,key,uid,add=('phase1.fixture/hold',)),'fixture-hold-add')
     assert held['success'] and held['object'] is not None and 'phase1.fixture/hold' in held['object']['metadata'].get('finalizers',[]),'原UID hold未实际生效'
     op=s.delete(i,False);s.state(op,'DELETION_BLOCKED','DELETION_VERIFYING');assert s.call('GET','/operations/'+op['operationId'])['state']!='SUCCEEDED'
     s.call('POST','/clusters/'+s.cluster['id']+'/unregister',{},status=409);s.call('POST','/clusters/'+s.cluster['id']+'/transfer',{'ownerId':s.owner},status=409)
     # 关键：只对明确RV条件冲突重读原UID，不能因后台status并发更新改为无条件patch。
-    released=fixture_finalizers(s,key,uid,remove=('phase1.fixture/hold',))
+    released=require_fixture_patch(s,fixture_finalizers(s,key,uid,remove=('phase1.fixture/hold',)),'fixture-hold-release')
     assert released['success'] and released['observed'],'原UID hold释放失败或释放前已不存在'
     wait(lambda:s.call('POST','/operations/'+op['operationId']+'/refresh',{}),lambda value:value['state']=='SUCCEEDED',message='前台删除原图未结束')
     assert not s.workloads() and s.k('get','kubestatemetrics',s.crname,check=False).returncode!=0
@@ -526,7 +527,8 @@ def browser(s):
     s.crname='history-'+uuid.uuid4().hex[:10];history_cfg=s.cfg();history_cfg['serviceMonitor']={'enabled':False,'interval':'30s','scrapeTimeout':'10s'};historical_ksm=s.create(history_cfg);s.publish(historical_ksm)
     original=s.cr()
     if 'serviceMonitor' in original['spec']:
-        s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':original['metadata']['uid']},{'op':'test','path':'/metadata/resourceVersion','value':original['metadata']['resourceVersion']},{'op':'remove','path':'/spec/serviceMonitor'}]))
+        from historical_cleanup import remove_legacy_service_monitor
+        remove_legacy_service_monitor(s,original['metadata']['uid'])
     historical_agent=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='history-agent-'+uuid.uuid4().hex[:8])},status=201)
     known_agent=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='history-known-agent-'+uuid.uuid4().hex[:8])},status=201)
     agent_namespace=s.a.prefix+'-browser-agent';s.fixture(agent_namespace,'control')

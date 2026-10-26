@@ -5,7 +5,8 @@ import re
 
 FILES = ('web/tests/phase1.spec.ts', 'web/tests/issue25.ts', 'web/tests/issue29.ts', 'web/tests/issue30.ts')
 STATES = {'Ready', 'NotReady', 'Reconciling', 'Pending', 'Disabled', 'Paused', 'Degraded', 'Unknown',
-          'SUCCEEDED', 'FAILED', 'CHECKING', 'ACCEPTED', 'true', 'false', 'undefined', 'null', '0', '1'}
+          'SUCCEEDED', 'FAILED', 'CHECKING', 'ACCEPTED', 'true', 'false', 'undefined', 'null', '0', '1',
+          '200', '201', '202', '400', '401', '403', '404', '409', '422', '500', '503'}
 
 
 def browser_summary(report, root):
@@ -16,7 +17,8 @@ def browser_summary(report, root):
               for title in re.findall(r"test\.step\(['\"]([^'\"]+)['\"]", line)}
     result = dict(caseId='E2E-10', failures=[])
 
-    def frame(error):
+    def frames(error):
+        found = []
         location = error.get('location', {})
         locations = [location] if isinstance(location, dict) else []
         stack = error.get('stack', '')
@@ -34,13 +36,16 @@ def browser_summary(report, root):
             except (ValueError, OSError):
                 continue
             if name in sources and 1 <= line <= len(sources[name]):
-                return dict(file=name, line=line)
-        return {}
+                frame = dict(file=name, line=line)
+                if frame not in found:
+                    found.append(frame)
+        return found[:8]
 
     def failure(error, title):
         if not isinstance(error, dict):
             return
-        value = dict(step=title, expected='unknown', actual='unknown', **frame(error))
+        locations = frames(error)
+        value = dict(step=title, expected='unknown', actual='unknown', frames=locations, **(locations[0] if locations else {}))
         # 仅解析有可信源码位置的精确 Expected/Received 行；颜色码、消息其余部分永不转发。
         message = error.get('message', '')
         if 'file' in value and isinstance(message, str):

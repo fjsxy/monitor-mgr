@@ -150,6 +150,6 @@ ut-review-fixes: ## #23 review 的运行能力、旧任务收尾、写前重检�
 	mkdir -p .scratch
 	MONITOR_MGR_PYTHON="$(PYTHON)" $(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus='UT-(08|10|11|12|14|18)' -ginkgo.json-report=.scratch/review-fixes.json
 check-review-fixes: ci-cases-check ## review 验收编排语法、Go 原始证据断言编译与浏览器发现，不启动 kind
-	$(PYTHON) -m py_compile scripts/e2e.py scripts/e2e_environment.py scripts/e2e_scenarios.py scripts/acceptance/capture.py scripts/acceptance/transport.py scripts/acceptance/exporter_collection.py scripts/acceptance/historical_cleanup.py scripts/acceptance/historical_cleanup_probe.py scripts/acceptance/fixture_names.py scripts/acceptance/browser_diagnostics.py scripts/acceptance/historical_collection.py scripts/acceptance/cluster_evidence.py scripts/acceptance/ksm_cases.py
+	$(PYTHON) -m py_compile scripts/e2e.py scripts/e2e_environment.py scripts/e2e_scenarios.py scripts/acceptance/capture.py scripts/acceptance/transport.py scripts/acceptance/exporter_collection.py scripts/acceptance/historical_cleanup.py scripts/acceptance/historical_cleanup_probe.py scripts/acceptance/fixture_names.py scripts/acceptance/browser_diagnostics.py scripts/acceptance/historical_collection.py scripts/acceptance/cluster_evidence.py scripts/acceptance/ksm_cases.py scripts/acceptance/historical_exporter.py scripts/acceptance/agent_collection.py
 	$(GO) test ./tests/e2e -run '^$$'
 	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list

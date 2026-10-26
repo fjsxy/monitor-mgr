@@ -70,7 +70,7 @@ class Environment:
         if operation.startswith('kubectl-'):
             from historical_cleanup import kubectl_failure
             reason=kubectl_failure(stderr)
-            diagnostic['errorCode']={'not-found':'KUBERNETES_NOT_FOUND','conflict':'KUBERNETES_CONFLICT','precondition-failed':'KUBERNETES_PRECONDITION_FAILED','forbidden':'KUBERNETES_FORBIDDEN','wait-timeout':'KUBERNETES_WAIT_TIMEOUT'}.get(reason,code)
+            diagnostic['errorCode']={'not-found':'KUBERNETES_NOT_FOUND','conflict':'KUBERNETES_CONFLICT','invalid':'KUBERNETES_INVALID','precondition-failed':'KUBERNETES_PRECONDITION_FAILED','forbidden':'KUBERNETES_FORBIDDEN','wait-timeout':'KUBERNETES_WAIT_TIMEOUT'}.get(reason,code)
         private_json(self.public/'command-failure.json', diagnostic)
         print('外部步骤失败：'+json.dumps(diagnostic), flush=True)
 

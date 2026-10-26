@@ -291,10 +291,10 @@ def creator_collection(s):
     for rule in rules:
         if 'servicemonitors' in rule.get('resources', []): rule['resources'].remove('servicemonitors')
     rules = [r for r in rules if r.get('resources') or r.get('nonResourceURLs')]
-    # 通过公开草稿/发布入口切换选择规则。
+    # 关键：管理员按原ClusterRole UID/RV注入读取故障，随后恢复完整原规则。
     def set_rules(value):
-        current = s.get('clusterrole', role['name'], target='data')
-        s.k('patch', 'clusterrole', role['name'], '--type=json', '-p', json.dumps([{'op': 'test', 'path': '/metadata/uid', 'value': original['metadata']['uid']}, {'op': 'test', 'path': '/metadata/resourceVersion', 'value': current['metadata']['resourceVersion']}, {'op': 'replace', 'path': '/rules', 'value': value}]), target='data')
+        from historical_cleanup import fixture_cluster_role_rules
+        fixture_cluster_role_rules(s,'data',role['name'],original['metadata']['uid'],value)
     set_rules(rules)
     try:
         proof['permissionFailure'] = _source(wait(lambda: s.association_preview(user_instance)['association:ServiceMonitor'], lambda v: v.get('error', '').startswith('TARGET_FORBIDDEN'), timeout=30, message='真实SA的SM读取Forbidden未生效'))

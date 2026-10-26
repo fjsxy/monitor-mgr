@@ -1,11 +1,11 @@
 """UT-18 仅保留三组会使测试结论失真的风险。"""
 import copy
+import os
 import json
 from pathlib import Path
 import sys
 import tempfile
 import subprocess
-import time
 from types import SimpleNamespace
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
@@ -33,6 +33,18 @@ class TrustBoundary(unittest.TestCase):
         self.assertEqual(value['failures'][0]['expected'],'Ready')
         self.assertEqual(value['failures'][0]['actual'],'Reconciling')
         self.assertNotIn(secret,json.dumps(value));self.assertNotIn(str(root),json.dumps(value))
+        # 固定HTTP枚举与同候选多个调用帧可以定位公共helper的真正调用点。
+        error['stack']='at send ('+str(root/'web/tests/issue25.ts')+':8:1)\n at '+secret+' (/private/'+secret+':1:1)\n at caller ('+str(root/'web/tests/issue25.ts')+':25:1)'
+        for expected in ['200','201','202','400','401','403','404','409','422','500','503']:
+            error['message']='Expected: '+expected+'\nReceived: 409'
+            value=browser_summary(report,root)['failures'][0]
+            self.assertEqual(value['expected'],expected)
+            self.assertEqual(value['actual'],'409')
+            self.assertEqual(value['frames'],[dict(file='web/tests/phase1.spec.ts',line=50),dict(file='web/tests/issue25.ts',line=8),dict(file='web/tests/issue25.ts',line=25)])
+            self.assertNotIn(secret,json.dumps(value))
+        error['message']='Expected: 599\nReceived: 999'
+        self.assertEqual(browser_summary(report,root)['failures'][0]['expected'],'unknown')
+        error['stack']=secret
         step['title']=secret;step.pop('steps');error['location']['file']='/private/'+secret
         error['message']='Expected: "'+secret+'"\nReceived: "'+secret+'"'
         value=browser_summary(report,root)
@@ -75,9 +87,11 @@ class TrustBoundary(unittest.TestCase):
             candidate = git('rev-parse','HEAD')
             output = b'x\n'*600000+b'panic: test timed out after 15m0s\n[FAIL] [It] UT-18 PRIVATE_FAILURE_MESSAGE\n'
             result = subprocess.CompletedProcess([],2,output,b'make: *** [Makefile:2: ut] Error 1\n')
-            result.capture_started_at=time.time()
+            result.capture_started_at=1700000000.5
             report=root/'internal/platform/.scratch/ut.json';report.parent.mkdir()
             report.write_text(json.dumps([dict(SpecReports=[dict(LeafNodeType='It',LeafNodeText='UT-18 PRIVATE_TITLE',State='failed',NumAttempts=1,Failure=dict(Message='PRIVATE_FAILURE_MESSAGE',Location=dict(FileName=str(root/'internal/platform/consolidated_test.go'),LineNumber=2,FullStackTrace='PRIVATE_STACK')))])]))
+            # 关键：合成报告明确设置为捕获开始之后，不依赖宿主微秒clock与文件mtime量化。
+            os.utime(report,(1700000001,1700000001))
             value = project_output(result,label='ut',candidate=candidate,private_root=private,root=root)
             self.assertIn('go-test-timeout',value['observedMarkers'])
             self.assertTrue(any(v.get('caseId')=='UT-18' for v in value['testFailures']))
@@ -85,6 +99,15 @@ class TrustBoundary(unittest.TestCase):
             self.assertEqual(value['nativeFailures'][0]['caseId'],'UT-18')
             self.assertEqual(value['nativeFailures'][0]['state'],'failed')
             self.assertNotIn('PRIVATE_',json.dumps(value))
+            # 相同边界可以接受，明确旧mtime必须拒绝；生产来源过滤保持严格。
+            os.utime(report,(1700000000.5,1700000000.5))
+            boundary=project_output(result,label='ut',candidate=candidate,private_root=private,root=root)
+            self.assertEqual(boundary['nativeFailures'][0]['caseId'],'UT-18')
+            os.utime(report,(1700000000,1700000000))
+            old=project_output(result,label='ut',candidate=candidate,private_root=private,root=root)
+            self.assertEqual(old.get('nativeFailures',[]),[])
+            self.assertTrue(old['unknown'])
+
 
     def test_environment_command_diagnostic(self):
         """公开命令失败必须可定位，未知标签和私有输出不能穿越安全边界。"""

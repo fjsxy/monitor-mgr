@@ -102,4 +102,21 @@
 
 | I23-R26.browser-diagnostic / UT-18、E2E-10 | 浏览器失败不再只见泛化外层assert | 构造嵌套test.step失败报告并含私有fixture/响应/token标记、未知标题/路径/状态；投影固定step标题、经源码核实的位置与白名单期望/实际枚举；真实浏览器失败时保存同一摘要 | 安全摘要可定位固定源码/阶段；未知值降为unknown，所有任意原文、绝对路径、凭据不公开；真实断言与预算保持原样 | #23 / #26 / #28 / #29 / #30 |
 
+| I23-R27.rv-conflict / UT-18、E2E-08/09 | 条件写使用可判别的RV冲突 | 对真实K8s1.28仅server dry-run，以metadata.uid/resourceVersion MergePatch核错误RV、正确UID；工具HTTP复现首次409后再读RV并成功 | 真实API错误可区分Conflict；最多3次且每次新GET核原UID；不减弱条件、不重放业务发送 | #23 / #25 / #27 / #29 |
+| I23-R27.uid-mismatch / UT-18 | UID替代与RV并发分开处理 | 真实server dry-run核错误UID且正确RV；工具HTTP在重读时返回同名新UID | 不修改任何验收对象；UID不一致立即停止，不因Invalid或同名继续写 | #23 / #27 / #29 |
+| I23-R27.unchanged / UT-18 | 正常无变化条件写保持合法 | 真实server dry-run用正确UID/RV写相同字段；工具HTTP清除本例hold并保留其它finalizer、之后GET404 | dry-run成功且不改变资源；fixture仅编辑自己字段、原UID最后hold释放后404可退休 | #23 / #27 / #29 |
+| I23-R27.unknown / UT-18 | 未知Invalid/Forbidden不能当RV冲突 | 工具HTTP分别返回泛化422、403、网络错误、连续409；诊断含任意私有标记 | 只有明确409有界重读，其他错误立即失败；公开固定阶段/分类/尝试次数，无原文/路径/凭据 | #23 / #27 / #29 |
+| I23-R27.legacy / UT-18、E2E-08 | 历史fixture移除字段同用原UID/RV条件契约 | 旧CR spec.serviceMonitor存在时仅MergePatch该字段为null；首次RV冲突后核原UID/新RV，其他spec保持 | 不再使用单次JSONPatch test错误猜测；字段移除确认且旧fixture身份/其它spec不被覆盖 | #23 / #29 |
+
+| I23-R28.frames / UT-18、E2E-10 | 浏览器公共helper失败定位实际调用点 | 嵌套错误stack含同候选白名单web测试源码多个有效帧、外部私有路径及任意消息；生成安全摘要 | 保留有界可信调用帧数组；不输出任意路径/原文；固定step定位不变 | #23 / #25 / #26 / #29 / #30 |
+| I23-R28.http / UT-18、E2E-10 | API断言仅公开有限HTTP枚举 | Expected/Received行分别含200/201/202/400/401/403/404/409/422/500/503，以及其它数字/私有标记 | 白名单状态可区分；未知值仍unknown；不导出APIpath、正文或凭据 | #23 / #25 / #26 / #29 / #30 |
+| I23-R29.browser-order / E2E-10 | 既存历史未知任务不得污染归属转移子场景 | 118a本地原Playwright报告确证首次clusters/{id}/transfer期望200实际409，调用帧issue25.ts8→24→phase1.spec.ts66；先完成原I29管理员显式旧SM处理/独立历史release，再执行原I25转移和创建身份保护 | 产品未完成任务guard保持；旧未知发送状态/confirmedUID不伪改；浏览器I25/I29全部原断言完整执行，不直接外部清锁 | #23 / #25 / #29 |
+
+| I23-R30.current-mtime / UT-18 | 合成报告明确绑定当前捕获时间 | 在固定临时Git源码与报告夹具中显式设置capture开始时间及报告mtime为相同边界或其后；含尾部失败 | 当前原生失败可投影；不依赖真实微秒写入时序或宿主文件时间量化 | #23 / #25 / #26 / #27 / #28 / #29 / #30 |
+| I23-R30.old-mtime / UT-18 | 旧报告拒绝仍保持 | 显式将同一路径native报告mtime置于capture开始时间之前，保留其它内容完全相同 | 原生旧报告不进入nativeFailures；生产来源判定不放宽，时间量化情形可重复定位 | #23 / #25 / #26 / #27 / #28 / #29 / #30 |
+
+| I23-R27.rules / UT-18、E2E-03/04 | 实际RBAC故障注入也使用可判别条件写 | 原ClusterRole UID/RV下仅替换既定rules，首次Conflict后新读原UID/RV；恢复完整原规则 | UID替代/未知不写；仅明确Conflict有界重读；不扩大平台SA权限，SM写仍为空 | #23 / #28 / #30 |
+
+| I23-R29.navigation / E2E-10 | I29迁移从明确列表导航起点开始 | 上段large实例删除断言完成后，若其详情drawer仍开则显式关闭，并确认详情已退出，再执行原I29迁移 | 背景刷新列表与原迁移行可交互；不改删除、I29迁移或I25/I30/I26原业务断言 | #23 / #25 / #29 |
+
 执行结果另存 `docs/e2e/issue-23-review-fixes-results.md`；真实集群、浏览器、实际指标与最终覆盖率由集成任务执行并绑定最终 testedCommit。
