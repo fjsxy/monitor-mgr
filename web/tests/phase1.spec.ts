@@ -1,5 +1,6 @@
 import {test, expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
+import {instanceCreatorProtection} from './issue25';
 
 // 唯一浏览器场景只验证关键交互与精确对象身份；字段矩阵归后端 UT。
 test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async ({page, baseURL}, info) => {
@@ -49,5 +50,6 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     await modal.getByRole('button',{name:'确认删除实例',exact:true}).click();const op=await(await accepted).json();
     await expect.poll(async()=>{await page.request.post(`/api/v1/operations/${op.operationId}/refresh`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data:{}});return (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state;},{timeout:90000}).toBe('SUCCEEDED');
   });
+  await instanceCreatorProtection(page,baseURL,fixture,info);
   expect(errors).toEqual([]);await page.screenshot({path:info.outputPath('main-flow.png')});
 });

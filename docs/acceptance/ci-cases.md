@@ -69,4 +69,4 @@
 
 `make ut` 生成 `.scratch/ut-results.json` 和 `.scratch/coverage.out`；`make e2e` 输出 `.scratch/e2e/<runId>/public/results.json`（含阶段/逐例耗时）、`cleanup.json` 和浏览器截图。CI 三组 artifact 为 `e2e-<runId>-<attempt>-<shard>`，完整汇总为 `e2e-complete-<runId>-<attempt>`。原始日志/报告、kubeconfig、数据库、证书、私有源码仅在同 run 的 `.private/`。CI 只上传 public 和 UT 安全摘要。
 
-入口摘要：`Makefile` SHA256=c8e343e6a51a0b5c46ddd4b50aedf1cf833546cc01a98cc662dd78570bbab396；workflow SHA256=058849e76d66092fd8591817dbc653a381c956b988e8c9a3bf97c5b3dc837f30。
+入口摘要：`Makefile` SHA256=dee74235cfbeb482b41f09c2b046eacfc7ed3d7c0a51b8742d6e38fdc7f2ca70；workflow SHA256=058849e76d66092fd8591817dbc653a381c956b988e8c9a3bf97c5b3dc837f30。

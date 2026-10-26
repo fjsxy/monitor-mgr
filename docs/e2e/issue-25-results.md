@@ -22,3 +22,9 @@
 重复入口为 `make ut-instance-identity`，原生局部报告保存在 `internal/platform/.scratch/issue-25.json`；其只选择 UT-07/10/16，不是完整 18 项报告。交付消息列出最终 testedCommit，`.scratch/issue-25-receipt.json` 绑定提交与局部结果。生成一致性、`make vet`、`make ci-cases-check` 及前端类型检查/构建均通过。
 
 环境和完整性：默认 `python3` 缺少锁定的 PyYAML；预检确认后主动中止首轮完整 `make ut`，该轮平台报告为 8 passed、1 interrupted、7 skipped，不能视为完整通过。使用已安装 PyYAML 6.0.3 的隔离 Python 环境单独复核 UT-18 通过，不能与其他报告合并冒充全量通过。完整 18 项、race、产品语句覆盖率 ≥70%、真实集群、浏览器及远端 CI 均以最终集成提交的独立证据为准。
+
+## 真实验收入口补齐
+
+新增 E2E-08 的 I25-K01.unsent/sent 编排与独立 Ginkgo 原始证据断言：暂停真实 KSM SSAR 只读预检后降级发起人；已发送更新丢响应后停用发起人并重建平台，要求原 UID 只读恢复、单一 component 资源成功且 PUT 不重放。新增 E2E-10 的 I25-B01 独立 Playwright helper，覆盖 ADMIN/USER exporter 与 collector 的身份、写控件及只读原因，结束恢复原会话和集群归属。原五列计划输入及预期不变。
+
+make check-issue25-e2e 仅完成 Python 语法、Go 编译与唯一浏览器场景发现，不能计作真实集群或浏览器通过。共享 result.evidence 及候选 SHA 环境由 #28 接入，最终执行仍以冻结集成提交的完整 make e2e 为准。
