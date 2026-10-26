@@ -96,13 +96,17 @@ struct CreateInstanceRequest { 1: required string clusterId, 2: required string 
 struct SaveDraftRequest { 1: required string id, 2: required i64 expectedDraftRevision, 3: optional KSMConfiguration ksm, 4: optional AgentConfiguration agent }
 struct ConfigurationDraft { 1: required i64 revision, 2: optional KSMConfiguration ksm, 3: required string yaml, 4: optional AgentConfiguration agent }
 struct InstanceRuntime { 1: required string summary, 2: required string desiredState, 3: required string deploymentMode, 4: optional i32 availablePods, 5: optional i32 desiredPods, 6: required string lastSuccessAt, 7: required string error, 8: required string observedAt, 9: optional i32 shards, 10: optional bool paused }
+// 管理权限确认独立保存，不改变历史创建事实。
+struct InstanceManagementConfirmation { 1: required string actorId, 2: required string confirmedAt, 3: required bool allowClusterManagers }
+struct ConfirmInstanceManagementRequest { 1: required string id, 2: required bool allowClusterManagers }
 struct ObservationInstance {
  1: required string id, 2: required string clusterId, 3: required string name, 4: required string targetNamespace,
  5: required string component, 6: required string type, 7: required bool readOnly, 8: required string uid,
  9: required string lifecycle, 10: required string currentVersionId, 11: required string activityAt, 12: optional InstanceRuntime runtime,
  13: required string ownership, 14: optional string yaml, 15: optional string crNamespace, 16: optional string scope, 17: optional list<SourceObservation> sources,
  // 创建身份由认证用户固定，当前管理权限另行投影；客户端创建与编辑请求不接受这些字段。
- 18: required string creatorUserId, 19: required string creatorRole, 20: required bool creatorIdentityKnown, 21: required bool canManage, 22: required string readOnlyReason
+ 18: required string creatorUserId, 19: required string creatorRole, 20: required bool creatorIdentityKnown, 21: required bool canManage, 22: required string readOnlyReason,
+ 23: optional InstanceManagementConfirmation managementConfirmation
 }
 struct InstancesResult { 1: required list<ObservationInstance> instances }
 // 工作台查询以完整授权集合统计并在服务端过滤/分页；活动序号保持数据库内部i64。
@@ -137,6 +141,7 @@ service ControlService {
  QueryInstancesResult QueryInstances(1: RequestContext ctx, 2: QueryInstancesRequest request) throws (1: APIError error)
  InstancesResult ListInstances(1: RequestContext ctx, 2: ClusterID request) throws (1: APIError error)
  ObservationInstance GetInstance(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
+ ObservationInstance ConfirmInstanceManagement(1: RequestContext ctx, 2: ConfirmInstanceManagementRequest request) throws (1: APIError error)
  ConfigurationDraft GetDraft(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)
  ConfigurationDraft SaveDraft(1: RequestContext ctx, 2: SaveDraftRequest request) throws (1: APIError error)
  ConfigurationDraft CopyTemplate(1: RequestContext ctx, 2: InstanceID request) throws (1: APIError error)

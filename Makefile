@@ -90,3 +90,9 @@ test-issue27: ## #27 单 CR、旧 SM 只读、冻结身份、删除与持久化 
 .PHONY: ut-instance-identity
 ut-instance-identity: ## #25 实例创建身份、直接 RPC 与 worker 授权局部行为回归
 	$(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus="UT-07|UT-10|UT-16" -ginkgo.json-report=.scratch/issue-25.json
+
+.PHONY: ut-historical-identity
+ut-historical-identity: ## #26 历史身份迁移、管理员确认与 worker 撤销局部回归
+	mkdir -p .scratch
+	$(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus="UT-07|UT-10|UT-16" -ginkgo.json-report=.scratch/issue-26.json
+	$(PYTHON) -m py_compile scripts/acceptance/historical_identity.py scripts/e2e_scenarios.py

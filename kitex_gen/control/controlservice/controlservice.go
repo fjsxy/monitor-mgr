@@ -90,6 +90,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"ConfirmInstanceManagement": kitex.NewMethodInfo(
+		confirmInstanceManagementHandler,
+		newControlServiceConfirmInstanceManagementArgs,
+		newControlServiceConfirmInstanceManagementResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"GetDraft": kitex.NewMethodInfo(
 		getDraftHandler,
 		newControlServiceGetDraftArgs,
@@ -670,6 +677,30 @@ func newControlServiceGetInstanceArgs() interface{} {
 
 func newControlServiceGetInstanceResult() interface{} {
 	return control.NewControlServiceGetInstanceResult()
+}
+
+func confirmInstanceManagementHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceConfirmInstanceManagementArgs)
+	realResult := result.(*control.ControlServiceConfirmInstanceManagementResult)
+	success, err := handler.(control.ControlService).ConfirmInstanceManagement(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceConfirmInstanceManagementArgs() interface{} {
+	return control.NewControlServiceConfirmInstanceManagementArgs()
+}
+
+func newControlServiceConfirmInstanceManagementResult() interface{} {
+	return control.NewControlServiceConfirmInstanceManagementResult()
 }
 
 func getDraftHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -1702,6 +1733,21 @@ func (p *kClient) GetInstance(ctx context.Context, ctx_ *control.RequestContext,
 	_args.Request = request
 	var _result control.ControlServiceGetInstanceResult
 	if err = p.c.Call(ctx, "GetInstance", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ConfirmInstanceManagement(ctx context.Context, ctx_ *control.RequestContext, request *control.ConfirmInstanceManagementRequest) (r *control.ObservationInstance, err error) {
+	var _args control.ControlServiceConfirmInstanceManagementArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceConfirmInstanceManagementResult
+	if err = p.c.Call(ctx, "ConfirmInstanceManagement", &_args, &_result); err != nil {
 		return
 	}
 	switch {
