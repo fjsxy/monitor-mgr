@@ -77,6 +77,10 @@ func migrate(db *sql.DB, dataDir string, key []byte) error {
 			return errors.New("数据库版本不支持，保留原库并停止启动")
 		}
 	}
+	// 关键：旧 v13 确认表先检查形状，再进入任何 DDL；失败不能推进版本标记。
+	if err = validateLegacyManagementSchema(ctx, conn); err != nil {
+		return err
+	}
 	if current < schemaVersion {
 		var tables int
 		if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`).Scan(&tables); err != nil {
@@ -185,5 +189,5 @@ func migrate(db *sql.DB, dataDir string, key []byte) error {
 		}
 		rows.Close()
 	}
-	return validateLegacyManagementSchema(ctx, conn)
+	return nil
 }
