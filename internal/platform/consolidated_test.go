@@ -44,6 +44,8 @@ var _ = ginkgo.It("UT-07 实例身份与不可变字段", func() {
 	checkTestHistoricalManagementDirectRPC(t)
 	checkTestAdminInstanceWriteProtection(t)
 	checkTestCollectorAdminProtection(t)
+	checkAgentCreatorAssociation(t)
+	checkAgentUnknownCreatorCustom(t)
 	checkTestInstanceCreatorRoleSnapshot(t)
 	checkTestK10DraftNameAndRevision(t)
 	checkTestAgentTypedDraftIdentityAndDefaults(t)
@@ -61,6 +63,7 @@ var _ = ginkgo.It("UT-08 保存预览与版本冻结", func() {
 	checkTestP02PublicationFreezesSourceAndP03Idempotency(t)
 	checkTestP04DraftAndTargetPreviewRaces(t)
 	checkTestAgentDraftSourceIsolation(t)
+	checkAgentCreatorMatching(t)
 })
 
 var _ = ginkgo.It("UT-09 幂等与受理事务", func() {

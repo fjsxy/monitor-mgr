@@ -1,6 +1,6 @@
 # #30 Agent 创建用户关联与真实采集测试计划
 
-2026-10-26 修订：从新集成基线28535ad实施，保留原 I30 稳定ID并展开必选输入。公开测试边界已在父规格/实施任务确认：HTTP → 真实 Kitex → SQLite/worker，补直接RPC、受控TLS目标、真实集群和唯一Playwright test。配套SM由锁定RC4 Operator创建，平台只写父CR意图。计划不表示执行通过；旧PR31结果不继承。
+2026-10-26 修订 2（将既有必选权限动词和浏览器 namespace 输入独立列出）：从新集成基线28535ad实施，保留原 I30 稳定ID并展开必选输入。公开测试边界已在父规格/实施任务确认：HTTP → 真实 Kitex → SQLite/worker，补直接RPC、受控TLS目标、真实集群和唯一Playwright test。配套SM由锁定RC4 Operator创建，平台只写父CR意图。计划不表示执行通过；旧PR31结果不继承。
 
 | 用例编号 | 验证目的 | 验证步骤 | 预期结果 | 所属 Issue 编号 |
 | --- | --- | --- | --- | --- |
@@ -23,7 +23,12 @@
 | I30-U02.read-failure | 读取失败不是空成功 | TLS目标真实返回500/连接失败 | TARGET_ERROR类明确，preview无lastSuccessAt；运行历史按原规则保留 | #30 |
 | I30-U02.forbidden | 权限不足独立 | TLS目标SM list 403 | TARGET_FORBIDDEN类明确，与读取失败原因不同 | #30 |
 | I30-U02.operator-scope | Operator可见范围独立 | 配置匹配namespace但Operator实际args排除该namespace | 明确范围受限，不伪装零匹配或采集成功 | #30 |
-| I30-U02.operator-permission | Operator/Agent SA读取权限独立 | 各自SAR拒绝匹配SM或目标发现资源get/list/watch | 对应依赖原因可判定，不能以平台可读替代实际运行SA权限 | #30 |
+| I30-U02.operator-permission.operator-get | operator SA 的 get 权限独立 | TLS目标对该实际SA的servicemonitors/get SAR拒绝，其他权限允许；经公开关联/发布预览 | TARGET_FORBIDDEN且明确资源/动词；不把平台可读当作运行SA有权 | #30 |
+| I30-U02.operator-permission.operator-list | operator SA 的 list 权限独立 | TLS目标对该实际SA的servicemonitors/list SAR拒绝，其他权限允许；经公开关联/发布预览 | TARGET_FORBIDDEN且明确资源/动词；不把平台可读当作运行SA有权 | #30 |
+| I30-U02.operator-permission.operator-watch | operator SA 的 watch 权限独立 | TLS目标对该实际SA的servicemonitors/watch SAR拒绝，其他权限允许；经公开关联/发布预览 | TARGET_FORBIDDEN且明确资源/动词；不把平台可读当作运行SA有权 | #30 |
+| I30-U02.operator-permission.agent-get | agent SA 的 get 权限独立 | TLS目标对该实际SA的pods/get SAR拒绝，其他权限允许；经公开关联/发布预览 | TARGET_FORBIDDEN且明确资源/动词；不把平台可读当作运行SA有权 | #30 |
+| I30-U02.operator-permission.agent-list | agent SA 的 list 权限独立 | TLS目标对该实际SA的pods/list SAR拒绝，其他权限允许；经公开关联/发布预览 | TARGET_FORBIDDEN且明确资源/动词；不把平台可读当作运行SA有权 | #30 |
+| I30-U02.operator-permission.agent-watch | agent SA 的 watch 权限独立 | TLS目标对该实际SA的pods/watch SAR拒绝，其他权限允许；经公开关联/发布预览 | TARGET_FORBIDDEN且明确资源/动词；不把平台可读当作运行SA有权 | #30 |
 | I30-U03.http | label不绕过管理员实例保护 | 普通owner HTTP给管理员Agent保存相同user label | FORBIDDEN、草稿/版本不变、零目标写 | #30 |
 | I30-U03.rpc | 直接RPC也保护 | 同一输入经真实Kitex SaveDraft | FORBIDDEN；label不参与平台授权 | #30 |
 | I30-U03.known-user-unknown-role | 可靠user与角色未知分开 | 独立旧库恢复可靠user/未知role，管理员读取；明确管理确认后普通owner自定义保存 | 可靠user不丢；权限独立，未确认普通owner只读；允许后按既有规则保存 | #30 |
@@ -42,7 +47,8 @@
 | I30-K03.read-failure | 真路径读取故障 | 独占故障接口对关联只读路径返回失败，保留真实受限上游身份并恢复 | 公开来源读失败、无成功时间，与Forbidden不同；主采集证据不伪报成功 | #30 |
 | I30-K03.forbidden | 真实受限凭据拒绝 | 用真实SA/token切换到缺SM list权限，实际SSR/SSAR及预览后恢复原受限SA | 真实RBAC拒绝，错误明确，不合成为零匹配；恢复不抬高到admin | #30 |
 | I30-B01.quick | 快捷固定目标与保存重开 | 唯一Playwright流程user Agent默认None/Own，点击快捷、保存重开、匹配/下发预览 | 展示具体creatorUserId与当前target；原生user标签保存，None只在明确点击后改变 | #30 |
-| I30-B01.custom | namespace/表达式主流程 | 快捷后独立切namespace Labels/All、编辑自定义表达式并保存 | 原生字段保留，预览状态可见；快捷保留其他labels/expressions | #30 |
+| I30-B01.custom.all | namespace All 主流程 | 快捷后独立切namespace All、保存重开 | 原生 namespaceSelector={}，object user label保持 | #30 |
+| I30-B01.custom.labels | namespace Labels/表达式主流程 | 从All切namespace Labels、编辑DoesNotExist表达式并保存；匹配及下发预览 | 原生字段保留，预览状态可见；快捷保留其他labels/expressions | #30 |
 | I30-B01.admin-edit | 管理员编辑他人Agent | 管理员登录修改user Agent CPU再重开 | 当前target仍原user，namespace/表达式不变 | #30 |
 | I30-B02.known | 可靠user但角色未知 | 当前管理员打开历史可靠user/未知role Agent | 快捷可用目标为可靠user，角色未知事实保留；普通用户权限单独受保护 | #30 |
 | I30-B02.unknown | unknown与自定义 | 管理员或已允许的owner打开未知creator Agent，尝试快捷再保存自定义team规则 | 明确原因/快捷disabled，无fallback；有权时自定义可保存 | #30 |

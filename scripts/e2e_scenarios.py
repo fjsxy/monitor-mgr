@@ -365,6 +365,8 @@ def agent(s):
     s.k('patch','secret','agent-auth','-n',s.targetns,'--type=json','-p','[{"op":"remove","path":"/data/credentials"}]',target='data')
     s.preview(i,status=422)
     s.prepare('-control','control','agent');j=s.create();s.publish(j);s.runtime(j)
+    from agent_collection import creator_collection
+    creator_collection(s)
 
 
 def storage(s):
@@ -495,10 +497,12 @@ def browser(s):
     if 'serviceMonitor' in original['spec']:
         s.k('patch','kubestatemetrics',s.crname,'--type=json','-p',json.dumps([{'op':'test','path':'/metadata/uid','value':original['metadata']['uid']},{'op':'test','path':'/metadata/resourceVersion','value':original['metadata']['resourceVersion']},{'op':'remove','path':'/spec/serviceMonitor'}]))
     historical_agent=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='history-agent-'+uuid.uuid4().hex[:8])},status=201)
+    known_agent=s.call('POST','/clusters/'+s.cluster['id']+'/instances',{'component':'Prometheus Agent','agent':AgentSuite.cfg(s,name='history-known-agent-'+uuid.uuid4().hex[:8])},status=201)
+    agent_namespace=s.a.prefix+'-browser-agent';s.fixture(agent_namespace,'control')
     s.crname=large_name
     from historical_identity import upgrade_v10
     upgrade_v10(s,missing_ids=[historical_agent['id']],draft_revisions={i['id']:9007199254740993})
-    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,largeId=i['id'],largeName=i['name'],historical=[historical_ksm,historical_agent])));os.chmod(fixture,0o600)
+    fixture=s.out/'browser-fixture.json';fixture.write_text(json.dumps(dict(password=s.password,clusterId=s.cluster['id'],namespace=s.targetns,largeId=i['id'],largeName=i['name'],historical=[historical_ksm,historical_agent],issue30KnownAgent=known_agent,agentNamespace=agent_namespace,runId=s.env.run_id)));os.chmod(fixture,0o600)
     s.by('真实 Chromium 完成表单保存、精确大 revision、YAML/diff、发布、工作台与删除')
     out=s.out/'playwright';report_path=s.out/'playwright.json';env=dict(os.environ,BASE_URL=s.base,PHASE1_E2E_FIXTURE=str(fixture),PLAYWRIGHT_JSON_OUTPUT_FILE=str(report_path))
     r=s.env.processes.run(['npm','--prefix','web','run','test:e2e','--','tests/phase1.spec.ts','--reporter=json','--output',str(out)],label='playwright-main-flow',cwd=ROOT,env=env,timeout=240)

@@ -12,7 +12,7 @@ def audit_configuration(policy_file):
     policy = dict(apiVersion='audit.k8s.io/v1', kind='Policy', omitStages=['ResponseStarted'], rules=[
         dict(level='Metadata', resources=[
             dict(group='monitoring.fjsxy.github.io', resources=['kubestatemetrics']),
-            dict(group='monitoring.coreos.com', resources=['servicemonitors'])]),
+            dict(group='monitoring.coreos.com', resources=['servicemonitors', 'prometheusagents'])]),
         dict(level='None')])
     patch = dict(kind='ClusterConfiguration', apiServer=dict(
         # 关键：同步审计不借异步缓冲掩盖请求，短生命周期日志不轮转以保留完整计数。
