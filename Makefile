@@ -82,3 +82,7 @@ ci-builder: ## CI 创建本 run 独占、固定版本的 BuildKit；须指定 BU
 	$(PYTHON) scripts/ci-builder.py create --name "$(BUILDX_BUILDER)"
 ci-builder-cleanup: ## 按记录的原容器 ID 清理本 run 构建器
 	$(PYTHON) scripts/ci-builder.py cleanup --name "$(BUILDX_BUILDER)"
+
+.PHONY: test-issue27
+test-issue27: ## #27 单 CR、旧 SM 只读、冻结身份、删除与持久化 Ginkgo 回归，不启动 kind
+	$(GO) test -race -count=1 -timeout 5m ./internal/platform -args -ginkgo.focus='UT-(07|10|11|12|13|16)' -ginkgo.no-color

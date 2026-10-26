@@ -3,7 +3,6 @@ package control
 
 import (
 	"context"
-	"encoding/json"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"sync"
 	"time"
@@ -52,7 +51,7 @@ func (s *Store) targetForRecovery(ctx context.Context, cluster string) (*Target,
 
 // launchRecovery 定期读取待确认结果，不重新进入派发队列。
 func (s *Store) launchRecovery(ctx context.Context) {
-	rows, e := s.DB.QueryContext(ctx, `SELECT id FROM operations WHERE action IN ('PUBLISH','DELETE') AND state IN ('RESULT_UNCERTAIN','DELETION_VERIFYING','DELETION_BLOCKED')`)
+	rows, e := s.DB.QueryContext(ctx, `SELECT id FROM operations WHERE action IN ('PUBLISH','DELETE') AND (state IN ('RESULT_UNCERTAIN','DELETION_VERIFYING','DELETION_BLOCKED') OR (state NOT IN ('SUCCEEDED','CANCELLED') AND id IN (SELECT operation_id FROM operation_resources WHERE resource_key<>'component')))`)
 	if e != nil {
 		return
 	}
@@ -103,6 +102,10 @@ func (s *Store) verifyLifecycle(ctx context.Context, id string) {
 	}
 	s.enrichPublicationOperation(ctx, s.DB, o)
 	s.enrichLifecycle(ctx, s.DB, o)
+	if historicalResourceOperation(ctx, s.DB, id) {
+		s.verifyHistoricalResources(ctx, o)
+		return
+	}
 	if o.State != "RESULT_UNCERTAIN" && o.State != "DELETION_VERIFYING" && o.State != "DELETION_BLOCKED" {
 		return
 	}
@@ -110,6 +113,12 @@ func (s *Store) verifyLifecycle(ctx context.Context, id string) {
 	if e != nil {
 		return
 	}
+	resource, e := executablePrimaryResource(ctx, s.DB, id, i)
+	if e != nil {
+		s.noteLifecycle(ctx, o, e)
+		return
+	}
+	i = resourceInstance(i, resource, resource.originalUID)
 	t, _, e := s.targetForRecovery(ctx, o.ClusterId)
 	if e != nil {
 		s.noteLifecycle(ctx, o, e)
@@ -133,14 +142,7 @@ func (s *Store) verifyLifecycle(ctx context.Context, id string) {
 		s.noteLifecycle(ctx, o, e)
 		return
 	}
-	var spec []byte
-	if s.DB.QueryRowContext(ctx, `SELECT effective_spec FROM publication_versions WHERE id=? AND instance_id=?`, o.GetVersionId(), i.Id).Scan(&spec) != nil {
-		return
-	}
-	var desired map[string]any
-	if json.Unmarshal(spec, &desired) != nil {
-		return
-	}
+	desired := objectMap(resource.document, "spec")
 	if componentFor(i.Component).normalizeSpec(objectMap(cr, "spec")) != componentFor(i.Component).normalizeSpec(desired) {
 		s.noteLifecycle(ctx, o, Error("CONFLICT", "原 UID 存在，配置尚不能确认；仅继续读取，不重放"))
 		return
