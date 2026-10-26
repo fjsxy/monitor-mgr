@@ -120,3 +120,14 @@ check-issue29-e2e: ## #29 真实编排语法、Go 原始证据断言编译与唯
 	$(PYTHON) -m py_compile scripts/acceptance/historical_exporter.py scripts/acceptance/historical_collection.py scripts/acceptance/historical_cleanup.py scripts/acceptance/historical_cleanup_probe.py scripts/acceptance/historical_identity.py scripts/e2e_scenarios.py
 	$(GO) test ./tests/e2e -run '^$$'
 	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list
+
+.PHONY: ut-agent-collection check-issue30-e2e receiver-chart-check
+ut-agent-collection: ## #30 固定创建用户、原生selector和独立权限的Ginkgo局部回归
+	$(GO) test -count=1 -timeout 8m ./internal/platform -args -ginkgo.no-color -ginkgo.focus='UT-07|UT-08|UT-14|UT-17' -ginkgo.json-report=.scratch/issue-30.json
+check-issue30-e2e: ## #30 真实采集编排语法、模块加载、Go证据编译及唯一浏览器发现；不创建kind
+	$(PYTHON) -m py_compile scripts/acceptance/agent_collection.py scripts/acceptance/ksm_proxy.py scripts/acceptance/fixtures/fault_proxy.py scripts/e2e_scenarios.py
+	PYTHONPATH=scripts:scripts/acceptance $(PYTHON) -c 'import agent_collection'
+	$(GO) test ./tests/e2e -run '^$$'
+	$(NPM) --prefix web run test:e2e -- tests/phase1.spec.ts --list
+receiver-chart-check: ## 校验独占空scrape receiver的Helm声明；镜像锁定与现有Prometheus一致
+	$(HELM) lint charts/test-receiver --set-string 'image=quay.io/prometheus/prometheus@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3' --set-string runId=mm-issue30-static

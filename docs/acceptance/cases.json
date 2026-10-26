@@ -53,17 +53,17 @@
       "id": "UT-07",
       "type": "ut",
       "purpose": "实例身份与不可变字段",
-      "steps": "同名 KSM 放到不同集群；同名 Agent 放到不同 namespace；第一次成功发布后尝试更改 name、namespace、storage mode、capacity；覆盖派生名称长度上界与一个旧库非法名称。 通过公开 HTTP 和直接 RPC 验证 I25-01–08/12：exporter/collector 固定创建用户和角色、伪造字段拒绝、管理员实例各写入口受保护、角色升降与归属转移不改写身份。",
-      "expected": "实例 ID 独立；固定身份和存储模式/容量变更返回冲突；Worker 不发布旧库中的非法派生名称；外部资源不能变成平台所有。 当前管理员可管理；普通用户可读管理员实例但不能写；canManage/readOnlyReason 与纳管 readOnly 分开，USER 创建实例沿用集群权限。",
-      "issues": "#16、#18、#20"
+      "steps": "同名 KSM 放到不同集群；同名 Agent 放到不同 namespace；第一次成功发布后尝试更改 name、namespace、storage mode、capacity；覆盖派生名称长度上界与一个旧库非法名称。 通过公开 HTTP 和直接 RPC 验证 I25-01–08/12：exporter/collector 固定创建用户和角色、伪造字段拒绝、管理员实例各写入口受保护、角色升降与归属转移不改写身份。 I30-U01/U02/U03经HTTP→真实Kitex→SQLite/worker独立验证固定creator、None/Own、原生All/Labels/四类表达式、跨namespace/Operator范围、独立权限与未知creator自定义规则。",
+      "expected": "实例 ID 独立；固定身份和存储模式/容量变更返回冲突；Worker 不发布旧库中的非法派生名称；外部资源不能变成平台所有。 当前管理员可管理；普通用户可读管理员实例但不能写；canManage/readOnlyReason 与纳管 readOnly 分开，USER 创建实例沿用集群权限。 管理员编辑/归属和角色变化不改已存关联；unknown不补造；零匹配、读失败与Forbidden分开。",
+      "issues": "#16、#18、#20、#30"
     },
     {
       "id": "UT-08",
       "type": "ut",
       "purpose": "保存、预览与版本冻结",
-      "steps": "保存草稿并读回；生成预览后分别修改草稿和目标配置；发布 v1 后编辑成 v2，再读 v1 来源；关闭高级选项后查看有效 CR。 I28-U01/U02/U03/R01/R02/R05：新草稿默认采集且零写、父 CR 单资源冻结与creator标签；缺失/错误 served schema、enabled默认值、status enum/UID和非法duration、任意labels逐项输入。",
-      "expected": "仅保存/预览不产生 Kubernetes mutation；过期预览拒绝发布；发布版本和来源快照不被新草稿改写；未启用字段不进入有效 CR。 只冻结父spec.serviceMonitor，不生成独立SM；旧schema在写前拒绝，固定creator投影且参数契约严格。",
-      "issues": "#17、#19、#28"
+      "steps": "保存草稿并读回；生成预览后分别修改草稿和目标配置；发布 v1 后编辑成 v2，再读 v1 来源；关闭高级选项后查看有效 CR。 I28-U01/U02/U03/R01/R02/R05：新草稿默认采集且零写、父 CR 单资源冻结与creator标签；缺失/错误 served schema、enabled默认值、status enum/UID和非法duration、任意labels逐项输入。 I30-U01/U02/U03经HTTP→真实Kitex→SQLite/worker独立验证固定creator、None/Own、原生All/Labels/四类表达式、跨namespace/Operator范围、独立权限与未知creator自定义规则。",
+      "expected": "仅保存/预览不产生 Kubernetes mutation；过期预览拒绝发布；发布版本和来源快照不被新草稿改写；未启用字段不进入有效 CR。 只冻结父spec.serviceMonitor，不生成独立SM；旧schema在写前拒绝，固定creator投影且参数契约严格。 管理员编辑/归属和角色变化不改已存关联；unknown不补造；零匹配、读失败与Forbidden分开。",
+      "issues": "#17、#19、#28、#30"
     },
     {
       "id": "UT-09",
@@ -109,9 +109,9 @@
       "id": "UT-14",
       "type": "ut",
       "purpose": "状态与工作台查询",
-      "steps": "用同一批对象覆盖缺 status、旧 generation、部分 Ready、合法 0/0；独立推进 CR/Pod/PVC/关联来源时钟至 30 秒前后；某页读取失败；测试名称/类型/组件 AND 筛选和活动排序。 I28-U04/U03.foreign/R03：按完整Operator status引用核子对象、parent/controller UID；子UID重建、旧generation、Degraded、Forbidden及错误引用。",
-      "expected": "未知、挂起、未就绪、过期分别可判；403/超时不是空集；一来源成功不刷新其他来源；筛选、统计、最近操作排序符合后端契约，轮询不篡改活动顺序。 配套与CR发布独立；合法子重建不改父身份，错误/未知/未收敛/历史/过期分开；不按labels认领。",
-      "issues": "#19、#28"
+      "steps": "用同一批对象覆盖缺 status、旧 generation、部分 Ready、合法 0/0；独立推进 CR/Pod/PVC/关联来源时钟至 30 秒前后；某页读取失败；测试名称/类型/组件 AND 筛选和活动排序。 I28-U04/U03.foreign/R03：按完整Operator status引用核子对象、parent/controller UID；子UID重建、旧generation、Degraded、Forbidden及错误引用。 I30-U01/U02/U03经HTTP→真实Kitex→SQLite/worker独立验证固定creator、None/Own、原生All/Labels/四类表达式、跨namespace/Operator范围、独立权限与未知creator自定义规则。",
+      "expected": "未知、挂起、未就绪、过期分别可判；403/超时不是空集；一来源成功不刷新其他来源；筛选、统计、最近操作排序符合后端契约，轮询不篡改活动顺序。 配套与CR发布独立；合法子重建不改父身份，错误/未知/未收敛/历史/过期分开；不按labels认领。 管理员编辑/归属和角色变化不改已存关联；unknown不补造；零匹配、读失败与Forbidden分开。",
+      "issues": "#19、#28、#30"
     },
     {
       "id": "UT-15",
@@ -133,9 +133,9 @@
       "id": "UT-17",
       "type": "ut",
       "purpose": "HTTP/Kitex 协议契约",
-      "steps": "仅选一条受保护 RPC 验证未认证拒绝；阻断真实 Kitex 连接再请求 HTTP；测试未知字段、optional/空对象/空集合、非法枚举；让 revision 从 9007199254740992 增至 9007199254740993。 I28-U01/R01/R02 的采集字段通过真实HTTP/Kitex往返，并拒绝客户端labels。",
-      "expected": "HTTP 不能旁路 RPC 或弱化校验，真实 RPC 不可用时 /readyz 失败；未知字段不被幂等吞掉；大 revision 在 HTTP 为精确字符串、RPC 保持 i64；错误结构稳定。不再把全部业务再走一遍直接 RPC。 可选字段保持旧冻结缺省语义，新建缺省只在Create生效。",
-      "issues": "#14、#16、#18、#19、#28"
+      "steps": "仅选一条受保护 RPC 验证未认证拒绝；阻断真实 Kitex 连接再请求 HTTP；测试未知字段、optional/空对象/空集合、非法枚举；让 revision 从 9007199254740992 增至 9007199254740993。 I28-U01/R01/R02 的采集字段通过真实HTTP/Kitex往返，并拒绝客户端labels。 I30-U01/U02/U03经HTTP→真实Kitex→SQLite/worker独立验证固定creator、None/Own、原生All/Labels/四类表达式、跨namespace/Operator范围、独立权限与未知creator自定义规则。",
+      "expected": "HTTP 不能旁路 RPC 或弱化校验，真实 RPC 不可用时 /readyz 失败；未知字段不被幂等吞掉；大 revision 在 HTTP 为精确字符串、RPC 保持 i64；错误结构稳定。不再把全部业务再走一遍直接 RPC。 可选字段保持旧冻结缺省语义，新建缺省只在Create生效。 管理员编辑/归属和角色变化不改已存关联；unknown不补造；零匹配、读失败与Forbidden分开。",
+      "issues": "#14、#16、#18、#19、#28、#30"
     },
     {
       "id": "UT-18",
@@ -173,9 +173,9 @@
       "id": "E2E-04",
       "type": "e2e",
       "purpose": "Agent 采集关联与发送配置",
-      "steps": "HTTP 在 data 发布默认 Agent，核验默认 None/Own；再创建四类采集 CR 并一次发布各自的代表规则；增删一个匹配对象/namespace；同一 Agent 的多个 remoteWrite 分别引用 None、BasicAuth、Bearer 和 TLS；control 部署一个默认 Agent；删除一个被引用 key 作拒绝输入。",
-      "expected": "两个集群均有真实 StatefulSet；默认资源为 CPU 200m、memory request 512Mi/limit 1Gi，PVC 1Gi；四种资源都被实际识别，生成配置与 Secret 引用正确；缺依赖阻止写入；不据此宣称下游收到样本。",
-      "issues": "#18"
+      "steps": "HTTP 在 data 发布默认 Agent，核验默认 None/Own；再创建四类采集 CR 并一次发布各自的代表规则；增删一个匹配对象/namespace；同一 Agent 的多个 remoteWrite 分别引用 None、BasicAuth、Bearer 和 TLS；control 部署一个默认 Agent；删除一个被引用 key 作拒绝输入。 I30-K01/K02/K03使用真实受限平台SA发布三exporter/两Agent，配套SM取RC4 statusref；Helm独占空scrape receiver接收remote_write；对全部实际Endpoints×被报告Pod作正样本、timestamp、双向负查询和精确全集比较，动态新增不重发Agent。",
+      "expected": "两个集群均有真实 StatefulSet；默认资源为 CPU 200m、memory request 512Mi/limit 1Gi，PVC 1Gi；四种资源都被实际识别，生成配置与 Secret 引用正确；缺依赖阻止写入；不据此宣称下游收到样本。 Ginkgo验证父/SM owner UID、实际进程配置、锁定镜像来源和真实样本；无额外job/target，动态AgentUID/版本/spec保持；平台SM所有写尝试0，有父写/SM读/Operator创建正控，空或缺proof不通过。",
+      "issues": "#18、#30"
     },
     {
       "id": "E2E-05",
@@ -221,9 +221,9 @@
       "id": "E2E-10",
       "type": "e2e",
       "purpose": "唯一浏览器主流程",
-      "steps": "Playwright 登录→用表单创建一个 KSM 草稿→编辑测试夹具预置的 revision=9007199254740993 草稿→查看只读 YAML/diff→明确发布→工作台查看状态/版本→明确删除；前后通过后端读回确认操作对象与版本；不增加产品测试接口。 I28-B01：表单保存采集开关、interval/timeout，查看只读配套状态与不可变父CR来源。",
-      "expected": "关键控件可操作、确认后才发发布/删除；显示正确实例和状态，大 revision 经浏览器操作后不舍入；没有前端控制台致命错误；不逐字段/逐模式重复验证后端规则。 配套收敛/故障与发布分别显示，无SM独立发布或修复按钮。",
-      "issues": "#14、#16、#19、#28"
+      "steps": "Playwright 登录→用表单创建一个 KSM 草稿→编辑测试夹具预置的 revision=9007199254740993 草稿→查看只读 YAML/diff→明确发布→工作台查看状态/版本→明确删除；前后通过后端读回确认操作对象与版本；不增加产品测试接口。 I28-B01：表单保存采集开关、interval/timeout，查看只读配套状态与不可变父CR来源。 I30-B01/B02在I26注销前完成快捷/自定义/namespace/管理员编辑/历史unknown与保护交互。",
+      "expected": "关键控件可操作、确认后才发发布/删除；显示正确实例和状态，大 revision 经浏览器操作后不舍入；没有前端控制台致命错误；不逐字段/逐模式重复验证后端规则。 配套收敛/故障与发布分别显示，无SM独立发布或修复按钮。 默认None/Own保持；明确点击固定creator；unknown禁快捷仍可按权限编辑custom；管理员编辑不重绑目标。",
+      "issues": "#14、#16、#19、#28、#30"
     }
   ],
   "omitted": [

@@ -2,6 +2,7 @@ import {test, expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {instanceCreatorProtection} from './issue25';
 import {historicalExporterMigration} from './issue29';
+import {agentCreatorAssociation} from './issue30';
 
 // 唯一浏览器场景只验证关键交互与精确对象身份；字段矩阵归后端 UT。
 test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async ({page, baseURL}, info) => {
@@ -61,6 +62,7 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
   });
   await instanceCreatorProtection(page,baseURL,fixture,info);
   await test.step('I29-B01 历史采集迁移独立确认与新父 CR 发布',()=>historicalExporterMigration(page,baseURL,fixture,info));
+  await agentCreatorAssociation(page,baseURL,fixture,info);
   await test.step('I26-B01 历史 KSM/Agent 由管理员明确确认，普通用户权限随允许和撤销变化',async()=>{
     const send=async(path:string,data:unknown,status=200)=>{
       const response=await page.request.post(`/api/v1${path}`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data});
