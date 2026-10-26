@@ -63,8 +63,12 @@ test('E2E-10 登录、草稿、精确修订、发布、版本和删除', async (
     await modal.getByRole('button',{name:'确认删除实例',exact:true}).click();const op=await(await accepted).json();
     await expect.poll(async()=>{await page.request.post(`/api/v1/operations/${op.operationId}/refresh`,{headers:{Origin:baseURL!,'Idempotency-Key':crypto.randomUUID()},data:{}});return (await(await page.request.get(`/api/v1/operations/${op.operationId}`)).json()).state;},{timeout:90000}).toBe('SUCCEEDED');
   });
-  await instanceCreatorProtection(page,baseURL,fixture,info);
+  // 上段删除完成后明确返回列表，后续迁移不依赖I25的reload隐式关闭详情。
+  if(await drawer.isVisible())await drawer.getByRole('button',{name:'关闭实例详情',exact:true}).click();
+  await expect(drawer).toHaveCount(0);
+  // 关键：原I29未知任务先由管理员显式处理并独立解锁，之后I25才可转移集群归属。
   await test.step('I29-B01 历史采集迁移独立确认与新父 CR 发布',()=>historicalExporterMigration(page,baseURL,fixture,info));
+  await instanceCreatorProtection(page,baseURL,fixture,info);
   await agentCreatorAssociation(page,baseURL,fixture,info);
   await test.step('I26-B01 历史 KSM/Agent 由管理员明确确认，普通用户权限随允许和撤销变化',async()=>{
     const send=async(path:string,data:unknown,status=200)=>{

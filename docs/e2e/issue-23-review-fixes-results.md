@@ -131,8 +131,13 @@
 | I23-R28.http | 工具UT通过；新真实浏览器未执行 | 有限200/201/202/400/401/403/404/409/422/500/503枚举投影；未知数字/任意标记仍unknown |
 | I23-R30.current-mtime | 可重复red→green | 固定start=1700000000.5、量化mtime=1700000000重现KeyError(nativeFailures)；fixture显式设report在start之后，恰好相等边界也验证接受；`review-report-mtime-*` |
 | I23-R30.old-mtime | 工具UT通过 | 明确旧mtime被拒绝，生产`capture.py`的`mtime<started`来源条件完全未变；最终`review-conditional-final.json` |
-| I23-R29.browser-order | 等待本地真实原报告确证，尚未修改 | 静态调用链发现I29未知任务先于I25集群转移，但不把通用send断言行当作具体请求证据 |
+| I23-R29.browser-order | 原118a真实red已确证；顺序修复静态通过，新真实浏览器未执行 | 118a原report首次transfer Expected200/Received409，send issue25.ts8→24→phase1.spec.ts66；先I29原显式迁移/独立release再I25，所有原断言和旧未知发送事实保持 |
 
 协议依据：[Kubernetes v0.28.15 patch.go](https://github.com/kubernetes/apiserver/blob/v0.28.15/pkg/endpoints/handlers/patch.go#L364) 将JSONPatch应用失败转换为泛化422，kubectl不会保留可判别的RV test失败文字。因此不能把任意Invalid当RV冲突。严格metadata-only/server-dry-run实测确认MergePatch错误RV为Conflict、错误UID为Invalid、正确条件成功；仅明确Conflict可有界重读。118a云端失败未取得原始错误正文，不能据此声称每次原失败都已证实为RV冲突；修复后的真实验收仍由父执行。
 
 最终本阶段 `review-conditional-final.json` UT-18 passed/attempt1，包含10项真实受控HTTP协议输入；`review-118a-checks.log` 完成固定18/10目录、Python语法、Go E2E编译及唯一Playwright用例发现。未触碰正在118a验收的资源，未创建集群或对象；唯一真实API诊断均为server dry-run，原始stdout/stderr只存私有目录。
+
+
+R29最终补充计划已发布并逐字回读：<https://github.com/fjsxy/monitor-mgr/issues/23#issuecomment-6419386224>。118a本地真实完整E2E的08/09均passed，10原Playwright报告确证 `/clusters/{id}/transfer` Expected200/Received409。只将原I29 browser step移到I25之前，不修改产品guard、旧operation结果或直接外部清锁。原I29仍明确验证旧SM `IDENTITY_UNCERTAIN` 与空confirmedUID，原I25全部创建身份、管理权限及归属恢复断言保持。该小改仅做浏览器用例发现/编译等静态检查，完整真实green由父在最终merge SHA执行。
+
+R29导航准备已同步计划并逐字回读：<https://github.com/fjsxy/monitor-mgr/issues/23#issuecomment-6419407241>。真实118a失败截图显示large实例DELETED详情仍打开，原I25的reload此前才隐式关闭。现上段删除业务断言完成后显式关闭该详情并确认退出，再执行I29；最终顺序为I29→I25→I30→I26末尾注销。仅准备导航起点，未删除任何业务断言。
