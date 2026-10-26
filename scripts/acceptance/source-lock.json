@@ -146,12 +146,40 @@
     }
   },
   "monitorOp": {
-    "source": "2b2a8b79a52070fb89a08f5afae2b7698901c999",
-    "dockerfileSHA256": "77a70f2323832ff353b8e5d08e023a4eff5d0872638ac9219ad3cb7441c6311a",
-    "crdSHA256": "66c224f6f5657afeeb1d891b6398bfaa797b766554a7c6f85ffe3f94a5cc2b7f",
+    "source": "8fb5ccb8ec2e9c0742fc7b83316d01c833af9aee",
+    "crdSHA256": "5ed40ce718cd67e9b923986b81fa0d79193709ab379c4301e4fa6fdf1b67cd6d",
     "repository": "fjsxy/monitor-in-hand",
     "sshHostsSource": "https://api.github.com/meta",
-    "sshHostsSHA256": "c73ac5d045cd2a359d2202b79b551fb22a638463d5ddbe5ed59b1b3998869c88"
+    "sshHostsSHA256": "c73ac5d045cd2a359d2202b79b551fb22a638463d5ddbe5ed59b1b3998869c88",
+    "previousSource": "2b2a8b79a52070fb89a08f5afae2b7698901c999",
+    "previousCRDSHA256": "66c224f6f5657afeeb1d891b6398bfaa797b766554a7c6f85ffe3f94a5cc2b7f",
+    "testedCommit": "8fb5ccb8ec2e9c0742fc7b83316d01c833af9aee",
+    "release": {
+      "version": "0.2.0-rc.4",
+      "tag": "v0.2.0-rc.4",
+      "manifestSHA256": "4b1aa74567d0c3a0c97017c83f7fc29d7fe0b87d9e0a81c25e7c98bd69606c4d",
+      "assets": {
+        "SHA256SUMS": "5eeeb3e8f45cc320887f0f0673e2c8efe5ee287bfe3347bfefc7e8a4b92dd9f1",
+        "kubestatemetrics.yaml": "5ed40ce718cd67e9b923986b81fa0d79193709ab379c4301e4fa6fdf1b67cd6d",
+        "legacy-kubestatemetrics.yaml": "66c224f6f5657afeeb1d891b6398bfaa797b766554a7c6f85ffe3f94a5cc2b7f",
+        "manager-role.yaml": "33280af80d6c11971f80e0bd5c109eb372c5879330d9972846c484fb2a3cb5bb",
+        "monitor-in-hand-0.1.0-pre-sm.2b2a8b7.tgz": "02deeb7d2b7d0a0c55e7583fe91ac3c42cf2c8ff415a2cd4c5a779ad89d6156b",
+        "monitor-in-hand-0.1.0.tgz": "15ea7f251c945b87a3ba336265e4d9e03c1195cdba1edfde51179a2d7dd3a23e",
+        "monitor-in-hand-0.2.0-rc.4.tgz": "56c85e51ae1fe14d751ea4974aa2a40da996581b2ad196aae8f770f78ba7364f",
+        "release.json": "4b1aa74567d0c3a0c97017c83f7fc29d7fe0b87d9e0a81c25e7c98bd69606c4d",
+        "servicemonitor-contract.json": "f2bd8e8c62ef535e6659a9c8ab2376cd90dc30039829b096bccf1e41ae3da887"
+      },
+      "image": {
+        "repository": "docker.io/fjsxy/monitor-in-hand",
+        "tag": "0.2.0-rc.4",
+        "sourceCommit": "8fb5ccb8ec2e9c0742fc7b83316d01c833af9aee",
+        "indexDigest": "sha256:1a9ec41de21c7b2b633ee7179f5f3f4c1a9e098f1dc4e74a9e720dbee73f19ff",
+        "platforms": {
+          "linux/amd64": "sha256:76fb66b77b9b9ed6094ef70fc84fb85a0f22d7b63416414bde09c6ca289f9065",
+          "linux/arm64": "sha256:0eadb4af76f5a1c72eb3f5bb4b8372eab43dbabb0a4dfb194866d58cf854ebde"
+        }
+      }
+    }
   },
   "prometheusOperator": {
     "source": "5cf2f5d37906d64b2259a262e319df4c74639e31",
