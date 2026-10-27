@@ -67,6 +67,7 @@ class Rule:
     action: str
     method: str
     path: str
+    ssar_resource: str | None = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     event: threading.Event = field(default_factory=threading.Event)
     claimed: bool = False
@@ -80,6 +81,7 @@ class Rule:
 
     def public(self):
         return {"id": self.id, "action": self.action, "method": self.method, "path": self.path,
+                **({"ssarResource": self.ssar_resource} if self.ssar_resource is not None else {}),
                 "claimed": self.claimed, "completed": self.completed, "released": self.released,
                 "cancelled": self.cancelled, "faultApplied": self.fault_applied, "stage": self.stage,
                 "matchingRequests": self.matching_requests, "upstreamStatus": self.upstream_status}
@@ -91,6 +93,7 @@ class FaultState:
         self.rule = None
         self.request_number = 0
         self.block_reads = False
+        self.read_error = False
         self.block_aux_only=False
         self.reject_write_path = ""
         self.creations = {}
@@ -133,7 +136,7 @@ class FaultState:
     def configure_faults(self, body):
         """受控读取故障与单一路径写拒绝；字段白名单避免暴露任意控制能力。"""
         if (not isinstance(body, dict) or set(body) != {"readMode", "rejectWritePath"}
-                or body["readMode"] not in {"all", "aux", "none"}):
+                or body["readMode"] not in {"all", "aux", "none", "error"}):
             raise RuleError("fixture faults rejected")
         path = body["rejectWritePath"]
         if (not isinstance(path, str) or path and (clean_path(path) != path or "?" in path
@@ -141,6 +144,7 @@ class FaultState:
             raise RuleError("fixture exact write path rejected")
         with self.lock:
             self.block_reads = body["readMode"] != "none"
+            self.read_error = body["readMode"] == "error"
             self.block_aux_only = body["readMode"] == "aux"
             self.reject_write_path = path
 
@@ -149,7 +153,7 @@ class FaultState:
             return {"rule": self.rule.public() if self.rule else None, "requestCount": self.request_number}
 
     def arm(self, body):
-        if set(body) != {"action", "method", "path"}:
+        if set(body) not in ({"action", "method", "path"}, {"action", "method", "path", "ssarResource"}):
             raise RuleError("fixture rule fields rejected")
         action, method, path = body["action"], body["method"], body["path"]
         if action not in {"drop_after_upstream", "drop_and_block_reads", "drop_and_block_aux", "pause_before_send"} or method not in METHODS:
@@ -158,13 +162,18 @@ class FaultState:
             raise RuleError("fixture rule requires an exact path without query")
         if action in {"drop_after_upstream","drop_and_block_reads","drop_and_block_aux"} and method not in MUTATING:
             raise RuleError("fixture response drop requires a mutating HTTP method")
+        ssar_resource = body.get("ssarResource")
+        # 关键：只允许暂停 KSM 权限只读预检，不能把其他 SSAR 误当组件尚未派发的证据。
+        if "ssarResource" in body and (ssar_resource != "kubestatemetrics" or method != "POST"
+                or path != "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"):
+            raise RuleError("fixture SSAR resource match rejected")
         with self.lock:
             if self.rule is not None and not self.rule.completed:
                 raise RuleError("fixture active rule must be reset first")
-            self.rule = Rule(action, method, path)
+            self.rule = Rule(action, method, path, ssar_resource)
             return self.rule.public()
 
-    def claim(self, method, target):
+    def claim(self, method, target, body=b""):
         path = clean_path(target)
         is_dry_run = "dryRun" in urllib.parse.parse_qs(urllib.parse.urlsplit(target).query,
                                                       keep_blank_values=True)
@@ -174,6 +183,19 @@ class FaultState:
             rule = self.rule
             if rule is None or rule.cancelled or rule.method != method or rule.path != path or is_dry_run:
                 return number, None
+            if rule.ssar_resource is not None:
+                # 仅解析白名单身份字段；不保存或公开携带凭据的请求正文。
+                try:
+                    review = json.loads(body)
+                    attrs = review["spec"]["resourceAttributes"]
+                    matches = (review.get("apiVersion") == "authorization.k8s.io/v1"
+                               and review.get("kind") == "SelfSubjectAccessReview"
+                               and attrs.get("group") == "monitoring.fjsxy.github.io"
+                               and attrs.get("resource") == rule.ssar_resource)
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    matches = False
+                if not matches:
+                    return number, None
             rule.matching_requests += 1
             if rule.claimed:
                 return number, None
@@ -198,6 +220,7 @@ class FaultState:
                 old.event.set()
             self.rule = None
             self.block_reads = False
+            self.read_error = False
             self.block_aux_only = False
             self.reject_write_path = ""
 
@@ -358,7 +381,7 @@ class APIHandler(QuietHandler):
             if len(body) != size:
                 self.json_response(400, {"code": "FIXTURE_INCOMPLETE_REQUEST"})
                 return
-            number, rule = app.state.claim(self.command, self.path)
+            number, rule = app.state.claim(self.command, self.path, body)
         except (RuleError, ValueError, OSError):
             self.json_response(400, {"code": "FIXTURE_REQUEST_REJECTED"})
             return
@@ -369,8 +392,9 @@ class APIHandler(QuietHandler):
             write_blocked=(app.state.reject_write_path == path and self.command in MUTATING
                            and "dryRun" not in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query,keep_blank_values=True))
         if blocked:
-            app.log.emit(number,self.command,path,"controlled_read_rejected",status=403)
-            self.json_response(403,{"code":"FIXTURE_READ_BLOCKED"})
+            status = 503 if app.state.read_error else 403
+            app.log.emit(number,self.command,path,"controlled_read_rejected",status=status)
+            self.json_response(status,{"code":"FIXTURE_READ_BLOCKED"})
             return
         if write_blocked:
             app.log.emit(number,self.command,path,"controlled_write_rejected",status=403)
@@ -396,6 +420,8 @@ class APIHandler(QuietHandler):
                         or lower.startswith(("impersonate-", "x-remote-", "x-forwarded-"))):
                     continue
                 conn.putheader(name, value)
+            if app.backend_token is not None:
+                conn.putheader("Authorization", "Bearer " + app.backend_token)
             conn.putheader("Content-Length", str(len(body)))
             conn.putheader("Connection", "close")
             app.log.emit(number, self.command, path, "upstream_send_started", rule)
@@ -520,14 +546,23 @@ class ProxyFixture:
         if not all(isinstance(self.limits[k], int) and 0 < self.limits[k] <= 64 * 1024 * 1024
                    for k in ("max_body_bytes", "max_response_bytes")):
             raise ConfigError("fixture byte limit rejected")
-        private_text(self.backend["client_key_file"])
+        self.backend_token = None
+        if "token_file" in self.backend:
+            if "client_key_file" in self.backend or "client_cert_file" in self.backend:
+                raise ConfigError("fixture backend authentication is ambiguous")
+            self.backend_token = private_text(self.backend["token_file"]).strip()
+            if not re.fullmatch(r"[A-Za-z0-9._~+/-]{16,32768}=*", self.backend_token):
+                raise ConfigError("fixture backend token rejected")
+        else:
+            private_text(self.backend["client_key_file"])
         private_text(front["key_file"])
         self.control_token = private_text(control["token_file"]).strip()
         if not re.fullmatch(r"[A-Za-z0-9_-]{32,512}", self.control_token):
             raise ConfigError("fixture control token rejected")
         self.backend_context = ssl.create_default_context(cafile=self.backend["ca_file"])
         self.backend_context.minimum_version = ssl.TLSVersion.TLSv1_2
-        self.backend_context.load_cert_chain(self.backend["client_cert_file"], self.backend["client_key_file"])
+        if self.backend_token is None:
+            self.backend_context.load_cert_chain(self.backend["client_cert_file"], self.backend["client_key_file"])
         frontend_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         frontend_context.minimum_version = ssl.TLSVersion.TLSv1_2
         frontend_context.load_cert_chain(front["cert_file"], front["key_file"])

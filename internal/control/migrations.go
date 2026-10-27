@@ -11,7 +11,7 @@ import (
 )
 
 // schemaVersion 定义本程序能够读取和升级到的数据库版本。
-const schemaVersion = 10
+const schemaVersion = 16
 
 // migrationSQL 按版本依次保存结构变更，不修改已经发布的旧版本语句。
 var migrationSQL = [][]string{
@@ -43,6 +43,12 @@ var migrationSQL = [][]string{
 	nil,
 	activitySchema,
 	append(append([]string{}, agentStorageSchema...), storageTasksSchema...),
+	instanceCreatorSchema, // v11 保留 #25 的真实创建身份迁移及旧版序号。
+	resourceProgressSchema,
+	nil, // v13 兼容旧权限确认历史，新库在 v15 建表。
+	historicalResourceSchema,
+	historicalManagementSchema, // v15 独立权限确认及可靠历史创建用户补齐。
+	historicalMigrationSchema,  // v16 保存只读迁移盘点快照。
 }
 
 // migrate 配置 SQLite WAL，并在保留恢复依据的前提下原子升级数据库。
@@ -72,6 +78,10 @@ func migrate(db *sql.DB, dataDir string, key []byte) error {
 		if current > schemaVersion || count != current {
 			return errors.New("数据库版本不支持，保留原库并停止启动")
 		}
+	}
+	// 关键：旧 v13 确认表先检查形状，再进入任何 DDL；失败不能推进版本标记。
+	if err = validateLegacyManagementSchema(ctx, conn); err != nil {
+		return err
 	}
 	if current < schemaVersion {
 		var tables int
@@ -125,6 +135,16 @@ func migrate(db *sql.DB, dataDir string, key []byte) error {
 			for _, q := range migrationSQL[v-1] {
 				if _, err = tx.Exec(q); err != nil {
 					return fmt.Errorf("数据库迁移失败，原库与快照保留: %w", err)
+				}
+			}
+			if v == 12 {
+				if err = migrateResourceProgress(ctx, tx); err != nil {
+					return fmt.Errorf("逐资源历史迁移失败: %w", err)
+				}
+			}
+			if v == 15 {
+				if err = migrateHistoricalCreators(tx); err != nil {
+					return fmt.Errorf("历史创建身份迁移失败，原库与快照保留: %w", err)
 				}
 			}
 			if v == 9 {

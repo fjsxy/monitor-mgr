@@ -1142,6 +1142,218 @@ var fieldIDToName_TransferClusterRequest = map[int16]string{
 	2: "ownerId",
 }
 
+type FrozenResource struct {
+	Key            string `thrift:"key,1,required" frugal:"1,required,string" json:"key"`
+	ApiVersion     string `thrift:"apiVersion,2,required" frugal:"2,required,string" json:"apiVersion"`
+	Kind           string `thrift:"kind,3,required" frugal:"3,required,string" json:"kind"`
+	Namespace      string `thrift:"namespace,4,required" frugal:"4,required,string" json:"namespace"`
+	Name           string `thrift:"name,5,required" frugal:"5,required,string" json:"name"`
+	Yaml           string `thrift:"yaml,6,required" frugal:"6,required,string" json:"yaml"`
+	_unknownFields unknown.Fields
+}
+
+func NewFrozenResource() *FrozenResource {
+	return &FrozenResource{}
+}
+
+func (p *FrozenResource) InitDefault() {
+}
+
+func (p *FrozenResource) GetKey() (v string) {
+	return p.Key
+}
+
+func (p *FrozenResource) GetApiVersion() (v string) {
+	return p.ApiVersion
+}
+
+func (p *FrozenResource) GetKind() (v string) {
+	return p.Kind
+}
+
+func (p *FrozenResource) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *FrozenResource) GetName() (v string) {
+	return p.Name
+}
+
+func (p *FrozenResource) GetYaml() (v string) {
+	return p.Yaml
+}
+func (p *FrozenResource) SetKey(val string) {
+	p.Key = val
+}
+func (p *FrozenResource) SetApiVersion(val string) {
+	p.ApiVersion = val
+}
+func (p *FrozenResource) SetKind(val string) {
+	p.Kind = val
+}
+func (p *FrozenResource) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *FrozenResource) SetName(val string) {
+	p.Name = val
+}
+func (p *FrozenResource) SetYaml(val string) {
+	p.Yaml = val
+}
+
+func (p *FrozenResource) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *FrozenResource) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("FrozenResource(%+v)", *p)
+}
+
+var fieldIDToName_FrozenResource = map[int16]string{
+	1: "key",
+	2: "apiVersion",
+	3: "kind",
+	4: "namespace",
+	5: "name",
+	6: "yaml",
+}
+
+type ResourceProgress struct {
+	Target            *FrozenResource `thrift:"target,1,required" frugal:"1,required,FrozenResource" json:"target"`
+	State             string          `thrift:"state,2,required" frugal:"2,required,string" json:"state"`
+	ConfirmedUid      string          `thrift:"confirmedUid,3,required" frugal:"3,required,string" json:"confirmedUid"`
+	PossiblySent      bool            `thrift:"possiblySent,4,required" frugal:"4,required,bool" json:"possiblySent"`
+	Message           string          `thrift:"message,5,required" frugal:"5,required,string" json:"message"`
+	UpdatedAt         string          `thrift:"updatedAt,6,required" frugal:"6,required,string" json:"updatedAt"`
+	AttemptId         string          `thrift:"attemptId,7,required" frugal:"7,required,string" json:"attemptId"`
+	Observation       *string         `thrift:"observation,8,optional" frugal:"8,optional,string" json:"observation,omitempty"`
+	HistoricalPending *bool           `thrift:"historicalPending,9,optional" frugal:"9,optional,bool" json:"historicalPending,omitempty"`
+	_unknownFields    unknown.Fields
+}
+
+func NewResourceProgress() *ResourceProgress {
+	return &ResourceProgress{}
+}
+
+func (p *ResourceProgress) InitDefault() {
+}
+
+var ResourceProgress_Target_DEFAULT *FrozenResource
+
+func (p *ResourceProgress) GetTarget() (v *FrozenResource) {
+	if !p.IsSetTarget() {
+		return ResourceProgress_Target_DEFAULT
+	}
+	return p.Target
+}
+
+func (p *ResourceProgress) GetState() (v string) {
+	return p.State
+}
+
+func (p *ResourceProgress) GetConfirmedUid() (v string) {
+	return p.ConfirmedUid
+}
+
+func (p *ResourceProgress) GetPossiblySent() (v bool) {
+	return p.PossiblySent
+}
+
+func (p *ResourceProgress) GetMessage() (v string) {
+	return p.Message
+}
+
+func (p *ResourceProgress) GetUpdatedAt() (v string) {
+	return p.UpdatedAt
+}
+
+func (p *ResourceProgress) GetAttemptId() (v string) {
+	return p.AttemptId
+}
+
+var ResourceProgress_Observation_DEFAULT string
+
+func (p *ResourceProgress) GetObservation() (v string) {
+	if !p.IsSetObservation() {
+		return ResourceProgress_Observation_DEFAULT
+	}
+	return *p.Observation
+}
+
+var ResourceProgress_HistoricalPending_DEFAULT bool
+
+func (p *ResourceProgress) GetHistoricalPending() (v bool) {
+	if !p.IsSetHistoricalPending() {
+		return ResourceProgress_HistoricalPending_DEFAULT
+	}
+	return *p.HistoricalPending
+}
+func (p *ResourceProgress) SetTarget(val *FrozenResource) {
+	p.Target = val
+}
+func (p *ResourceProgress) SetState(val string) {
+	p.State = val
+}
+func (p *ResourceProgress) SetConfirmedUid(val string) {
+	p.ConfirmedUid = val
+}
+func (p *ResourceProgress) SetPossiblySent(val bool) {
+	p.PossiblySent = val
+}
+func (p *ResourceProgress) SetMessage(val string) {
+	p.Message = val
+}
+func (p *ResourceProgress) SetUpdatedAt(val string) {
+	p.UpdatedAt = val
+}
+func (p *ResourceProgress) SetAttemptId(val string) {
+	p.AttemptId = val
+}
+func (p *ResourceProgress) SetObservation(val *string) {
+	p.Observation = val
+}
+func (p *ResourceProgress) SetHistoricalPending(val *bool) {
+	p.HistoricalPending = val
+}
+
+func (p *ResourceProgress) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ResourceProgress) IsSetTarget() bool {
+	return p.Target != nil
+}
+
+func (p *ResourceProgress) IsSetObservation() bool {
+	return p.Observation != nil
+}
+
+func (p *ResourceProgress) IsSetHistoricalPending() bool {
+	return p.HistoricalPending != nil
+}
+
+func (p *ResourceProgress) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ResourceProgress(%+v)", *p)
+}
+
+var fieldIDToName_ResourceProgress = map[int16]string{
+	1: "target",
+	2: "state",
+	3: "confirmedUid",
+	4: "possiblySent",
+	5: "message",
+	6: "updatedAt",
+	7: "attemptId",
+	8: "observation",
+	9: "historicalPending",
+}
+
 type Operation struct {
 	OperationId        string               `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
 	Action             string               `thrift:"action,2,required" frugal:"2,required,string" json:"action"`
@@ -1160,6 +1372,7 @@ type Operation struct {
 	Revision           *int64               `thrift:"revision,15,optional" frugal:"15,optional,i64" json:"revision,omitempty"`
 	StorageResult_     *string              `thrift:"storageResult,16,optional" frugal:"16,optional,string" json:"storageResult,omitempty"`
 	StorageVolumes     []*VolumeObservation `thrift:"storageVolumes,17,optional" frugal:"17,optional,list<VolumeObservation>" json:"storageVolumes,omitempty"`
+	Resources          []*ResourceProgress  `thrift:"resources,18,optional" frugal:"18,optional,list<ResourceProgress>" json:"resources,omitempty"`
 	_unknownFields     unknown.Fields
 }
 
@@ -1267,6 +1480,15 @@ func (p *Operation) GetStorageVolumes() (v []*VolumeObservation) {
 	}
 	return p.StorageVolumes
 }
+
+var Operation_Resources_DEFAULT []*ResourceProgress
+
+func (p *Operation) GetResources() (v []*ResourceProgress) {
+	if !p.IsSetResources() {
+		return Operation_Resources_DEFAULT
+	}
+	return p.Resources
+}
 func (p *Operation) SetOperationId(val string) {
 	p.OperationId = val
 }
@@ -1318,6 +1540,9 @@ func (p *Operation) SetStorageResult_(val *string) {
 func (p *Operation) SetStorageVolumes(val []*VolumeObservation) {
 	p.StorageVolumes = val
 }
+func (p *Operation) SetResources(val []*ResourceProgress) {
+	p.Resources = val
+}
 
 func (p *Operation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -1347,6 +1572,10 @@ func (p *Operation) IsSetStorageVolumes() bool {
 	return p.StorageVolumes != nil
 }
 
+func (p *Operation) IsSetResources() bool {
+	return p.Resources != nil
+}
+
 func (p *Operation) String() string {
 	if p == nil {
 		return "<nil>"
@@ -1372,6 +1601,7 @@ var fieldIDToName_Operation = map[int16]string{
 	15: "revision",
 	16: "storageResult",
 	17: "storageVolumes",
+	18: "resources",
 }
 
 type OperationID struct {
@@ -1946,20 +2176,91 @@ var fieldIDToName_RoleResources = map[int16]string{
 	2: "resources",
 }
 
+type ExporterServiceMonitor struct {
+	Enabled        bool    `thrift:"enabled,1,required" frugal:"1,required,bool" json:"enabled"`
+	Interval       *string `thrift:"interval,2,optional" frugal:"2,optional,string" json:"interval,omitempty"`
+	ScrapeTimeout  *string `thrift:"scrapeTimeout,3,optional" frugal:"3,optional,string" json:"scrapeTimeout,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewExporterServiceMonitor() *ExporterServiceMonitor {
+	return &ExporterServiceMonitor{}
+}
+
+func (p *ExporterServiceMonitor) InitDefault() {
+}
+
+func (p *ExporterServiceMonitor) GetEnabled() (v bool) {
+	return p.Enabled
+}
+
+var ExporterServiceMonitor_Interval_DEFAULT string
+
+func (p *ExporterServiceMonitor) GetInterval() (v string) {
+	if !p.IsSetInterval() {
+		return ExporterServiceMonitor_Interval_DEFAULT
+	}
+	return *p.Interval
+}
+
+var ExporterServiceMonitor_ScrapeTimeout_DEFAULT string
+
+func (p *ExporterServiceMonitor) GetScrapeTimeout() (v string) {
+	if !p.IsSetScrapeTimeout() {
+		return ExporterServiceMonitor_ScrapeTimeout_DEFAULT
+	}
+	return *p.ScrapeTimeout
+}
+func (p *ExporterServiceMonitor) SetEnabled(val bool) {
+	p.Enabled = val
+}
+func (p *ExporterServiceMonitor) SetInterval(val *string) {
+	p.Interval = val
+}
+func (p *ExporterServiceMonitor) SetScrapeTimeout(val *string) {
+	p.ScrapeTimeout = val
+}
+
+func (p *ExporterServiceMonitor) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ExporterServiceMonitor) IsSetInterval() bool {
+	return p.Interval != nil
+}
+
+func (p *ExporterServiceMonitor) IsSetScrapeTimeout() bool {
+	return p.ScrapeTimeout != nil
+}
+
+func (p *ExporterServiceMonitor) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ExporterServiceMonitor(%+v)", *p)
+}
+
+var fieldIDToName_ExporterServiceMonitor = map[int16]string{
+	1: "enabled",
+	2: "interval",
+	3: "scrapeTimeout",
+}
+
 type KSMConfiguration struct {
-	Name                 string              `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
-	TargetNamespace      string              `thrift:"targetNamespace,2,required" frugal:"2,required,string" json:"targetNamespace"`
-	DeploymentMode       string              `thrift:"deploymentMode,3,required" frugal:"3,required,string" json:"deploymentMode"`
-	DesiredState         string              `thrift:"desiredState,4,required" frugal:"4,required,string" json:"desiredState"`
-	Resources            *ContainerResources `thrift:"resources,5,required" frugal:"5,required,ContainerResources" json:"resources"`
-	Collectors           *CollectorSelection `thrift:"collectors,6,required" frugal:"6,required,CollectorSelection" json:"collectors"`
-	MetricFilter         *MetricSelection    `thrift:"metricFilter,7,required" frugal:"7,required,MetricSelection" json:"metricFilter"`
-	NamespaceFilter      *NamespaceSelection `thrift:"namespaceFilter,8,required" frugal:"8,required,NamespaceSelection" json:"namespaceFilter"`
-	AdvancedResources    bool                `thrift:"advancedResources,9,required" frugal:"9,required,bool" json:"advancedResources"`
-	Shards               *int32              `thrift:"shards,10,optional" frugal:"10,optional,i32" json:"shards,omitempty"`
-	NodeResources        *RoleResources      `thrift:"nodeResources,11,optional" frugal:"11,optional,RoleResources" json:"nodeResources,omitempty"`
-	ClusterResources     *RoleResources      `thrift:"clusterResources,12,optional" frugal:"12,optional,RoleResources" json:"clusterResources,omitempty"`
-	UnscheduledResources *RoleResources      `thrift:"unscheduledResources,13,optional" frugal:"13,optional,RoleResources" json:"unscheduledResources,omitempty"`
+	Name                 string                  `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	TargetNamespace      string                  `thrift:"targetNamespace,2,required" frugal:"2,required,string" json:"targetNamespace"`
+	DeploymentMode       string                  `thrift:"deploymentMode,3,required" frugal:"3,required,string" json:"deploymentMode"`
+	DesiredState         string                  `thrift:"desiredState,4,required" frugal:"4,required,string" json:"desiredState"`
+	Resources            *ContainerResources     `thrift:"resources,5,required" frugal:"5,required,ContainerResources" json:"resources"`
+	Collectors           *CollectorSelection     `thrift:"collectors,6,required" frugal:"6,required,CollectorSelection" json:"collectors"`
+	MetricFilter         *MetricSelection        `thrift:"metricFilter,7,required" frugal:"7,required,MetricSelection" json:"metricFilter"`
+	NamespaceFilter      *NamespaceSelection     `thrift:"namespaceFilter,8,required" frugal:"8,required,NamespaceSelection" json:"namespaceFilter"`
+	AdvancedResources    bool                    `thrift:"advancedResources,9,required" frugal:"9,required,bool" json:"advancedResources"`
+	Shards               *int32                  `thrift:"shards,10,optional" frugal:"10,optional,i32" json:"shards,omitempty"`
+	NodeResources        *RoleResources          `thrift:"nodeResources,11,optional" frugal:"11,optional,RoleResources" json:"nodeResources,omitempty"`
+	ClusterResources     *RoleResources          `thrift:"clusterResources,12,optional" frugal:"12,optional,RoleResources" json:"clusterResources,omitempty"`
+	UnscheduledResources *RoleResources          `thrift:"unscheduledResources,13,optional" frugal:"13,optional,RoleResources" json:"unscheduledResources,omitempty"`
+	ServiceMonitor       *ExporterServiceMonitor `thrift:"serviceMonitor,14,optional" frugal:"14,optional,ExporterServiceMonitor" json:"serviceMonitor,omitempty"`
 	_unknownFields       unknown.Fields
 }
 
@@ -2061,6 +2362,15 @@ func (p *KSMConfiguration) GetUnscheduledResources() (v *RoleResources) {
 	}
 	return p.UnscheduledResources
 }
+
+var KSMConfiguration_ServiceMonitor_DEFAULT *ExporterServiceMonitor
+
+func (p *KSMConfiguration) GetServiceMonitor() (v *ExporterServiceMonitor) {
+	if !p.IsSetServiceMonitor() {
+		return KSMConfiguration_ServiceMonitor_DEFAULT
+	}
+	return p.ServiceMonitor
+}
 func (p *KSMConfiguration) SetName(val string) {
 	p.Name = val
 }
@@ -2100,6 +2410,9 @@ func (p *KSMConfiguration) SetClusterResources(val *RoleResources) {
 func (p *KSMConfiguration) SetUnscheduledResources(val *RoleResources) {
 	p.UnscheduledResources = val
 }
+func (p *KSMConfiguration) SetServiceMonitor(val *ExporterServiceMonitor) {
+	p.ServiceMonitor = val
+}
 
 func (p *KSMConfiguration) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -2137,6 +2450,10 @@ func (p *KSMConfiguration) IsSetUnscheduledResources() bool {
 	return p.UnscheduledResources != nil
 }
 
+func (p *KSMConfiguration) IsSetServiceMonitor() bool {
+	return p.ServiceMonitor != nil
+}
+
 func (p *KSMConfiguration) String() string {
 	if p == nil {
 		return "<nil>"
@@ -2158,6 +2475,7 @@ var fieldIDToName_KSMConfiguration = map[int16]string{
 	11: "nodeResources",
 	12: "clusterResources",
 	13: "unscheduledResources",
+	14: "serviceMonitor",
 }
 
 type LabelExpression struct {
@@ -3428,6 +3746,191 @@ var fieldIDToName_VolumeObservation = map[int16]string{
 	18: "impactAction",
 }
 
+type OperatorResourceReference struct {
+	ApiVersion     string `thrift:"apiVersion,1,required" frugal:"1,required,string" json:"apiVersion"`
+	Kind           string `thrift:"kind,2,required" frugal:"2,required,string" json:"kind"`
+	Namespace      string `thrift:"namespace,3,required" frugal:"3,required,string" json:"namespace"`
+	Name           string `thrift:"name,4,required" frugal:"4,required,string" json:"name"`
+	Uid            string `thrift:"uid,5,required" frugal:"5,required,string" json:"uid"`
+	_unknownFields unknown.Fields
+}
+
+func NewOperatorResourceReference() *OperatorResourceReference {
+	return &OperatorResourceReference{}
+}
+
+func (p *OperatorResourceReference) InitDefault() {
+}
+
+func (p *OperatorResourceReference) GetApiVersion() (v string) {
+	return p.ApiVersion
+}
+
+func (p *OperatorResourceReference) GetKind() (v string) {
+	return p.Kind
+}
+
+func (p *OperatorResourceReference) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *OperatorResourceReference) GetName() (v string) {
+	return p.Name
+}
+
+func (p *OperatorResourceReference) GetUid() (v string) {
+	return p.Uid
+}
+func (p *OperatorResourceReference) SetApiVersion(val string) {
+	p.ApiVersion = val
+}
+func (p *OperatorResourceReference) SetKind(val string) {
+	p.Kind = val
+}
+func (p *OperatorResourceReference) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *OperatorResourceReference) SetName(val string) {
+	p.Name = val
+}
+func (p *OperatorResourceReference) SetUid(val string) {
+	p.Uid = val
+}
+
+func (p *OperatorResourceReference) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *OperatorResourceReference) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("OperatorResourceReference(%+v)", *p)
+}
+
+var fieldIDToName_OperatorResourceReference = map[int16]string{
+	1: "apiVersion",
+	2: "kind",
+	3: "namespace",
+	4: "name",
+	5: "uid",
+}
+
+type CompanionObservation struct {
+	State              string                     `thrift:"state,1,required" frugal:"1,required,string" json:"state"`
+	Reason             string                     `thrift:"reason,2,required" frugal:"2,required,string" json:"reason"`
+	Message            string                     `thrift:"message,3,required" frugal:"3,required,string" json:"message"`
+	ParentUid          string                     `thrift:"parentUid,4,required" frugal:"4,required,string" json:"parentUid"`
+	Generation         int64                      `thrift:"generation,5,required" frugal:"5,required,i64" json:"generation"`
+	ObservedGeneration int64                      `thrift:"observedGeneration,6,required" frugal:"6,required,i64" json:"observedGeneration"`
+	Resource           *OperatorResourceReference `thrift:"resource,7,optional" frugal:"7,optional,OperatorResourceReference" json:"resource,omitempty"`
+	Yaml               *string                    `thrift:"yaml,8,optional" frugal:"8,optional,string" json:"yaml,omitempty"`
+	_unknownFields     unknown.Fields
+}
+
+func NewCompanionObservation() *CompanionObservation {
+	return &CompanionObservation{}
+}
+
+func (p *CompanionObservation) InitDefault() {
+}
+
+func (p *CompanionObservation) GetState() (v string) {
+	return p.State
+}
+
+func (p *CompanionObservation) GetReason() (v string) {
+	return p.Reason
+}
+
+func (p *CompanionObservation) GetMessage() (v string) {
+	return p.Message
+}
+
+func (p *CompanionObservation) GetParentUid() (v string) {
+	return p.ParentUid
+}
+
+func (p *CompanionObservation) GetGeneration() (v int64) {
+	return p.Generation
+}
+
+func (p *CompanionObservation) GetObservedGeneration() (v int64) {
+	return p.ObservedGeneration
+}
+
+var CompanionObservation_Resource_DEFAULT *OperatorResourceReference
+
+func (p *CompanionObservation) GetResource() (v *OperatorResourceReference) {
+	if !p.IsSetResource() {
+		return CompanionObservation_Resource_DEFAULT
+	}
+	return p.Resource
+}
+
+var CompanionObservation_Yaml_DEFAULT string
+
+func (p *CompanionObservation) GetYaml() (v string) {
+	if !p.IsSetYaml() {
+		return CompanionObservation_Yaml_DEFAULT
+	}
+	return *p.Yaml
+}
+func (p *CompanionObservation) SetState(val string) {
+	p.State = val
+}
+func (p *CompanionObservation) SetReason(val string) {
+	p.Reason = val
+}
+func (p *CompanionObservation) SetMessage(val string) {
+	p.Message = val
+}
+func (p *CompanionObservation) SetParentUid(val string) {
+	p.ParentUid = val
+}
+func (p *CompanionObservation) SetGeneration(val int64) {
+	p.Generation = val
+}
+func (p *CompanionObservation) SetObservedGeneration(val int64) {
+	p.ObservedGeneration = val
+}
+func (p *CompanionObservation) SetResource(val *OperatorResourceReference) {
+	p.Resource = val
+}
+func (p *CompanionObservation) SetYaml(val *string) {
+	p.Yaml = val
+}
+
+func (p *CompanionObservation) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *CompanionObservation) IsSetResource() bool {
+	return p.Resource != nil
+}
+
+func (p *CompanionObservation) IsSetYaml() bool {
+	return p.Yaml != nil
+}
+
+func (p *CompanionObservation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CompanionObservation(%+v)", *p)
+}
+
+var fieldIDToName_CompanionObservation = map[int16]string{
+	1: "state",
+	2: "reason",
+	3: "message",
+	4: "parentUid",
+	5: "generation",
+	6: "observedGeneration",
+	7: "resource",
+	8: "yaml",
+}
+
 type SourceObservation struct {
 	Source          string                 `thrift:"source,1,required" frugal:"1,required,string" json:"source"`
 	LastAttemptAt   string                 `thrift:"lastAttemptAt,2,required" frugal:"2,required,string" json:"lastAttemptAt"`
@@ -3441,6 +3944,7 @@ type SourceObservation struct {
 	Stale           *bool                  `thrift:"stale,10,optional" frugal:"10,optional,bool" json:"stale,omitempty"`
 	Policies        []*AgentStatefulPolicy `thrift:"policies,11,optional" frugal:"11,optional,list<AgentStatefulPolicy>" json:"policies,omitempty"`
 	StorageMode     *string                `thrift:"storageMode,12,optional" frugal:"12,optional,string" json:"storageMode,omitempty"`
+	Companion       *CompanionObservation  `thrift:"companion,13,optional" frugal:"13,optional,CompanionObservation" json:"companion,omitempty"`
 	_unknownFields  unknown.Fields
 }
 
@@ -3533,6 +4037,15 @@ func (p *SourceObservation) GetStorageMode() (v string) {
 	}
 	return *p.StorageMode
 }
+
+var SourceObservation_Companion_DEFAULT *CompanionObservation
+
+func (p *SourceObservation) GetCompanion() (v *CompanionObservation) {
+	if !p.IsSetCompanion() {
+		return SourceObservation_Companion_DEFAULT
+	}
+	return p.Companion
+}
 func (p *SourceObservation) SetSource(val string) {
 	p.Source = val
 }
@@ -3569,6 +4082,9 @@ func (p *SourceObservation) SetPolicies(val []*AgentStatefulPolicy) {
 func (p *SourceObservation) SetStorageMode(val *string) {
 	p.StorageMode = val
 }
+func (p *SourceObservation) SetCompanion(val *CompanionObservation) {
+	p.Companion = val
+}
 
 func (p *SourceObservation) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -3602,6 +4118,10 @@ func (p *SourceObservation) IsSetStorageMode() bool {
 	return p.StorageMode != nil
 }
 
+func (p *SourceObservation) IsSetCompanion() bool {
+	return p.Companion != nil
+}
+
 func (p *SourceObservation) String() string {
 	if p == nil {
 		return "<nil>"
@@ -3622,6 +4142,7 @@ var fieldIDToName_SourceObservation = map[int16]string{
 	10: "stale",
 	11: "policies",
 	12: "storageMode",
+	13: "companion",
 }
 
 type AssociationPreviewRequest struct {
@@ -4132,25 +4653,126 @@ var fieldIDToName_InstanceRuntime = map[int16]string{
 	10: "paused",
 }
 
+type InstanceManagementConfirmation struct {
+	ActorId              string `thrift:"actorId,1,required" frugal:"1,required,string" json:"actorId"`
+	ConfirmedAt          string `thrift:"confirmedAt,2,required" frugal:"2,required,string" json:"confirmedAt"`
+	AllowClusterManagers bool   `thrift:"allowClusterManagers,3,required" frugal:"3,required,bool" json:"allowClusterManagers"`
+	_unknownFields       unknown.Fields
+}
+
+func NewInstanceManagementConfirmation() *InstanceManagementConfirmation {
+	return &InstanceManagementConfirmation{}
+}
+
+func (p *InstanceManagementConfirmation) InitDefault() {
+}
+
+func (p *InstanceManagementConfirmation) GetActorId() (v string) {
+	return p.ActorId
+}
+
+func (p *InstanceManagementConfirmation) GetConfirmedAt() (v string) {
+	return p.ConfirmedAt
+}
+
+func (p *InstanceManagementConfirmation) GetAllowClusterManagers() (v bool) {
+	return p.AllowClusterManagers
+}
+func (p *InstanceManagementConfirmation) SetActorId(val string) {
+	p.ActorId = val
+}
+func (p *InstanceManagementConfirmation) SetConfirmedAt(val string) {
+	p.ConfirmedAt = val
+}
+func (p *InstanceManagementConfirmation) SetAllowClusterManagers(val bool) {
+	p.AllowClusterManagers = val
+}
+
+func (p *InstanceManagementConfirmation) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *InstanceManagementConfirmation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("InstanceManagementConfirmation(%+v)", *p)
+}
+
+var fieldIDToName_InstanceManagementConfirmation = map[int16]string{
+	1: "actorId",
+	2: "confirmedAt",
+	3: "allowClusterManagers",
+}
+
+type ConfirmInstanceManagementRequest struct {
+	Id                   string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	AllowClusterManagers bool   `thrift:"allowClusterManagers,2,required" frugal:"2,required,bool" json:"allowClusterManagers"`
+	_unknownFields       unknown.Fields
+}
+
+func NewConfirmInstanceManagementRequest() *ConfirmInstanceManagementRequest {
+	return &ConfirmInstanceManagementRequest{}
+}
+
+func (p *ConfirmInstanceManagementRequest) InitDefault() {
+}
+
+func (p *ConfirmInstanceManagementRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *ConfirmInstanceManagementRequest) GetAllowClusterManagers() (v bool) {
+	return p.AllowClusterManagers
+}
+func (p *ConfirmInstanceManagementRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *ConfirmInstanceManagementRequest) SetAllowClusterManagers(val bool) {
+	p.AllowClusterManagers = val
+}
+
+func (p *ConfirmInstanceManagementRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ConfirmInstanceManagementRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ConfirmInstanceManagementRequest(%+v)", *p)
+}
+
+var fieldIDToName_ConfirmInstanceManagementRequest = map[int16]string{
+	1: "id",
+	2: "allowClusterManagers",
+}
+
 type ObservationInstance struct {
-	Id               string               `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
-	ClusterId        string               `thrift:"clusterId,2,required" frugal:"2,required,string" json:"clusterId"`
-	Name             string               `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
-	TargetNamespace  string               `thrift:"targetNamespace,4,required" frugal:"4,required,string" json:"targetNamespace"`
-	Component        string               `thrift:"component,5,required" frugal:"5,required,string" json:"component"`
-	Type             string               `thrift:"type,6,required" frugal:"6,required,string" json:"type"`
-	ReadOnly         bool                 `thrift:"readOnly,7,required" frugal:"7,required,bool" json:"readOnly"`
-	Uid              string               `thrift:"uid,8,required" frugal:"8,required,string" json:"uid"`
-	Lifecycle        string               `thrift:"lifecycle,9,required" frugal:"9,required,string" json:"lifecycle"`
-	CurrentVersionId string               `thrift:"currentVersionId,10,required" frugal:"10,required,string" json:"currentVersionId"`
-	ActivityAt       string               `thrift:"activityAt,11,required" frugal:"11,required,string" json:"activityAt"`
-	Runtime          *InstanceRuntime     `thrift:"runtime,12,optional" frugal:"12,optional,InstanceRuntime" json:"runtime,omitempty"`
-	Ownership        string               `thrift:"ownership,13,required" frugal:"13,required,string" json:"ownership"`
-	Yaml             *string              `thrift:"yaml,14,optional" frugal:"14,optional,string" json:"yaml,omitempty"`
-	CrNamespace      *string              `thrift:"crNamespace,15,optional" frugal:"15,optional,string" json:"crNamespace,omitempty"`
-	Scope            *string              `thrift:"scope,16,optional" frugal:"16,optional,string" json:"scope,omitempty"`
-	Sources          []*SourceObservation `thrift:"sources,17,optional" frugal:"17,optional,list<SourceObservation>" json:"sources,omitempty"`
-	_unknownFields   unknown.Fields
+	Id                     string                          `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	ClusterId              string                          `thrift:"clusterId,2,required" frugal:"2,required,string" json:"clusterId"`
+	Name                   string                          `thrift:"name,3,required" frugal:"3,required,string" json:"name"`
+	TargetNamespace        string                          `thrift:"targetNamespace,4,required" frugal:"4,required,string" json:"targetNamespace"`
+	Component              string                          `thrift:"component,5,required" frugal:"5,required,string" json:"component"`
+	Type                   string                          `thrift:"type,6,required" frugal:"6,required,string" json:"type"`
+	ReadOnly               bool                            `thrift:"readOnly,7,required" frugal:"7,required,bool" json:"readOnly"`
+	Uid                    string                          `thrift:"uid,8,required" frugal:"8,required,string" json:"uid"`
+	Lifecycle              string                          `thrift:"lifecycle,9,required" frugal:"9,required,string" json:"lifecycle"`
+	CurrentVersionId       string                          `thrift:"currentVersionId,10,required" frugal:"10,required,string" json:"currentVersionId"`
+	ActivityAt             string                          `thrift:"activityAt,11,required" frugal:"11,required,string" json:"activityAt"`
+	Runtime                *InstanceRuntime                `thrift:"runtime,12,optional" frugal:"12,optional,InstanceRuntime" json:"runtime,omitempty"`
+	Ownership              string                          `thrift:"ownership,13,required" frugal:"13,required,string" json:"ownership"`
+	Yaml                   *string                         `thrift:"yaml,14,optional" frugal:"14,optional,string" json:"yaml,omitempty"`
+	CrNamespace            *string                         `thrift:"crNamespace,15,optional" frugal:"15,optional,string" json:"crNamespace,omitempty"`
+	Scope                  *string                         `thrift:"scope,16,optional" frugal:"16,optional,string" json:"scope,omitempty"`
+	Sources                []*SourceObservation            `thrift:"sources,17,optional" frugal:"17,optional,list<SourceObservation>" json:"sources,omitempty"`
+	CreatorUserId          string                          `thrift:"creatorUserId,18,required" frugal:"18,required,string" json:"creatorUserId"`
+	CreatorRole            string                          `thrift:"creatorRole,19,required" frugal:"19,required,string" json:"creatorRole"`
+	CreatorIdentityKnown   bool                            `thrift:"creatorIdentityKnown,20,required" frugal:"20,required,bool" json:"creatorIdentityKnown"`
+	CanManage              bool                            `thrift:"canManage,21,required" frugal:"21,required,bool" json:"canManage"`
+	ReadOnlyReason         string                          `thrift:"readOnlyReason,22,required" frugal:"22,required,string" json:"readOnlyReason"`
+	ManagementConfirmation *InstanceManagementConfirmation `thrift:"managementConfirmation,23,optional" frugal:"23,optional,InstanceManagementConfirmation" json:"managementConfirmation,omitempty"`
+	_unknownFields         unknown.Fields
 }
 
 func NewObservationInstance() *ObservationInstance {
@@ -4252,6 +4874,35 @@ func (p *ObservationInstance) GetSources() (v []*SourceObservation) {
 	}
 	return p.Sources
 }
+
+func (p *ObservationInstance) GetCreatorUserId() (v string) {
+	return p.CreatorUserId
+}
+
+func (p *ObservationInstance) GetCreatorRole() (v string) {
+	return p.CreatorRole
+}
+
+func (p *ObservationInstance) GetCreatorIdentityKnown() (v bool) {
+	return p.CreatorIdentityKnown
+}
+
+func (p *ObservationInstance) GetCanManage() (v bool) {
+	return p.CanManage
+}
+
+func (p *ObservationInstance) GetReadOnlyReason() (v string) {
+	return p.ReadOnlyReason
+}
+
+var ObservationInstance_ManagementConfirmation_DEFAULT *InstanceManagementConfirmation
+
+func (p *ObservationInstance) GetManagementConfirmation() (v *InstanceManagementConfirmation) {
+	if !p.IsSetManagementConfirmation() {
+		return ObservationInstance_ManagementConfirmation_DEFAULT
+	}
+	return p.ManagementConfirmation
+}
 func (p *ObservationInstance) SetId(val string) {
 	p.Id = val
 }
@@ -4303,6 +4954,24 @@ func (p *ObservationInstance) SetScope(val *string) {
 func (p *ObservationInstance) SetSources(val []*SourceObservation) {
 	p.Sources = val
 }
+func (p *ObservationInstance) SetCreatorUserId(val string) {
+	p.CreatorUserId = val
+}
+func (p *ObservationInstance) SetCreatorRole(val string) {
+	p.CreatorRole = val
+}
+func (p *ObservationInstance) SetCreatorIdentityKnown(val bool) {
+	p.CreatorIdentityKnown = val
+}
+func (p *ObservationInstance) SetCanManage(val bool) {
+	p.CanManage = val
+}
+func (p *ObservationInstance) SetReadOnlyReason(val string) {
+	p.ReadOnlyReason = val
+}
+func (p *ObservationInstance) SetManagementConfirmation(val *InstanceManagementConfirmation) {
+	p.ManagementConfirmation = val
+}
 
 func (p *ObservationInstance) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -4326,6 +4995,10 @@ func (p *ObservationInstance) IsSetScope() bool {
 
 func (p *ObservationInstance) IsSetSources() bool {
 	return p.Sources != nil
+}
+
+func (p *ObservationInstance) IsSetManagementConfirmation() bool {
+	return p.ManagementConfirmation != nil
 }
 
 func (p *ObservationInstance) String() string {
@@ -4353,6 +5026,551 @@ var fieldIDToName_ObservationInstance = map[int16]string{
 	15: "crNamespace",
 	16: "scope",
 	17: "sources",
+	18: "creatorUserId",
+	19: "creatorRole",
+	20: "creatorIdentityKnown",
+	21: "canManage",
+	22: "readOnlyReason",
+	23: "managementConfirmation",
+}
+
+type HistoricalMigrationResource struct {
+	OperationId         string `thrift:"operationId,1,required" frugal:"1,required,string" json:"operationId"`
+	ResourceKey         string `thrift:"resourceKey,2,required" frugal:"2,required,string" json:"resourceKey"`
+	ObjectPath          string `thrift:"objectPath,3,required" frugal:"3,required,string" json:"objectPath"`
+	OriginalUid         string `thrift:"originalUid,4,required" frugal:"4,required,string" json:"originalUid"`
+	DocumentFingerprint string `thrift:"documentFingerprint,5,required" frugal:"5,required,string" json:"documentFingerprint"`
+	State               string `thrift:"state,6,required" frugal:"6,required,string" json:"state"`
+	PossiblySent        bool   `thrift:"possiblySent,7,required" frugal:"7,required,bool" json:"possiblySent"`
+	FrozenYaml          string `thrift:"frozenYaml,8,required" frugal:"8,required,string" json:"frozenYaml"`
+	CurrentUid          string `thrift:"currentUid,9,required" frugal:"9,required,string" json:"currentUid"`
+	ResourceVersion     string `thrift:"resourceVersion,10,required" frugal:"10,required,string" json:"resourceVersion"`
+	CurrentYaml         string `thrift:"currentYaml,11,required" frugal:"11,required,string" json:"currentYaml"`
+	Missing             bool   `thrift:"missing,12,required" frugal:"12,required,bool" json:"missing"`
+	Error               string `thrift:"error,13,required" frugal:"13,required,string" json:"error"`
+	ResolvedBy          string `thrift:"resolvedBy,14,required" frugal:"14,required,string" json:"resolvedBy"`
+	ResolvedAt          string `thrift:"resolvedAt,15,required" frugal:"15,required,string" json:"resolvedAt"`
+	_unknownFields      unknown.Fields
+}
+
+func NewHistoricalMigrationResource() *HistoricalMigrationResource {
+	return &HistoricalMigrationResource{}
+}
+
+func (p *HistoricalMigrationResource) InitDefault() {
+}
+
+func (p *HistoricalMigrationResource) GetOperationId() (v string) {
+	return p.OperationId
+}
+
+func (p *HistoricalMigrationResource) GetResourceKey() (v string) {
+	return p.ResourceKey
+}
+
+func (p *HistoricalMigrationResource) GetObjectPath() (v string) {
+	return p.ObjectPath
+}
+
+func (p *HistoricalMigrationResource) GetOriginalUid() (v string) {
+	return p.OriginalUid
+}
+
+func (p *HistoricalMigrationResource) GetDocumentFingerprint() (v string) {
+	return p.DocumentFingerprint
+}
+
+func (p *HistoricalMigrationResource) GetState() (v string) {
+	return p.State
+}
+
+func (p *HistoricalMigrationResource) GetPossiblySent() (v bool) {
+	return p.PossiblySent
+}
+
+func (p *HistoricalMigrationResource) GetFrozenYaml() (v string) {
+	return p.FrozenYaml
+}
+
+func (p *HistoricalMigrationResource) GetCurrentUid() (v string) {
+	return p.CurrentUid
+}
+
+func (p *HistoricalMigrationResource) GetResourceVersion() (v string) {
+	return p.ResourceVersion
+}
+
+func (p *HistoricalMigrationResource) GetCurrentYaml() (v string) {
+	return p.CurrentYaml
+}
+
+func (p *HistoricalMigrationResource) GetMissing() (v bool) {
+	return p.Missing
+}
+
+func (p *HistoricalMigrationResource) GetError() (v string) {
+	return p.Error
+}
+
+func (p *HistoricalMigrationResource) GetResolvedBy() (v string) {
+	return p.ResolvedBy
+}
+
+func (p *HistoricalMigrationResource) GetResolvedAt() (v string) {
+	return p.ResolvedAt
+}
+func (p *HistoricalMigrationResource) SetOperationId(val string) {
+	p.OperationId = val
+}
+func (p *HistoricalMigrationResource) SetResourceKey(val string) {
+	p.ResourceKey = val
+}
+func (p *HistoricalMigrationResource) SetObjectPath(val string) {
+	p.ObjectPath = val
+}
+func (p *HistoricalMigrationResource) SetOriginalUid(val string) {
+	p.OriginalUid = val
+}
+func (p *HistoricalMigrationResource) SetDocumentFingerprint(val string) {
+	p.DocumentFingerprint = val
+}
+func (p *HistoricalMigrationResource) SetState(val string) {
+	p.State = val
+}
+func (p *HistoricalMigrationResource) SetPossiblySent(val bool) {
+	p.PossiblySent = val
+}
+func (p *HistoricalMigrationResource) SetFrozenYaml(val string) {
+	p.FrozenYaml = val
+}
+func (p *HistoricalMigrationResource) SetCurrentUid(val string) {
+	p.CurrentUid = val
+}
+func (p *HistoricalMigrationResource) SetResourceVersion(val string) {
+	p.ResourceVersion = val
+}
+func (p *HistoricalMigrationResource) SetCurrentYaml(val string) {
+	p.CurrentYaml = val
+}
+func (p *HistoricalMigrationResource) SetMissing(val bool) {
+	p.Missing = val
+}
+func (p *HistoricalMigrationResource) SetError(val string) {
+	p.Error = val
+}
+func (p *HistoricalMigrationResource) SetResolvedBy(val string) {
+	p.ResolvedBy = val
+}
+func (p *HistoricalMigrationResource) SetResolvedAt(val string) {
+	p.ResolvedAt = val
+}
+
+func (p *HistoricalMigrationResource) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigrationResource) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigrationResource(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigrationResource = map[int16]string{
+	1:  "operationId",
+	2:  "resourceKey",
+	3:  "objectPath",
+	4:  "originalUid",
+	5:  "documentFingerprint",
+	6:  "state",
+	7:  "possiblySent",
+	8:  "frozenYaml",
+	9:  "currentUid",
+	10: "resourceVersion",
+	11: "currentYaml",
+	12: "missing",
+	13: "error",
+	14: "resolvedBy",
+	15: "resolvedAt",
+}
+
+type HistoricalMigrationConfirmation struct {
+	InstanceId     string `thrift:"instanceId,1,required" frugal:"1,required,string" json:"instanceId"`
+	OperationId    string `thrift:"operationId,2,required" frugal:"2,required,string" json:"operationId"`
+	ResourceKey    string `thrift:"resourceKey,3,required" frugal:"3,required,string" json:"resourceKey"`
+	OriginalUid    string `thrift:"originalUid,4,required" frugal:"4,required,string" json:"originalUid"`
+	ResolvedBy     string `thrift:"resolvedBy,5,required" frugal:"5,required,string" json:"resolvedBy"`
+	ResolvedAt     string `thrift:"resolvedAt,6,required" frugal:"6,required,string" json:"resolvedAt"`
+	SnapshotId     string `thrift:"snapshotId,7,required" frugal:"7,required,string" json:"snapshotId"`
+	ParentReleased bool   `thrift:"parentReleased,8,required" frugal:"8,required,bool" json:"parentReleased"`
+	_unknownFields unknown.Fields
+}
+
+func NewHistoricalMigrationConfirmation() *HistoricalMigrationConfirmation {
+	return &HistoricalMigrationConfirmation{}
+}
+
+func (p *HistoricalMigrationConfirmation) InitDefault() {
+}
+
+func (p *HistoricalMigrationConfirmation) GetInstanceId() (v string) {
+	return p.InstanceId
+}
+
+func (p *HistoricalMigrationConfirmation) GetOperationId() (v string) {
+	return p.OperationId
+}
+
+func (p *HistoricalMigrationConfirmation) GetResourceKey() (v string) {
+	return p.ResourceKey
+}
+
+func (p *HistoricalMigrationConfirmation) GetOriginalUid() (v string) {
+	return p.OriginalUid
+}
+
+func (p *HistoricalMigrationConfirmation) GetResolvedBy() (v string) {
+	return p.ResolvedBy
+}
+
+func (p *HistoricalMigrationConfirmation) GetResolvedAt() (v string) {
+	return p.ResolvedAt
+}
+
+func (p *HistoricalMigrationConfirmation) GetSnapshotId() (v string) {
+	return p.SnapshotId
+}
+
+func (p *HistoricalMigrationConfirmation) GetParentReleased() (v bool) {
+	return p.ParentReleased
+}
+func (p *HistoricalMigrationConfirmation) SetInstanceId(val string) {
+	p.InstanceId = val
+}
+func (p *HistoricalMigrationConfirmation) SetOperationId(val string) {
+	p.OperationId = val
+}
+func (p *HistoricalMigrationConfirmation) SetResourceKey(val string) {
+	p.ResourceKey = val
+}
+func (p *HistoricalMigrationConfirmation) SetOriginalUid(val string) {
+	p.OriginalUid = val
+}
+func (p *HistoricalMigrationConfirmation) SetResolvedBy(val string) {
+	p.ResolvedBy = val
+}
+func (p *HistoricalMigrationConfirmation) SetResolvedAt(val string) {
+	p.ResolvedAt = val
+}
+func (p *HistoricalMigrationConfirmation) SetSnapshotId(val string) {
+	p.SnapshotId = val
+}
+func (p *HistoricalMigrationConfirmation) SetParentReleased(val bool) {
+	p.ParentReleased = val
+}
+
+func (p *HistoricalMigrationConfirmation) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigrationConfirmation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigrationConfirmation(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigrationConfirmation = map[int16]string{
+	1: "instanceId",
+	2: "operationId",
+	3: "resourceKey",
+	4: "originalUid",
+	5: "resolvedBy",
+	6: "resolvedAt",
+	7: "snapshotId",
+	8: "parentReleased",
+}
+
+type HistoricalMigrationConfirmationRequest struct {
+	Id                      string `thrift:"id,1,required" frugal:"1,required,string" json:"id"`
+	SnapshotId              string `thrift:"snapshotId,2,required" frugal:"2,required,string" json:"snapshotId"`
+	OperationId             string `thrift:"operationId,3,required" frugal:"3,required,string" json:"operationId"`
+	ResourceKey             string `thrift:"resourceKey,4,required" frugal:"4,required,string" json:"resourceKey"`
+	ObjectPath              string `thrift:"objectPath,5,required" frugal:"5,required,string" json:"objectPath"`
+	OriginalUid             string `thrift:"originalUid,6,required" frugal:"6,required,string" json:"originalUid"`
+	DocumentFingerprint     string `thrift:"documentFingerprint,7,required" frugal:"7,required,string" json:"documentFingerprint"`
+	ConfirmExternalHandling bool   `thrift:"confirmExternalHandling,8,required" frugal:"8,required,bool" json:"confirmExternalHandling"`
+	_unknownFields          unknown.Fields
+}
+
+func NewHistoricalMigrationConfirmationRequest() *HistoricalMigrationConfirmationRequest {
+	return &HistoricalMigrationConfirmationRequest{}
+}
+
+func (p *HistoricalMigrationConfirmationRequest) InitDefault() {
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetId() (v string) {
+	return p.Id
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetSnapshotId() (v string) {
+	return p.SnapshotId
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetOperationId() (v string) {
+	return p.OperationId
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetResourceKey() (v string) {
+	return p.ResourceKey
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetObjectPath() (v string) {
+	return p.ObjectPath
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetOriginalUid() (v string) {
+	return p.OriginalUid
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetDocumentFingerprint() (v string) {
+	return p.DocumentFingerprint
+}
+
+func (p *HistoricalMigrationConfirmationRequest) GetConfirmExternalHandling() (v bool) {
+	return p.ConfirmExternalHandling
+}
+func (p *HistoricalMigrationConfirmationRequest) SetId(val string) {
+	p.Id = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetSnapshotId(val string) {
+	p.SnapshotId = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetOperationId(val string) {
+	p.OperationId = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetResourceKey(val string) {
+	p.ResourceKey = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetObjectPath(val string) {
+	p.ObjectPath = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetOriginalUid(val string) {
+	p.OriginalUid = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetDocumentFingerprint(val string) {
+	p.DocumentFingerprint = val
+}
+func (p *HistoricalMigrationConfirmationRequest) SetConfirmExternalHandling(val bool) {
+	p.ConfirmExternalHandling = val
+}
+
+func (p *HistoricalMigrationConfirmationRequest) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigrationConfirmationRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigrationConfirmationRequest(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigrationConfirmationRequest = map[int16]string{
+	1: "id",
+	2: "snapshotId",
+	3: "operationId",
+	4: "resourceKey",
+	5: "objectPath",
+	6: "originalUid",
+	7: "documentFingerprint",
+	8: "confirmExternalHandling",
+}
+
+type HistoricalMigrationAgent struct {
+	Name           string   `thrift:"name,1,required" frugal:"1,required,string" json:"name"`
+	Namespace      string   `thrift:"namespace,2,required" frugal:"2,required,string" json:"namespace"`
+	Uid            string   `thrift:"uid,3,required" frugal:"3,required,string" json:"uid"`
+	SelectionYaml  string   `thrift:"selectionYaml,4,required" frugal:"4,required,string" json:"selectionYaml"`
+	SelectedPaths  []string `thrift:"selectedPaths,5,required" frugal:"5,required,list<string>" json:"selectedPaths"`
+	_unknownFields unknown.Fields
+}
+
+func NewHistoricalMigrationAgent() *HistoricalMigrationAgent {
+	return &HistoricalMigrationAgent{}
+}
+
+func (p *HistoricalMigrationAgent) InitDefault() {
+}
+
+func (p *HistoricalMigrationAgent) GetName() (v string) {
+	return p.Name
+}
+
+func (p *HistoricalMigrationAgent) GetNamespace() (v string) {
+	return p.Namespace
+}
+
+func (p *HistoricalMigrationAgent) GetUid() (v string) {
+	return p.Uid
+}
+
+func (p *HistoricalMigrationAgent) GetSelectionYaml() (v string) {
+	return p.SelectionYaml
+}
+
+func (p *HistoricalMigrationAgent) GetSelectedPaths() (v []string) {
+	return p.SelectedPaths
+}
+func (p *HistoricalMigrationAgent) SetName(val string) {
+	p.Name = val
+}
+func (p *HistoricalMigrationAgent) SetNamespace(val string) {
+	p.Namespace = val
+}
+func (p *HistoricalMigrationAgent) SetUid(val string) {
+	p.Uid = val
+}
+func (p *HistoricalMigrationAgent) SetSelectionYaml(val string) {
+	p.SelectionYaml = val
+}
+func (p *HistoricalMigrationAgent) SetSelectedPaths(val []string) {
+	p.SelectedPaths = val
+}
+
+func (p *HistoricalMigrationAgent) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigrationAgent) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigrationAgent(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigrationAgent = map[int16]string{
+	1: "name",
+	2: "namespace",
+	3: "uid",
+	4: "selectionYaml",
+	5: "selectedPaths",
+}
+
+type HistoricalMigration struct {
+	InstanceId            string                         `thrift:"instanceId,1,required" frugal:"1,required,string" json:"instanceId"`
+	SnapshotId            string                         `thrift:"snapshotId,2,required" frugal:"2,required,string" json:"snapshotId"`
+	ObservedAt            string                         `thrift:"observedAt,3,required" frugal:"3,required,string" json:"observedAt"`
+	SchemaVersion         int32                          `thrift:"schemaVersion,4,required" frugal:"4,required,i32" json:"schemaVersion"`
+	CurrentVersionId      string                         `thrift:"currentVersionId,5,required" frugal:"5,required,string" json:"currentVersionId"`
+	Resources             []*HistoricalMigrationResource `thrift:"resources,6,required" frugal:"6,required,list<HistoricalMigrationResource>" json:"resources"`
+	Agents                []*HistoricalMigrationAgent    `thrift:"agents,7,required" frugal:"7,required,list<HistoricalMigrationAgent>" json:"agents"`
+	ImpactComplete        bool                           `thrift:"impactComplete,8,required" frugal:"8,required,bool" json:"impactComplete"`
+	Error                 string                         `thrift:"error,9,required" frugal:"9,required,string" json:"error"`
+	ProtectionOperationId string                         `thrift:"protectionOperationId,10,required" frugal:"10,required,string" json:"protectionOperationId"`
+	_unknownFields        unknown.Fields
+}
+
+func NewHistoricalMigration() *HistoricalMigration {
+	return &HistoricalMigration{}
+}
+
+func (p *HistoricalMigration) InitDefault() {
+}
+
+func (p *HistoricalMigration) GetInstanceId() (v string) {
+	return p.InstanceId
+}
+
+func (p *HistoricalMigration) GetSnapshotId() (v string) {
+	return p.SnapshotId
+}
+
+func (p *HistoricalMigration) GetObservedAt() (v string) {
+	return p.ObservedAt
+}
+
+func (p *HistoricalMigration) GetSchemaVersion() (v int32) {
+	return p.SchemaVersion
+}
+
+func (p *HistoricalMigration) GetCurrentVersionId() (v string) {
+	return p.CurrentVersionId
+}
+
+func (p *HistoricalMigration) GetResources() (v []*HistoricalMigrationResource) {
+	return p.Resources
+}
+
+func (p *HistoricalMigration) GetAgents() (v []*HistoricalMigrationAgent) {
+	return p.Agents
+}
+
+func (p *HistoricalMigration) GetImpactComplete() (v bool) {
+	return p.ImpactComplete
+}
+
+func (p *HistoricalMigration) GetError() (v string) {
+	return p.Error
+}
+
+func (p *HistoricalMigration) GetProtectionOperationId() (v string) {
+	return p.ProtectionOperationId
+}
+func (p *HistoricalMigration) SetInstanceId(val string) {
+	p.InstanceId = val
+}
+func (p *HistoricalMigration) SetSnapshotId(val string) {
+	p.SnapshotId = val
+}
+func (p *HistoricalMigration) SetObservedAt(val string) {
+	p.ObservedAt = val
+}
+func (p *HistoricalMigration) SetSchemaVersion(val int32) {
+	p.SchemaVersion = val
+}
+func (p *HistoricalMigration) SetCurrentVersionId(val string) {
+	p.CurrentVersionId = val
+}
+func (p *HistoricalMigration) SetResources(val []*HistoricalMigrationResource) {
+	p.Resources = val
+}
+func (p *HistoricalMigration) SetAgents(val []*HistoricalMigrationAgent) {
+	p.Agents = val
+}
+func (p *HistoricalMigration) SetImpactComplete(val bool) {
+	p.ImpactComplete = val
+}
+func (p *HistoricalMigration) SetError(val string) {
+	p.Error = val
+}
+func (p *HistoricalMigration) SetProtectionOperationId(val string) {
+	p.ProtectionOperationId = val
+}
+
+func (p *HistoricalMigration) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *HistoricalMigration) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("HistoricalMigration(%+v)", *p)
+}
+
+var fieldIDToName_HistoricalMigration = map[int16]string{
+	1:  "instanceId",
+	2:  "snapshotId",
+	3:  "observedAt",
+	4:  "schemaVersion",
+	5:  "currentVersionId",
+	6:  "resources",
+	7:  "agents",
+	8:  "impactComplete",
+	9:  "error",
+	10: "protectionOperationId",
 }
 
 type InstancesResult_ struct {
@@ -4968,6 +6186,7 @@ type PublicationVersion struct {
 	Yaml                string              `thrift:"yaml,5,required" frugal:"5,required,string" json:"yaml"`
 	CreatedAt           string              `thrift:"createdAt,6,required" frugal:"6,required,string" json:"createdAt"`
 	Agent               *AgentConfiguration `thrift:"agent,7,optional" frugal:"7,optional,AgentConfiguration" json:"agent,omitempty"`
+	Resources           []*FrozenResource   `thrift:"resources,8,optional" frugal:"8,optional,list<FrozenResource>" json:"resources,omitempty"`
 	_unknownFields      unknown.Fields
 }
 
@@ -5015,6 +6234,15 @@ func (p *PublicationVersion) GetAgent() (v *AgentConfiguration) {
 	}
 	return p.Agent
 }
+
+var PublicationVersion_Resources_DEFAULT []*FrozenResource
+
+func (p *PublicationVersion) GetResources() (v []*FrozenResource) {
+	if !p.IsSetResources() {
+		return PublicationVersion_Resources_DEFAULT
+	}
+	return p.Resources
+}
 func (p *PublicationVersion) SetVersionId(val string) {
 	p.VersionId = val
 }
@@ -5036,6 +6264,9 @@ func (p *PublicationVersion) SetCreatedAt(val string) {
 func (p *PublicationVersion) SetAgent(val *AgentConfiguration) {
 	p.Agent = val
 }
+func (p *PublicationVersion) SetResources(val []*FrozenResource) {
+	p.Resources = val
+}
 
 func (p *PublicationVersion) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -5047,6 +6278,10 @@ func (p *PublicationVersion) IsSetKsm() bool {
 
 func (p *PublicationVersion) IsSetAgent() bool {
 	return p.Agent != nil
+}
+
+func (p *PublicationVersion) IsSetResources() bool {
+	return p.Resources != nil
 }
 
 func (p *PublicationVersion) String() string {
@@ -5064,6 +6299,7 @@ var fieldIDToName_PublicationVersion = map[int16]string{
 	5: "yaml",
 	6: "createdAt",
 	7: "agent",
+	8: "resources",
 }
 
 type VersionsResult_ struct {
@@ -5187,16 +6423,17 @@ var fieldIDToName_OperationLookup = map[int16]string{
 }
 
 type ExecutionAttempt struct {
-	AttemptId      string  `thrift:"attemptId,1,required" frugal:"1,required,string" json:"attemptId"`
-	OperationId    string  `thrift:"operationId,2,required" frugal:"2,required,string" json:"operationId"`
-	State          string  `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
-	PossiblySent   bool    `thrift:"possiblySent,4,required" frugal:"4,required,bool" json:"possiblySent"`
-	CreatedAt      string  `thrift:"createdAt,5,required" frugal:"5,required,string" json:"createdAt"`
-	UpdatedAt      string  `thrift:"updatedAt,6,required" frugal:"6,required,string" json:"updatedAt"`
-	Revision       *int64  `thrift:"revision,7,optional" frugal:"7,optional,i64" json:"revision,omitempty"`
-	Sequence       *int64  `thrift:"sequence,8,optional" frugal:"8,optional,i64" json:"sequence,omitempty"`
-	ActorId        *string `thrift:"actorId,9,optional" frugal:"9,optional,string" json:"actorId,omitempty"`
-	Message        *string `thrift:"message,10,optional" frugal:"10,optional,string" json:"message,omitempty"`
+	AttemptId      string              `thrift:"attemptId,1,required" frugal:"1,required,string" json:"attemptId"`
+	OperationId    string              `thrift:"operationId,2,required" frugal:"2,required,string" json:"operationId"`
+	State          string              `thrift:"state,3,required" frugal:"3,required,string" json:"state"`
+	PossiblySent   bool                `thrift:"possiblySent,4,required" frugal:"4,required,bool" json:"possiblySent"`
+	CreatedAt      string              `thrift:"createdAt,5,required" frugal:"5,required,string" json:"createdAt"`
+	UpdatedAt      string              `thrift:"updatedAt,6,required" frugal:"6,required,string" json:"updatedAt"`
+	Revision       *int64              `thrift:"revision,7,optional" frugal:"7,optional,i64" json:"revision,omitempty"`
+	Sequence       *int64              `thrift:"sequence,8,optional" frugal:"8,optional,i64" json:"sequence,omitempty"`
+	ActorId        *string             `thrift:"actorId,9,optional" frugal:"9,optional,string" json:"actorId,omitempty"`
+	Message        *string             `thrift:"message,10,optional" frugal:"10,optional,string" json:"message,omitempty"`
+	Resources      []*ResourceProgress `thrift:"resources,11,optional" frugal:"11,optional,list<ResourceProgress>" json:"resources,omitempty"`
 	_unknownFields unknown.Fields
 }
 
@@ -5266,6 +6503,15 @@ func (p *ExecutionAttempt) GetMessage() (v string) {
 	}
 	return *p.Message
 }
+
+var ExecutionAttempt_Resources_DEFAULT []*ResourceProgress
+
+func (p *ExecutionAttempt) GetResources() (v []*ResourceProgress) {
+	if !p.IsSetResources() {
+		return ExecutionAttempt_Resources_DEFAULT
+	}
+	return p.Resources
+}
 func (p *ExecutionAttempt) SetAttemptId(val string) {
 	p.AttemptId = val
 }
@@ -5296,6 +6542,9 @@ func (p *ExecutionAttempt) SetActorId(val *string) {
 func (p *ExecutionAttempt) SetMessage(val *string) {
 	p.Message = val
 }
+func (p *ExecutionAttempt) SetResources(val []*ResourceProgress) {
+	p.Resources = val
+}
 
 func (p *ExecutionAttempt) CarryingUnknownFields() bool {
 	return len(p._unknownFields) > 0
@@ -5317,6 +6566,10 @@ func (p *ExecutionAttempt) IsSetMessage() bool {
 	return p.Message != nil
 }
 
+func (p *ExecutionAttempt) IsSetResources() bool {
+	return p.Resources != nil
+}
+
 func (p *ExecutionAttempt) String() string {
 	if p == nil {
 		return "<nil>"
@@ -5335,6 +6588,7 @@ var fieldIDToName_ExecutionAttempt = map[int16]string{
 	8:  "sequence",
 	9:  "actorId",
 	10: "message",
+	11: "resources",
 }
 
 type LifecycleRequest struct {
@@ -5770,6 +7024,12 @@ var fieldIDToName_APIError = map[int16]string{
 }
 
 type ControlService interface {
+	ReleaseHistoricalOperation(ctx context.Context, ctx_ *RequestContext, request *HistoricalMigrationConfirmationRequest) (r *HistoricalMigrationConfirmation, err error)
+
+	ResolveHistoricalServiceMonitor(ctx context.Context, ctx_ *RequestContext, request *HistoricalMigrationConfirmationRequest) (r *HistoricalMigrationConfirmation, err error)
+
+	GetHistoricalMigration(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *HistoricalMigration, err error)
+
 	PreviewAssociations(ctx context.Context, ctx_ *RequestContext, request *AssociationPreviewRequest) (r *AssociationPreview, err error)
 
 	PreviewDeletion(ctx context.Context, ctx_ *RequestContext, request *DeletionPreviewRequest) (r *DeletionPreview, err error)
@@ -5791,6 +7051,8 @@ type ControlService interface {
 	ListInstances(ctx context.Context, ctx_ *RequestContext, request *ClusterID) (r *InstancesResult_, err error)
 
 	GetInstance(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *ObservationInstance, err error)
+
+	ConfirmInstanceManagement(ctx context.Context, ctx_ *RequestContext, request *ConfirmInstanceManagementRequest) (r *ObservationInstance, err error)
 
 	GetDraft(ctx context.Context, ctx_ *RequestContext, request *InstanceID) (r *ConfigurationDraft, err error)
 
@@ -5863,6 +7125,372 @@ type ControlService interface {
 	UpdateAccount(ctx context.Context, ctx_ *RequestContext, request *UpdateAccountRequest) (r *Account, err error)
 
 	ResetPassword(ctx context.Context, ctx_ *RequestContext, request *ResetPasswordRequest) (r *Empty, err error)
+}
+
+type ControlServiceReleaseHistoricalOperationArgs struct {
+	Ctx            *RequestContext                         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *HistoricalMigrationConfirmationRequest `thrift:"request,2" frugal:"2,default,HistoricalMigrationConfirmationRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceReleaseHistoricalOperationArgs() *ControlServiceReleaseHistoricalOperationArgs {
+	return &ControlServiceReleaseHistoricalOperationArgs{}
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) InitDefault() {
+}
+
+var ControlServiceReleaseHistoricalOperationArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceReleaseHistoricalOperationArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceReleaseHistoricalOperationArgs_Request_DEFAULT *HistoricalMigrationConfirmationRequest
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) GetRequest() (v *HistoricalMigrationConfirmationRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceReleaseHistoricalOperationArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceReleaseHistoricalOperationArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceReleaseHistoricalOperationArgs) SetRequest(val *HistoricalMigrationConfirmationRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceReleaseHistoricalOperationArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceReleaseHistoricalOperationArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceReleaseHistoricalOperationArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceReleaseHistoricalOperationResult struct {
+	Success        *HistoricalMigrationConfirmation `thrift:"success,0,optional" frugal:"0,optional,HistoricalMigrationConfirmation" json:"success,omitempty"`
+	Error          *APIError                        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceReleaseHistoricalOperationResult() *ControlServiceReleaseHistoricalOperationResult {
+	return &ControlServiceReleaseHistoricalOperationResult{}
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) InitDefault() {
+}
+
+var ControlServiceReleaseHistoricalOperationResult_Success_DEFAULT *HistoricalMigrationConfirmation
+
+func (p *ControlServiceReleaseHistoricalOperationResult) GetSuccess() (v *HistoricalMigrationConfirmation) {
+	if !p.IsSetSuccess() {
+		return ControlServiceReleaseHistoricalOperationResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceReleaseHistoricalOperationResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceReleaseHistoricalOperationResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceReleaseHistoricalOperationResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceReleaseHistoricalOperationResult) SetSuccess(x interface{}) {
+	p.Success = x.(*HistoricalMigrationConfirmation)
+}
+func (p *ControlServiceReleaseHistoricalOperationResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceReleaseHistoricalOperationResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceReleaseHistoricalOperationResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceReleaseHistoricalOperationResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceResolveHistoricalServiceMonitorArgs struct {
+	Ctx            *RequestContext                         `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *HistoricalMigrationConfirmationRequest `thrift:"request,2" frugal:"2,default,HistoricalMigrationConfirmationRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceResolveHistoricalServiceMonitorArgs() *ControlServiceResolveHistoricalServiceMonitorArgs {
+	return &ControlServiceResolveHistoricalServiceMonitorArgs{}
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) InitDefault() {
+}
+
+var ControlServiceResolveHistoricalServiceMonitorArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceResolveHistoricalServiceMonitorArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceResolveHistoricalServiceMonitorArgs_Request_DEFAULT *HistoricalMigrationConfirmationRequest
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) GetRequest() (v *HistoricalMigrationConfirmationRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceResolveHistoricalServiceMonitorArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) SetRequest(val *HistoricalMigrationConfirmationRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceResolveHistoricalServiceMonitorArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceResolveHistoricalServiceMonitorArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceResolveHistoricalServiceMonitorResult struct {
+	Success        *HistoricalMigrationConfirmation `thrift:"success,0,optional" frugal:"0,optional,HistoricalMigrationConfirmation" json:"success,omitempty"`
+	Error          *APIError                        `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceResolveHistoricalServiceMonitorResult() *ControlServiceResolveHistoricalServiceMonitorResult {
+	return &ControlServiceResolveHistoricalServiceMonitorResult{}
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) InitDefault() {
+}
+
+var ControlServiceResolveHistoricalServiceMonitorResult_Success_DEFAULT *HistoricalMigrationConfirmation
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) GetSuccess() (v *HistoricalMigrationConfirmation) {
+	if !p.IsSetSuccess() {
+		return ControlServiceResolveHistoricalServiceMonitorResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceResolveHistoricalServiceMonitorResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceResolveHistoricalServiceMonitorResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) SetSuccess(x interface{}) {
+	p.Success = x.(*HistoricalMigrationConfirmation)
+}
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceResolveHistoricalServiceMonitorResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceResolveHistoricalServiceMonitorResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceResolveHistoricalServiceMonitorResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceGetHistoricalMigrationArgs struct {
+	Ctx            *RequestContext `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *InstanceID     `thrift:"request,2" frugal:"2,default,InstanceID" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetHistoricalMigrationArgs() *ControlServiceGetHistoricalMigrationArgs {
+	return &ControlServiceGetHistoricalMigrationArgs{}
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) InitDefault() {
+}
+
+var ControlServiceGetHistoricalMigrationArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceGetHistoricalMigrationArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceGetHistoricalMigrationArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceGetHistoricalMigrationArgs_Request_DEFAULT *InstanceID
+
+func (p *ControlServiceGetHistoricalMigrationArgs) GetRequest() (v *InstanceID) {
+	if !p.IsSetRequest() {
+		return ControlServiceGetHistoricalMigrationArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceGetHistoricalMigrationArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceGetHistoricalMigrationArgs) SetRequest(val *InstanceID) {
+	p.Request = val
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceGetHistoricalMigrationArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetHistoricalMigrationArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetHistoricalMigrationArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceGetHistoricalMigrationResult struct {
+	Success        *HistoricalMigration `thrift:"success,0,optional" frugal:"0,optional,HistoricalMigration" json:"success,omitempty"`
+	Error          *APIError            `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceGetHistoricalMigrationResult() *ControlServiceGetHistoricalMigrationResult {
+	return &ControlServiceGetHistoricalMigrationResult{}
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) InitDefault() {
+}
+
+var ControlServiceGetHistoricalMigrationResult_Success_DEFAULT *HistoricalMigration
+
+func (p *ControlServiceGetHistoricalMigrationResult) GetSuccess() (v *HistoricalMigration) {
+	if !p.IsSetSuccess() {
+		return ControlServiceGetHistoricalMigrationResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceGetHistoricalMigrationResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceGetHistoricalMigrationResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceGetHistoricalMigrationResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceGetHistoricalMigrationResult) SetSuccess(x interface{}) {
+	p.Success = x.(*HistoricalMigration)
+}
+func (p *ControlServiceGetHistoricalMigrationResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceGetHistoricalMigrationResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceGetHistoricalMigrationResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceGetHistoricalMigrationResult = map[int16]string{
+	0: "success",
+	1: "error",
 }
 
 type ControlServicePreviewAssociationsArgs struct {
@@ -7203,6 +8831,128 @@ func (p *ControlServiceGetInstanceResult) String() string {
 }
 
 var fieldIDToName_ControlServiceGetInstanceResult = map[int16]string{
+	0: "success",
+	1: "error",
+}
+
+type ControlServiceConfirmInstanceManagementArgs struct {
+	Ctx            *RequestContext                   `thrift:"ctx,1" frugal:"1,default,RequestContext" json:"ctx"`
+	Request        *ConfirmInstanceManagementRequest `thrift:"request,2" frugal:"2,default,ConfirmInstanceManagementRequest" json:"request"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceConfirmInstanceManagementArgs() *ControlServiceConfirmInstanceManagementArgs {
+	return &ControlServiceConfirmInstanceManagementArgs{}
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) InitDefault() {
+}
+
+var ControlServiceConfirmInstanceManagementArgs_Ctx_DEFAULT *RequestContext
+
+func (p *ControlServiceConfirmInstanceManagementArgs) GetCtx() (v *RequestContext) {
+	if !p.IsSetCtx() {
+		return ControlServiceConfirmInstanceManagementArgs_Ctx_DEFAULT
+	}
+	return p.Ctx
+}
+
+var ControlServiceConfirmInstanceManagementArgs_Request_DEFAULT *ConfirmInstanceManagementRequest
+
+func (p *ControlServiceConfirmInstanceManagementArgs) GetRequest() (v *ConfirmInstanceManagementRequest) {
+	if !p.IsSetRequest() {
+		return ControlServiceConfirmInstanceManagementArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+func (p *ControlServiceConfirmInstanceManagementArgs) SetCtx(val *RequestContext) {
+	p.Ctx = val
+}
+func (p *ControlServiceConfirmInstanceManagementArgs) SetRequest(val *ConfirmInstanceManagementRequest) {
+	p.Request = val
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) IsSetCtx() bool {
+	return p.Ctx != nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceConfirmInstanceManagementArgs(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceConfirmInstanceManagementArgs = map[int16]string{
+	1: "ctx",
+	2: "request",
+}
+
+type ControlServiceConfirmInstanceManagementResult struct {
+	Success        *ObservationInstance `thrift:"success,0,optional" frugal:"0,optional,ObservationInstance" json:"success,omitempty"`
+	Error          *APIError            `thrift:"error,1,optional" frugal:"1,optional,APIError" json:"error,omitempty"`
+	_unknownFields unknown.Fields
+}
+
+func NewControlServiceConfirmInstanceManagementResult() *ControlServiceConfirmInstanceManagementResult {
+	return &ControlServiceConfirmInstanceManagementResult{}
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) InitDefault() {
+}
+
+var ControlServiceConfirmInstanceManagementResult_Success_DEFAULT *ObservationInstance
+
+func (p *ControlServiceConfirmInstanceManagementResult) GetSuccess() (v *ObservationInstance) {
+	if !p.IsSetSuccess() {
+		return ControlServiceConfirmInstanceManagementResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var ControlServiceConfirmInstanceManagementResult_Error_DEFAULT *APIError
+
+func (p *ControlServiceConfirmInstanceManagementResult) GetError() (v *APIError) {
+	if !p.IsSetError() {
+		return ControlServiceConfirmInstanceManagementResult_Error_DEFAULT
+	}
+	return p.Error
+}
+func (p *ControlServiceConfirmInstanceManagementResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ObservationInstance)
+}
+func (p *ControlServiceConfirmInstanceManagementResult) SetError(val *APIError) {
+	p.Error = val
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) CarryingUnknownFields() bool {
+	return len(p._unknownFields) > 0
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) IsSetError() bool {
+	return p.Error != nil
+}
+
+func (p *ControlServiceConfirmInstanceManagementResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlServiceConfirmInstanceManagementResult(%+v)", *p)
+}
+
+var fieldIDToName_ControlServiceConfirmInstanceManagementResult = map[int16]string{
 	0: "success",
 	1: "error",
 }

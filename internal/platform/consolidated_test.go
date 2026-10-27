@@ -39,6 +39,14 @@ var _ = ginkgo.It("UT-04 集群登记与管理状态", func() {
 
 var _ = ginkgo.It("UT-07 实例身份与不可变字段", func() {
 	t := ginkgo.GinkgoT()
+	checkTestInstanceCreatorIdentity(t)
+	checkTestHistoricalManagementConfirmation(t)
+	checkTestHistoricalManagementDirectRPC(t)
+	checkTestAdminInstanceWriteProtection(t)
+	checkTestCollectorAdminProtection(t)
+	checkAgentCreatorAssociation(t)
+	checkAgentUnknownCreatorCustom(t)
+	checkTestInstanceCreatorRoleSnapshot(t)
 	checkTestK10DraftNameAndRevision(t)
 	checkTestAgentTypedDraftIdentityAndDefaults(t)
 	checkTestAgentRevisionNameBudgetLegacyAndWorker(t)
@@ -48,9 +56,14 @@ var _ = ginkgo.It("UT-07 实例身份与不可变字段", func() {
 
 var _ = ginkgo.It("UT-08 保存预览与版本冻结", func() {
 	t := ginkgo.GinkgoT()
+	checkExporterCollectionIntent(t)
+	checkExporterCollectionCapability(t)
+	checkExporterCollectionParameters(t)
+	checkExporterUnknownCreator(t)
 	checkTestP02PublicationFreezesSourceAndP03Idempotency(t)
 	checkTestP04DraftAndTargetPreviewRaces(t)
 	checkTestAgentDraftSourceIsolation(t)
+	checkAgentCreatorMatching(t)
 })
 
 var _ = ginkgo.It("UT-09 幂等与受理事务", func() {
@@ -65,6 +78,13 @@ var _ = ginkgo.It("UT-09 幂等与受理事务", func() {
 
 var _ = ginkgo.It("UT-10 派发取消与任务授权", func() {
 	t := ginkgo.GinkgoT()
+	checkExporterOperatorDispatch(t)
+	checkTestInstanceDispatchReauthorizesCreatorProtection(t)
+	checkTestHistoricalManagementDispatchRevocation(t)
+	checkTestInstanceDispatchRejectsDisabledAccount(t)
+	checkTestInstanceConflictRetryReauthorizes(t)
+	checkTestInstanceDeletionDispatchReauthorizes(t)
+	checkTestInstanceSentResultSurvivesRevocation(t)
 	checkTestP08CancellationCompetesWithPersistentDispatch(t)
 	checkTestI06CookieExpiryDoesNotCancelAcceptedOperation(t)
 	checkTestPublicationPreflightDoesNotBlockCurrentAccountRevocation(t)
@@ -77,6 +97,18 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 		checkTestP13RestartUsesPersistentSentBoundary(t)
 		return
 	}
+	checkHistoricalMigrationInventory(t)
+	checkHistoricalMigrationResolutions(t)
+	checkHistoricalParentRelease(t)
+	checkHistoricalDeletionRelease(t)
+	checkHistoricalMigrationBoundaries(t)
+	checkHistoricalAgentImpact(t)
+	checkHistoricalNewPublicationRecovery(t)
+	checkLegacySMNeverDispatches(t)
+	checkSingleCRResourceProgress(t)
+	checkAgentSingleCRResourceProgress(t)
+	checkResourceRetryIdentity(t)
+	checkResourceProgressSurvivesRestart(t)
 	checkTestP07RetryUsesFrozenVersionAndCurrentRevisions(t)
 	checkTestPublicationUnknownOutcomeNeverReplays(t)
 	checkTestP13RestartUsesPersistentSentBoundary(t)
@@ -84,6 +116,7 @@ var _ = ginkgo.It("UT-11 重试与重启恢复", func() {
 
 var _ = ginkgo.It("UT-12 预览与删除保护", func() {
 	t := ginkgo.GinkgoT()
+	checkExporterCollectionDeletion(t)
 	checkTestDeletionPreviewBindsTargetAndImpact(t)
 	checkTestP05DriftOverwritePreservesMetadataAndP06Equivalent(t)
 	checkPublicationStatusConflict(t)
@@ -108,6 +141,7 @@ var _ = ginkgo.It("UT-13 PVC 危险动作决策", func() {
 
 var _ = ginkgo.It("UT-14 状态与工作台查询", func() {
 	t := ginkgo.GinkgoT()
+	checkExporterCollectionObservation(t)
 	checkTestR03KSMEffectiveZeroValuesAndMissingStatus(t)
 	checkTestR03AgentPausedReadOnly(t)
 	checkTestR03AgentZeroUsesApplicableStatus(t)
@@ -129,6 +163,12 @@ var _ = ginkgo.It("UT-15 请求预算与并发", func() {
 
 var _ = ginkgo.It("UT-16 数据库主密钥与敏感投影", func() {
 	t := ginkgo.GinkgoT()
+	checkTestUnknownCreatorMigration(t)
+	checkTestHistoricalCreatorEvidence(t)
+	checkTestHistoricalMigrationRollback(t)
+	checkHistoricalMigrationRollback(t)
+	checkHistoricalSingleCR(t)
+	checkTestHistoricalV13Confirmation(t)
 	checkTestSchemaOneMigrationPreservesSessionAndBacksUpBeforeDDL(t)
 	checkLegacyPublicationMigration(t)
 	checkTestT07DatabaseCorruptionNeverStartsReady(t)

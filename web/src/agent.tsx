@@ -1,3 +1,6 @@
+import { AgentExporterAssociation } from "./agent-exporter";
+import { InstanceManagement } from "./instance-management";
+import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
 import { useDraftBookmark } from "./draft-bookmark";
 import {AgentLifecycleFields,AgentStorageFields,StorageImpact,StoragePolicies,type StorageImpactValue,type StatefulPolicy,StorageVolumeOutcome} from "./agent-storage";
@@ -87,7 +90,7 @@ export type Source = SourceStatus & {
     expectedPolicy?:string;retentionResult?:string;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;statefulUID?:string;statefulName?:string;shard?:number;agentUID?:string;impactAction?:string;
   }[];
 };
-type Instance = {
+type Instance = InstanceIdentityValue & {
   id: string;
   name: string;
   readOnly: boolean;
@@ -123,6 +126,7 @@ type Reference = {
 };
 type Tab = "draft" | "runtime" | "history" | "yaml";
 type Props = {
+  isAdmin: boolean;
   selection: {
     instance?: Instance;
     agentTemplate?: AgentConfiguration;
@@ -218,6 +222,7 @@ function canonical(config: AgentConfiguration): AgentConfiguration {
 
 // 编辑草稿独立于运行/来源刷新，避免轮询回填未保存编辑或重建控件。
 export function AgentEditor({
+  isAdmin,
   selection,
   cluster,
   onAction,
@@ -266,6 +271,7 @@ export function AgentEditor({
     } | null>(null);
   const bookmark = useDraftBookmark(bodyRef);
   currentRef.current = current;
+  const canManage = !current || current.canManage;
   const readOnly = Boolean(current?.readOnly),
     fixed = Boolean(current?.uid),
     dirty = JSON.stringify(canonical(config)) !== saved;
@@ -453,7 +459,7 @@ export function AgentEditor({
     setConfig(value);
     setNotice("");
     setPreview(null);
-    if (currentRef.current && !readOnly) {
+    if (currentRef.current && canManage) {
       if (editingTimer.current) clearTimeout(editingTimer.current);
       editingTimer.current = setTimeout(() => {
         void api(
@@ -466,6 +472,7 @@ export function AgentEditor({
   }
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (!canManage) return;
     await run(async () => {
       const value = canonical(config);
       let id = current?.id;
@@ -586,6 +593,7 @@ export function AgentEditor({
               实例详情 · {cluster.name} · collector / Prometheus Agent
             </p>
             <h2>{current?.name || config.name || "新 Agent 实例"}</h2>
+            {current && <><InstanceIdentity value={current} /><InstanceManagement value={current} clusterActive={cluster.state === "ACTIVE"} isAdmin={isAdmin} onConfirmed={next => { setCurrent(next); onChange(); }} /></>}
             <span className={`badge ${readOnly ? "gray" : "ok"}`}>
               {readOnly
                 ? "平台未纳管 · 只读"
@@ -646,6 +654,7 @@ export function AgentEditor({
               </p>
               <AgentForm
                 value={viewed.agent}
+                creatorUserId={current?.creatorUserId}
                 onChange={() => {}}
                 fixed
                 disabled
@@ -666,9 +675,10 @@ export function AgentEditor({
                   >
                     <AgentForm
                       value={config}
+                      creatorUserId={current?.creatorUserId}
                       onChange={change}
                       fixed={fixed}
-                      disabled={busy}
+                      disabled={busy || !canManage}
                       namespaces={namespaces}
                       references={references}
                       errors={{
@@ -738,7 +748,7 @@ export function AgentEditor({
                         <strong>{stateText(operation.state)}</strong>
                         <p>{operation.message}</p>
                         <p className="help">操作 {operation.operationId}</p>
-                        <LifecycleActions operation={operation} onOperation={followOperation} />
+                        <LifecycleActions canManage={canManage} operation={operation} onOperation={followOperation} />
                       </article>
                     )}
                     <p className="help">
@@ -799,7 +809,7 @@ export function AgentEditor({
                                 查看冻结版本 {item.versionId.slice(0, 8)}
                               </button>
                             )}
-                            <LifecycleActions operation={item} onOperation={value => followOperation(value, true)} />
+                            <LifecycleActions canManage={canManage} operation={item} onOperation={value => followOperation(value, true)} />
                           </article>
                         ))}
                         <h3>发布版本</h3>
@@ -841,7 +851,7 @@ export function AgentEditor({
             )
           )}
         </div>
-        {!viewed && !readOnly && tab === "draft" && (
+        {!viewed && canManage && tab === "draft" && (
           <div className="drawer-footer">
             <div>
               <span className={`badge ${dirty ? "warn" : "gray"}`}>
@@ -941,7 +951,7 @@ export function AgentEditor({
                 </button>
                 <button
                   className="primary"
-                  disabled={busy || (preview.drift && !overwrite)}
+                  disabled={busy || !canManage || (preview.drift && !overwrite)}
                   onClick={() => void confirm()}
                 >
                   确认下发
@@ -958,6 +968,7 @@ export function AgentEditor({
 // 配置表单只开放首期单 shard/PVC 运行形态；既有 CR 的身份和存储不可原地迁移。
 function AgentForm({
   value,
+  creatorUserId,
   onChange,
   fixed,
   disabled,
@@ -967,6 +978,7 @@ function AgentForm({
   onRefresh,
 }: {
   value: AgentConfiguration;
+  creatorUserId?: string;
   onChange: (value: AgentConfiguration) => void;
   fixed: boolean;
   disabled: boolean;
@@ -1112,6 +1124,7 @@ function AgentForm({
           每类独立设置对象与 namespace 规则。默认 None / Own，不修改已有资源
           labels；匹配预览不等于实际采集目标。
         </p>
+        <AgentExporterAssociation creatorUserId={creatorUserId} object={value.associations.serviceMonitor.object} disabled={disabled} onChange={(object) => patch({associations:{...value.associations,serviceMonitor:{...value.associations.serviceMonitor,object}}})}/>
         {kinds.map(([key, label]) => (
           <details className="publication-item" key={key} open>
             <summary>

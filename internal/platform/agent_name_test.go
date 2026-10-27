@@ -93,6 +93,9 @@ func checkTestAgentRevisionNameBudgetLegacyAndWorker(t ginkgo.GinkgoTInterface) 
 		{`UPDATE instances SET name=? WHERE id=?`, []any{longName, id}},
 		{`UPDATE drafts SET config=? WHERE instance_id=?`, []any{raw, id}},
 		{`UPDATE publication_versions SET config=? WHERE instance_id=?`, []any{raw, id}},
+		// 此历史场景的原名称本来就很长；冻结路径必须同步，不能制造当前身份与原资源错绑。
+		{`UPDATE version_resources SET document=json_set(document,'$.metadata.name',?),object_path=collection_path||'/'||? WHERE version_id IN (SELECT id FROM publication_versions WHERE instance_id=?)`, []any{longName, longName, id}},
+		{`UPDATE operation_resources SET document=json_set(document,'$.metadata.name',?),object_path=collection_path||'/'||? WHERE operation_id=?`, []any{longName, longName, op["operationId"]}},
 	} {
 		if _, err = db.Exec(update.sql, update.args...); err != nil {
 			t.Fatal(err)

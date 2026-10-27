@@ -55,10 +55,11 @@ var _ = ginkgo.Describe("独占双集群", ginkgo.Ordered, ginkgo.ContinueOnFail
 			decoder := json.NewDecoder(conn)
 			for {
 				var event struct {
-					Type    string `json:"type"`
-					Text    string `json:"text"`
-					ID      string `json:"id"`
-					Outcome string `json:"outcome"`
+					Type     string                     `json:"type"`
+					Text     string                     `json:"text"`
+					ID       string                     `json:"id"`
+					Outcome  string                     `json:"outcome"`
+					Evidence map[string]json.RawMessage `json:"evidence"`
 				}
 				gomega.Expect(decoder.Decode(&event)).To(gomega.Succeed())
 				if event.Type == "step" {
@@ -68,6 +69,7 @@ var _ = ginkgo.Describe("独占双集群", ginkgo.Ordered, ginkgo.ContinueOnFail
 				// 关键：只有同 ID 的实际断言和清理均成功才记通过；连接/进程成功不等于业务通过。
 				gomega.Expect(event.ID).To(gomega.Equal(id))
 				gomega.Expect(event.Outcome).To(gomega.Equal("passed"))
+				assertIssueEvidence(id, event.Evidence)
 				break
 			}
 		})

@@ -13,6 +13,27 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
+	"ReleaseHistoricalOperation": kitex.NewMethodInfo(
+		releaseHistoricalOperationHandler,
+		newControlServiceReleaseHistoricalOperationArgs,
+		newControlServiceReleaseHistoricalOperationResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ResolveHistoricalServiceMonitor": kitex.NewMethodInfo(
+		resolveHistoricalServiceMonitorHandler,
+		newControlServiceResolveHistoricalServiceMonitorArgs,
+		newControlServiceResolveHistoricalServiceMonitorResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetHistoricalMigration": kitex.NewMethodInfo(
+		getHistoricalMigrationHandler,
+		newControlServiceGetHistoricalMigrationArgs,
+		newControlServiceGetHistoricalMigrationResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"PreviewAssociations": kitex.NewMethodInfo(
 		previewAssociationsHandler,
 		newControlServicePreviewAssociationsArgs,
@@ -87,6 +108,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		getInstanceHandler,
 		newControlServiceGetInstanceArgs,
 		newControlServiceGetInstanceResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ConfirmInstanceManagement": kitex.NewMethodInfo(
+		confirmInstanceManagementHandler,
+		newControlServiceConfirmInstanceManagementArgs,
+		newControlServiceConfirmInstanceManagementResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
@@ -408,6 +436,78 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 	return svcInfo
 }
 
+func releaseHistoricalOperationHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceReleaseHistoricalOperationArgs)
+	realResult := result.(*control.ControlServiceReleaseHistoricalOperationResult)
+	success, err := handler.(control.ControlService).ReleaseHistoricalOperation(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceReleaseHistoricalOperationArgs() interface{} {
+	return control.NewControlServiceReleaseHistoricalOperationArgs()
+}
+
+func newControlServiceReleaseHistoricalOperationResult() interface{} {
+	return control.NewControlServiceReleaseHistoricalOperationResult()
+}
+
+func resolveHistoricalServiceMonitorHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceResolveHistoricalServiceMonitorArgs)
+	realResult := result.(*control.ControlServiceResolveHistoricalServiceMonitorResult)
+	success, err := handler.(control.ControlService).ResolveHistoricalServiceMonitor(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceResolveHistoricalServiceMonitorArgs() interface{} {
+	return control.NewControlServiceResolveHistoricalServiceMonitorArgs()
+}
+
+func newControlServiceResolveHistoricalServiceMonitorResult() interface{} {
+	return control.NewControlServiceResolveHistoricalServiceMonitorResult()
+}
+
+func getHistoricalMigrationHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceGetHistoricalMigrationArgs)
+	realResult := result.(*control.ControlServiceGetHistoricalMigrationResult)
+	success, err := handler.(control.ControlService).GetHistoricalMigration(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceGetHistoricalMigrationArgs() interface{} {
+	return control.NewControlServiceGetHistoricalMigrationArgs()
+}
+
+func newControlServiceGetHistoricalMigrationResult() interface{} {
+	return control.NewControlServiceGetHistoricalMigrationResult()
+}
+
 func previewAssociationsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*control.ControlServicePreviewAssociationsArgs)
 	realResult := result.(*control.ControlServicePreviewAssociationsResult)
@@ -670,6 +770,30 @@ func newControlServiceGetInstanceArgs() interface{} {
 
 func newControlServiceGetInstanceResult() interface{} {
 	return control.NewControlServiceGetInstanceResult()
+}
+
+func confirmInstanceManagementHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*control.ControlServiceConfirmInstanceManagementArgs)
+	realResult := result.(*control.ControlServiceConfirmInstanceManagementResult)
+	success, err := handler.(control.ControlService).ConfirmInstanceManagement(ctx, realArg.Ctx, realArg.Request)
+	if err != nil {
+		switch v := err.(type) {
+		case *control.APIError:
+			realResult.Error = v
+		default:
+			return err
+		}
+	} else {
+		realResult.Success = success
+	}
+	return nil
+}
+func newControlServiceConfirmInstanceManagementArgs() interface{} {
+	return control.NewControlServiceConfirmInstanceManagementArgs()
+}
+
+func newControlServiceConfirmInstanceManagementResult() interface{} {
+	return control.NewControlServiceConfirmInstanceManagementResult()
 }
 
 func getDraftHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -1546,6 +1670,51 @@ func newServiceClient(c client.Client) *kClient {
 	}
 }
 
+func (p *kClient) ReleaseHistoricalOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest) (r *control.HistoricalMigrationConfirmation, err error) {
+	var _args control.ControlServiceReleaseHistoricalOperationArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceReleaseHistoricalOperationResult
+	if err = p.c.Call(ctx, "ReleaseHistoricalOperation", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ResolveHistoricalServiceMonitor(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest) (r *control.HistoricalMigrationConfirmation, err error) {
+	var _args control.ControlServiceResolveHistoricalServiceMonitorArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceResolveHistoricalServiceMonitorResult
+	if err = p.c.Call(ctx, "ResolveHistoricalServiceMonitor", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetHistoricalMigration(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID) (r *control.HistoricalMigration, err error) {
+	var _args control.ControlServiceGetHistoricalMigrationArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceGetHistoricalMigrationResult
+	if err = p.c.Call(ctx, "GetHistoricalMigration", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
 func (p *kClient) PreviewAssociations(ctx context.Context, ctx_ *control.RequestContext, request *control.AssociationPreviewRequest) (r *control.AssociationPreview, err error) {
 	var _args control.ControlServicePreviewAssociationsArgs
 	_args.Ctx = ctx_
@@ -1702,6 +1871,21 @@ func (p *kClient) GetInstance(ctx context.Context, ctx_ *control.RequestContext,
 	_args.Request = request
 	var _result control.ControlServiceGetInstanceResult
 	if err = p.c.Call(ctx, "GetInstance", &_args, &_result); err != nil {
+		return
+	}
+	switch {
+	case _result.Error != nil:
+		return r, _result.Error
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ConfirmInstanceManagement(ctx context.Context, ctx_ *control.RequestContext, request *control.ConfirmInstanceManagementRequest) (r *control.ObservationInstance, err error) {
+	var _args control.ControlServiceConfirmInstanceManagementArgs
+	_args.Ctx = ctx_
+	_args.Request = request
+	var _result control.ControlServiceConfirmInstanceManagementResult
+	if err = p.c.Call(ctx, "ConfirmInstanceManagement", &_args, &_result); err != nil {
 		return
 	}
 	switch {

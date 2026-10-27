@@ -20,17 +20,8 @@ func (s *Store) wakeWorker() {
 
 // StartWorkers 建立后台核验循环，并先将重启遗留操作转为等待明确继续。
 func (s *Store) StartWorkers() error {
-	// 关键：重启不能重放已受理变更；未发等待人工继续，可能已发保持不确定保护。
-	if _, e := s.DB.Exec(`UPDATE operations SET state='WAITING_CONFIRMATION',message='平台已重启，等待管理员明确继续核验' WHERE state IN ('QUEUED','RUNNING','CHECKING')`); e != nil {
-		return e
-	}
-	if _, e := s.DB.Exec(`UPDATE operations SET state=CASE WHEN EXISTS(SELECT 1 FROM publication_operations p JOIN instances i ON i.id=p.instance_id WHERE p.operation_id=operations.id AND i.uid='') THEN 'IDENTITY_UNCERTAIN' ELSE 'RESULT_UNCERTAIN' END,message='平台已重启，只恢复读取核验，不自动重放' WHERE action='PUBLISH' AND state='DISPATCHED'`); e != nil {
-		return e
-	}
-	if _, e := s.DB.Exec(`UPDATE operations SET state='DELETION_VERIFYING',message='平台已重启，只恢复原UID清理核验，不重发删除' WHERE action='DELETE' AND state='DISPATCHED'`); e != nil {
-		return e
-	}
-	if _, e := s.DB.Exec(`UPDATE execution_attempts SET state=(SELECT state FROM operations WHERE id=operation_id),revision=revision+1 WHERE id IN (SELECT current_attempt_id FROM operation_lifecycle) AND state IN ('QUEUED','CHECKING','DISPATCHED')`); e != nil {
+	// 关键：逐资源发送边界与操作状态共同恢复，不自动重放。
+	if e := s.recoverResourceProgress(); e != nil {
 		return e
 	}
 	ctx, cancel := context.WithCancel(context.Background())

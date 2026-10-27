@@ -15,7 +15,7 @@ import (
 func (s *Store) launchPublications(ctx context.Context) {
 	for ctx.Err() == nil && !s.stopping.Load() {
 		var id string
-		if s.DB.QueryRowContext(ctx, `SELECT id FROM operations WHERE action IN ('PUBLISH','DELETE') AND state='QUEUED' ORDER BY created_at,id LIMIT 1`).Scan(&id) != nil {
+		if s.DB.QueryRowContext(ctx, `SELECT id FROM operations WHERE action IN ('PUBLISH','DELETE') AND state='QUEUED' AND id NOT IN (SELECT operation_id FROM operation_resources WHERE resource_key<>'component') ORDER BY created_at,id LIMIT 1`).Scan(&id) != nil {
 			return
 		}
 		res, e := s.DB.ExecContext(ctx, `UPDATE operations SET state='CHECKING',message='正在核验当前权限与目标基线' WHERE id=? AND state='QUEUED'`, id)
@@ -101,6 +101,13 @@ func (s *Store) executePublication(life context.Context, id string) {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
+	// 关键：原请求路径及 UID 来自操作冻结目标，当前草稿和实例字段不参与重新定位。
+	resource, e := executablePrimaryResource(life, s.DB, id, i)
+	if e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
+		return
+	}
+	i = resourceInstance(i, resource, resource.originalUID)
 	v, e := versionByID(life, s.DB, o.GetVersionId(), i.Id)
 	if e != nil {
 		s.finishExecution(life, o, "FAILED", e, nil)
@@ -146,6 +153,10 @@ func (s *Store) executePublication(life context.Context, id string) {
 	// 同一受理 attempt 最多三次条件写；每次重读都重新验证 UID、spec、依赖与存储影响。
 	var rejectedRV string
 	for write := 0; write < 3; write++ {
+		if e = validateHistoricalCollection(life, s.DB, i, frozen, t); e != nil {
+			s.finishExecution(life, o, "FAILED", e, nil)
+			return
+		}
 		if e = validateFixedSpec(life, s.DB, i, frozen); e != nil {
 			s.finishExecution(life, o, "FAILED", e, nil)
 			return
@@ -180,10 +191,10 @@ func (s *Store) executePublication(life context.Context, id string) {
 		}
 		// 关键：更新携带原UID与最新RV，防止覆盖并发写或同名替换；请求体只替换支持的spec，完整保留目标当前非平台 metadata/status/finalizers。
 		body := publicationDocument(cfg, cr, frozen)
-		method, path := "POST", componentFor(i.Component).collectionPath(instanceCRNamespace(i))
+		method, path := "POST", resource.collection
 		if i.Uid != "" {
 			method = "PUT"
-			path = componentFor(i.Component).objectPath(i)
+			path = resource.path
 			if objectString(objectMap(body, "metadata"), "resourceVersion") == "" {
 				s.finishExecution(life, o, "FAILED", Error("CONFLICT", "目标 RV 缺失，拒绝无条件更新"), nil)
 				return
@@ -312,6 +323,9 @@ func (s *Store) finishPublication(expected *rpc.Operation, state string, cause e
 	}
 	if state == "IDENTITY_UNCERTAIN" {
 		message = "首次创建可能已发送，原 UID 未确认；禁止根据同名自动认领"
+	}
+	if e = recordResourceResult(ctx, tx, o, "component", state, message, objectString(objectMap(cr, "metadata"), "uid"), now); e != nil {
+		return
 	}
 	if _, e = tx.ExecContext(ctx, `UPDATE operations SET state=?,message=?,updated_at=? WHERE id=?`, state, message, now, id); e != nil {
 		return

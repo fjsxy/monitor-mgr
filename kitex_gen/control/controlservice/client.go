@@ -11,6 +11,9 @@ import (
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
+	ReleaseHistoricalOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest, callOptions ...callopt.Option) (r *control.HistoricalMigrationConfirmation, err error)
+	ResolveHistoricalServiceMonitor(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest, callOptions ...callopt.Option) (r *control.HistoricalMigrationConfirmation, err error)
+	GetHistoricalMigration(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.HistoricalMigration, err error)
 	PreviewAssociations(ctx context.Context, ctx_ *control.RequestContext, request *control.AssociationPreviewRequest, callOptions ...callopt.Option) (r *control.AssociationPreview, err error)
 	PreviewDeletion(ctx context.Context, ctx_ *control.RequestContext, request *control.DeletionPreviewRequest, callOptions ...callopt.Option) (r *control.DeletionPreview, err error)
 	RetryLifecycle(ctx context.Context, ctx_ *control.RequestContext, request *control.LifecycleRequest, callOptions ...callopt.Option) (r *control.Operation, err error)
@@ -22,6 +25,7 @@ type Client interface {
 	QueryInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.QueryInstancesRequest, callOptions ...callopt.Option) (r *control.QueryInstancesResult_, err error)
 	ListInstances(ctx context.Context, ctx_ *control.RequestContext, request *control.ClusterID, callOptions ...callopt.Option) (r *control.InstancesResult_, err error)
 	GetInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
+	ConfirmInstanceManagement(ctx context.Context, ctx_ *control.RequestContext, request *control.ConfirmInstanceManagementRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error)
 	GetDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
 	SaveDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.SaveDraftRequest, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
 	CopyTemplate(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error)
@@ -89,6 +93,21 @@ type kControlServiceClient struct {
 	*kClient
 }
 
+func (p *kControlServiceClient) ReleaseHistoricalOperation(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest, callOptions ...callopt.Option) (r *control.HistoricalMigrationConfirmation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ReleaseHistoricalOperation(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ResolveHistoricalServiceMonitor(ctx context.Context, ctx_ *control.RequestContext, request *control.HistoricalMigrationConfirmationRequest, callOptions ...callopt.Option) (r *control.HistoricalMigrationConfirmation, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ResolveHistoricalServiceMonitor(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) GetHistoricalMigration(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.HistoricalMigration, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetHistoricalMigration(ctx, ctx_, request)
+}
+
 func (p *kControlServiceClient) PreviewAssociations(ctx context.Context, ctx_ *control.RequestContext, request *control.AssociationPreviewRequest, callOptions ...callopt.Option) (r *control.AssociationPreview, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.PreviewAssociations(ctx, ctx_, request)
@@ -142,6 +161,11 @@ func (p *kControlServiceClient) ListInstances(ctx context.Context, ctx_ *control
 func (p *kControlServiceClient) GetInstance(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ObservationInstance, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetInstance(ctx, ctx_, request)
+}
+
+func (p *kControlServiceClient) ConfirmInstanceManagement(ctx context.Context, ctx_ *control.RequestContext, request *control.ConfirmInstanceManagementRequest, callOptions ...callopt.Option) (r *control.ObservationInstance, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ConfirmInstanceManagement(ctx, ctx_, request)
 }
 
 func (p *kControlServiceClient) GetDraft(ctx context.Context, ctx_ *control.RequestContext, request *control.InstanceID, callOptions ...callopt.Option) (r *control.ConfigurationDraft, err error) {

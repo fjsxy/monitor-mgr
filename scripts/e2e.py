@@ -62,13 +62,14 @@ def main():
     try:
         # 分阶段记录耗时，后续调整分组可依据公开实测，而不依赖敏感原始日志。
         for name,operation in [('build',environment.build),('clusters',environment.prepare_clusters),('images',environment.load_images),('operators',environment.operators)]:
+            summary['stage']=name
             stage=time.monotonic();operation();summary['timingsSeconds'][name]=round(time.monotonic()-stage,3)
         summary['environment']='ready'
         with tempfile.TemporaryDirectory(prefix='mm-e2e-') as temporary:
             address=str(Path(temporary)/'scheduler.sock')
             with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
                 server.bind(address);os.chmod(address,0o600);server.listen(1);server.settimeout(.2)
-                env=dict(os.environ,MONITOR_MGR_E2E_SOCKET=address,MONITOR_MGR_E2E_CASES=json.dumps(required))
+                env=dict(os.environ,MONITOR_MGR_E2E_SOCKET=address,MONITOR_MGR_E2E_CASES=json.dumps(required),MONITOR_MGR_E2E_CANDIDATE=candidate)
                 report=environment.private/'ginkgo.json'
                 child=environment.processes.popen(['go','test','./tests/e2e','-count=1','-timeout=120m','-args','-ginkgo.no-color','-ginkgo.fail-on-empty','-ginkgo.json-report='+str(report)],label='ginkgo-e2e',cwd=ROOT,env=env)
                 seen=set()
@@ -104,18 +105,29 @@ def main():
                             result['durationSeconds']=round(time.monotonic()-case_started,3)
                             if failures:result['outcome']='failed'
                             result['requests']=scenario.traces;result['platformContainers']=scenario.platform_proofs
+                            result['evidence']=scenario.acceptance_evidence
                             private_json(environment.public/'results.json',summary)
-                            emit(dict(type='result',id=id,outcome=result['outcome']))
+                            emit(dict(type='result',id=id,outcome=result['outcome'],evidence=scenario.acceptance_evidence))
                             print(id+' '+result['outcome'],flush=True)
                 raw=json.loads(report.read_text());specs=[s for suite in raw for s in suite.get('SpecReports',[]) if s.get('LeafNodeType')=='It']
                 summary['ginkgo']=[dict(id=s['LeafNodeText'].split(' ')[0],state=s['State'],attempts=s['NumAttempts']) for s in specs]
+                # Go 的原始证据断言也决定单例结果，不能保留 Python passed 造成部分结果误报。
+                for spec in specs:
+                    if spec['State'] != 'passed':
+                        item=results[spec['LeafNodeText'].split(' ')[0]]
+                        # 保留已经捕获的环境/业务根因；只有 Python 已通过时才将失败归因于 Go 证据断言。
+                        if item['outcome']=='passed':
+                            item['failedStep']='Ginkgo 原始证据断言';item['errorType']='GinkgoAssertionFailure'
+                        item['outcome']='failed';item['ginkgoState']=spec['State']
+
                 validate_specs(raw,required,candidate,source())
                 summary['passed']=child.returncode==0 and all(r['outcome']=='passed' for r in results.values())
     except Exception as error:
         summary['errorType']=type(error).__name__
+        summary['diagnostic']=failure_summary(error)
         if summary['environment']=='preparing':summary['environment']='failed'
         path=environment.private/'run-failure.txt';path.write_text(traceback.format_exc());os.chmod(path,0o600)
-        print('E2E 执行失败：'+type(error).__name__+'；原始诊断：'+str(path),flush=True)
+        print('E2E 执行失败；源码位置见公开 diagnostic，原始诊断保持私有',flush=True)
     finally:
         if child and child.poll() is None:child.terminate();child.wait(timeout=15)
         failures=environment.processes.close_auxiliary()

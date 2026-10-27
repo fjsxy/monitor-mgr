@@ -16,6 +16,9 @@ import (
 
 // KSMConfig 是平台草稿；隐藏的角色值不属于有效 CR spec。
 type KSMConfig struct {
+	ServiceMonitor *ExporterServiceMonitor `json:"serviceMonitor,omitempty"`
+	creatorUserID  string
+
 	Name                 string             `json:"name"`
 	TargetNamespace      string             `json:"targetNamespace"`
 	DeploymentMode       string             `json:"deploymentMode"`
@@ -30,6 +33,14 @@ type KSMConfig struct {
 	ClusterResources     *RoleResources     `json:"clusterResources,omitempty"`
 	UnscheduledResources *RoleResources     `json:"unscheduledResources,omitempty"`
 }
+
+// ExporterServiceMonitor 只保存用户意图；受控标签在明确发布时派生。
+type ExporterServiceMonitor struct {
+	Enabled       bool   `json:"enabled"`
+	Interval      string `json:"interval"`
+	ScrapeTimeout string `json:"scrapeTimeout"`
+}
+
 type Resources struct {
 	RequestCPU    *string `json:"requestCPU,omitempty"`
 	RequestMemory *string `json:"requestMemory,omitempty"`
@@ -127,6 +138,9 @@ func uniqueNames(names []string, allowed []string) bool {
 	return true
 }
 func (c *KSMConfig) validate() error {
+	if e := c.validateCollection(); e != nil {
+		return e
+	}
 	if len(validation.IsDNS1123Subdomain(c.Name)) != 0 {
 		return fieldError("name", "须为 1–253 字符 Kubernetes DNS subdomain")
 	}
@@ -298,7 +312,15 @@ func (c *KSMConfig) spec() map[string]any {
 			ns["namePatterns"] = c.NamespaceFilter.NamePatterns
 		}
 	}
-	return map[string]any{"targetNamespace": c.TargetNamespace, "enabled": c.DesiredState != "Disabled", "suspended": c.DesiredState == "Suspended", "deployment": deployment, "podResources": c.Resources.cr(), "collectors": collectors, "metricFilter": metric, "namespaceFilter": ns}
+	out := map[string]any{"targetNamespace": c.TargetNamespace, "enabled": c.DesiredState != "Disabled", "suspended": c.DesiredState == "Suspended", "deployment": deployment, "podResources": c.Resources.cr(), "collectors": collectors, "metricFilter": metric, "namespaceFilter": ns}
+	if c.ServiceMonitor != nil {
+		m := map[string]any{"enabled": c.ServiceMonitor.Enabled, "interval": c.ServiceMonitor.Interval, "scrapeTimeout": c.ServiceMonitor.ScrapeTimeout}
+		if c.creatorUserID != "" {
+			m["labels"] = map[string]any{"monitor-mgr.io/user-id": c.creatorUserID}
+		}
+		out["serviceMonitor"] = m
+	}
+	return out
 }
 
 const ksmAPI = "monitoring.fjsxy.github.io/v1alpha1"

@@ -1,3 +1,6 @@
+import { HistoricalMigration } from "./historical-migration";
+import { InstanceManagement } from "./instance-management";
+import { InstanceIdentity, type InstanceIdentityValue } from "./instance-identity";
 import { SourceHistory, type SourceStatus } from "./source-history";
 import { useDraftBookmark } from "./draft-bookmark";
 import {StorageImpact} from "./agent-storage";
@@ -32,6 +35,7 @@ type KSM = {
   nodeResources?: Role;
   clusterResources?: Role;
   unscheduledResources?: Role;
+  serviceMonitor?: { enabled: boolean; interval: string; scrapeTimeout: string };
 };
 type Runtime = {
   summary: string;
@@ -43,7 +47,7 @@ type Runtime = {
   error: string;
   observedAt: string;
 };
-type Instance = {
+type Instance = InstanceIdentityValue & {
   id: string;
   clusterId: string;
   name: string;
@@ -143,6 +147,7 @@ const defaultConfig = (): KSM => ({
   metricFilter: { mode: "All" },
   namespaceFilter: { mode: "All" },
   advancedResources: false,
+  serviceMonitor: {enabled: true, interval: "30s", scrapeTimeout: "10s"},
 });
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 // 后端明确字段错误保留原文；浏览器网络异常统一中文，避免直接暴露英文实现提示。
@@ -160,6 +165,7 @@ const stateName = (value: string) =>
       Missing: "原 CR 不存在",
       Deleted:"已删除",
       DELETION_VERIFYING:"清理核验中",
+      HISTORICAL_RESOLVED:"历史删除已显式收尾",
       DELETION_BLOCKED:"清理受阻",
       QUEUED: "已受理",
       CHECKING: "检查中",
@@ -493,6 +499,7 @@ export function Instances({
                 <td>
                   <strong>{item.name}</strong>
                   <div className="help">{item.targetNamespace}</div>
+                  <InstanceIdentity value={item} compact />
                   {item.readOnly && (
                     <span className="badge gray">平台未纳管 · 只读</span>
                   )}
@@ -544,19 +551,19 @@ export function Instances({
                 <td>
                   <div className="row-actions">
                     <button onClick={() => open(item)}>
-                      {item.readOnly ? "查看" : "编辑"}
+                      {item.canManage ? "编辑" : "查看"}
                     </button>
                     <button
                       onClick={() => open(item, "draft")}
-                      disabled={item.readOnly}
-                      title={item.readOnly ? "平台未纳管实例只读" : ""}
+                      disabled={!item.canManage}
+                      title={item.readOnlyReason}
                     >
                       下发
                     </button>
                     <button
                       className="danger"
-                      disabled={item.readOnly || item.lifecycle==="DELETED"}
-                      title={item.readOnly?"平台未纳管实例只读":"删除原 UID 对应的实例"}
+                      disabled={!item.canManage || item.lifecycle==="DELETED"}
+                      title={item.readOnlyReason || "删除原 UID 对应的实例"}
                       onClick={() => void openDeletion(item)}
                     >
                       删除
@@ -668,6 +675,7 @@ export function Instances({
             key={selection.key}
             selection={selection}
             cluster={current}
+            isAdmin={account.role === "ADMIN"}
             onAction={onAction}
             onChange={() => void load()}
             onClose={() => setSelection(null)}
@@ -684,6 +692,7 @@ export function Instances({
             key={selection.key}
             selection={selection}
             cluster={current}
+            isAdmin={account.role === "ADMIN"}
             onAction={onAction}
             onChange={() => void load()}
             onClose={() => setSelection(null)}
@@ -723,6 +732,7 @@ export function Instances({
 
 // 抽屉中的配置状态独立于运行轮询，保存冲突或读取失败均不覆盖本地编辑。
 function Editor({
+  isAdmin,
   selection,
   cluster,
   onAction,
@@ -730,6 +740,7 @@ function Editor({
   onClose,
   onCopy,
 }: {
+  isAdmin: boolean;
   selection: Selection;
   cluster: Cluster;
   onAction: (work: () => Promise<void>) => Promise<void>;
@@ -764,6 +775,7 @@ function Editor({
     [versions, setVersions] = useState<Version[]>([]),
     [viewedVersion, setViewedVersion] = useState<Version | null>(null),
     [namespaceOpen, setNamespaceOpen] = useState(false);
+  const canManage = !current || current.canManage;
   const readOnly = Boolean(current?.readOnly);
   const fixed = Boolean(current?.uid);
   const dirty = JSON.stringify(requestConfig(config)) !== saved;
@@ -907,7 +919,7 @@ function Editor({
     setConfig(next);
     setNotice("");
     setPreview(null);
-    if (currentRef.current && !readOnly) {
+    if (currentRef.current && canManage) {
       if (editingTimer.current) clearTimeout(editingTimer.current);
       editingTimer.current = setTimeout(() => {
         void api(
@@ -920,6 +932,7 @@ function Editor({
   }
   async function save(event?: FormEvent) {
     event?.preventDefault();
+    if (!canManage) return;
     await run(async () => {
       const value = requestConfig(config);
       let id = current?.id;
@@ -1037,6 +1050,7 @@ function Editor({
           <div>
             <p className="help">实例详情 · {cluster.name}</p>
             <h2>{current?.name || config.name || "新 KSM 实例"}</h2>
+            {current && <><InstanceIdentity value={current} /><InstanceManagement value={current} clusterActive={cluster.state === "ACTIVE"} isAdmin={isAdmin} onConfirmed={next => { setCurrent(next); onChange(); }} /></>}
             <span className={"badge " + (readOnly ? "gray" : "ok")}>
               {readOnly
                 ? "平台未纳管 · 只读"
@@ -1126,7 +1140,7 @@ function Editor({
                   <Configuration
                     config={config}
                     onChange={change}
-                    disabled={busy}
+                    disabled={busy || !canManage}
                     fixed={fixed}
                     namespaces={effectiveNamespaces}
                     namespacesError={namespaceError}
@@ -1185,7 +1199,7 @@ function Editor({
                         {operation.attemptId &&
                           ` · 执行尝试 ${operation.attemptId}`}
                       </p>
-                      <LifecycleActions operation={operation} onOperation={async next=>{setOperation(next);setTab("runtime");await refreshRuntime();if(current)await loadHistory(current.id)}}/>
+                      <LifecycleActions canManage={canManage} operation={operation} onOperation={async next=>{setOperation(next);setTab("runtime");await refreshRuntime();if(current)await loadHistory(current.id)}}/>
                     </div>
                   )}
                   <div className="row-actions">
@@ -1214,6 +1228,7 @@ function Editor({
                       刷新历史
                     </button>
                   </div>
+                  {current&&!readOnly&&<HistoricalMigration key={current.id} instanceId={current.id} isAdmin={isAdmin} active={cluster.state==="ACTIVE"} onUpdated={async()=>{setCurrent(await api<Instance>(`/instances/${current.id}`));await loadHistory(current.id);onChange()}}/>}
                   {readOnly ? (
                     <p className="help">平台未纳管实例没有平台发布历史。</p>
                   ) : (
@@ -1245,7 +1260,7 @@ function Editor({
                             </button>
                           )}
                           <p className="help">{item.action==="DELETE"?"删除":"下发"}操作 {item.operationId}</p>
-                          <LifecycleActions operation={item} onOperation={async next=>{setOperation(next);setTab("runtime");if(current)await loadHistory(current.id);onChange()}}/>
+                          <LifecycleActions canManage={canManage} operation={item} onOperation={async next=>{setOperation(next);setTab("runtime");if(current)await loadHistory(current.id);onChange()}}/>
                         </article>
                       ))}
                       <h3>发布版本</h3>
@@ -1290,7 +1305,7 @@ function Editor({
             </>
           )}
         </div>
-        {!viewedVersion && !readOnly && tab === "draft" && (
+        {!viewedVersion && canManage && tab === "draft" && (
           <div className="drawer-footer">
             <div>
               <span className={"badge " + (dirty ? "warn" : "gray")}>
@@ -1396,7 +1411,7 @@ function Editor({
                 <button
                   className="primary"
                   onClick={() => void confirmPublication()}
-                  disabled={busy || (preview.drift && !overwrite)}
+                  disabled={busy || !canManage || (preview.drift && !overwrite)}
                 >
                   确认下发
                 </button>
@@ -1612,6 +1627,15 @@ function Configuration({
             })}
         </section>
       )}
+      <section className="config-section">
+        <h3>配套采集意图</h3>
+        <label className="checkbox-line"><input type="checkbox" aria-label="启用配套采集" checked={config.serviceMonitor?.enabled ?? false} onChange={event => patch({serviceMonitor: {...(config.serviceMonitor ?? {interval:"30s",scrapeTimeout:"10s"}), enabled:event.target.checked}})} />启用配套采集</label>
+        <p className="help">保存草稿不改变集群。明确下发后由 Operator 维护配套 ServiceMonitor；归属使用固定的实例创建用户。关闭采集不停止 exporter，挂起保留配套配置，停用清理全部本实例资源。</p>
+        {config.serviceMonitor && <div className="field-grid">
+          <label>采集间隔<input aria-label="采集间隔" value={config.serviceMonitor.interval} onChange={event => patch({serviceMonitor:{...config.serviceMonitor!,interval:event.target.value}})} placeholder="30s" /></label>
+          <label>采集超时<input aria-label="采集超时" value={config.serviceMonitor.scrapeTimeout} onChange={event => patch({serviceMonitor:{...config.serviceMonitor!,scrapeTimeout:event.target.value}})} placeholder="10s" /></label>
+        </div>}
+      </section>
       <section className="config-section">
         <h3>采集内容与过滤</h3>
         <div className="field-grid">

@@ -84,6 +84,11 @@ func agentDependenciesFromSpec(original *AgentConfig, spec map[string]any) (*Age
 
 // listObjects只有完整分页成功才返回集合，失败不能被当作零匹配或对象不存在。
 func (t *Target) listObjects(ctx context.Context, path string) ([]map[string]any, error) {
+	return t.listObjectsWithOptionalAPI(ctx, path, false)
+}
+
+// listObjectsWithOptionalAPI 仅允许可选API首页确实404；后续缺页仍是未知。
+func (t *Target) listObjectsWithOptionalAPI(ctx context.Context, path string, optional bool) ([]map[string]any, error) {
 	out := []map[string]any{}
 	next := ""
 	seen := map[string]bool{}
@@ -94,6 +99,9 @@ func (t *Target) listObjects(ctx context.Context, path string) ([]map[string]any
 			sep = "&"
 		}
 		if e := t.Request(ctx, "GET", path+sep+"limit=500&continue="+url.QueryEscape(next), nil, &list); e != nil {
+			if optional && next == "" && apiCode(e) == "TARGET_NOT_FOUND" {
+				return out, nil
+			}
 			return nil, e
 		}
 		// 关键：缺items不是空集合；辅助身份/策略缺页不能作为安全放行或已清理的证据。

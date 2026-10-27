@@ -3,7 +3,7 @@ import base64,copy,json,os,pathlib,secrets,tempfile,time,urllib.parse,urllib.req
 from transport import process as subprocess
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 class Proxy:
- def __init__(self,s,target):
+ def __init__(self,s,target,backend_config=None):
   self.s=s;self.token=secrets.token_urlsafe(36);self.ns=s.ns;self.target=target
   with tempfile.TemporaryDirectory(prefix='ksm-proxy-') as raw:
    p=pathlib.Path(raw)
@@ -15,9 +15,13 @@ class Proxy:
     openssl('req','-newkey','rsa:2048','-nodes','-keyout',name+'.key','-out',name+'.csr','-subj','/CN='+name)
     (p/'ext').write_text('basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n' + ('subjectAltName=DNS:fault-proxy.'+self.ns+'.svc\nextendedKeyUsage=serverAuth\n' if name=='server' else 'extendedKeyUsage=clientAuth\n'))
     openssl('x509','-req','-in',name+'.csr','-CA','ca.crt','-CAkey','ca.key','-CAcreateserial','-out',name+'.crt','-days','1','-extfile','ext')
-   original=s.config(target);cluster=original['clusters'][0]['cluster'];user=original['users'][0]['user'];u=urllib.parse.urlsplit(cluster['server'])
-   files={'backend-ca.crt':base64.b64decode(cluster['certificate-authority-data']),'backend-admin.crt':base64.b64decode(user['client-certificate-data']),'backend-admin.key':base64.b64decode(user['client-key-data']),'proxy-server.crt':(p/'server.crt').read_bytes(),'proxy-server.key':(p/'server.key').read_bytes(),'proxy-client-ca.crt':(p/'ca.crt').read_bytes(),'proxy-probe.crt':(p/'client.crt').read_bytes(),'proxy-probe.key':(p/'client.key').read_bytes(),'control-token':self.token.encode()}
+   original=copy.deepcopy(backend_config if backend_config is not None else s.config(target));cluster=original['clusters'][0]['cluster'];user=original['users'][0]['user'];u=urllib.parse.urlsplit(cluster['server'])
+   files={'backend-ca.crt':base64.b64decode(cluster['certificate-authority-data']),'backend-admin.crt':base64.b64decode(user.get('client-certificate-data','')),'backend-admin.key':base64.b64decode(user.get('client-key-data','')),'proxy-server.crt':(p/'server.crt').read_bytes(),'proxy-server.key':(p/'server.key').read_bytes(),'proxy-client-ca.crt':(p/'ca.crt').read_bytes(),'proxy-probe.crt':(p/'client.crt').read_bytes(),'proxy-probe.key':(p/'client.key').read_bytes(),'control-token':self.token.encode()}
    cfg={'backend':{'host':u.hostname,'port':u.port or 443,'server_name':cluster.get('tls-server-name',u.hostname),'ca_file':'/private/backend-ca.crt','client_cert_file':'/private/backend-admin.crt','client_key_file':'/private/backend-admin.key'},'frontend':{'bind':'0.0.0.0','port':8443,'cert_file':'/private/proxy-server.crt','key_file':'/private/proxy-server.key','client_ca_file':'/private/proxy-client-ca.crt'},'control':{'port':9090,'token_file':'/private/control-token'},'limits':{'io_timeout_seconds':15,'pause_timeout_seconds':30},'event_log_file':'/evidence/events.jsonl'}
+   if 'token' in user:
+    # 关键：故障代理沿用真实受限上游SA；客户端mTLS身份和任意Authorization均不能提升后端身份。
+    files['backend-token']=user['token'].encode()
+    cfg['backend'].pop('client_cert_file');cfg['backend'].pop('client_key_file');cfg['backend']['token_file']='/private/backend-token'
    files['config.json']=json.dumps(cfg).encode()
    if s.session:s.session.register_secrets(self.token,*[value.decode() for value in files.values()])
    secret={'apiVersion':'v1','kind':'Secret','metadata':{'name':'fault-private','namespace':self.ns},'data':{k:base64.b64encode(v).decode() for k,v in files.items()}}
@@ -54,7 +58,10 @@ else:print(json.dumps({'verified':False,'error':last}))
  def control(self,action,body=None):
   req=urllib.request.Request(self.base+'/'+('rule' if action=='arm' else action),data=None if body is None else json.dumps(body).encode(),method='GET' if action=='state' else 'POST',headers={'X-Fault-Control':self.token,'Content-Type':'application/json'})
   return json.load(urllib.request.urlopen(req,timeout=5))
- def arm(self,method,path,action='pause_before_send'):return self.control('arm',{'method':method,'path':path,'action':action})
+ def arm(self,method,path,action='pause_before_send',ssar_resource=None):
+  body={'method':method,'path':path,'action':action}
+  if ssar_resource is not None:body['ssarResource']=ssar_resource
+  return self.control('arm',body)
  def paused(self):
   end=time.monotonic()+6
   while time.monotonic()<end:

@@ -5,7 +5,6 @@ import (
 	"context"
 	rpc "github.com/fjsxy/monitor-mgr/kitex_gen/control"
 	"net/http/httptrace"
-	"net/url"
 	"time"
 )
 
@@ -114,6 +113,11 @@ func (s *Store) DeleteInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 			return nil, Error("UNAVAILABLE", "删除受理事务失败")
 		}
 	}
+	if e = freezeOperationResources(ctx, tx, o, i); e != nil {
+		return nil, e
+	}
+	enrichResourceProgress(ctx, tx, o)
+
 	if e = s.recordInstanceActivity(ctx, tx, i.Id); e != nil {
 		return nil, e
 	}
@@ -154,61 +158,9 @@ func ownerUID(meta map[string]any) string {
 	return ""
 }
 
-// listOwnedCandidates 分页读取全部工作负载和Pod，任何缺页/失败都不能当作资源已经消失。
+// listOwnedCandidates 保留 Agent 原有的 namespace 工作负载边界。
 func (t *Target) listOwnedCandidates(ctx context.Context, namespace string) ([]seenResource, error) {
-	out := []seenResource{}
-	for _, g := range []struct{ api, kind, resource string }{{"apps/v1", "Deployment", "deployments"}, {"apps/v1", "StatefulSet", "statefulsets"}, {"apps/v1", "DaemonSet", "daemonsets"}, {"apps/v1", "ReplicaSet", "replicasets"}, {"v1", "Pod", "pods"}} {
-		base := "/apis/" + g.api
-		if g.api == "v1" {
-			base = "/api/v1"
-		}
-		path := base
-		if namespace != "" {
-			path += "/namespaces/" + url.PathEscape(namespace)
-		}
-		path += "/" + g.resource
-		next := ""
-		tokens := map[string]bool{}
-		for {
-			var list struct {
-				Items    []map[string]any `json:"items"`
-				Metadata struct {
-					Continue string `json:"continue"`
-				} `json:"metadata"`
-			}
-			q := path + "?limit=200"
-			if next != "" {
-				q += "&continue=" + url.QueryEscape(next)
-			}
-			if e := t.Request(ctx, "GET", q, nil, &list); e != nil {
-				return nil, e
-			}
-			if list.Items == nil {
-				return nil, Error("UNAVAILABLE", "辅助资源列表不完整")
-			}
-			for _, obj := range list.Items {
-				m := objectMap(obj, "metadata")
-				uid, name := objectString(m, "uid"), objectString(m, "name")
-				actualNamespace := objectString(m, "namespace")
-				if actualNamespace == "" {
-					actualNamespace = namespace
-				}
-				if uid == "" || name == "" || actualNamespace == "" {
-					return nil, Error("UNAVAILABLE", "辅助资源身份不完整")
-				}
-				out = append(out, seenResource{g.api, g.kind, actualNamespace, name, uid, ownerUID(m), base + "/namespaces/" + url.PathEscape(actualNamespace) + "/" + g.resource + "/" + url.PathEscape(name)})
-			}
-			next = list.Metadata.Continue
-			if next == "" {
-				break
-			}
-			if tokens[next] {
-				return nil, Error("UNAVAILABLE", "辅助资源分页未前进")
-			}
-			tokens[next] = true
-		}
-	}
-	return out, nil
+	return t.listGraphCandidates(ctx, namespace, workloadGraphKinds)
 }
 
 // observeOwnerGraph 保存见过的所有者UID链；父对象消失后仍能识别残留ReplicaSet/Pod。
@@ -223,38 +175,30 @@ func (s *Store) observeOwnerGraphRecords(ctx context.Context, i *rpc.Observation
 	if componentFor(i.Component).scope == "Cluster" {
 		namespace = ""
 	}
-	candidates, e := t.listOwnedCandidates(ctx, namespace)
+	var candidates []seenResource
+	var e error
+	if i.Component == KSMComponent {
+		candidates, e = t.listGraphCandidates(ctx, "", ksmGraphKinds)
+	} else {
+		candidates, e = t.listOwnedCandidates(ctx, namespace)
+	}
 	if e != nil {
 		return nil, e
 	}
-	rows, e := s.DB.QueryContext(ctx, `SELECT uid FROM seen_resources WHERE instance_id=?`, i.Id)
-	if e != nil {
-		return nil, e
-	}
-	seen := map[string]bool{i.Uid: true}
-	for rows.Next() {
-		var id string
-		if e = rows.Scan(&id); e != nil {
-			rows.Close()
-			return nil, e
+	if i.Component == KSMComponent {
+		companion, err := s.companionGraphCandidates(ctx, i, t)
+		if err != nil {
+			return nil, err
 		}
-		seen[id] = true
+		candidates = append(candidates, companion...)
 	}
-	e = rows.Err()
-	rows.Close()
+	durable, e := readSeenGraph(ctx, s.DB, i.Id)
 	if e != nil {
 		return nil, e
 	}
-	// 关键：递归闭包从原CR UID和持久seen UID出发，不能按同名新资源重新起根。
-	changed := true
-	for changed {
-		changed = false
-		for _, r := range candidates {
-			if !seen[r.uid] && seen[r.ownerUID] {
-				seen[r.uid] = true
-				changed = true
-			}
-		}
+	live, e := originalOwnerGraph(i.Uid, durable, candidates)
+	if e != nil {
+		return nil, e
 	}
 	tx, e := s.DB.BeginTx(ctx, nil)
 	if e != nil {
@@ -264,12 +208,7 @@ func (s *Store) observeOwnerGraphRecords(ctx context.Context, i *rpc.Observation
 	if !observationScopeCurrent(ctx, tx, ctx) {
 		return nil, Error("CONFLICT", "观察目标修订已变化")
 	}
-	live := []seenResource{}
-	for _, r := range candidates {
-		if !seen[r.uid] {
-			continue
-		}
-		live = append(live, r)
+	for _, r := range live {
 		if _, e = tx.ExecContext(ctx, `INSERT INTO seen_resources VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(instance_id,uid) DO NOTHING`, i.Id, r.apiVersion, r.kind, r.namespace, r.name, r.uid, r.ownerUID, r.path); e != nil {
 			return nil, e
 		}
@@ -297,6 +236,12 @@ func (s *Store) executeDeletion(life context.Context, id string) {
 		s.finishExecution(life, o, "FAILED", e, nil)
 		return
 	}
+	resource, e := executablePrimaryResource(life, s.DB, id, i)
+	if e != nil {
+		s.finishExecution(life, o, "FAILED", e, nil)
+		return
+	}
+	i = resourceInstance(i, resource, resource.originalUID)
 	a, _, e := lifecycleAttempt(life, s.DB, id)
 	if e != nil {
 		return
@@ -394,6 +339,12 @@ func (s *Store) verifyDeletion(ctx context.Context, o *rpc.Operation, i *rpc.Obs
 	if s.DB.QueryRowContext(ctx, `SELECT original_uid,target_namespace FROM deletion_operations WHERE operation_id=?`, o.OperationId).Scan(&uid, &ns) != nil {
 		return
 	}
+	resource, e := executablePrimaryResource(ctx, s.DB, o.OperationId, i)
+	if e != nil {
+		s.noteLifecycle(ctx, o, e)
+		return
+	}
+	i = resourceInstance(i, resource, uid)
 	cr, e := t.readComponent(ctx, i)
 	if e != nil {
 		s.noteLifecycle(ctx, o, e)
@@ -409,10 +360,10 @@ func (s *Store) verifyDeletion(ctx context.Context, o *rpc.Operation, i *rpc.Obs
 		return
 	}
 	if cr != nil || live > 0 {
-		s.finishDeletion(o, "DELETION_BLOCKED", "原 CR、workload 或 Pod 仍存在；等待清理，不移除 finalizer")
+		s.finishDeletion(o, "DELETION_BLOCKED", "原 CR、workload、Pod 或配套 ServiceMonitor 仍存在；等待 Operator 清理，不移除 finalizer")
 		return
 	}
-	s.finishDeletion(o, "SUCCEEDED", "原 CR、对应 workload 与 Pod 已全部核验消失")
+	s.finishDeletion(o, "SUCCEEDED", "原 CR、对应 workload、Pod 与配套 ServiceMonitor 已全部只读核验消失")
 }
 
 // finishDeletion 保留历史身份和发布版本，只有完整清理核验成功才解除删除保护。
@@ -433,6 +384,9 @@ func (s *Store) finishDeletion(expected *rpc.Operation, state, message string) {
 		return
 	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
+	if e = recordResourceResult(ctx, tx, expected, "component", state, message, "", now); e != nil {
+		return
+	}
 	if _, e = tx.ExecContext(ctx, `UPDATE operations SET state=?,message=?,updated_at=? WHERE id=?`, state, message, now, expected.OperationId); e != nil {
 		return
 	}

@@ -145,48 +145,173 @@ func checkTestF04EncryptedSchema3WrongKeyDoesNotMigrate(t ginkgo.GinkgoTInterfac
 }
 
 type ksmFixture struct {
-	identityGate        chan struct{}
-	identityEntered     chan struct{}
-	identityOnce        sync.Once
-	identityFailure     bool
-	readDelay           time.Duration
-	clusterUID          string
-	targetConfiguration string
-	inventoryPages      map[string]map[string]any
-	inventoryFailure    string
-	mu                  sync.Mutex
-	cr                  map[string]any
-	writes              int
-	lastWrite           []byte
-	rejectWrite         int
-	dropResponse        bool
-	owned               map[string][]any
-	deleteCount         int
-	deleteRequests      int
-	lastDelete          map[string]any
-	retainCR            bool
-	retainPod           bool
-	crReadFailure       bool
-	crReads             int
-	observationGate     chan struct{}
-	observationEntered  chan struct{}
-	observationCanceled chan struct{}
-	observationOnce     sync.Once
-	readFailure         bool
-	readFailureOnDelete bool
-	block               chan struct{}
-	entered             chan struct{}
-	readGate            chan struct{}
-	readEntered         chan struct{}
-	readOnce            sync.Once
+	migrationNamespaces     []any
+	migrationAgentPages     map[string]map[string]any
+	migrationAgentFailToken string
+	migrationAgents         []any
+	migrationAgentFailure   bool
+	legacySM                map[string]any
+	crd                     map[string]any
+	smReadFailure           bool
+	smReads                 int
+	smReadPaths             []string
+	smWrites                int
+	identityGate            chan struct{}
+	identityEntered         chan struct{}
+	identityOnce            sync.Once
+	identityFailure         bool
+	readDelay               time.Duration
+	clusterUID              string
+	targetConfiguration     string
+	inventoryPages          map[string]map[string]any
+	inventoryFailure        string
+	mu                      sync.Mutex
+	cr                      map[string]any
+	writes                  int
+	mutationRequests        int
+	lastWrite               []byte
+	rejectWrite             int
+	dropResponse            bool
+	exporterRuntime         map[string]map[string]any
+	exporterRuntimeDenied   bool
+	resourceStatuses        map[string]int
+	owned                   map[string][]any
+	deleteCount             int
+	deleteRequests          int
+	lastDelete              map[string]any
+	retainCR                bool
+	retainPod               bool
+	crReadFailure           bool
+	crReads                 int
+	observationGate         chan struct{}
+	observationEntered      chan struct{}
+	observationCanceled     chan struct{}
+	observationOnce         sync.Once
+	readFailure             bool
+	readFailureOnDelete     bool
+	block                   chan struct{}
+	entered                 chan struct{}
+	readGate                chan struct{}
+	readEntered             chan struct{}
+	readOnce                sync.Once
 }
 
 func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 	t.Helper()
 	base, _, _ := clusterAPI(t, 200, false)
-	f := &ksmFixture{}
+	f := &ksmFixture{crd: collectionCRDFixture(t), exporterRuntime: exporterRuntimeFixture()}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		f.mu.Lock()
+		status := f.resourceStatuses[r.URL.Path]
+		if token := r.URL.Query().Get("continue"); token != "" {
+			if next := f.resourceStatuses[r.URL.Path+"#"+token]; next != 0 {
+				status = next
+			}
+		}
+		if status != 0 {
+			w.WriteHeader(status)
+			f.mu.Unlock()
+			return
+		}
+		runtime, runtimeKnown := f.exporterRuntime[r.URL.Path]
+		runtimeDenied := f.exporterRuntimeDenied
+		if runtimeKnown && r.Method == "GET" {
+			if runtimeDenied || f.readFailure {
+				w.WriteHeader(403)
+			} else {
+				if r.URL.Path == "/apis/apps/v1/deployments" {
+					merged := map[string]any{"items": append([]any{}, runtime["items"].([]any)...)}
+					for path, objects := range f.owned {
+						if strings.HasSuffix(path, "/deployments") {
+							merged["items"] = append(merged["items"].([]any), objects...)
+						}
+					}
+					json.NewEncoder(w).Encode(merged)
+				} else {
+					json.NewEncoder(w).Encode(runtime)
+				}
+			}
+			f.mu.Unlock()
+			return
+		}
+		f.mu.Unlock()
+		if strings.HasPrefix(r.URL.Path, "/api/v1/namespaces") {
+			f.mu.Lock()
+			namespaces := f.migrationNamespaces
+			f.mu.Unlock()
+			if namespaces != nil {
+				if r.URL.Path == "/api/v1/namespaces" {
+					json.NewEncoder(w).Encode(map[string]any{"items": namespaces})
+					return
+				}
+				for _, raw := range namespaces {
+					ns := raw.(map[string]any)
+					if r.URL.Path == "/api/v1/namespaces/"+ns["metadata"].(map[string]any)["name"].(string) {
+						json.NewEncoder(w).Encode(ns)
+						return
+					}
+				}
+			}
+		}
+		if r.URL.Path == "/apis/monitoring.coreos.com/v1alpha1/prometheusagents" {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.migrationAgentFailure {
+				w.WriteHeader(403)
+				return
+			}
+			if f.migrationAgentPages != nil {
+				token := r.URL.Query().Get("continue")
+				if token != "" && token == f.migrationAgentFailToken {
+					w.WriteHeader(403)
+					return
+				}
+				json.NewEncoder(w).Encode(f.migrationAgentPages[token])
+				return
+			}
+			items := f.migrationAgents
+			if items == nil {
+				items = []any{}
+			}
+			json.NewEncoder(w).Encode(map[string]any{"items": items})
+			return
+		}
+		if r.URL.Path == "/apis/apiextensions.k8s.io/v1/customresourcedefinitions/kubestatemetrics.monitoring.fjsxy.github.io" {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			json.NewEncoder(w).Encode(f.crd)
+			return
+		}
+		if strings.Contains(r.URL.Path, "/servicemonitors") {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if r.Method != "GET" {
+				f.smWrites++
+				w.WriteHeader(500)
+				return
+			}
+			if f.smReadFailure {
+				w.WriteHeader(403)
+				return
+			}
+			if strings.HasSuffix(r.URL.Path, "/servicemonitors") {
+				items := []any{}
+				if f.legacySM != nil {
+					items = append(items, f.legacySM)
+				}
+				json.NewEncoder(w).Encode(map[string]any{"items": items})
+				return
+			}
+			f.smReads++
+			f.smReadPaths = append(f.smReadPaths, r.URL.Path)
+			if f.legacySM == nil {
+				w.WriteHeader(404)
+				return
+			}
+			json.NewEncoder(w).Encode(f.legacySM)
+			return
+		}
 		f.mu.Lock()
 		delay := f.readDelay
 		f.mu.Unlock()
@@ -317,6 +442,8 @@ func ksmTarget(t ginkgo.GinkgoTInterface) (*ksmFixture, string) {
 			json.NewEncoder(w).Encode(f.cr)
 			return
 		}
+		// 记录进入外部 API 的全部组件写请求，包含被拒绝的请求。
+		f.mutationRequests++
 		if f.rejectWrite != 0 {
 			w.WriteHeader(f.rejectWrite)
 			io.WriteString(w, `{}`)
@@ -485,6 +612,8 @@ func checkTestExternalKSMReadOnlyAndFailedList(t ginkgo.GinkgoTInterface) {
 		t.Fatal(external)
 	}
 	ext := external["id"].(string)
+	// I26-06：管理员也不能通过历史权限确认接管外部实例。
+	clusterCall(t, p, "POST", "/instances/"+ext+"/management-confirmations", map[string]any{"allowClusterManagers": true}, c, "external-confirm", 403)
 	detail := clusterCall(t, p, "GET", "/instances/"+ext, nil, c, "", 200)
 	if !strings.Contains(detail["yaml"].(string), "external-uid") {
 		t.Fatal("只读YAML丢失")

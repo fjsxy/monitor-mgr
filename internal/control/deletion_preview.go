@@ -131,7 +131,7 @@ func deletionPreviewIdentity(ctx context.Context, q clusterQuery, i *rpc.Observa
 
 // PreviewDeletion 输出可阅读的名称/namespace范围，完整目标值不回显、不存入历史。
 func (s *Store) PreviewDeletion(ctx context.Context, c *rpc.RequestContext, r *rpc.DeletionPreviewRequest) (*rpc.DeletionPreview, error) {
-	i, e := s.authorizedInstance(ctx, c, r.Id)
+	i, e := s.authorizedInstanceForWrite(ctx, c, r.Id)
 	if e != nil {
 		return nil, e
 	}

@@ -9,11 +9,19 @@ import (
 	"time"
 )
 
-const instanceColumns = `id,cluster_id,component,name,target_namespace,uid,lifecycle,current_version_id,activity_at`
+const instanceColumns = `id,cluster_id,component,name,target_namespace,uid,lifecycle,current_version_id,activity_at,creator_user_id,creator_role,
+ coalesce((SELECT actor_id FROM instance_management_confirmations WHERE instance_id=instances.id ORDER BY sequence DESC LIMIT 1),''),
+ coalesce((SELECT confirmed_at FROM instance_management_confirmations WHERE instance_id=instances.id ORDER BY sequence DESC LIMIT 1),''),
+ coalesce((SELECT allow_cluster_managers FROM instance_management_confirmations WHERE instance_id=instances.id ORDER BY sequence DESC LIMIT 1),0)`
 
 func scanInstance(row interface{ Scan(...any) error }) (*rpc.ObservationInstance, error) {
 	i := new(rpc.ObservationInstance)
-	e := row.Scan(&i.Id, &i.ClusterId, &i.Component, &i.Name, &i.TargetNamespace, &i.Uid, &i.Lifecycle, &i.CurrentVersionId, &i.ActivityAt)
+	confirmation := new(rpc.InstanceManagementConfirmation)
+	e := row.Scan(&i.Id, &i.ClusterId, &i.Component, &i.Name, &i.TargetNamespace, &i.Uid, &i.Lifecycle, &i.CurrentVersionId, &i.ActivityAt, &i.CreatorUserId, &i.CreatorRole, &confirmation.ActorId, &confirmation.ConfirmedAt, &confirmation.AllowClusterManagers)
+	if confirmation.ActorId != "" {
+		i.ManagementConfirmation = confirmation
+	}
+	i.CreatorIdentityKnown = i.CreatorUserId != "" && i.CreatorRole != ""
 	i.Type = "exporter"
 	scope, ns := "Cluster", ""
 	if i.Component == AgentComponent {
@@ -58,6 +66,7 @@ func (s *Store) authorizedInstance(ctx context.Context, c *rpc.RequestContext, i
 	if e = clusterPermission(p, cl); e != nil {
 		return nil, e
 	}
+	projectInstanceAccess(p, cl, i)
 	return i, nil
 }
 func (s *Store) instanceTx(ctx context.Context, tx *sql.Tx, c *rpc.RequestContext, id string) (*Principal, *rpc.ObservationInstance, error) {
@@ -77,6 +86,9 @@ func (s *Store) instanceTx(ctx context.Context, tx *sql.Tx, c *rpc.RequestContex
 		return nil, nil, e
 	}
 	if e = clusterPermission(p, cl); e != nil {
+		return nil, nil, e
+	}
+	if e = instanceWritePermission(p, i); e != nil {
 		return nil, nil, e
 	}
 	if cl.State != "ACTIVE" {
@@ -110,11 +122,16 @@ func (s *Store) CreateInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 		return nil, e
 	}
 	if hit {
+		projectInstanceAccess(p, cl, &replay)
 		return &replay, nil
 	}
 	cfg, e := decodeRequestConfiguration(r.Component, r.Ksm, r.Agent)
 	if e != nil {
 		return nil, e
+	}
+	// 新草稿默认开启；读取旧草稿/冻结版本不会调用此默认，避免升级补建。
+	if ksm, ok := cfg.(*KSMConfig); ok && ksm.ServiceMonitor == nil {
+		ksm.ServiceMonitor = &ExporterServiceMonitor{Enabled: true, Interval: "30s", ScrapeTimeout: "10s"}
 	}
 	var n int
 	if tx.QueryRowContext(ctx, `SELECT count(*) FROM instances WHERE cluster_id=? AND component=? AND cr_namespace=? AND name=?`, cl.Id, r.Component, cfg.identity().Namespace, cfg.identity().Name).Scan(&n) != nil {
@@ -125,7 +142,8 @@ func (s *Store) CreateInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	}
 	id, now := ID(), s.Now().UTC().Format(time.RFC3339Nano)
 	raw, _ := json.Marshal(cfg)
-	if _, e = tx.ExecContext(ctx, `INSERT INTO instances(id,cluster_id,component,name,target_namespace,activity_at,cr_namespace) VALUES(?,?,?,?,?,?,?)`, id, cl.Id, r.Component, cfg.identity().Name, cfg.identity().DeploymentNamespace, now, cfg.identity().Namespace); e != nil {
+	// 关键：创建身份来自本事务中的实际认证账号，不从客户端配置或集群归属推断。
+	if _, e = tx.ExecContext(ctx, `INSERT INTO instances(id,cluster_id,component,name,target_namespace,activity_at,cr_namespace,creator_user_id,creator_role) VALUES(?,?,?,?,?,?,?,?,?)`, id, cl.Id, r.Component, cfg.identity().Name, cfg.identity().DeploymentNamespace, now, cfg.identity().Namespace, p.Account.Id, p.Account.Role); e != nil {
 		return nil, Error("CONFLICT", "实例身份冲突")
 	}
 	if _, e = tx.ExecContext(ctx, `INSERT INTO drafts VALUES(?,1,?)`, id, raw); e != nil {
@@ -138,6 +156,7 @@ func (s *Store) CreateInstance(ctx context.Context, c *rpc.RequestContext, r *rp
 	if e != nil {
 		return nil, e
 	}
+	projectInstanceAccess(p, cl, i)
 	if e = s.finishCommand(ctx, tx, cmd, i); e != nil {
 		return nil, e
 	}
@@ -152,7 +171,12 @@ func (s *Store) GetInstance(ctx context.Context, c *rpc.RequestContext, r *rpc.I
 		return nil, e
 	}
 	if i.ReadOnly {
-		return s.externalByID(ctx, i.Id)
+		external, err := s.externalByID(ctx, i.Id)
+		if err != nil {
+			return nil, err
+		}
+		external.CanManage, external.ReadOnlyReason = i.CanManage, i.ReadOnlyReason
+		return external, nil
 	}
 	if !i.ReadOnly {
 		i.Runtime, e = s.GetRuntime(ctx, c, r)
@@ -201,6 +225,18 @@ func (s *Store) ListInstances(ctx context.Context, c *rpc.RequestContext, r *rpc
 			return nil, e
 		}
 		out = append(out, external...)
+	}
+	p, e := s.Authorize(ctx, token(c))
+	if e != nil {
+		return nil, e
+	}
+	// 关键：目标发现可能等待网络；返回管理能力前复核当前集群访问权限。
+	cl, e = s.GetCluster(ctx, c, r)
+	if e != nil {
+		return nil, e
+	}
+	for _, i := range out {
+		projectInstanceAccess(p, cl, i)
 	}
 	return &rpc.InstancesResult_{Instances: out}, nil
 }

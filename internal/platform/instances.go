@@ -113,6 +113,59 @@ func (p *Runtime) instanceRoutes(w http.ResponseWriter, r *http.Request, c *rpc.
 	}
 	if len(parts) == 3 {
 		switch parts[2] {
+		case "historical-servicemonitor-resolutions", "historical-operation-releases":
+			if r.Method == "POST" {
+				var body struct {
+					SnapshotId              string  `json:"snapshotId"`
+					OperationId             string  `json:"operationId"`
+					ResourceKey             string  `json:"resourceKey"`
+					ObjectPath              string  `json:"objectPath"`
+					OriginalUid             *string `json:"originalUid"`
+					DocumentFingerprint     string  `json:"documentFingerprint"`
+					ConfirmExternalHandling *bool   `json:"confirmExternalHandling"`
+				}
+				if e := decode(r, &body); e != nil {
+					p.writeError(w, e, id)
+					return true
+				}
+				if body.OriginalUid == nil || body.ConfirmExternalHandling == nil {
+					p.writeError(w, control.Error("BAD_REQUEST", "必须显式提交原UID（未知为空）及外部处理确认"), id)
+					return true
+				}
+				request := &rpc.HistoricalMigrationConfirmationRequest{Id: req.Id, SnapshotId: body.SnapshotId, OperationId: body.OperationId, ResourceKey: body.ResourceKey, ObjectPath: body.ObjectPath, OriginalUid: *body.OriginalUid, DocumentFingerprint: body.DocumentFingerprint, ConfirmExternalHandling: *body.ConfirmExternalHandling}
+				var v *rpc.HistoricalMigrationConfirmation
+				var e error
+				if parts[2] == "historical-operation-releases" {
+					v, e = p.client.ReleaseHistoricalOperation(r.Context(), c, request)
+				} else {
+					v, e = p.client.ResolveHistoricalServiceMonitor(r.Context(), c, request)
+				}
+				p.respond(w, 200, v, e, id)
+				return true
+			}
+		case "historical-migration":
+			if r.Method == "GET" {
+				v, e := p.client.GetHistoricalMigration(r.Context(), c, req)
+				p.respond(w, 200, v, e, id)
+				return true
+			}
+		case "management-confirmations":
+			if r.Method == "POST" {
+				var b struct {
+					AllowClusterManagers *bool `json:"allowClusterManagers"`
+				}
+				if e := decode(r, &b); e != nil {
+					p.writeError(w, e, id)
+					return true
+				}
+				if b.AllowClusterManagers == nil {
+					p.writeError(w, control.Error("BAD_REQUEST", "必须明确确认是否允许现有集群管理用户"), id)
+					return true
+				}
+				v, e := p.client.ConfirmInstanceManagement(r.Context(), c, &rpc.ConfirmInstanceManagementRequest{Id: req.Id, AllowClusterManagers: *b.AllowClusterManagers})
+				p.respond(w, 200, v, e, id)
+				return true
+			}
 		case "deletion-previews":
 			if r.Method == "POST" {
 				var b struct {
